@@ -23,6 +23,7 @@ on conflict (branch_id, name) do nothing;
 insert into public.positions (name, code, level, description) values
   ('Direktur Utama', 'DIRUT', 1, 'Pimpinan tertinggi perusahaan'),
   ('Direktur Operasional', 'DIROPS', 2, 'Pimpinan operasional perusahaan'),
+  ('Human Resource', 'HR', 5, 'Manajemen sumber daya manusia'),
   ('Kepala Cabang', 'KACAB', 10, 'Kepala cabang'),
   ('Manager', 'MGR', 20, 'Manajer divisi'),
   ('Supervisor', 'SPV', 30, 'Supervisor tim'),

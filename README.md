@@ -202,6 +202,8 @@ Semua bagian di bawah ini benar-benar berjalan begitu di-deploy — tidak ada ya
 - **Login rate limiting** — `mkc_login_attempts` + `check_login_lockout()`/`record_login_attempt()` (SECURITY DEFINER RPCs, `supabase/migrations/0015_login_rate_limiting.sql`) lock an email out for 15 minutes after 5 failed attempts; old rows are pruned daily by `pg_cron`. Enforced in `loginAction` before Supabase Auth is even called.
 - **Storage** — bucket privat untuk selfie absensi & lampiran izin (signed URL, TTL 10 menit); bucket publik hanya untuk avatar & aset perusahaan.
 - **Audit log** otomatis (trigger) untuk seluruh tabel penting (`employees`, `attendance`, `leave_requests`, `memos`, `announcements`, dll).
+- **Perlindungan akun Super Admin** — trigger `prevent_non_super_admin_from_altering_super_admin` (`supabase/migrations/0016_rbac_refinement.sql`) memblokir siapa pun yang bukan Super Admin dari menghapus, menonaktifkan, atau mengubah role akun Super Admin lain — meski aktor tersebut punya `employee.manage` (mis. Direktur Operasional). Melengkapi trigger Root Owner yang sudah ada (`0011_root_owner_protection.sql`), yang secara spesifik melindungi satu akun pemilik yang ditandai `is_root_owner`.
+- **Akun produksi tidak pernah masuk git** — repo ini publik. Akun demo (`scripts/seed-users.ts`) memakai password bersama yang memang dimaksudkan publik. Akun karyawan sungguhan (Owner, direksi, kepala cabang, HR, dst.) dibuat langsung ke database live lewat Supabase MCP/SQL, dengan cara yang identik ke pola provisioning Root Owner — **tidak pernah** ditulis ke file migrasi atau commit apa pun. Kredensial akun tersebut disampaikan hanya lewat percakapan pemberi tugas.
 
 ## Roadmap ERP
 

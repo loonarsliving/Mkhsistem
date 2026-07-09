@@ -52,4 +52,42 @@ describe("RBAC seed integrity", () => {
     expect(kepalaCabang.has(PERMISSIONS.ATTENDANCE_VIEW_ALL)).toBe(false);
     expect(kepalaCabang.has(PERMISSIONS.EMPLOYEE_VIEW_ALL)).toBe(false);
   });
+
+  it("kepala_cabang cannot manage org structure, roles, or global settings", () => {
+    const kepalaCabang = new Set(ROLE_PERMISSIONS_SEED[ROLE_KEYS.KEPALA_CABANG]);
+    for (const forbidden of [
+      PERMISSIONS.BRANCH_MANAGE,
+      PERMISSIONS.DIVISION_MANAGE,
+      PERMISSIONS.POSITION_MANAGE,
+      PERMISSIONS.ROLE_MANAGE,
+      PERMISSIONS.EMPLOYEE_MANAGE,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ]) {
+      expect(kepalaCabang.has(forbidden), `kepala_cabang should not have "${forbidden}"`).toBe(false);
+    }
+  });
+
+  it("hr manages people and attendance company-wide but not org structure, roles, or global settings", () => {
+    const hr = new Set(ROLE_PERMISSIONS_SEED[ROLE_KEYS.HR]);
+    expect(hr.has(PERMISSIONS.EMPLOYEE_VIEW_ALL)).toBe(true);
+    expect(hr.has(PERMISSIONS.ATTENDANCE_VIEW_ALL)).toBe(true);
+    expect(hr.has(PERMISSIONS.ATTENDANCE_EXPORT)).toBe(true);
+    for (const forbidden of [
+      PERMISSIONS.BRANCH_MANAGE,
+      PERMISSIONS.DIVISION_MANAGE,
+      PERMISSIONS.POSITION_MANAGE,
+      PERMISSIONS.ROLE_MANAGE,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ]) {
+      expect(hr.has(forbidden), `hr should not have "${forbidden}"`).toBe(false);
+    }
+  });
+
+  it("direktur_operasional can manage attendance and operational settings but not global settings", () => {
+    const direkturOperasional = new Set(ROLE_PERMISSIONS_SEED[ROLE_KEYS.DIREKTUR_OPERASIONAL]);
+    expect(direkturOperasional.has(PERMISSIONS.ATTENDANCE_MANAGE)).toBe(true);
+    expect(direkturOperasional.has(PERMISSIONS.ATTENDANCE_SETTINGS_MANAGE)).toBe(true);
+    expect(direkturOperasional.has(PERMISSIONS.SETTINGS_MANAGE)).toBe(false);
+    expect(direkturOperasional.has(PERMISSIONS.ROLE_MANAGE)).toBe(false);
+  });
 });

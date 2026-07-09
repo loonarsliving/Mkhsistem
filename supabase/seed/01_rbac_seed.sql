@@ -58,7 +58,7 @@ on conflict do nothing;
 
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
-  'dashboard.view', 'attendance.view_all', 'attendance.export',
+  'dashboard.view', 'attendance.view_all', 'attendance.manage', 'attendance.settings_manage', 'attendance.export',
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
@@ -66,14 +66,13 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
--- hr
+-- hr: people + attendance company-wide, but no org-structure or role/settings control
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_all', 'attendance.manage', 'attendance.settings_manage', 'attendance.export',
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
-  'employee.view_all', 'employee.manage',
-  'branch.manage', 'division.manage', 'position.manage'
+  'employee.view_all', 'employee.manage'
 ) where r.key = 'hr'
 on conflict do nothing;
 
