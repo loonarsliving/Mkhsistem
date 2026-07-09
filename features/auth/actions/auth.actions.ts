@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,11 @@ import {
   type ResetPasswordInput,
 } from "../schemas/auth.schema";
 
+async function clientIp(): Promise<string | null> {
+  const headerList = await headers();
+  return headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? headerList.get("x-real-ip") ?? null;
+}
+
 export async function loginAction(input: LoginInput): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) {
@@ -22,7 +28,15 @@ export async function loginAction(input: LoginInput): Promise<ActionResult> {
   }
 
   const supabase = await createClient();
+
+  const { data: locked } = await supabase.rpc("check_login_lockout", { p_email: parsed.data.email });
+  if (locked) {
+    return actionError("Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.");
+  }
+
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const ip = await clientIp();
+  await supabase.rpc("record_login_attempt", { p_email: parsed.data.email, p_success: !error, p_ip_address: ip });
 
   if (error) {
     if (error.message.toLowerCase().includes("invalid login credentials")) {

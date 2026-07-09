@@ -927,6 +927,11 @@ export interface Database {
       get_memo_audience: { Args: { p_memo_id: string }; Returns: { user_id: string }[] };
       get_announcement_audience: { Args: { p_announcement_id: string }; Returns: { user_id: string }[] };
       health_check: { Args: Record<string, never>; Returns: Json };
+      record_login_attempt: {
+        Args: { p_email: string; p_success: boolean; p_ip_address?: string | null };
+        Returns: undefined;
+      };
+      check_login_lockout: { Args: { p_email: string }; Returns: boolean };
     };
     Enums: Record<string, never>;
   };

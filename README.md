@@ -198,7 +198,8 @@ Semua bagian di bawah ini benar-benar berjalan begitu di-deploy — tidak ada ya
 - **Permission check ganda** — Server Action memvalidasi permission sebelum eksekusi (defense in depth bersama RLS).
 - **Service role key** hanya dipakai di `lib/supabase/admin.ts` (server-only, untuk provisioning akun karyawan) — tidak pernah diekspos ke client.
 - **Validasi input** dengan Zod di setiap Server Action.
-- **Security headers** (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) diset di `next.config.ts`.
+- **Security headers**: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security` (static, `next.config.ts`) plus a per-request nonce-based **Content-Security-Policy** (`lib/security/csp.ts`, applied in `lib/supabase/middleware.ts`) — `script-src` uses a fresh nonce + `strict-dynamic` per request, blocking injected/inline script execution; `style-src` allows `'unsafe-inline'` deliberately (Radix UI positions popovers/dropdowns via inline `style` attributes, which nonces cannot cover). Verified against a real `next build && next start` with Playwright: zero CSP violations, hydration and client-side validation both work.
+- **Login rate limiting** — `mkc_login_attempts` + `check_login_lockout()`/`record_login_attempt()` (SECURITY DEFINER RPCs, `supabase/migrations/0015_login_rate_limiting.sql`) lock an email out for 15 minutes after 5 failed attempts; old rows are pruned daily by `pg_cron`. Enforced in `loginAction` before Supabase Auth is even called.
 - **Storage** — bucket privat untuk selfie absensi & lampiran izin (signed URL, TTL 10 menit); bucket publik hanya untuk avatar & aset perusahaan.
 - **Audit log** otomatis (trigger) untuk seluruh tabel penting (`employees`, `attendance`, `leave_requests`, `memos`, `announcements`, dll).
 

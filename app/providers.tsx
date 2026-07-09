@@ -7,7 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, nonce }: { children: React.ReactNode; nonce?: string }) {
   const [queryClient] = React.useState(
     () =>
       new QueryClient({
@@ -22,7 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={200}>
           {children}

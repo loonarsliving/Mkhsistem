@@ -2,6 +2,12 @@ import Image from "next/image";
 
 import { APP_NAME, APP_TAGLINE, COMPANY_NAME } from "@/constants/app";
 
+// Next.js can only embed a correct per-request CSP nonce into dynamically
+// rendered pages — a statically prerendered page's <script> tags are fixed
+// at build time and would carry a stale nonce, breaking hydration under the
+// strict-dynamic script-src set in lib/security/csp.ts.
+export const dynamic = "force-dynamic";
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
