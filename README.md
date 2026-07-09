@@ -149,15 +149,35 @@ Membuat 5 akun demo (super admin, direktur, HR, kepala cabang, staff) dengan pas
 ## Perintah yang Tersedia
 
 ```bash
-npm run dev          # development server
-npm run build         # production build
-npm run start         # jalankan production build
-npm run lint           # ESLint
-npm run typecheck      # TypeScript strict check
-npm run format          # Prettier
-npm run supabase:types  # generate types/database.types.ts dari proyek Supabase live
-npm run seed:users       # seed akun demo (lihat di atas)
+npm run dev              # development server
+npm run build             # production build
+npm run start             # jalankan production build
+npm run lint                # ESLint
+npm run typecheck           # TypeScript strict check
+npm run format                # Prettier
+npm run supabase:types         # generate types/database.types.ts dari proyek Supabase live
+npm run seed:users              # seed akun demo (lihat di atas)
+npm test                         # unit test (Vitest, tanpa network)
+npm run test:coverage             # unit test + laporan coverage
+npm run test:integration           # integration test terhadap Supabase live (lihat tests/integration/README.md)
+npm run test:e2e                    # end-to-end test (Playwright)
+npm run backup:db                    # backup database manual (lihat docs/BACKUP.md)
 ```
+
+## Testing
+
+- **Unit** (`tests/unit/`) — Vitest, tanpa dependency eksternal. Mencakup `lib/utils`, integritas seed RBAC, validasi Zod untuk setiap schema form, dan beberapa komponen UI. Jalankan dengan `npm test`.
+- **Integration** (`tests/integration/`) — Vitest terhadap proyek Supabase live menggunakan dua akun uji berhak-akses-rendah (`TEST-STAFF-001`, `TEST-HR-001`): RLS, resolusi permission per role, RPC absensi, targeting & read-receipt memo. Lihat `tests/integration/README.md` untuk environment variable yang dibutuhkan.
+- **End-to-end** (`tests/e2e/`) — Playwright dengan kamera palsu (`--use-fake-device-for-media-stream`) dan geolocation ter-mock, menjalankan alur check-in/check-out sungguhan lewat UI, bukan hanya lewat RPC.
+- Integration & e2e membutuhkan akses network ke Supabase sehingga dijalankan di GitHub Actions (`.github/workflows/ci.yml`), bukan di sandbox dev lokal yang egress-nya dibatasi.
+
+## CI/CD
+
+`.github/workflows/ci.yml` berjalan pada setiap push/PR: lint, typecheck, unit test, build selalu jalan (tanpa secret apa pun). Integration & e2e test otomatis aktif begitu 4 secret berikut ditambahkan di **Settings → Secrets and variables → Actions**: `TEST_STAFF_EMAIL`, `TEST_STAFF_PASSWORD`, `TEST_HR_EMAIL`, `TEST_HR_PASSWORD` — sebelum itu, job tersebut di-skip secara eksplisit (bukan gagal). `.github/workflows/codeql.yml` menjalankan static analysis mingguan + setiap push. `.github/dependabot.yml` membuka PR pembaruan dependency mingguan.
+
+## Backup & Recovery
+
+Lihat [`docs/BACKUP.md`](docs/BACKUP.md) — proyek Supabase saat ini di plan Free (tanpa backup otomatis dari Supabase). Backup terjadwal harian via `.github/workflows/backup.yml` sudah di-deploy tapi butuh 2 secret (`SUPABASE_DB_URL`, `BACKUP_ENCRYPTION_KEY`) sebelum aktif — dokumen tersebut menjelaskan cara mendapatkannya dan prosedur restore.
 
 ## Keamanan
 

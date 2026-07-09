@@ -1,0 +1,62 @@
+name: Database Backup
+
+on:
+  schedule:
+    # Daily at 18:00 UTC (02:00 WITA / Asia/Makassar the next day, after
+    # office hours end for every branch).
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check backup secrets are configured
+        id: check
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "::warning::SUPABASE_DB_URL and/or BACKUP_ENCRYPTION_KEY secrets are not set — skipping this run. See docs/BACKUP.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+        if: steps.check.outputs.ready == 'true'
+
+      - name: Install PostgreSQL 17 client (pg_dump)
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17 gnupg
+
+      - name: Run backup
+        if: steps.check.outputs.ready == 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: npm run backup:db
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          name: mk-connect-db-backup-${{ github.run_id }}
+          path: backups/*.gpg
+          # GitHub retains workflow artifacts up to 90 days on public repos;
+          # 30 days here balances real disaster-recovery coverage against
+          # storage growth. Adjust in one place if the retention policy changes.
+          retention-days: 30
