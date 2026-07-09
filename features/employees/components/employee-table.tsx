@@ -25,7 +25,7 @@ export function EmployeeTable({ canCreate, canViewAllBranches }: { canCreate: bo
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState("");
   const [branchId, setBranchId] = React.useState("all");
-  const [status, setStatus] = React.useState("all");
+  const [status, setStatus] = React.useState<EmploymentStatus | "all">("all");
   const debouncedSearch = useDebounce(search, 300);
 
   const { data: branches } = useQuery({ queryKey: ["branches"], queryFn: listBranchesAction, enabled: canViewAllBranches });
@@ -77,7 +77,7 @@ export function EmployeeTable({ canCreate, canViewAllBranches }: { canCreate: bo
           )}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Status</label>
-            <Select value={status} onValueChange={(v) => (setPage(1), setStatus(v))}>
+            <Select value={status} onValueChange={(v) => (setPage(1), setStatus(v as EmploymentStatus | "all"))}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>

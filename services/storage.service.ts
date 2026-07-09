@@ -26,5 +26,8 @@ export async function getSignedUrls(bucket: string, paths: (string | null)[]): P
   const { data, error } = await supabase.storage.from(bucket).createSignedUrls(validPaths, SIGNED_URL_TTL_SECONDS);
   if (error || !data) return {};
 
-  return Object.fromEntries(data.filter((d) => d.signedUrl).map((d) => [d.path ?? "", d.signedUrl]));
+  const entries = data
+    .filter((d): d is typeof d & { signedUrl: string } => Boolean(d.signedUrl))
+    .map((d) => [d.path ?? "", d.signedUrl] as const);
+  return Object.fromEntries(entries);
 }

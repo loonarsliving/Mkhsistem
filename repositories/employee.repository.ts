@@ -1,12 +1,12 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
-import type { TablesInsert, TablesUpdate } from "@/types/database.types";
+import type { EmploymentStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
 
 export interface EmployeeListFilters {
   search?: string;
   branchId?: string;
   divisionId?: string;
   positionId?: string;
-  employmentStatus?: string;
+  employmentStatus?: EmploymentStatusDb;
   page?: number;
   pageSize?: number;
 }

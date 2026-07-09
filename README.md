@@ -1,0 +1,175 @@
+# MK Connect
+
+**Internal Communication & Attendance System** — PT Maha Karya Haluoleo
+
+MK Connect adalah aplikasi internal resmi untuk seluruh karyawan PT Maha Karya Haluoleo. Versi 1 mencakup autentikasi, dashboard, absensi (GPS + selfie), memo, pengumuman, manajemen karyawan/cabang/divisi/jabatan, notifikasi realtime, pencarian global, dan pengaturan perusahaan — dibangun di atas arsitektur yang siap dikembangkan menjadi ERP internal perusahaan.
+
+---
+
+## Tech Stack
+
+| Layer | Teknologi |
+|---|---|
+| Framework | Next.js 15 (App Router, Server Components, Server Actions) |
+| Bahasa | TypeScript (strict mode) |
+| Styling | Tailwind CSS + Radix UI primitives |
+| Backend | Supabase (PostgreSQL, Auth, Storage, Realtime, RLS) |
+| Data fetching | TanStack Query, Server Actions |
+| Tabel | TanStack Table |
+| Form | React Hook Form + Zod |
+| Notifikasi UI | Sonner |
+| Tanggal | date-fns |
+| Ikon | Lucide React |
+| Hosting | Vercel |
+
+## Arsitektur
+
+Clean architecture dengan pemisahan tanggung jawab per layer:
+
+```
+app/            Route segments (App Router) — (auth), (app), api
+components/     UI primitives (ui/) & shared cross-feature components (shared/, layout/)
+features/       Modul per domain: actions (Server Actions), schemas (Zod), components, hooks
+repositories/   Akses data Supabase murni (query builder), tanpa business logic
+services/       Business logic lintas-repository (mis. signed URL storage)
+lib/            Supabase client factories, RBAC session resolver, utils
+hooks/          Reusable client hooks (geolocation, camera, debounce, ...)
+constants/      RBAC, status enum, navigasi, konfigurasi aplikasi
+types/          Tipe database (mirror schema) & tipe domain
+supabase/       Migrations SQL, seed SQL, config
+scripts/        Script operasional (seed demo user)
+```
+
+**Alur data**: `page.tsx` (Server Component) → `repositories/*` (query) atau `features/*/actions` (mutation via Server Action) → Supabase (RLS-enforced). Komponen klien memanggil Server Actions langsung atau via TanStack Query untuk data interaktif (filter, pagination, realtime).
+
+**RBAC**: Role & permission disimpan di database (`roles`, `permissions`, `role_permissions`), bukan hardcoded — role baru dapat ditambahkan tanpa migrasi skema. Setiap Server Action memvalidasi permission melalui `requirePermission()` (lib/rbac/session.ts), dan Postgres RLS menjadi lapisan pertahanan kedua yang independen dari kode aplikasi.
+
+## Modul Versi 1
+
+- **Authentication** — login, logout, forgot/reset password, protected routes via middleware, RBAC
+- **Dashboard** — ringkasan profil, status kehadiran hari ini, statistik bulanan, memo & pengumuman terbaru, quick actions
+- **Attendance** — check-in/out dengan GPS + selfie + validasi radius kantor, riwayat & filter & export CSV, pengajuan izin/sakit & approval, pengaturan jam kerja
+- **Memo** — CRUD, pin, prioritas, wajib dibaca, lampiran, read receipt, targeting (cabang/divisi/jabatan/user)
+- **Pengumuman** — CRUD, kategori, lampiran, pin, tanggal kedaluwarsa, targeting
+- **Employee / Branch / Division / Position** — CRUD lengkap dengan RBAC
+- **Notification** — realtime via Supabase Realtime, unread badge
+- **Profile** — edit profil, foto, ganti password
+- **Search** — pencarian global (memo, pengumuman, karyawan)
+- **Settings** — profil perusahaan, jam kerja, lokasi kantor, radius absensi
+
+## Struktur Database
+
+Seluruh skema ada di `supabase/migrations/` (dijalankan berurutan sesuai nomor file):
+
+1. `0001_extensions.sql` — pgcrypto, pg_trgm, unaccent
+2. `0002_core_tables.sql` — roles, permissions, role_permissions, branches, divisions, positions, employees
+3. `0003_attendance_tables.sql` — work_schedules, attendance, leave_requests
+4. `0004_communication_tables.sql` — memos, memo_targets, memo_attachments, memo_reads, announcements, announcement_categories, announcement_targets, announcement_attachments
+5. `0005_notifications_audit_settings.sql` — notifications, audit_logs, company_settings
+6. `0006_functions_and_triggers.sql` — updated_at trigger, audit log trigger, RBAC helper functions, geo distance function, target audience resolver
+7. `0007_rpc_functions.sql` — transactional RPCs: check-in/out, leave approval, create memo/announcement (+ notification fan-out)
+8. `0008_views.sql` — reporting views (employee directory, today's attendance, monthly stats, memo read stats)
+9. `0009_rls_policies.sql` — Row Level Security policies untuk seluruh tabel
+10. `0010_storage.sql` — storage buckets & policies
+
+Semua tabel menggunakan **UUID primary key**, kolom audit (`created_at`, `updated_at`, `created_by`, `updated_by`), **soft delete** (`deleted_at`), foreign key + index yang relevan, dan **Row Level Security** aktif dengan policy sesuai role & cabang.
+
+Seed data ada di `supabase/seed/`:
+- `01_rbac_seed.sql` — permissions, roles, role_permissions
+- `02_reference_seed.sql` — cabang, divisi, jabatan, jadwal kerja default, company settings
+
+## Setup
+
+### 1. Buat proyek Supabase
+
+Buat proyek baru di [supabase.com](https://supabase.com), lalu catat `Project URL`, `anon key`, dan `service_role key` dari **Project Settings → API**.
+
+### 2. Jalankan migration & seed
+
+Install [Supabase CLI](https://supabase.com/docs/guides/cli) secara terpisah (bukan sebagai dependency proyek ini — gunakan Homebrew/Scoop/binary release sesuai OS Anda), lalu:
+
+```bash
+supabase login
+supabase link --project-ref <project-ref>
+supabase db push               # menjalankan seluruh file di supabase/migrations
+psql "$(supabase db url)" -f supabase/seed/01_rbac_seed.sql
+psql "$(supabase db url)" -f supabase/seed/02_reference_seed.sql
+```
+
+Atau jalankan isi setiap file secara manual via **SQL Editor** di Supabase Dashboard (urutkan sesuai nomor file).
+
+### 3. Konfigurasi environment
+
+```bash
+cp .env.example .env.local
+```
+
+Isi `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxxxx
+SUPABASE_SERVICE_ROLE_KEY=xxxxx
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### 4. Install & jalankan
+
+```bash
+npm install
+npm run dev
+```
+
+Buka [http://localhost:3000](http://localhost:3000).
+
+### 5. Buat akun pengguna pertama
+
+Karyawan dibuat melalui modul **Employee**, yang mengirim undangan email via Supabase Auth (`inviteUserByEmail`) — namun untuk akun *pertama* (Super Admin) belum ada user yang bisa membuatnya lewat UI. Dua opsi:
+
+**A. Script seed demo (untuk development):**
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=xxxxx NEXT_PUBLIC_SUPABASE_URL=xxxxx npm run seed:users
+```
+
+Membuat 5 akun demo (super admin, direktur, HR, kepala cabang, staff) dengan password `MkConnect#2026`. Lihat `scripts/seed-users.ts`.
+
+**B. Manual (untuk production):** buat user melalui **Authentication → Users → Add User** di Supabase Dashboard, lalu insert satu baris ke tabel `employees` yang mereferensikan `id` user tersebut dengan `role_id` milik role `super_admin` (lihat `supabase/seed/01_rbac_seed.sql`).
+
+## Deploy ke Vercel
+
+1. Push repository ini ke GitHub.
+2. Import project di [vercel.com/new](https://vercel.com/new).
+3. Tambahkan environment variables yang sama seperti `.env.local` di **Project Settings → Environment Variables**.
+4. Deploy — Vercel otomatis mendeteksi Next.js, tidak perlu konfigurasi build tambahan.
+5. Tambahkan domain produksi ke **Supabase → Authentication → URL Configuration → Redirect URLs** (untuk flow reset password & invite).
+
+## Perintah yang Tersedia
+
+```bash
+npm run dev          # development server
+npm run build         # production build
+npm run start         # jalankan production build
+npm run lint           # ESLint
+npm run typecheck      # TypeScript strict check
+npm run format          # Prettier
+npm run supabase:types  # generate types/database.types.ts dari proyek Supabase live
+npm run seed:users       # seed akun demo (lihat di atas)
+```
+
+## Keamanan
+
+- **RLS di setiap tabel** — akses data selalu difilter berdasarkan role & cabang di level database, independen dari kode aplikasi.
+- **Permission check ganda** — Server Action memvalidasi permission sebelum eksekusi (defense in depth bersama RLS).
+- **Service role key** hanya dipakai di `lib/supabase/admin.ts` (server-only, untuk provisioning akun karyawan) — tidak pernah diekspos ke client.
+- **Validasi input** dengan Zod di setiap Server Action.
+- **Security headers** (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) diset di `next.config.ts`.
+- **Storage** — bucket privat untuk selfie absensi & lampiran izin (signed URL, TTL 10 menit); bucket publik hanya untuk avatar & aset perusahaan.
+- **Audit log** otomatis (trigger) untuk seluruh tabel penting (`employees`, `attendance`, `leave_requests`, `memos`, `announcements`, dll).
+
+## Roadmap ERP
+
+Struktur database dan folder sudah dirancang agar mudah dikembangkan tanpa refactor besar:
+- `divisions`/`positions` bersifat company-wide dengan `branch_id` opsional → siap untuk struktur organisasi lebih kompleks.
+- `roles`/`permissions` data-driven → modul baru cukup menambah permission key baru + policy RLS, tanpa mengubah struktur inti.
+- Folder `features/` per domain memudahkan penambahan modul baru (payroll, inventory, procurement, dll) sebagai folder baru yang mandiri.
