@@ -1,0 +1,33 @@
+name: CodeQL Security Scan
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 02:00 UTC — catches newly-disclosed vulnerabilities in
+    # unchanged code, not just what a diff touches.
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
