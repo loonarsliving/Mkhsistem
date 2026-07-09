@@ -26,7 +26,10 @@ insert into public.permissions (key, description) values
   ('role.manage', 'Manage roles and role permissions'),
   ('settings.manage', 'Manage company settings'),
   ('audit_log.view', 'View the audit log'),
-  ('system.monitoring_view', 'View system health, error logs and performance metrics')
+  ('system.monitoring_view', 'View system health, error logs and performance metrics'),
+  ('registration.view_all', 'View self-registration requests for all branches'),
+  ('registration.view_branch', 'View self-registration requests for own branch'),
+  ('registration.manage', 'Approve or reject self-registration requests')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -36,7 +39,8 @@ insert into public.roles (key, name, level, description, is_system) values
   ('hr', 'HR', 20, 'Human resources management', true),
   ('kepala_cabang', 'Kepala Cabang', 30, 'Branch head', true),
   ('manager', 'Manager', 40, 'Division / team manager', true),
-  ('staff', 'Staff', 100, 'Regular employee', true)
+  ('staff', 'Staff', 100, 'Regular employee', true),
+  ('pending', 'Pending Approval', 999, 'Self-registered account awaiting approval', true)
 on conflict (key) do nothing;
 
 -- super_admin: every permission
@@ -62,7 +66,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
-  'branch.manage', 'division.manage', 'position.manage'
+  'branch.manage', 'division.manage', 'position.manage',
+  'registration.view_all', 'registration.manage'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -82,7 +87,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_branch', 'attendance.export',
   'memo.view', 'memo.create',
   'announcement.view', 'announcement.create',
-  'employee.view_branch'
+  'employee.view_branch',
+  'registration.view_branch', 'registration.manage'
 ) where r.key = 'kepala_cabang'
 on conflict do nothing;
 

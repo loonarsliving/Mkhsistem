@@ -7,7 +7,8 @@ insert into public.branches (code, name, city, address, latitude, longitude, rad
   ('JOG', 'Jogja', 'Yogyakarta', 'Jl. Malioboro, Yogyakarta', -7.7956, 110.3695, 100, false),
   ('MKS', 'Makassar', 'Makassar', 'Jl. Sudirman, Makassar, Sulawesi Selatan', -5.1477, 119.4327, 100, false),
   ('KDI', 'Kendari', 'Kendari', 'Jl. MT Haryono, Kendari, Sulawesi Tenggara', -3.9985, 122.5127, 100, false),
-  ('CBR', 'Cibarusah', 'Bekasi', 'Jl. Raya Cibarusah, Bekasi, Jawa Barat', -6.3389, 107.0653, 100, false)
+  ('CBR', 'Cibarusah', 'Bekasi', 'Jl. Raya Cibarusah, Bekasi, Jawa Barat', -6.3389, 107.0653, 100, false),
+  ('JBD', 'Jabodetabek', 'Jakarta', null, -6.2088, 106.8456, 100, false)
 on conflict (code) do nothing;
 
 insert into public.divisions (name, code, description) values

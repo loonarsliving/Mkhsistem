@@ -80,3 +80,12 @@ export async function listRoles(supabase: TypedSupabaseClient) {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function countPendingRegistrations(supabase: TypedSupabaseClient) {
+  const { count, error } = await supabase
+    .from("employees")
+    .select("*", { count: "exact", head: true })
+    .eq("approval_status", "pending");
+  if (error) throw error;
+  return count ?? 0;
+}

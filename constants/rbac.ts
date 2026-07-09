@@ -12,6 +12,8 @@ export const ROLE_KEYS = {
   KEPALA_CABANG: "kepala_cabang",
   MANAGER: "manager",
   STAFF: "staff",
+  /** Placeholder role for self-registered accounts awaiting approval — grants nothing. */
+  PENDING: "pending",
 } as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
@@ -51,6 +53,10 @@ export const PERMISSIONS = {
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_LOG_VIEW: "audit_log.view",
   SYSTEM_MONITORING_VIEW: "system.monitoring_view",
+
+  REGISTRATION_VIEW_ALL: "registration.view_all",
+  REGISTRATION_VIEW_BRANCH: "registration.view_branch",
+  REGISTRATION_MANAGE: "registration.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -93,6 +99,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.BRANCH_MANAGE,
     PERMISSIONS.DIVISION_MANAGE,
     PERMISSIONS.POSITION_MANAGE,
+    PERMISSIONS.REGISTRATION_VIEW_ALL,
+    PERMISSIONS.REGISTRATION_MANAGE,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -121,6 +129,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.ANNOUNCEMENT_VIEW,
     PERMISSIONS.ANNOUNCEMENT_CREATE,
     PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
+    PERMISSIONS.REGISTRATION_VIEW_BRANCH,
+    PERMISSIONS.REGISTRATION_MANAGE,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -136,4 +146,5 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.MEMO_VIEW,
     PERMISSIONS.ANNOUNCEMENT_VIEW,
   ],
+  [ROLE_KEYS.PENDING]: [],
 };

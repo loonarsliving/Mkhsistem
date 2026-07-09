@@ -20,7 +20,7 @@ export type LeaveStatusDb = "pending" | "approved" | "rejected";
 export type EmploymentStatusDb = "active" | "inactive" | "on_leave" | "terminated";
 export type MemoPriorityDb = "low" | "normal" | "high" | "urgent";
 export type TargetTypeDb = "all_branch" | "branch" | "all_division" | "division" | "position" | "user";
-export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system";
+export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system" | "registration";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 
 export interface Database {
@@ -204,6 +204,13 @@ export interface Database {
           join_date: string;
           address: string | null;
           is_root_owner: boolean;
+          approval_status: "pending" | "approved" | "rejected";
+          is_active: boolean;
+          approved_by: string | null;
+          approved_at: string | null;
+          rejected_by: string | null;
+          rejected_at: string | null;
+          rejection_reason: string | null;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -212,7 +219,7 @@ export interface Database {
         };
         Insert: {
           id: string;
-          employee_code: string;
+          employee_code?: string;
           full_name: string;
           email: string;
           phone?: string | null;
@@ -227,6 +234,13 @@ export interface Database {
           join_date?: string;
           address?: string | null;
           is_root_owner?: boolean;
+          approval_status?: "pending" | "approved" | "rejected";
+          is_active?: boolean;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          rejected_by?: string | null;
+          rejected_at?: string | null;
+          rejection_reason?: string | null;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -932,6 +946,14 @@ export interface Database {
         Returns: undefined;
       };
       check_login_lockout: { Args: { p_email: string }; Returns: boolean };
+      approve_employee_registration: {
+        Args: { p_employee_id: string };
+        Returns: Database["public"]["Tables"]["employees"]["Row"];
+      };
+      reject_employee_registration: {
+        Args: { p_employee_id: string; p_reason?: string | null };
+        Returns: Database["public"]["Tables"]["employees"]["Row"];
+      };
     };
     Enums: Record<string, never>;
   };

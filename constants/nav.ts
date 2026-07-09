@@ -9,6 +9,7 @@ import {
   Settings,
   ShieldCheck,
   StickyNote,
+  UserCheck,
   Users,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Manajemen",
     items: [
       { label: "Karyawan", href: "/employees", icon: Users, permission: PERMISSIONS.EMPLOYEE_VIEW_BRANCH },
+      { label: "Pending Registration", href: "/registrations", icon: UserCheck, permission: PERMISSIONS.REGISTRATION_MANAGE },
       { label: "Cabang", href: "/branches", icon: Building2, permission: PERMISSIONS.BRANCH_MANAGE },
       { label: "Divisi", href: "/divisions", icon: Network, permission: PERMISSIONS.DIVISION_MANAGE },
       { label: "Jabatan", href: "/positions", icon: ShieldCheck, permission: PERMISSIONS.POSITION_MANAGE },

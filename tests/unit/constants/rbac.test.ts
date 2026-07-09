@@ -34,10 +34,15 @@ describe("RBAC seed integrity", () => {
     }
   });
 
-  it("grants every role at least dashboard.view", () => {
+  it("grants every real role at least dashboard.view (pending is intentionally permission-less)", () => {
     for (const [role, permissions] of Object.entries(ROLE_PERMISSIONS_SEED)) {
+      if (role === ROLE_KEYS.PENDING) continue;
       expect(permissions, `${role} cannot access the dashboard`).toContain(PERMISSIONS.DASHBOARD_VIEW);
     }
+  });
+
+  it("grants the pending role absolutely nothing", () => {
+    expect(ROLE_PERMISSIONS_SEED[ROLE_KEYS.PENDING]).toEqual([]);
   });
 
   it("scopes staff to view-only, self-service permissions", () => {

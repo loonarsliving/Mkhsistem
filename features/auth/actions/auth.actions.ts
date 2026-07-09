@@ -34,7 +34,7 @@ export async function loginAction(input: LoginInput): Promise<ActionResult> {
     return actionError("Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.");
   }
 
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { error, data } = await supabase.auth.signInWithPassword(parsed.data);
   const ip = await clientIp();
   await supabase.rpc("record_login_attempt", { p_email: parsed.data.email, p_success: !error, p_ip_address: ip });
 
@@ -43,6 +43,24 @@ export async function loginAction(input: LoginInput): Promise<ActionResult> {
       return actionError("Email atau password salah");
     }
     return actionError("Gagal masuk. Silakan coba lagi.");
+  }
+
+  // Valid Supabase Auth credentials aren't enough for a self-registered
+  // account — it also needs sign-off from an authorized approver. Check
+  // after sign-in (not before) since this must hold even if someone tries
+  // to skip straight to signInWithPassword.
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("approval_status, is_active")
+    .eq("id", data.user.id)
+    .single();
+
+  if (employee && (employee.approval_status !== "approved" || !employee.is_active)) {
+    await supabase.auth.signOut();
+    if (employee.approval_status === "rejected") {
+      return actionError("Pendaftaran Anda ditolak. Hubungi HR untuk informasi lebih lanjut.");
+    }
+    return actionError("Akun Anda sedang menunggu persetujuan. Anda akan menerima akses login setelah akun disetujui.");
   }
 
   return actionSuccess();

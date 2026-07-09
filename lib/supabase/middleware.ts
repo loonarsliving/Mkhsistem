@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { buildCspHeader } from "@/lib/security/csp";
 import type { Database } from "@/types/database.types";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/callback", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/api/health"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -63,7 +63,7 @@ export async function updateSession(request: NextRequest) {
     return withCsp(NextResponse.redirect(redirectUrl));
   }
 
-  if (user && (pathname === "/login" || pathname === "/")) {
+  if (user && (pathname === "/login" || pathname === "/register" || pathname === "/")) {
     return withCsp(NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
