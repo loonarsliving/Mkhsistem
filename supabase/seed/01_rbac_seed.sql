@@ -25,7 +25,8 @@ insert into public.permissions (key, description) values
   ('position.manage', 'Manage positions'),
   ('role.manage', 'Manage roles and role permissions'),
   ('settings.manage', 'Manage company settings'),
-  ('audit_log.view', 'View the audit log')
+  ('audit_log.view', 'View the audit log'),
+  ('system.monitoring_view', 'View system health, error logs and performance metrics')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values

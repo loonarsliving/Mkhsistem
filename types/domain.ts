@@ -22,6 +22,9 @@ export type AnnouncementTarget = Tables<"announcement_targets">;
 export type Notification = Tables<"mkc_notifications">;
 export type CompanySettings = Tables<"company_settings">;
 export type AuditLog = Tables<"audit_logs">;
+export type ErrorLog = Tables<"mkc_error_logs">;
+export type PerformanceMetric = Tables<"mkc_performance_metrics">;
+export type PerformanceSummary = Views<"v_performance_summary">;
 
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {

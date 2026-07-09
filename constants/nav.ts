@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Building2,
   CalendarCheck,
   LayoutDashboard,
@@ -46,6 +47,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Sistem",
-    items: [{ label: "Pengaturan", href: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE }],
+    items: [
+      { label: "Pengaturan", href: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
+      { label: "Monitoring", href: "/monitoring", icon: Activity, permission: PERMISSIONS.SYSTEM_MONITORING_VIEW },
+    ],
   },
 ];

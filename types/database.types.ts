@@ -739,6 +739,70 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["company_settings"]["Insert"]>;
         Relationships: [];
       };
+      mkc_error_logs: {
+        Row: {
+          id: string;
+          occurred_at: string;
+          level: "warning" | "error" | "fatal";
+          source: "client" | "server";
+          message: string;
+          stack: string | null;
+          digest: string | null;
+          context: Json;
+          url: string | null;
+          user_agent: string | null;
+          user_id: string | null;
+          environment: string;
+          resolved: boolean;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          occurred_at?: string;
+          level: "warning" | "error" | "fatal";
+          source: "client" | "server";
+          message: string;
+          stack?: string | null;
+          digest?: string | null;
+          context?: Json;
+          url?: string | null;
+          user_agent?: string | null;
+          user_id?: string | null;
+          environment?: string;
+          resolved?: boolean;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_error_logs"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_performance_metrics: {
+        Row: {
+          id: string;
+          metric_name: "CLS" | "FCP" | "FID" | "INP" | "LCP" | "TTFB";
+          value: number;
+          rating: "good" | "needs-improvement" | "poor";
+          url: string | null;
+          user_id: string | null;
+          environment: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          metric_name: "CLS" | "FCP" | "FID" | "INP" | "LCP" | "TTFB";
+          value: number;
+          rating: "good" | "needs-improvement" | "poor";
+          url?: string | null;
+          user_id?: string | null;
+          environment?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_performance_metrics"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: {
       v_employee_directory: {
@@ -804,6 +868,16 @@ export interface Database {
         Row: { memo_id: string; audience_count: number; read_count: number };
         Relationships: [];
       };
+      v_performance_summary: {
+        Row: {
+          metric_name: string;
+          sample_count: number;
+          avg_value: number;
+          p75_value: number;
+          poor_count: number;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       app_current_role_key: { Args: Record<string, never>; Returns: string };
@@ -852,6 +926,7 @@ export interface Database {
       mark_all_notifications_read: { Args: Record<string, never>; Returns: undefined };
       get_memo_audience: { Args: { p_memo_id: string }; Returns: { user_id: string }[] };
       get_announcement_audience: { Args: { p_announcement_id: string }; Returns: { user_id: string }[] };
+      health_check: { Args: Record<string, never>; Returns: Json };
     };
     Enums: Record<string, never>;
   };

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
+import { WebVitalsReporter } from "@/components/shared/web-vitals-reporter";
 import { APP_NAME, APP_TAGLINE } from "@/constants/app";
 import { Providers } from "./providers";
 
@@ -31,6 +33,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans`}>
         <Providers>{children}</Providers>
+        <WebVitalsReporter />
+        <SpeedInsights />
       </body>
     </html>
   );

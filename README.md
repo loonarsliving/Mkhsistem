@@ -179,6 +179,19 @@ npm run backup:db                    # backup database manual (lihat docs/BACKUP
 
 Lihat [`docs/BACKUP.md`](docs/BACKUP.md) — proyek Supabase saat ini di plan Free (tanpa backup otomatis dari Supabase). Backup terjadwal harian via `.github/workflows/backup.yml` sudah di-deploy tapi butuh 2 secret (`SUPABASE_DB_URL`, `BACKUP_ENCRYPTION_KEY`) sebelum aktif — dokumen tersebut menjelaskan cara mendapatkannya dan prosedur restore.
 
+## Monitoring, Logging & Error Tracking
+
+Semua bagian di bawah ini benar-benar berjalan begitu di-deploy — tidak ada yang menunggu akun pihak ketiga:
+
+- **Health check** — `GET /api/health` (publik, tanpa auth) melakukan round-trip nyata ke database lewat RPC `health_check()` dan mengembalikan status `ok`/`degraded` beserta latensi. Arahkan uptime monitor (UptimeRobot, Better Stack, dll) atau load balancer ke endpoint ini.
+- **Logging** — `lib/logger.ts` menulis satu baris JSON terstruktur per event ke stdout/stderr. Vercel (dan platform log collector standar lainnya) menangkap ini otomatis tanpa setup tambahan.
+- **Error tracking** — dua jalur, keduanya menulis ke tabel `mkc_error_logs`:
+  - Server: `instrumentation.ts` (`onRequestError`, API bawaan Next.js 15) menangkap error tak tertangani di Route Handler, Server Action, dan RSC.
+  - Client: `app/(app)/error.tsx` & `app/global-error.tsx` menangkap error React, lalu mengirim ke server lewat `reportClientErrorAction`.
+  - Dilihat & diselesaikan lewat halaman **Monitoring** (`/monitoring`, permission `system.monitoring_view`, default hanya Super Admin).
+- **Performance monitoring** — `components/shared/web-vitals-reporter.tsx` mengirim Core Web Vitals (CLS, FCP, FID, INP, LCP, TTFB) tiap page view ke `mkc_performance_metrics`; halaman Monitoring menampilkan agregat p75 7-hari terakhir (`v_performance_summary`). `@vercel/speed-insights` juga aktif otomatis begitu di-deploy ke Vercel.
+- **Scheduled jobs** — `pg_cron` aktif di database live; `mark_absentees_alpha()` berjalan otomatis setiap hari jam 18:00 WITA (10:00 UTC) untuk menandai karyawan aktif yang tidak absen sebagai alpha (lihat `supabase/migrations/0012_enable_pg_cron.sql` & `0013_schedule_mark_absentees_alpha.sql`).
+
 ## Keamanan
 
 - **RLS di setiap tabel** — akses data selalu difilter berdasarkan role & cabang di level database, independen dari kode aplikasi.

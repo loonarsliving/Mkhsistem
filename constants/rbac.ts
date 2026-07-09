@@ -50,6 +50,7 @@ export const PERMISSIONS = {
 
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_LOG_VIEW: "audit_log.view",
+  SYSTEM_MONITORING_VIEW: "system.monitoring_view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
