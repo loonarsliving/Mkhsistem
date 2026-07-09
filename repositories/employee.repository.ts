@@ -1,3 +1,4 @@
+import { escapePostgrestOrValue } from "@/lib/utils";
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { EmploymentStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
 
@@ -24,7 +25,10 @@ export async function listEmployees(supabase: TypedSupabaseClient, filters: Empl
     .order("full_name")
     .range(from, to);
 
-  if (filters.search) query = query.or(`full_name.ilike.%${filters.search}%,employee_code.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+  if (filters.search) {
+    const term = escapePostgrestOrValue(`%${filters.search}%`);
+    query = query.or(`full_name.ilike.${term},employee_code.ilike.${term},email.ilike.${term}`);
+  }
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.divisionId) query = query.eq("division_id", filters.divisionId);
   if (filters.positionId) query = query.eq("position_id", filters.positionId);
@@ -36,11 +40,12 @@ export async function listEmployees(supabase: TypedSupabaseClient, filters: Empl
 }
 
 export async function searchEmployees(supabase: TypedSupabaseClient, term: string, limit = 10) {
+  const safeTerm = escapePostgrestOrValue(`%${term}%`);
   const { data, error } = await supabase
     .from("v_employee_directory")
     .select("id, full_name, employee_code, avatar_url")
     .is("deleted_at", null)
-    .or(`full_name.ilike.%${term}%,employee_code.ilike.%${term}%`)
+    .or(`full_name.ilike.${safeTerm},employee_code.ilike.${safeTerm}`)
     .limit(limit);
   if (error) throw error;
   return data ?? [];

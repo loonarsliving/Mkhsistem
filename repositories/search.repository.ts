@@ -1,3 +1,4 @@
+import { escapePostgrestOrValue } from "@/lib/utils";
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
 export interface GlobalSearchResults {
@@ -8,6 +9,7 @@ export interface GlobalSearchResults {
 
 export async function globalSearch(supabase: TypedSupabaseClient, query: string): Promise<GlobalSearchResults> {
   const term = `%${query}%`;
+  const safeTerm = escapePostgrestOrValue(term);
 
   const [memos, announcements, employees] = await Promise.all([
     supabase.from("memos").select("id, title").is("deleted_at", null).ilike("title", term).limit(5),
@@ -16,7 +18,7 @@ export async function globalSearch(supabase: TypedSupabaseClient, query: string)
       .from("v_employee_directory")
       .select("id, full_name, employee_code, avatar_url")
       .is("deleted_at", null)
-      .or(`full_name.ilike.${term},employee_code.ilike.${term}`)
+      .or(`full_name.ilike.${safeTerm},employee_code.ilike.${safeTerm}`)
       .limit(5),
   ]);
 

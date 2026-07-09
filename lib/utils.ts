@@ -32,6 +32,19 @@ export function formatFileSize(bytes: number | null | undefined): string {
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+/**
+ * Escapes a value for safe interpolation into a PostgREST `.or()`/`.filter()`
+ * expression string. Per PostgREST's filter grammar, values containing a
+ * comma, period, parenthesis, or colon must be double-quoted, with any
+ * internal backslash/quote backslash-escaped — otherwise user input can
+ * break out of the intended `column.operator.value` clause and inject
+ * additional filter terms (e.g. a search string containing `,role.eq.x`).
+ */
+export function escapePostgrestOrValue(value: string): string {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()
