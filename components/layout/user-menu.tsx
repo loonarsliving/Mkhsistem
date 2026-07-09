@@ -21,7 +21,10 @@ export function UserMenu({ session }: { session: CurrentSession }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <DropdownMenuTrigger
+        aria-label={`Menu akun untuk ${employee.full_name}`}
+        className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <Avatar>
           <AvatarImage src={employee.avatar_url ?? undefined} alt={employee.full_name} />
           <AvatarFallback>{getInitials(employee.full_name)}</AvatarFallback>
