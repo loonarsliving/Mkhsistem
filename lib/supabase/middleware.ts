@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { logger } from "@/lib/logger";
 import { buildCspHeader } from "@/lib/security/csp";
 import type { Database } from "@/types/database.types";
 
@@ -10,6 +11,8 @@ function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+const REQUIRED_ENV_VARS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
+
 /**
  * Refreshes the Supabase auth session on every request, redirects
  * unauthenticated users away from protected routes, and attaches a
@@ -17,8 +20,25 @@ function isPublicPath(pathname: string) {
  * (including redirects, for defense-in-depth). Called from the root
  * `middleware.ts`. Fine-grained (per-permission) authorization is enforced
  * again at the page/server-action level via RLS + `app_has_permission`.
+ *
+ * Middleware runs on every request, so an uncaught throw here takes the
+ * entire site down at once (Vercel surfaces it as the opaque
+ * MIDDLEWARE_INVOCATION_FAILED, with no detail). Two safeguards against
+ * that: an explicit env-var check that fails loud with a specific message
+ * (a misconfigured deployment needs a human to notice and fix it), and a
+ * catch-all around the Supabase call that fails closed — redirect to
+ * /login — instead of crashing the whole request.
  */
 export async function updateSession(request: NextRequest) {
+  const missingEnvVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
+  if (missingEnvVars.length > 0) {
+    logger.error("Middleware misconfigured: missing required environment variables", { missingEnvVars });
+    return new NextResponse(
+      `Configuration error: missing environment variable(s) ${missingEnvVars.join(", ")}. Set them in the Vercel project's Environment Variables (Production scope) and redeploy.`,
+      { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const { nonce, header: cspHeader } = buildCspHeader();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -34,38 +54,47 @@ export async function updateSession(request: NextRequest) {
 
   let supabaseResponse = withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
 
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
+  try {
+    const supabase = createServerClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            supabaseResponse = withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
+            cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
+          },
         },
       },
-    },
-  );
+    );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
+    const { pathname } = request.nextUrl;
 
-  if (!user && !isPublicPath(pathname)) {
-    const redirectUrl = new URL("/login", request.url);
-    redirectUrl.searchParams.set("redirectTo", pathname);
-    return withCsp(NextResponse.redirect(redirectUrl));
+    if (!user && !isPublicPath(pathname)) {
+      const redirectUrl = new URL("/login", request.url);
+      redirectUrl.searchParams.set("redirectTo", pathname);
+      return withCsp(NextResponse.redirect(redirectUrl));
+    }
+
+    if (user && (pathname === "/login" || pathname === "/register" || pathname === "/")) {
+      return withCsp(NextResponse.redirect(new URL("/dashboard", request.url)));
+    }
+
+    return supabaseResponse;
+  } catch (error) {
+    logger.error("Middleware failed unexpectedly", { error: error instanceof Error ? error.message : String(error) });
+    const { pathname } = request.nextUrl;
+    if (isPublicPath(pathname)) {
+      return supabaseResponse;
+    }
+    return withCsp(NextResponse.redirect(new URL("/login", request.url)));
   }
-
-  if (user && (pathname === "/login" || pathname === "/register" || pathname === "/")) {
-    return withCsp(NextResponse.redirect(new URL("/dashboard", request.url)));
-  }
-
-  return supabaseResponse;
 }
