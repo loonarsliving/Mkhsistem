@@ -447,6 +447,9 @@ export interface Database {
           phone: string | null;
           avatar_url: string | null;
           employment_status: EmploymentStatusDb;
+          gender: "male" | "female" | null;
+          birth_date: string | null;
+          address: string | null;
           join_date: string;
           branch_id: string;
           branch_name: string;
