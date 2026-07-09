@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- CLI script: stdout progress output is the intended behavior */
 /**
  * Seeds demo auth accounts + employee profiles for local/demo environments.
  * Run after `supabase db reset` (which applies migrations + SQL seeds).
