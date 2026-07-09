@@ -52,8 +52,11 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title={employee.full_name}
-        description="Kelola data karyawan."
-        actions={employee.employment_status !== "terminated" && <DeactivateEmployeeButton employeeId={employee.id} />}
+        description={employee.is_root_owner ? "Root Owner — akun ini tidak dapat dinonaktifkan atau dihapus." : "Kelola data karyawan."}
+        actions={
+          employee.employment_status !== "terminated" &&
+          !employee.is_root_owner && <DeactivateEmployeeButton employeeId={employee.id} />
+        }
       />
       <EmployeeEditForm initialValues={formValues} />
     </div>

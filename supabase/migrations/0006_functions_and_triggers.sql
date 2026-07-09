@@ -65,9 +65,12 @@ do $$
 declare
   t text;
 begin
+  -- role_permissions is intentionally excluded: it's a pure join table with
+  -- a composite primary key (role_id, permission_id) and no `id` column, so
+  -- audit_log_trigger()'s `new.id`/`old.id` lookup would fail on it.
   for t in
     select unnest(array[
-      'employees', 'branches', 'divisions', 'positions', 'roles', 'role_permissions',
+      'employees', 'branches', 'divisions', 'positions', 'roles',
       'attendance', 'leave_requests', 'memos', 'announcements', 'work_schedules',
       'company_settings'
     ])

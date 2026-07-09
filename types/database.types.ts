@@ -203,6 +203,7 @@ export interface Database {
           birth_date: string | null;
           join_date: string;
           address: string | null;
+          is_root_owner: boolean;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -225,6 +226,7 @@ export interface Database {
           birth_date?: string | null;
           join_date?: string;
           address?: string | null;
+          is_root_owner?: boolean;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -763,6 +765,7 @@ export interface Database {
           role_name: string;
           created_at: string;
           deleted_at: string | null;
+          is_root_owner: boolean;
         };
         Relationships: [];
       };
