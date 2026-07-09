@@ -4,6 +4,8 @@
 
 MK Connect adalah aplikasi internal resmi untuk seluruh karyawan PT Maha Karya Haluoleo. Versi 1 mencakup autentikasi, dashboard, absensi (GPS + selfie), memo, pengumuman, manajemen karyawan/cabang/divisi/jabatan, notifikasi realtime, pencarian global, dan pengaturan perusahaan — dibangun di atas arsitektur yang siap dikembangkan menjadi ERP internal perusahaan.
 
+> **Catatan proyek Supabase**: Instance produksi MK Connect saat ini adalah proyek Supabase `svcmybsziaelwwdrnzcv` yang **dipakai bersama (shared)** dengan aplikasi villa-rental lain milik organisasi yang sama. Karena itu tabel `notifications` bawaan MK Connect diberi nama `mkc_notifications` (bukan `notifications`) untuk menghindari bentrok dengan tabel `notifications` milik aplikasi villa yang sudah ada lebih dulu — lihat komentar di `supabase/migrations/0005_notifications_audit_settings.sql`. Seluruh tabel/fungsi lain sudah diverifikasi tidak bentrok dan tetap memakai nama aslinya. Jika MK Connect suatu saat dipindah ke proyek Supabase khusus (dedicated), penyesuaian nama ini boleh dibalik.
+
 ---
 
 ## Tech Stack
