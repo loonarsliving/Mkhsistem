@@ -1,0 +1,136 @@
+/**
+ * Roles are data-driven (stored in the `roles` table), not a hardcoded enum,
+ * so new roles can be added without a schema or code change. These keys are
+ * the seed set for v1 and are used only as typed references in app code /
+ * seed data — the source of truth at runtime is always the database row.
+ */
+export const ROLE_KEYS = {
+  SUPER_ADMIN: "super_admin",
+  DIREKTUR_UTAMA: "direktur_utama",
+  DIREKTUR_OPERASIONAL: "direktur_operasional",
+  HR: "hr",
+  KEPALA_CABANG: "kepala_cabang",
+  MANAGER: "manager",
+  STAFF: "staff",
+} as const;
+
+export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
+
+/**
+ * Permission keys follow `<resource>.<action>` and are additive: a role has
+ * a permission if it exists in role_permissions. Scope (own / branch / all)
+ * is resolved separately via RLS + branch_id comparison, not encoded here.
+ */
+export const PERMISSIONS = {
+  DASHBOARD_VIEW: "dashboard.view",
+
+  ATTENDANCE_VIEW_OWN: "attendance.view_own",
+  ATTENDANCE_VIEW_BRANCH: "attendance.view_branch",
+  ATTENDANCE_VIEW_ALL: "attendance.view_all",
+  ATTENDANCE_MANAGE: "attendance.manage",
+  ATTENDANCE_SETTINGS_MANAGE: "attendance.settings_manage",
+  ATTENDANCE_EXPORT: "attendance.export",
+
+  MEMO_VIEW: "memo.view",
+  MEMO_CREATE: "memo.create",
+  MEMO_MANAGE: "memo.manage",
+
+  ANNOUNCEMENT_VIEW: "announcement.view",
+  ANNOUNCEMENT_CREATE: "announcement.create",
+  ANNOUNCEMENT_MANAGE: "announcement.manage",
+
+  EMPLOYEE_VIEW_BRANCH: "employee.view_branch",
+  EMPLOYEE_VIEW_ALL: "employee.view_all",
+  EMPLOYEE_MANAGE: "employee.manage",
+
+  BRANCH_MANAGE: "branch.manage",
+  DIVISION_MANAGE: "division.manage",
+  POSITION_MANAGE: "position.manage",
+  ROLE_MANAGE: "role.manage",
+
+  SETTINGS_MANAGE: "settings.manage",
+  AUDIT_LOG_VIEW: "audit_log.view",
+} as const;
+
+export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+/** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
+export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
+  [ROLE_KEYS.SUPER_ADMIN]: Object.values(PERMISSIONS),
+  [ROLE_KEYS.DIREKTUR_UTAMA]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_ALL,
+    PERMISSIONS.ATTENDANCE_EXPORT,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.MEMO_CREATE,
+    PERMISSIONS.MEMO_MANAGE,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_CREATE,
+    PERMISSIONS.ANNOUNCEMENT_MANAGE,
+    PERMISSIONS.EMPLOYEE_VIEW_ALL,
+    PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.BRANCH_MANAGE,
+    PERMISSIONS.DIVISION_MANAGE,
+    PERMISSIONS.POSITION_MANAGE,
+    PERMISSIONS.SETTINGS_MANAGE,
+    PERMISSIONS.AUDIT_LOG_VIEW,
+  ],
+  [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_ALL,
+    PERMISSIONS.ATTENDANCE_EXPORT,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.MEMO_CREATE,
+    PERMISSIONS.MEMO_MANAGE,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_CREATE,
+    PERMISSIONS.ANNOUNCEMENT_MANAGE,
+    PERMISSIONS.EMPLOYEE_VIEW_ALL,
+    PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.BRANCH_MANAGE,
+    PERMISSIONS.DIVISION_MANAGE,
+    PERMISSIONS.POSITION_MANAGE,
+  ],
+  [ROLE_KEYS.HR]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_ALL,
+    PERMISSIONS.ATTENDANCE_MANAGE,
+    PERMISSIONS.ATTENDANCE_SETTINGS_MANAGE,
+    PERMISSIONS.ATTENDANCE_EXPORT,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.MEMO_CREATE,
+    PERMISSIONS.MEMO_MANAGE,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_CREATE,
+    PERMISSIONS.ANNOUNCEMENT_MANAGE,
+    PERMISSIONS.EMPLOYEE_VIEW_ALL,
+    PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.BRANCH_MANAGE,
+    PERMISSIONS.DIVISION_MANAGE,
+    PERMISSIONS.POSITION_MANAGE,
+  ],
+  [ROLE_KEYS.KEPALA_CABANG]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_BRANCH,
+    PERMISSIONS.ATTENDANCE_EXPORT,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.MEMO_CREATE,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_CREATE,
+    PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
+  ],
+  [ROLE_KEYS.MANAGER]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_BRANCH,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.MEMO_CREATE,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
+  ],
+  [ROLE_KEYS.STAFF]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_OWN,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+  ],
+};
