@@ -17,7 +17,7 @@ export function useNotifications(userId: string) {
     queryKey: NOTIFICATIONS_KEY,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("notifications")
+        .from("mkc_notifications")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(20);
@@ -30,7 +30,7 @@ export function useNotifications(userId: string) {
     queryKey: UNREAD_COUNT_KEY,
     queryFn: async () => {
       const { count, error } = await supabase
-        .from("notifications")
+        .from("mkc_notifications")
         .select("*", { count: "exact", head: true })
         .eq("is_read", false);
       if (error) throw error;
@@ -43,7 +43,7 @@ export function useNotifications(userId: string) {
       .channel(`notifications:${userId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        { event: "*", schema: "public", table: "mkc_notifications", filter: `user_id=eq.${userId}` },
         () => {
           queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_KEY });
           queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_KEY });

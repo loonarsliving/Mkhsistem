@@ -651,7 +651,10 @@ export interface Database {
           },
         ];
       };
-      notifications: {
+      // Named mkc_notifications (not notifications) — this Supabase project
+      // is shared with other apps that already own an unrelated
+      // public.notifications table.
+      mkc_notifications: {
         Row: {
           id: string;
           user_id: string;
@@ -676,10 +679,10 @@ export interface Database {
           metadata?: Json;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["mkc_notifications"]["Insert"]>;
         Relationships: [
           {
-            foreignKeyName: "notifications_user_id_fkey";
+            foreignKeyName: "mkc_notifications_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "employees";
             referencedColumns: ["id"];

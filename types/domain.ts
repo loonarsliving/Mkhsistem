@@ -19,7 +19,7 @@ export type Announcement = Tables<"announcements">;
 export type AnnouncementCategory = Tables<"announcement_categories">;
 export type AnnouncementAttachment = Tables<"announcement_attachments">;
 export type AnnouncementTarget = Tables<"announcement_targets">;
-export type Notification = Tables<"notifications">;
+export type Notification = Tables<"mkc_notifications">;
 export type CompanySettings = Tables<"company_settings">;
 export type AuditLog = Tables<"audit_logs">;
 

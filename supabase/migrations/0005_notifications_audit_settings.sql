@@ -2,7 +2,12 @@
 -- MK Connect — 0005: Notifications, audit log, company settings
 -- ============================================================================
 
-create table public.notifications (
+-- Named `mkc_notifications` (not `notifications`) because this Supabase
+-- project is shared with other applications in the same org that already
+-- own an unrelated `public.notifications` table. All other MK Connect
+-- table/function names were verified collision-free against this project
+-- and kept unprefixed.
+create table public.mkc_notifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.employees(id) on delete cascade,
   type text not null check (type in ('memo', 'announcement', 'attendance', 'leave_request', 'system')),
@@ -14,9 +19,13 @@ create table public.notifications (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
-create index notifications_user_id_idx on public.notifications (user_id);
-create index notifications_user_unread_idx on public.notifications (user_id) where not is_read;
-create index notifications_created_at_idx on public.notifications (created_at desc);
+create index mkc_notifications_user_id_idx on public.mkc_notifications (user_id);
+create index mkc_notifications_user_unread_idx on public.mkc_notifications (user_id) where not is_read;
+create index mkc_notifications_created_at_idx on public.mkc_notifications (created_at desc);
+
+-- Required for the client's `postgres_changes` realtime subscription
+-- (features/notifications/hooks/use-notifications.ts) to receive events.
+alter publication supabase_realtime add table public.mkc_notifications;
 
 create table public.audit_logs (
   id uuid primary key default gen_random_uuid(),

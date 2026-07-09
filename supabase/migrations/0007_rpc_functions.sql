@@ -218,7 +218,7 @@ begin
     end loop;
   end if;
 
-  insert into public.notifications (user_id, type, title, body, link)
+  insert into public.mkc_notifications (user_id, type, title, body, link)
   values (
     v_leave.user_id,
     'leave_request',
@@ -283,7 +283,7 @@ begin
     );
   end loop;
 
-  insert into public.notifications (user_id, type, title, body, link)
+  insert into public.mkc_notifications (user_id, type, title, body, link)
   select ma.user_id, 'memo', 'Memo baru: ' || p_title, left(p_content, 140), '/memo/' || v_memo_id
   from public.get_memo_audience(v_memo_id) ma
   where ma.user_id <> v_user_id;
@@ -354,7 +354,7 @@ begin
     );
   end loop;
 
-  insert into public.notifications (user_id, type, title, body, link)
+  insert into public.mkc_notifications (user_id, type, title, body, link)
   select aa.user_id, 'announcement', 'Pengumuman baru: ' || p_title, left(p_content, 140), '/announcements/' || v_announcement_id
   from public.get_announcement_audience(v_announcement_id) aa
   where aa.user_id <> v_user_id;
@@ -372,7 +372,7 @@ language sql
 security invoker
 set search_path = public
 as $$
-  update public.notifications
+  update public.mkc_notifications
   set is_read = true, read_at = now()
   where id = p_notification_id and user_id = auth.uid();
 $$;
@@ -383,7 +383,7 @@ language sql
 security invoker
 set search_path = public
 as $$
-  update public.notifications
+  update public.mkc_notifications
   set is_read = true, read_at = now()
   where user_id = auth.uid() and not is_read;
 $$;

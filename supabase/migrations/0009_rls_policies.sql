@@ -24,7 +24,7 @@ alter table public.announcement_categories enable row level security;
 alter table public.announcements enable row level security;
 alter table public.announcement_attachments enable row level security;
 alter table public.announcement_targets enable row level security;
-alter table public.notifications enable row level security;
+alter table public.mkc_notifications enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.company_settings enable row level security;
 
@@ -265,12 +265,12 @@ create policy announcement_attachments_write on public.announcement_attachments 
 -- ----------------------------------------------------------------------------
 -- notifications
 -- ----------------------------------------------------------------------------
-create policy notifications_select on public.notifications for select to authenticated
+create policy notifications_select on public.mkc_notifications for select to authenticated
   using (user_id = auth.uid());
-create policy notifications_update on public.notifications for update to authenticated
+create policy notifications_update on public.mkc_notifications for update to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
-create policy notifications_delete on public.notifications for delete to authenticated
+create policy notifications_delete on public.mkc_notifications for delete to authenticated
   using (user_id = auth.uid());
 
 -- ----------------------------------------------------------------------------

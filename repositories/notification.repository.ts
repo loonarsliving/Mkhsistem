@@ -7,7 +7,7 @@ export async function listNotifications(supabase: TypedSupabaseClient, userId: s
   const to = from + PAGE_SIZE - 1;
 
   const { data, error, count } = await supabase
-    .from("notifications")
+    .from("mkc_notifications")
     .select("*", { count: "exact" })
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
@@ -19,7 +19,7 @@ export async function listNotifications(supabase: TypedSupabaseClient, userId: s
 
 export async function countUnreadNotifications(supabase: TypedSupabaseClient, userId: string) {
   const { count, error } = await supabase
-    .from("notifications")
+    .from("mkc_notifications")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("is_read", false);
