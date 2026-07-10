@@ -23,6 +23,11 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         StartupDiagnostics.log(this, "MainActivity.onCreate() starting");
         try {
+            // Must be registered before super.onCreate() -- that call is
+            // what builds the Bridge from whatever plugins are registered
+            // so far (see BridgeActivity#load()/bridgeBuilder.create()).
+            registerPlugin(FirebaseStatusPlugin.class);
+
             // Capacitor Bridge creation + every plugin's load() runs inside
             // this call - this is the step most likely to throw if a native
             // plugin (biometric, push-notifications/Firebase, camera, etc.)
