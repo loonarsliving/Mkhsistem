@@ -50,23 +50,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle
 
       - uses: android-actions/setup-android@v3
 
       - name: Sync Capacitor
         run: npx cap sync android
-
-      - name: Android lint
-        working-directory: android
-        run: ./gradlew lint --no-daemon
-
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-lint-report
-          path: android/app/build/reports/lint-results-*.html
-          if-no-files-found: ignore
 
       - name: Build debug APK
         working-directory: android
@@ -110,6 +99,22 @@ jobs:
         with:
           name: boot-smoke-test-logcat
           path: ${{ runner.temp }}/logcat.txt
+          if-no-files-found: ignore
+
+      # Non-blocking: lint findings are worth surfacing but shouldn't hold
+      # up getting a real device/emulator signal on whether the app boots.
+      - name: Android lint
+        if: always()
+        continue-on-error: true
+        working-directory: android
+        run: ./gradlew lint --no-daemon
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: android/app/build/reports/lint-results-*.html
           if-no-files-found: ignore
 
       # Release signing is optional: without the three secrets below, this
