@@ -90,6 +90,30 @@ jobs:
           MKC_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
+      # Cryptographic proof, not an inference from the filename: apksigner
+      # parses the actual APK Signing Block and validates it against the
+      # certificate, the same check the Play Store and any Android device
+      # perform before allowing an install. Fails the job (no continue-on-
+      # error) if verification doesn't pass -- an APK named app-release.apk
+      # that isn't actually correctly signed should never ship.
+      - name: Verify release APK signature
+        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
+        working-directory: android
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "No apksigner found in installed build-tools -- installing build-tools;36.0.0"
+            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            sdkmanager "build-tools;36.0.0"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+          fi
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::Could not locate or install apksigner"
+            exit 1
+          fi
+          echo "Using: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
