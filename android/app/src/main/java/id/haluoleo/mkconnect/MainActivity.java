@@ -140,10 +140,18 @@ public class MainActivity extends BridgeActivity {
             webView.setWebChromeClient(new BridgeWebChromeClient(bridge) {
                 @Override
                 public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                    if (consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    // WARNING is included (not just ERROR) because the app's
+                    // JS-side flow instrumentation (lib/native/*, attendance
+                    // Check In flow) logs via console.warn -- this project's
+                    // eslint no-console rule only allows warn/error, and the
+                    // user has no browser devtools access to the WebView, so
+                    // this is the only way those log lines ever reach them
+                    // (via logcat / this session's crash-diagnostics tooling).
+                    ConsoleMessage.MessageLevel level = consoleMessage.messageLevel();
+                    if (level == ConsoleMessage.MessageLevel.ERROR || level == ConsoleMessage.MessageLevel.WARNING) {
                         StartupDiagnostics.log(
                             MainActivity.this,
-                            "WebView JS console error: " + consoleMessage.message()
+                            "WebView JS console " + level + ": " + consoleMessage.message()
                                 + " (" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + ")"
                         );
                     }

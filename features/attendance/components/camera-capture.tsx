@@ -22,12 +22,18 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
   }, []);
 
   async function handleCapture() {
+    console.warn("[camera-capture] handleCapture: starting");
     const blob = await capture();
-    if (!blob) return;
+    if (!blob) {
+      console.warn("[camera-capture] handleCapture: capture() returned null, aborting");
+      return;
+    }
+    console.warn("[camera-capture] handleCapture: got blob, size =", blob.size);
     const url = URL.createObjectURL(blob);
     setPreviewUrl(url);
     onCapture(blob, url);
     stop();
+    console.warn("[camera-capture] handleCapture: done, preview set");
   }
 
   function handleRetake() {
