@@ -4,19 +4,37 @@ import { headers } from "next/headers";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import { WebVitalsReporter } from "@/components/shared/web-vitals-reporter";
-import { APP_NAME, APP_TAGLINE } from "@/constants/app";
+import { APP_NAME, APP_TAGLINE, APP_URL, COMPANY_NAME } from "@/constants/app";
 import { Providers } from "./providers";
 
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
+const description = `${APP_TAGLINE} untuk ${COMPANY_NAME}`;
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: {
     default: `${APP_NAME} — ${APP_TAGLINE}`,
     template: `%s | ${APP_NAME}`,
   },
-  description: `${APP_TAGLINE} untuk PT Maha Karya Haluoleo`,
+  description,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    url: "/",
+    siteName: APP_NAME,
+    title: `${APP_NAME} — ${APP_TAGLINE}`,
+    description,
+  },
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export const viewport: Viewport = {

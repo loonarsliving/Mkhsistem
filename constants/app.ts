@@ -1,6 +1,13 @@
 export const APP_NAME = "MK Connect";
 export const APP_TAGLINE = "Internal Communication & Attendance System";
 export const COMPANY_NAME = "PT Maha Karya Haluoleo";
+/**
+ * Canonical production origin, no trailing slash. Falls back to the real
+ * custom domain (not a *.vercel.app alias) so metadata/manifest/robots/
+ * sitemap and auth redirect URLs are correct even if the Vercel project's
+ * own NEXT_PUBLIC_APP_URL env var is ever unset or stale.
+ */
+export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://mkh.haluoleo.id").replace(/\/$/, "");
 
 export const ATTENDANCE_STATUS = {
   HADIR: "hadir",

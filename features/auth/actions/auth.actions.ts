@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { APP_URL } from "@/constants/app";
 import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess } from "@/types/domain";
 import type { ActionResult } from "@/types/domain";
@@ -79,7 +80,7 @@ export async function forgotPasswordAction(input: ForgotPasswordInput): Promise<
   }
 
   const supabase = await createClient();
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`;
+  const redirectTo = `${APP_URL}/reset-password`;
 
   // Always report success regardless of whether the email exists, to avoid
   // leaking which addresses are registered.
