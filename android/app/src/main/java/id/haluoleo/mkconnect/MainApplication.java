@@ -2,45 +2,42 @@ package id.haluoleo.mkconnect;
 
 import android.app.Application;
 import android.content.Context;
-import android.util.Log;
+import android.os.Process;
 
 /**
  * Installs a global uncaught-exception handler as early as possible
- * (attachBaseContext, before any ContentProvider — including FileProvider
- * and any Firebase/WorkManager auto-init providers pulled in transitively
- * by the native plugins — is created) so a startup crash is always logged
- * to Logcat with its full stack trace under a single, greppable tag,
- * regardless of which component throws or how early it throws.
+ * (attachBaseContext, before any ContentProvider - including FileProvider
+ * and Firebase's/WorkManager's auto-init providers pulled in transitively by
+ * the native plugins - is created) so a startup crash is always captured:
+ * logged to Logcat, written to crash.txt, and shown on-screen via the
+ * separate-process CrashActivity, even on a device with no adb access.
  */
 public class MainApplication extends Application {
-
-    private static final String CRASH_TAG = "MKConnectStartupCrash";
 
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        installCrashLogger();
+        StartupDiagnostics.log(base, "MainApplication.attachBaseContext() -- installing global crash handlers");
+        installCrashHandler();
     }
 
-    private void installCrashLogger() {
-        final Thread.UncaughtExceptionHandler previousHandler = Thread.getDefaultUncaughtExceptionHandler();
+    private void installCrashHandler() {
+        final Context appContext = this;
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             try {
-                Log.e(
-                    CRASH_TAG,
-                    "FATAL EXCEPTION during startup on thread \"" + thread.getName() + "\": " + throwable,
+                String report = StartupDiagnostics.reportFatal(
+                    appContext,
+                    "Uncaught exception on thread \"" + thread.getName() + "\"",
                     throwable
                 );
-            } catch (Throwable loggingFailure) {
-                // Never let the crash logger itself become the reason the
-                // original crash report is lost.
-            }
-            if (previousHandler != null) {
-                previousHandler.uncaughtException(thread, throwable);
-            } else {
-                // No previous handler (shouldn't normally happen): fall
-                // back to killing the process the same way the platform
-                // default handler would, so behavior stays unchanged.
+                StartupDiagnostics.launchCrashActivity(appContext, report);
+                // Give the separate :crash process time to actually start
+                // before this (broken) process is torn down.
+                Thread.sleep(400);
+            } catch (Throwable ignored) {
+                // Diagnostics must never be the reason the crash isn't handled.
+            } finally {
+                Process.killProcess(Process.myPid());
                 Runtime.getRuntime().exit(10);
             }
         });
@@ -49,6 +46,10 @@ public class MainApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.i(CRASH_TAG, "MainApplication.onCreate() reached — process/ContentProvider init completed without crashing.");
+        StartupDiagnostics.log(
+            this,
+            "MainApplication.onCreate() reached -- process/ContentProvider init " +
+            "(including Firebase auto-init) completed without crashing."
+        );
     }
 }
