@@ -25,6 +25,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # `if:` conditions can't reference `secrets` directly (GitHub Actions
+      # restriction) — mapping it into a job-level env var first is the
+      # standard workaround.
+      HAS_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +78,7 @@ jobs:
       # and register a real release keystore so this step ships a properly
       # signed artifact instead.
       - name: Decode release keystore
-        if: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "MKC_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
