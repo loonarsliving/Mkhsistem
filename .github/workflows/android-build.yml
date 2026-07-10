@@ -78,6 +78,40 @@ jobs:
           name: mk-connect-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+      # Lint and a successful Gradle build only prove the APK packages —
+      # they can't catch a runtime crash on launch (a missing manifest
+      # resource, an uninitialized SDK, a bad plugin config). Boot a real
+      # emulator, install the just-built debug APK, launch it, and fail the
+      # job if logcat shows a FATAL EXCEPTION for our process.
+      - name: Boot emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb logcat -c
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n id.haluoleo.mkconnect/.MainActivity
+            sleep 15
+            adb logcat -d > "$RUNNER_TEMP/logcat.txt"
+            if grep -q "FATAL EXCEPTION" "$RUNNER_TEMP/logcat.txt" || ! adb shell pidof id.haluoleo.mkconnect > /dev/null; then
+              echo "::error::App crashed or is not running after launch. Relevant logcat:"
+              grep -A 60 "FATAL EXCEPTION\|AndroidRuntime: Process\|id.haluoleo.mkconnect" "$RUNNER_TEMP/logcat.txt" || cat "$RUNNER_TEMP/logcat.txt"
+              exit 1
+            fi
+            echo "App launched and is still running after 15s — no crash detected."
+
+      - name: Upload smoke test logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-smoke-test-logcat
+          path: ${{ runner.temp }}/logcat.txt
+          if-no-files-found: ignore
+
       # Release signing is optional: without the three secrets below, this
       # still produces a real, installable (but unsigned) release APK for
       # internal testing — see docs/android/BUILD.md for how to generate

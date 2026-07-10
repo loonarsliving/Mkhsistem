@@ -19,4 +19,18 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
     </style>
+
+    <!-- Required by capacitor-native-biometric's AuthActivity
+         (node_modules/capacitor-native-biometric/android AndroidManifest.xml
+         references @style/AppTheme.Transparent but never defines it — every
+         consuming app has to). Without this, opening the biometric prompt
+         crashes with a Resources$NotFoundException. -->
+    <style name="AppTheme.Transparent" parent="Theme.AppCompat.Translucent">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
 </resources>
