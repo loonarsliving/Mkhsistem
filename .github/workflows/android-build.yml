@@ -10,6 +10,10 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/android-build.yml"
+    # Pushing a tag like android-v1.0.0 builds the same way *and* publishes
+    # a GitHub Release named "MK Connect Android v1.0.0" with both APKs
+    # attached — see the release job below.
+    tags: ["android-v*"]
   workflow_dispatch:
 
 # Same public, non-secret project config as .github/workflows/ci.yml.
@@ -25,6 +29,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # only needed for the release step below (tag pushes)
     env:
       # `if:` conditions can't reference `secrets` directly (GitHub Actions
       # restriction) — mapping it into a job-level env var first is the
@@ -96,3 +102,34 @@ jobs:
         with:
           name: mk-connect-release-apk
           path: android/app/build/outputs/apk/release/app-release*.apk
+
+      # Only on a tag push (e.g. android-v1.0.0) — renames both APKs with
+      # the version baked into the filename and publishes them as a
+      # GitHub Release, so anyone can grab them from the Releases page
+      # instead of digging through workflow-run artifacts (which also
+      # expire after 90 days; release assets don't).
+      - name: Prepare versioned APK filenames
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        run: |
+          version="${GITHUB_REF_NAME#android-v}"
+          echo "APK_VERSION=$version" >> "$GITHUB_ENV"
+          mkdir -p release-assets
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release-assets/MKConnect-v${version}-debug.apk"
+          release_apk=$(ls android/app/build/outputs/apk/release/app-release*.apk | head -n1)
+          release_label=$([ "$HAS_RELEASE_KEYSTORE" = "true" ] && echo "release" || echo "release-unsigned")
+          cp "$release_apk" "release-assets/MKConnect-v${version}-${release_label}.apk"
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "MK Connect Android v${{ env.APK_VERSION }}"
+          generate_release_notes: true
+          files: release-assets/*.apk
+          body: |
+            Android app for PT Maha Karya Haluoleo employees (package `id.haluoleo.mkconnect`).
+
+            - **Debug APK** — for internal testing, signed with the standard Android debug key.
+            - **Release APK** — ${{ env.HAS_RELEASE_KEYSTORE == 'true' && 'signed with the production release key.' || 'currently UNSIGNED (no release keystore configured in repo secrets yet — see docs/android/BUILD.md). Fine for one-off installs, but cannot receive signed updates until a real keystore is added.' }}
+
+            See `docs/android/INSTALL.md` for installation steps.
