@@ -72,10 +72,9 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
 }
 
 /**
- * Notifies whoever is authorized to approve this registration: the branch's
- * Kepala Cabang if one exists, otherwise every Direktur Operasional (covers
- * Jabodetabek/Kendari, which have no branch head yet) — plus every Super
- * Admin, always, regardless of branch.
+ * Notifies everyone authorized to approve this registration: every Direktur
+ * Operasional and every Super Admin, always, plus the branch's own Kepala
+ * Cabang if one exists (Jabodetabec/Kendari currently have none).
  */
 async function notifyApprovers(admin: ReturnType<typeof createAdminClient>, branchId: string, registrantName: string) {
   const { data: approvers } = await admin
@@ -85,16 +84,12 @@ async function notifyApprovers(admin: ReturnType<typeof createAdminClient>, bran
     .eq("approval_status", "approved")
     .is("deleted_at", null);
 
-  const hasOwnKepalaCabang = (approvers ?? []).some(
-    (e) => e.branch_id === branchId && (e.roles as { key: string } | null)?.key === "kepala_cabang",
-  );
-
   const recipientIds = (approvers ?? [])
     .filter((e) => {
       const roleKey = (e.roles as { key: string } | null)?.key;
       if (roleKey === "super_admin") return true;
+      if (roleKey === "direktur_operasional") return true;
       if (roleKey === "kepala_cabang") return e.branch_id === branchId;
-      if (roleKey === "direktur_operasional") return !hasOwnKepalaCabang;
       return false;
     })
     .map((e) => e.id);
