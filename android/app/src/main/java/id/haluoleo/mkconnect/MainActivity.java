@@ -1,6 +1,7 @@
 package id.haluoleo.mkconnect;
 
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
@@ -8,6 +9,8 @@ import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
+
+import androidx.annotation.RequiresApi;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -101,8 +104,20 @@ public class MainActivity extends BridgeActivity {
                     );
                 }
 
+                // onRenderProcessGone was added in API 26 (Oreo). Overriding
+                // it is always safe on older devices -- the platform simply
+                // never calls it there, since pre-26 WebView has no
+                // multi-process renderer to lose -- but @RequiresApi makes
+                // that explicit for Lint instead of relying on it inferring
+                // override-safety, and the SDK_INT check below is a second,
+                // redundant guard so nothing inside ever runs pre-26 even if
+                // some OEM WebView build called this out of contract.
+                @RequiresApi(api = Build.VERSION_CODES.O)
                 @Override
                 public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                        return false;
+                    }
                     String report = StartupDiagnostics.reportFatal(
                         MainActivity.this,
                         "WebView render process gone",
