@@ -2,13 +2,29 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { APP_URL } from "@/constants/app";
+import { canShare, shareLink } from "@/lib/native/share";
 
 import { deleteMemoAction, markMemoReadAction } from "../actions/memo.actions";
+
+export function MemoShareButton({ memoId, title }: { memoId: string; title: string }) {
+  if (!canShare()) return null;
+
+  async function handleShare() {
+    await shareLink(title, `Memo: ${title}`, `${APP_URL}/memo/${memoId}`);
+  }
+
+  return (
+    <Button variant="outline" onClick={handleShare}>
+      <Share2 className="h-4 w-4" /> Bagikan
+    </Button>
+  );
+}
 
 export function MemoReadButton({ memoId, alreadyRead }: { memoId: string; alreadyRead: boolean }) {
   const router = useRouter();

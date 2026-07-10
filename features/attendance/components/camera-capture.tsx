@@ -5,6 +5,7 @@ import { Camera, RefreshCw, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCamera } from "@/hooks/use-camera";
+import { isNativePlatform } from "@/lib/native/platform";
 
 interface CameraCaptureProps {
   onCapture: (blob: Blob | null, previewUrl: string | null) => void;
@@ -41,10 +42,15 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
         {previewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={previewUrl} alt="Selfie" className="h-full w-full object-cover" />
+        ) : isNativePlatform() ? (
+          <div className="flex flex-col items-center gap-2 text-sm text-white/70">
+            <Camera className="h-8 w-8" />
+            Ketuk &quot;Ambil Foto&quot; untuk membuka kamera
+          </div>
         ) : (
           <video ref={videoRef} muted playsInline className="h-full w-full -scale-x-100 object-cover" />
         )}
-        {!isActive && !previewUrl && !error && (
+        {!isActive && !previewUrl && !error && !isNativePlatform() && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">
             <Video className="mr-2 h-4 w-4 animate-pulse" /> Mengaktifkan kamera...
           </div>

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { GeolocationBridgeError, getNativePosition, isNativePlatform } from "@/lib/native/geolocation";
+
 interface GeolocationState {
   latitude: number | null;
   longitude: number | null;
@@ -21,6 +23,17 @@ export function useGeolocation() {
   });
 
   const request = React.useCallback(() => {
+    if (isNativePlatform()) {
+      setState((s) => ({ ...s, loading: true, error: null }));
+      getNativePosition()
+        .then((position) => setState({ ...position, error: null, loading: false }))
+        .catch((error: unknown) => {
+          const message = error instanceof GeolocationBridgeError ? error.message : "Gagal mendapatkan lokasi. Pastikan GPS aktif.";
+          setState((s) => ({ ...s, loading: false, error: message }));
+        });
+      return;
+    }
+
     if (!("geolocation" in navigator)) {
       setState((s) => ({ ...s, error: "Perangkat tidak mendukung geolocation" }));
       return;

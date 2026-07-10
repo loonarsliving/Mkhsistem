@@ -705,6 +705,33 @@ export interface Database {
           },
         ];
       };
+      mkc_device_push_tokens: {
+        Row: {
+          id: string;
+          user_id: string;
+          token: string;
+          platform: "android" | "ios";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          token: string;
+          platform: "android" | "ios";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_device_push_tokens"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "mkc_device_push_tokens_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       audit_logs: {
         Row: {
           id: string;

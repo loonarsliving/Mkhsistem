@@ -2,7 +2,15 @@
 
 import * as React from "react";
 
-/** Wraps getUserMedia to drive a <video> preview and capture a still frame as a JPEG blob (selfie for attendance). */
+import { takeNativePhoto } from "@/lib/native/camera";
+import { isNativePlatform } from "@/lib/native/platform";
+
+/**
+ * Wraps getUserMedia to drive a <video> preview and capture a still frame
+ * as a JPEG blob (selfie for attendance). Inside the Android app, `start`
+ * is a no-op (there's no in-page stream to preview) and `capture` launches
+ * the native camera intent instead — see lib/native/camera.ts.
+ */
 export function useCamera() {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -11,6 +19,10 @@ export function useCamera() {
 
   const start = React.useCallback(async () => {
     setError(null);
+    if (isNativePlatform()) {
+      setIsActive(true);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
@@ -34,6 +46,9 @@ export function useCamera() {
   }, []);
 
   const capture = React.useCallback((): Promise<Blob | null> => {
+    if (isNativePlatform()) {
+      return takeNativePhoto().catch(() => null);
+    }
     return new Promise((resolve) => {
       const video = videoRef.current;
       if (!video || video.videoWidth === 0) {

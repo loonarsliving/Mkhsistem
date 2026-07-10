@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { PriorityBadge } from "@/components/shared/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STORAGE_BUCKETS } from "@/constants/app";
-import { MemoDeleteButton, MemoReadButton } from "@/features/memo/components/memo-detail-actions";
+import { MemoDeleteButton, MemoReadButton, MemoShareButton } from "@/features/memo/components/memo-detail-actions";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/utils";
@@ -43,7 +43,12 @@ export default async function MemoDetailPage({ params }: { params: Promise<{ id:
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title={memo.title}
-        actions={canManage && <MemoDeleteButton memoId={memo.id} />}
+        actions={
+          <div className="flex gap-2">
+            <MemoShareButton memoId={memo.id} title={memo.title} />
+            {canManage && <MemoDeleteButton memoId={memo.id} />}
+          </div>
+        }
       />
 
       <Card>
