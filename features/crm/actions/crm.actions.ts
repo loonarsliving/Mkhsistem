@@ -149,6 +149,7 @@ export async function setBranchTargetAction(input: SetBranchTargetInput): Promis
     p_period_month: parsed.data.periodMonth,
     p_period_year: parsed.data.periodYear,
     p_target_units: parsed.data.targetUnits,
+    p_selling_price_per_unit: parsed.data.sellingPricePerUnit,
     p_commission_percent: parsed.data.commissionPercent,
   });
 

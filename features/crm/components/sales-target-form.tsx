@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { listBranchesAction } from "@/features/branches/actions/branch-query.actions";
+import { formatCurrency } from "@/lib/utils";
 
 import { setBranchTargetAction } from "../actions/crm.actions";
 import { listBranchSalesTargetsAction } from "../actions/crm-query.actions";
@@ -46,15 +47,36 @@ export function SalesTargetForm() {
     formState: { errors, isSubmitting },
   } = useForm<SetBranchTargetInput>({
     resolver: zodResolver(setBranchTargetSchema),
-    defaultValues: { branchId: "", periodMonth: month, periodYear: year, targetUnits: 0, commissionPercent: 0 },
+    defaultValues: {
+      branchId: "",
+      periodMonth: month,
+      periodYear: year,
+      targetUnits: 0,
+      sellingPricePerUnit: 0,
+      commissionPercent: 0,
+    },
   });
 
   const watchedBranchId = watch("branchId");
   const activeSalesCount = branchTargets?.find((b) => b.branch_id === watchedBranchId)?.active_sales_count ?? 0;
-  const watchedTargetUnits = watch("targetUnits");
+  const watchedTargetUnits = Number(watch("targetUnits")) || 0;
+  const watchedSellingPrice = Number(watch("sellingPricePerUnit")) || 0;
+  const watchedCommissionPercent = Number(watch("commissionPercent")) || 0;
+
+  const targetPerSales = activeSalesCount > 0 ? Math.floor(watchedTargetUnits / activeSalesCount) : 0;
+  const targetRevenue = watchedTargetUnits * watchedSellingPrice;
+  const targetRevenuePerSales = activeSalesCount > 0 ? targetRevenue / activeSalesCount : 0;
+  const maxCommissionPerSales = (targetRevenuePerSales * watchedCommissionPercent) / 100;
 
   React.useEffect(() => {
-    reset({ branchId: "", periodMonth: month, periodYear: year, targetUnits: 0, commissionPercent: 0 });
+    reset({
+      branchId: "",
+      periodMonth: month,
+      periodYear: year,
+      targetUnits: 0,
+      sellingPricePerUnit: 0,
+      commissionPercent: 0,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, year]);
 
@@ -106,10 +128,7 @@ export function SalesTargetForm() {
                 {watchedBranchId && (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Users className="h-3.5 w-3.5" />
-                    {activeSalesCount} Sales aktif di cabang ini
-                    {activeSalesCount > 0 && watchedTargetUnits > 0 && (
-                      <> — perkiraan {Math.floor(watchedTargetUnits / activeSalesCount)} unit/Sales</>
-                    )}
+                    {activeSalesCount} Sales aktif (divisi Marketing &amp; Sales) di cabang ini
                   </p>
                 )}
               </div>
@@ -136,11 +155,16 @@ export function SalesTargetForm() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="targetUnits">Target Unit</Label>
                 <Input id="targetUnits" type="number" min={0} {...register("targetUnits")} />
                 {errors.targetUnits && <p className="text-sm text-destructive">{errors.targetUnits.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sellingPricePerUnit">Harga Jual / Unit (Rp)</Label>
+                <Input id="sellingPricePerUnit" type="number" min={0} step="1000000" {...register("sellingPricePerUnit")} />
+                {errors.sellingPricePerUnit && <p className="text-sm text-destructive">{errors.sellingPricePerUnit.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="commissionPercent">Komisi (%)</Label>
@@ -148,6 +172,31 @@ export function SalesTargetForm() {
                 {errors.commissionPercent && <p className="text-sm text-destructive">{errors.commissionPercent.message}</p>}
               </div>
             </div>
+
+            {watchedBranchId && watchedTargetUnits > 0 && (
+              <div className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Sales Aktif</p>
+                  <p className="font-medium tabular-nums">{activeSalesCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Target / Sales</p>
+                  <p className="font-medium tabular-nums">{activeSalesCount > 0 ? `${targetPerSales} unit` : "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Target Revenue</p>
+                  <p className="font-medium tabular-nums">{formatCurrency(targetRevenue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Target Revenue / Sales</p>
+                  <p className="font-medium tabular-nums">{activeSalesCount > 0 ? formatCurrency(targetRevenuePerSales) : "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Komisi Maksimal / Sales</p>
+                  <p className="font-medium tabular-nums">{activeSalesCount > 0 ? formatCurrency(maxCommissionPerSales) : "-"}</p>
+                </div>
+              </div>
+            )}
 
             <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -173,6 +222,8 @@ export function SalesTargetForm() {
                   <TableRow>
                     <TableHead>Cabang</TableHead>
                     <TableHead className="text-right">Target Unit</TableHead>
+                    <TableHead className="text-right">Harga Jual/Unit</TableHead>
+                    <TableHead className="text-right">Target Revenue</TableHead>
                     <TableHead className="text-right">Komisi</TableHead>
                     <TableHead className="text-right">Sales Aktif</TableHead>
                     <TableHead className="text-right">Unit/Sales</TableHead>
@@ -183,6 +234,12 @@ export function SalesTargetForm() {
                     <TableRow key={row.branch_id}>
                       <TableCell className="font-medium">{row.branch_name}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.has_target ? row.target_units : "-"}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.has_target ? formatCurrency(row.selling_price_per_unit) : "-"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.has_target ? formatCurrency(row.target_units * row.selling_price_per_unit) : "-"}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{row.has_target ? `${row.commission_percent}%` : "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.active_sales_count}</TableCell>
                       <TableCell className="text-right tabular-nums">

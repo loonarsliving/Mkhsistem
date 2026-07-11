@@ -1059,6 +1059,7 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units: number;
+          selling_price_per_unit: number;
           commission_percent: number;
           created_at: string;
           updated_at: string;
@@ -1071,6 +1072,7 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units?: number;
+          selling_price_per_unit?: number;
           commission_percent?: number;
           created_at?: string;
           updated_at?: string;
@@ -1094,6 +1096,7 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units: number;
+          selling_price_per_unit: number;
           commission_percent: number;
           created_at: string;
           updated_at: string;
@@ -1106,6 +1109,7 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units?: number;
+          selling_price_per_unit?: number;
           commission_percent?: number;
           created_at?: string;
           updated_at?: string;
@@ -1321,6 +1325,7 @@ export interface Database {
           p_period_month: number;
           p_period_year: number;
           p_target_units: number;
+          p_selling_price_per_unit: number;
           p_commission_percent: number;
         };
         Returns: { branch_target_id: string; distributed_count: number }[];
@@ -1332,7 +1337,10 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units: number;
+          selling_price_per_unit: number;
           commission_percent: number;
+          target_revenue: number;
+          max_commission: number;
           closing_units: number;
           achievement_percent: number;
           remaining_target: number;

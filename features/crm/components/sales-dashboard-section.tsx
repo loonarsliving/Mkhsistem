@@ -34,11 +34,13 @@ export function SalesDashboardSection({ stats }: { stats: Awaited<ReturnType<typ
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <StatTile icon={ClipboardList} label="Prospect Hari Ini" value={String(stats.today_prospect)} />
-          <StatTile icon={Target} label="Target Bulanan" value={String(stats.target_units)} />
-          <StatTile icon={CheckCircle2} label="Closing" value={String(stats.closing_units)} tone="success" />
+          <StatTile icon={Target} label="Target Unit" value={String(stats.target_units)} />
+          <StatTile icon={Wallet} label="Target Revenue" value={formatCurrency(stats.target_revenue)} />
+          <StatTile icon={CheckCircle2} label="Unit Tercapai" value={String(stats.closing_units)} tone="success" />
+          <StatTile icon={Wallet} label="Revenue Tercapai" value={formatCurrency(stats.collection)} tone="success" />
           <StatTile icon={Percent} label="Achievement" value={`${stats.achievement_percent}%`} tone="success" />
-          <StatTile icon={Wallet} label="Collection" value={formatCurrency(stats.collection)} />
-          <StatTile icon={Coins} label="Komisi" value={formatCurrency(stats.commission)} tone="success" />
+          <StatTile icon={Coins} label="Estimasi Komisi" value={formatCurrency(stats.commission)} tone="success" />
+          <StatTile icon={Coins} label="Komisi Maksimal" value={formatCurrency(stats.max_commission)} />
           <StatTile icon={Target} label="Sisa Target" value={String(stats.remaining_target)} tone="warning" />
           <StatTile icon={CalendarClock} label="Follow Up Hari Ini" value={String(stats.today_follow_up)} />
           <StatTile

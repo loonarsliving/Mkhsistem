@@ -43,6 +43,7 @@ export const setBranchTargetSchema = z.object({
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodYear: z.coerce.number().int().min(2020).max(2100),
   targetUnits: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
+  sellingPricePerUnit: z.coerce.number().min(0, "Harga jual tidak boleh negatif"),
   commissionPercent: z.coerce.number().min(0).max(100, "Persentase maksimal 100"),
 });
 export type SetBranchTargetInput = z.infer<typeof setBranchTargetSchema>;

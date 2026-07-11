@@ -153,6 +153,7 @@ export async function listBranchSalesTargets(supabase: TypedSupabaseClient, mont
       branch_id: b.id,
       branch_name: b.name,
       target_units: target?.target_units ?? 0,
+      selling_price_per_unit: target?.selling_price_per_unit ?? 0,
       commission_percent: target?.commission_percent ?? 0,
       has_target: Boolean(target),
       active_sales_count: salesCountByBranch.get(b.id) ?? 0,
