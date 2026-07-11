@@ -1,24 +1,31 @@
-import { CheckCircle2, Percent, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Percent, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
 import { StatTile } from "@/components/shared/stat-tile";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import type { nationalStatsAction } from "@/features/crm/actions/crm-query.actions";
 
 /**
- * Executive Summary top-level KPIs for Director / Director of Operations --
- * "how is the company performing", nothing operational. Branch/Sales
- * breakdowns, rankings and prospect funnels live in the CRM module now, not
- * here (see /crm/dashboard).
+ * The ONLY CRM element allowed on the Executive Dashboard: a single summary
+ * card plus a shortcut into the CRM module. It is not an analysis surface --
+ * no branch/sales rankings, no prospect lists, no funnels. All of that lives
+ * behind the "Buka CRM Dashboard" link at /crm/dashboard, never here.
  */
-export function CompanySummarySection({ stats }: { stats: Awaited<ReturnType<typeof nationalStatsAction>> }) {
+export function CrmDirectorSummaryCard({ stats }: { stats: Awaited<ReturnType<typeof nationalStatsAction>> }) {
   if (!stats) return null;
   const growth = stats.monthly_growth_percent;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Ringkasan Eksekutif</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="text-base">CRM — Ringkasan Direktur</CardTitle>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/crm/dashboard">
+            Buka CRM Dashboard <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -32,10 +39,6 @@ export function CompanySummarySection({ stats }: { stats: Awaited<ReturnType<typ
             value={growth === null ? "N/A" : `${growth > 0 ? "+" : ""}${growth}%`}
             tone={growth === null ? "default" : growth >= 0 ? "success" : "destructive"}
           />
-        </div>
-        <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Detail performa cabang, sales, dan prospect ada di modul CRM.
         </div>
       </CardContent>
     </Card>

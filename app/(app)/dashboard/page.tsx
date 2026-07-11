@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
 import { AttendanceSummaryCard } from "@/features/dashboard/components/attendance-summary-card";
-import { CompanySummarySection } from "@/features/dashboard/components/company-summary-section";
+import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
 import { PayrollStatusCard } from "@/features/dashboard/components/payroll-status-card";
 import { PendingApprovalsCard } from "@/features/dashboard/components/pending-approvals-card";
 import { PendingRegistrationCard } from "@/features/dashboard/components/pending-registration-card";
@@ -33,11 +33,11 @@ import { listNotifications } from "@/repositories/notification.repository";
 export const metadata: Metadata = { title: "Dashboard" };
 
 /**
- * Dashboard = Executive Summary ("how is the company performing"). All
- * operational CRM analysis (Sales Summary, Branch Summary, prospect
- * funnels, rankings, customer tables) lives in the CRM module now -- see
- * /crm/dashboard, which every role reaches via the "Dashboard CRM" nav
- * item and which reuses these exact same figures scoped to their role.
+ * Dashboard = Executive Summary ("how is the company performing"), never an
+ * operational CRM surface. The ONLY CRM element allowed here is
+ * CrmDirectorSummaryCard -- one card, one shortcut into /crm/dashboard.
+ * Everything operational (Sales Summary, Branch Summary, prospect funnels,
+ * rankings, customer tables, analytics) lives exclusively in the CRM module.
  */
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
 
       <ProfileSummaryCard employee={session.employee} />
 
-      {isDirector && nationalStats && <CompanySummarySection stats={nationalStats} />}
+      {isDirector && nationalStats && <CrmDirectorSummaryCard stats={nationalStats} />}
 
       {isDirector ? (
         <div className="grid gap-6 sm:grid-cols-2">
