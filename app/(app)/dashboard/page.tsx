@@ -13,7 +13,7 @@ import { RecentAnnouncementList } from "@/features/dashboard/components/recent-a
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
 import { RecentNotificationsCard } from "@/features/dashboard/components/recent-notifications-card";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
-import { nationalStatsAction } from "@/features/crm/actions/crm-query.actions";
+import { conversionAnalyticsAction, monthlyTrendAction, nationalStatsAction } from "@/features/crm/actions/crm-query.actions";
 import {
   branchStatsAction as markomBranchStatsAction,
   employeeStatsAction as markomEmployeeStatsAction,
@@ -60,6 +60,8 @@ export default async function DashboardPage() {
     notifications,
     pendingRegistrationCount,
     nationalStats,
+    crmConversion,
+    crmTrend,
     attendanceSummary,
     markomEmployeeStats,
     markomBranchStats,
@@ -72,6 +74,8 @@ export default async function DashboardPage() {
     listNotifications(supabase, session.userId, 1),
     canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
     isDirector ? nationalStatsAction() : Promise.resolve(null),
+    isDirector ? conversionAnalyticsAction() : Promise.resolve(null),
+    isDirector ? monthlyTrendAction(6) : Promise.resolve([]),
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
     isMarkom ? markomEmployeeStatsAction() : Promise.resolve(null),
     canViewBranchMarkom ? markomBranchStatsAction() : Promise.resolve(null),
@@ -84,7 +88,9 @@ export default async function DashboardPage() {
 
       <ProfileSummaryCard employee={session.employee} />
 
-      {isDirector && nationalStats && <CrmDirectorSummaryCard stats={nationalStats} />}
+      {isDirector && nationalStats && (
+        <CrmDirectorSummaryCard stats={nationalStats} conversion={crmConversion} trend={crmTrend} />
+      )}
 
       {isDirector ? (
         <div className="grid gap-6 sm:grid-cols-2">
