@@ -113,10 +113,18 @@ export async function listPendingPayments(supabase: TypedSupabaseClient) {
 }
 
 /**
+ * "Sales" is determined by Division, never by Role -- Role is authorization
+ * only. Employees in this division are who target distribution counts,
+ * regardless of what Role (staff, sales, ...) they happen to hold.
+ */
+export const SALES_DIVISION_NAME = "Marketing & Sales";
+
+/**
  * One row per branch for the Branch Target admin page: every branch, the
  * target/commission Director set for this period (if any), and how many
- * currently-active Sales are in that branch (so the UI can preview "N
- * active Sales" and the ~per-Sales split before/after saving).
+ * currently-active Marketing & Sales employees are in that branch (so the
+ * UI can preview "N active Sales" and the ~per-Sales split before/after
+ * saving).
  */
 export async function listBranchSalesTargets(supabase: TypedSupabaseClient, month: number, year: number) {
   const [branchesRes, targetsRes, salesRes] = await Promise.all([
@@ -125,7 +133,7 @@ export async function listBranchSalesTargets(supabase: TypedSupabaseClient, mont
     supabase
       .from("v_employee_directory")
       .select("id, branch_id")
-      .eq("role_key", "sales")
+      .eq("division_name", SALES_DIVISION_NAME)
       .eq("employment_status", "active")
       .is("deleted_at", null),
   ]);
