@@ -8,6 +8,7 @@ import { CheckCircle2, PlusCircle, Target, Users, Wallet } from "lucide-react";
 import { BreadcrumbNav } from "@/components/shared/breadcrumb-nav";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { RevenueTile } from "@/components/shared/revenue-tile";
 import { StatTile } from "@/components/shared/stat-tile";
 import { ProspectStatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,11 +91,11 @@ export default async function CrmSalesDetailPage({ params }: { params: Promise<{
 
       {salesStats && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatTile icon={Target} label="Target Unit" value={String(salesStats.target_units)} />
             <StatTile icon={CheckCircle2} label="Closing Unit" value={String(salesStats.closing_units)} tone="success" />
-            <StatTile icon={Wallet} label="Collection" value={formatCurrency(salesStats.collection)} tone="success" />
             <StatTile icon={Target} label="Achievement" value={`${salesStats.achievement_percent}%`} tone="success" />
+            <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(salesStats.collection)} tone="success" />
           </div>
 
           <div className="flex flex-wrap gap-2 text-xs">

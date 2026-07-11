@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CheckCircle2, Percent, TrendingUp, Users, Wallet } from "lucide-react";
+import { CheckCircle2, Percent, Target, TrendingUp, Users, Wallet } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/shared/breadcrumb-nav";
 import { PageHeader } from "@/components/shared/page-header";
+import { RevenueTile } from "@/components/shared/revenue-tile";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,13 +89,37 @@ export default async function CrmDashboardPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatTile icon={Users} label="Total Prospects" value={String(conversion?.total_prospects ?? 0)} />
-        <StatTile icon={CheckCircle2} label="Total Closing" value={String(conversion?.total_closing ?? 0)} tone="success" />
-        <StatTile icon={Percent} label="Conversion Rate" value={`${conversion?.conversion_percent ?? 0}%`} />
-        <StatTile icon={Wallet} label="Collection" value={formatCurrency(stats?.collection ?? 0)} tone="success" />
-        <StatTile icon={TrendingUp} label="Achievement" value={`${stats?.achievement_percent ?? 0}%`} tone="success" />
-      </div>
+      {canViewAll ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile icon={Users} label="Total Prospects" value={String(conversion?.total_prospects ?? 0)} />
+          <StatTile icon={CheckCircle2} label="Total Closing" value={String(conversion?.total_closing ?? 0)} tone="success" />
+          <StatTile icon={Percent} label="Conversion Rate" value={`${conversion?.conversion_percent ?? 0}%`} />
+          <StatTile icon={TrendingUp} label="Achievement" value={`${stats?.achievement_percent ?? 0}%`} tone="success" />
+          <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(stats?.collection ?? 0)} tone="success" />
+        </div>
+      ) : (
+        // Branch Manager view: whole-branch figures only (crm_branch_stats), never per-sales data.
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile
+            icon={Target}
+            label="Target Unit Cabang"
+            value={String((stats as { target_units?: number } | null)?.target_units ?? 0)}
+          />
+          <StatTile
+            icon={CheckCircle2}
+            label="Closing Unit Cabang"
+            value={String((stats as { closing_units?: number } | null)?.closing_units ?? 0)}
+            tone="success"
+          />
+          <StatTile icon={TrendingUp} label="Achievement Cabang" value={`${stats?.achievement_percent ?? 0}%`} tone="success" />
+          <RevenueTile
+            icon={Wallet}
+            label="Target Revenue Cabang"
+            value={formatCurrency((stats as { target_revenue?: number } | null)?.target_revenue ?? 0)}
+          />
+          <RevenueTile icon={Wallet} label="Collection Cabang" value={formatCurrency(stats?.collection ?? 0)} tone="success" />
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <MonthlyTrendChart data={trend} />

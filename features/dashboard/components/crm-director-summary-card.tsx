@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Percent, Trophy, Users, Wallet } from "lucide-react";
 
+import { RevenueTile } from "@/components/shared/revenue-tile";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,12 +47,11 @@ export function CrmDirectorSummaryCard({
         </Button>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatTile icon={Users} label="Total Prospect" value={String(conversion?.total_prospects ?? 0)} />
           <StatTile icon={CheckCircle2} label="Total Closing" value={String(conversion?.total_closing ?? 0)} tone="success" />
           <StatTile icon={Percent} label="Conversion Rate" value={`${conversion?.conversion_percent ?? 0}%`} />
-          <StatTile icon={Wallet} label="Total Revenue" value={formatCurrency(stats.total_target_revenue)} />
-          <StatTile icon={Wallet} label="Total Collection" value={formatCurrency(stats.collection)} tone="success" />
+          <RevenueTile icon={Wallet} label="Total Revenue" value={formatCurrency(stats.total_target_revenue)} />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">

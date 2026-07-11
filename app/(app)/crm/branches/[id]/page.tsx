@@ -5,6 +5,7 @@ import { CheckCircle2, Percent, Target, Trophy, Wallet } from "lucide-react";
 
 import { BreadcrumbNav, type BreadcrumbItem } from "@/components/shared/breadcrumb-nav";
 import { PageHeader } from "@/components/shared/page-header";
+import { RevenueTile } from "@/components/shared/revenue-tile";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -72,10 +73,8 @@ export default async function CrmBranchDetailPage({ params }: { params: Promise<
       <PageHeader title={branchName} description="Detail performa cabang" />
 
       {branchStats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <StatTile icon={Target} label="Target Unit" value={String(branchStats.target_units)} />
-          <StatTile icon={Wallet} label="Target Revenue" value={formatCurrency(branchStats.target_revenue)} />
-          <StatTile icon={Wallet} label="Collection" value={formatCurrency(branchStats.collection)} tone="success" />
           <StatTile icon={Percent} label="Achievement" value={`${branchStats.achievement_percent}%`} tone="success" />
           <StatTile
             icon={CheckCircle2}
@@ -85,6 +84,8 @@ export default async function CrmBranchDetailPage({ params }: { params: Promise<
           {rank !== null && (
             <StatTile icon={Trophy} label="Ranking" value={`#${rank} dari ${branchRanking.length} cabang`} tone="success" />
           )}
+          <RevenueTile icon={Wallet} label="Target Revenue" value={formatCurrency(branchStats.target_revenue)} />
+          <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(branchStats.collection)} tone="success" />
         </div>
       )}
 
