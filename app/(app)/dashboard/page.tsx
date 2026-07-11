@@ -15,13 +15,11 @@ import { RecentNotificationsCard } from "@/features/dashboard/components/recent-
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { conversionAnalyticsAction, monthlyTrendAction, nationalStatsAction } from "@/features/crm/actions/crm-query.actions";
 import {
-  branchStatsAction as markomBranchStatsAction,
-  employeeStatsAction as markomEmployeeStatsAction,
   nationalStatsAction as markomNationalStatsAction,
+  teamStatsAction as markomTeamStatsAction,
 } from "@/features/markom/actions/markom-query.actions";
-import { BranchDashboardSection as MarkomBranchDashboardSection } from "@/features/markom/components/branch-dashboard-section";
 import { DirectorDashboardSection as MarkomDirectorDashboardSection } from "@/features/markom/components/director-dashboard-section";
-import { EmployeeDashboardSection as MarkomEmployeeDashboardSection } from "@/features/markom/components/employee-dashboard-section";
+import { TeamSummaryCard as MarkomTeamSummaryCard } from "@/features/markom/components/team-summary-card";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getCompanyAttendanceSummary, getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
@@ -63,8 +61,7 @@ export default async function DashboardPage() {
     crmConversion,
     crmTrend,
     attendanceSummary,
-    markomEmployeeStats,
-    markomBranchStats,
+    markomTeamStats,
     markomNationalStats,
   ] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
@@ -77,8 +74,7 @@ export default async function DashboardPage() {
     isDirector ? conversionAnalyticsAction() : Promise.resolve(null),
     isDirector ? monthlyTrendAction(6) : Promise.resolve([]),
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
-    isMarkom ? markomEmployeeStatsAction() : Promise.resolve(null),
-    canViewBranchMarkom ? markomBranchStatsAction() : Promise.resolve(null),
+    isMarkom || canViewBranchMarkom ? markomTeamStatsAction() : Promise.resolve(null),
     canViewNationalMarkom ? markomNationalStatsAction() : Promise.resolve(null),
   ]);
 
@@ -106,8 +102,9 @@ export default async function DashboardPage() {
         canReviewRegistrations && <PendingRegistrationCard count={pendingRegistrationCount} />
       )}
 
-      {isMarkom && <MarkomEmployeeDashboardSection stats={markomEmployeeStats} />}
-      {canViewBranchMarkom && <MarkomBranchDashboardSection stats={markomBranchStats} />}
+      {(isMarkom || canViewBranchMarkom) && (
+        <MarkomTeamSummaryCard stats={markomTeamStats} reviewMode={canViewBranchMarkom} />
+      )}
       {canViewNationalMarkom && <MarkomDirectorDashboardSection stats={markomNationalStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">

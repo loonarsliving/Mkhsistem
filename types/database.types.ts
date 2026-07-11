@@ -1141,7 +1141,6 @@ export interface Database {
           id: string;
           division_id: string;
           branch_id: string;
-          assigned_to: string;
           title: string;
           description: string | null;
           period_year: number;
@@ -1162,7 +1161,6 @@ export interface Database {
           id?: string;
           division_id: string;
           branch_id: string;
-          assigned_to: string;
           title: string;
           description?: string | null;
           period_year: number;
@@ -1191,12 +1189,6 @@ export interface Database {
             foreignKeyName: "kpi_tasks_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "kpi_tasks_assigned_to_fkey";
-            columns: ["assigned_to"];
-            referencedRelation: "employees";
             referencedColumns: ["id"];
           },
           {
@@ -1516,11 +1508,12 @@ export interface Database {
       };
       kpi_assign_tasks: {
         Args: {
-          p_assigned_to: string;
+          p_branch_id: string;
           p_period_year: number;
           p_period_month: number;
           p_period_week: number;
           p_items: Json;
+          p_division_id?: string | null;
         };
         Returns: string[];
       };
@@ -1536,41 +1529,26 @@ export interface Database {
         Args: { p_task_id: string; p_status: string; p_notes?: string | null };
         Returns: undefined;
       };
-      kpi_employee_stats: {
-        Args: { p_employee_id?: string | null; p_month?: number | null; p_year?: number | null };
-        Returns: {
-          employee_id: string;
-          period_month: number;
-          period_year: number;
-          current_week: number;
-          today_tasks: number;
-          weekly_assigned: number;
-          weekly_completed: number;
-          weekly_rejected: number;
-          weekly_pending: number;
-          weekly_achievement_percent: number;
-          monthly_assigned: number;
-          monthly_completed: number;
-          monthly_rejected: number;
-          monthly_pending: number;
-          monthly_achievement_percent: number;
-          overdue_count: number;
-        }[];
-      };
-      kpi_branch_stats: {
+      kpi_team_stats: {
         Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null; p_division_id?: string | null };
         Returns: {
           branch_id: string;
+          branch_name: string;
+          division_id: string;
           period_month: number;
           period_year: number;
           current_week: number;
-          employee_count: number;
-          monthly_assigned: number;
+          team_members: Json;
+          weekly_total: number;
+          weekly_completed: number;
+          weekly_remaining: number;
+          weekly_achievement_percent: number;
+          monthly_total: number;
           monthly_completed: number;
+          monthly_remaining: number;
           monthly_achievement_percent: number;
           overdue_count: number;
-          pending_verification_count: number;
-          employee_performance: Json;
+          waiting_review_count: number;
         }[];
       };
       kpi_national_stats: {
@@ -1579,14 +1557,12 @@ export interface Database {
           period_month: number;
           period_year: number;
           current_week: number;
-          employee_count: number;
-          monthly_assigned: number;
+          team_count: number;
+          monthly_total: number;
           monthly_completed: number;
           monthly_achievement_percent: number;
           overdue_count: number;
           branch_ranking: Json;
-          employee_ranking_weekly: Json;
-          employee_ranking_monthly: Json;
         }[];
       };
       kpi_ranking: {
@@ -1600,10 +1576,9 @@ export interface Database {
         };
         Returns: {
           rank: number;
-          employee_id: string;
-          full_name: string;
+          branch_id: string;
           branch_name: string;
-          division_name: string;
+          team_members: Json;
           assigned: number;
           completed: number;
           rejected: number;

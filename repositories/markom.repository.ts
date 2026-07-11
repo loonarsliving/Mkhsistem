@@ -6,7 +6,7 @@ import type { TypedSupabaseClient } from "@/lib/supabase/types";
  */
 export const MARKOM_DIVISION_NAME = "Marketing & Komunikasi";
 
-/** Active Markom employees in a branch, for the "assign checklist to" dropdown. */
+/** Active Markom employees in a branch -- this IS the branch's one Markom team roster. */
 export async function listMarkomEmployees(supabase: TypedSupabaseClient, branchId: string) {
   const { data, error } = await supabase
     .from("v_employee_directory")
@@ -21,7 +21,6 @@ export async function listMarkomEmployees(supabase: TypedSupabaseClient, branchI
 }
 
 export interface KpiTaskListFilters {
-  assignedTo?: string;
   branchId?: string;
   periodYear: number;
   periodMonth: number;
@@ -29,19 +28,16 @@ export interface KpiTaskListFilters {
   status?: "pending" | "completed" | "rejected";
 }
 
-/** Checklist rows for a given scope, newest first. RLS enforces who can see what. */
+/** Checklist rows for a given team/branch, newest first -- team-based, no per-assignee filter. RLS enforces who can see what. */
 export async function listKpiTasks(supabase: TypedSupabaseClient, filters: KpiTaskListFilters) {
   let query = supabase
     .from("kpi_tasks")
-    .select(
-      "*, assignee:employees!kpi_tasks_assigned_to_fkey(full_name), verifier:employees!kpi_tasks_verified_by_fkey(full_name)",
-    )
+    .select("*, verifier:employees!kpi_tasks_verified_by_fkey(full_name)")
     .eq("period_year", filters.periodYear)
     .eq("period_month", filters.periodMonth)
     .order("period_week", { ascending: true })
     .order("created_at", { ascending: false });
 
-  if (filters.assignedTo) query = query.eq("assigned_to", filters.assignedTo);
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.periodWeek) query = query.eq("period_week", filters.periodWeek);
   if (filters.status) query = query.eq("status", filters.status);

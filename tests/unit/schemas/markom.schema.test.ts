@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { assignChecklistSchema, updateTaskSchema, verifyTaskSchema } from "@/features/markom/schemas/markom.schema";
 
 const validAssign = {
-  assignedTo: "11111111-1111-1111-1111-111111111111",
+  branchId: "11111111-1111-1111-1111-111111111111",
   periodYear: 2026,
   periodMonth: 8,
   periodWeek: 2,
@@ -36,8 +36,8 @@ describe("assignChecklistSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects a non-uuid assignedTo", () => {
-    expect(assignChecklistSchema.safeParse({ ...validAssign, assignedTo: "not-a-uuid" }).success).toBe(false);
+  it("rejects a non-uuid branchId", () => {
+    expect(assignChecklistSchema.safeParse({ ...validAssign, branchId: "not-a-uuid" }).success).toBe(false);
   });
 });
 

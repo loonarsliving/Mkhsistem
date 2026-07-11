@@ -5,8 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import { listKpiTasks, listMarkomEmployees, type KpiTaskListFilters } from "@/repositories/markom.repository";
 
-type EmployeeStatsRow = Database["public"]["Functions"]["kpi_employee_stats"]["Returns"][number];
-type BranchStatsRow = Database["public"]["Functions"]["kpi_branch_stats"]["Returns"][number];
+type TeamStatsRow = Database["public"]["Functions"]["kpi_team_stats"]["Returns"][number];
 type NationalStatsRow = Database["public"]["Functions"]["kpi_national_stats"]["Returns"][number];
 type RankingRow = Database["public"]["Functions"]["kpi_ranking"]["Returns"][number];
 
@@ -22,32 +21,19 @@ export async function listKpiTasksAction(filters: KpiTaskListFilters) {
 
   const scoped: KpiTaskListFilters = { ...filters };
   if (!hasPermission(session, "kpi_task.view_all")) {
-    if (hasPermission(session, "kpi_task.view_branch")) {
-      scoped.branchId = session.employee.branch_id;
-    } else {
-      scoped.assignedTo = session.userId;
-    }
+    // Both "view my team's board" and "view my branch's board" resolve to the
+    // same branch filter now -- a team IS the branch's roster for its division.
+    scoped.branchId = session.employee.branch_id;
   }
 
   return listKpiTasks(supabase, scoped);
 }
 
-export async function employeeStatsAction(employeeId?: string, month?: number, year?: number): Promise<EmployeeStatsRow | null> {
+/** The one team-board function: used both by a team member ("my team") and the Branch Manager ("the team I review"). */
+export async function teamStatsAction(branchId?: string, month?: number, year?: number): Promise<TeamStatsRow | null> {
   await requireSession();
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("kpi_employee_stats", {
-    p_employee_id: employeeId ?? null,
-    p_month: month ?? null,
-    p_year: year ?? null,
-  });
-  if (error) throw error;
-  return data?.[0] ?? null;
-}
-
-export async function branchStatsAction(branchId?: string, month?: number, year?: number): Promise<BranchStatsRow | null> {
-  await requireSession();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("kpi_branch_stats", {
+  const { data, error } = await supabase.rpc("kpi_team_stats", {
     p_branch_id: branchId ?? null,
     p_month: month ?? null,
     p_year: year ?? null,

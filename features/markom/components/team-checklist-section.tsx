@@ -4,7 +4,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { AlarmClock, CheckCircle2, Circle, ClipboardList, Percent, XCircle } from "lucide-react";
+import { AlarmClock, CheckCircle2, Circle, ClipboardList, Percent, Users, XCircle } from "lucide-react";
 
 import { StatTile } from "@/components/shared/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import type { KpiTaskStatusDb } from "@/types/database.types";
 
-import { employeeStatsAction, listKpiTasksAction } from "../actions/markom-query.actions";
+import { listKpiTasksAction, teamStatsAction } from "../actions/markom-query.actions";
 
 const STATUS_ICON: Record<KpiTaskStatusDb, React.ReactNode> = {
   pending: <Circle className="h-5 w-5 text-muted-foreground" />,
@@ -33,19 +33,20 @@ interface KpiTaskRow {
   verifier: { full_name: string } | null;
 }
 
-export function MyChecklistSection() {
+/** A team member's own read-only view of their team's shared checklist -- no Approve/Needs Revision actions here, only the Branch Manager can decide. */
+export function TeamChecklistSection() {
   const now = new Date();
   const [month] = React.useState(now.getMonth() + 1);
   const [year] = React.useState(now.getFullYear());
   const [week, setWeek] = React.useState<number | "all">("all");
 
   const { data: stats } = useQuery({
-    queryKey: ["markom-employee-stats", month, year],
-    queryFn: () => employeeStatsAction(undefined, month, year),
+    queryKey: ["markom-team-stats", month, year],
+    queryFn: () => teamStatsAction(undefined, month, year),
   });
 
   const { data: tasks, isLoading } = useQuery({
-    queryKey: ["markom-my-tasks", month, year, week],
+    queryKey: ["markom-team-tasks", month, year, week],
     queryFn: () =>
       listKpiTasksAction({
         periodYear: year,
@@ -56,12 +57,13 @@ export function MyChecklistSection() {
 
   const items = tasks ?? [];
   const currentWeek = stats?.current_week ?? 1;
+  const teamMembers = (stats?.team_members as unknown as { employee_id: string; full_name: string }[] | null) ?? [];
   const achievement = week === "all" ? stats?.monthly_achievement_percent ?? 0 : stats?.weekly_achievement_percent ?? 0;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Checklist Markom Saya</CardTitle>
+        <CardTitle className="text-base">{stats ? `Tim Markom — ${stats.branch_name}` : "Checklist Tim Markom"}</CardTitle>
         <Select value={String(week)} onValueChange={(v) => setWeek(v === "all" ? "all" : Number(v))}>
           <SelectTrigger className="w-40">
             <SelectValue />
@@ -79,21 +81,25 @@ export function MyChecklistSection() {
       <CardContent className="space-y-4">
         {stats && (
           <>
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              {teamMembers.length > 0 ? teamMembers.map((m) => m.full_name).join(", ") : "Belum ada anggota tim aktif."}
+            </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile icon={ClipboardList} label="Task Hari Ini" value={String(stats.today_tasks)} />
+              <StatTile icon={ClipboardList} label="Total Tasks" value={String(week === "all" ? stats.monthly_total : stats.weekly_total)} />
               <StatTile
                 icon={CheckCircle2}
-                label={week === "all" ? "Selesai Bulan Ini" : "Selesai Minggu Ini"}
+                label="Completed Tasks"
                 value={String(week === "all" ? stats.monthly_completed : stats.weekly_completed)}
                 tone="success"
               />
-              <StatTile icon={Percent} label="Achievement" value={`${achievement}%`} tone="success" />
               <StatTile
                 icon={AlarmClock}
-                label="Task Terlambat"
-                value={String(stats.overdue_count)}
-                tone={stats.overdue_count > 0 ? "destructive" : "default"}
+                label="Remaining Tasks"
+                value={String(week === "all" ? stats.monthly_remaining : stats.weekly_remaining)}
+                tone={(week === "all" ? stats.monthly_remaining : stats.weekly_remaining) > 0 ? "warning" : "default"}
               />
+              <StatTile icon={Percent} label={week === "all" ? "Monthly Achievement" : "Weekly Achievement"} value={`${achievement}%`} tone="success" />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -120,7 +126,7 @@ export function MyChecklistSection() {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span>Minggu {task.period_week}</span>
                     {task.due_date && <span>Tenggat {format(new Date(task.due_date), "d MMM yyyy", { locale: idLocale })}</span>}
-                    {task.verifier && <span>Diverifikasi {task.verifier.full_name}</span>}
+                    {task.verifier && <span>Direview {task.verifier.full_name}</span>}
                   </div>
                   {task.notes && task.status === "rejected" && <p className="text-xs text-destructive">Catatan: {task.notes}</p>}
                 </div>

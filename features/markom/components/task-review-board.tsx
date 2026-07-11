@@ -9,7 +9,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { StatTile } from "@/components/shared/stat-tile";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -18,19 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { KpiTaskStatusDb } from "@/types/database.types";
 
 import { verifyTaskAction } from "../actions/markom.actions";
-import { branchStatsAction, listKpiTasksAction } from "../actions/markom-query.actions";
-
-interface EmployeePerformance {
-  employee_id: string;
-  full_name: string;
-  weekly_assigned: number;
-  weekly_completed: number;
-  weekly_achievement_percent: number;
-  monthly_assigned: number;
-  monthly_completed: number;
-  monthly_achievement_percent: number;
-  overdue: number;
-}
+import { listKpiTasksAction, teamStatsAction } from "../actions/markom-query.actions";
 
 interface KpiTaskRow {
   id: string;
@@ -38,9 +25,9 @@ interface KpiTaskRow {
   due_date: string | null;
   period_week: number;
   status: KpiTaskStatusDb;
-  assignee: { full_name: string } | null;
 }
 
+/** Branch Manager's review board: one team's checklist, approve/reject the whole task at once -- never per-person. */
 export function TaskReviewBoard() {
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -51,8 +38,8 @@ export function TaskReviewBoard() {
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   const { data: stats } = useQuery({
-    queryKey: ["markom-branch-stats", month, year],
-    queryFn: () => branchStatsAction(undefined, month, year),
+    queryKey: ["markom-team-stats", month, year],
+    queryFn: () => teamStatsAction(undefined, month, year),
   });
 
   const { data: pendingTasks, isLoading } = useQuery({
@@ -61,21 +48,21 @@ export function TaskReviewBoard() {
   });
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["markom-branch-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["markom-team-stats"] });
     queryClient.invalidateQueries({ queryKey: ["markom-pending-tasks"] });
     queryClient.invalidateQueries({ queryKey: ["markom-national-stats"] });
     queryClient.invalidateQueries({ queryKey: ["markom-ranking"] });
   }
 
-  async function handleComplete(taskId: string) {
+  async function handleApprove(taskId: string) {
     setBusyId(taskId);
     const result = await verifyTaskAction({ taskId, status: "completed" });
     setBusyId(null);
     if (!result.success) {
-      toast.error(result.error ?? "Gagal menyelesaikan task");
+      toast.error(result.error ?? "Gagal menyetujui task");
       return;
     }
-    toast.success("Task ditandai selesai");
+    toast.success("Task disetujui, seluruh anggota tim diberi tahu");
     invalidate();
   }
 
@@ -85,94 +72,54 @@ export function TaskReviewBoard() {
     const result = await verifyTaskAction({ taskId: rejectTarget, status: "rejected", notes: rejectNotes || undefined });
     setBusyId(null);
     if (!result.success) {
-      toast.error(result.error ?? "Gagal menolak task");
+      toast.error(result.error ?? "Gagal menandai task perlu revisi");
       return;
     }
-    toast.success("Task ditolak");
+    toast.success("Task ditandai perlu revisi");
     setRejectTarget(null);
     setRejectNotes("");
     invalidate();
   }
 
-  const performance = (stats?.employee_performance as unknown as EmployeePerformance[] | null) ?? [];
   const tasks = pendingTasks ?? [];
+  const teamMembers = (stats?.team_members as unknown as { employee_id: string; full_name: string }[] | null) ?? [];
 
   return (
     <div className="space-y-6">
       {stats && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Markom — Branch Overview</CardTitle>
+            <CardTitle className="text-base">Tim Markom — {stats.branch_name}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile icon={Users} label="Karyawan Markom" value={String(stats.employee_count)} />
-              <StatTile icon={ClipboardList} label="Task Bulan Ini" value={String(stats.monthly_assigned)} />
-              <StatTile icon={CheckCircle2} label="Achievement" value={`${stats.monthly_achievement_percent}%`} tone="success" />
-              <StatTile
-                icon={XCircle}
-                label="Menunggu Verifikasi"
-                value={String(stats.pending_verification_count)}
-                tone={stats.pending_verification_count > 0 ? "warning" : "default"}
-              />
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              {teamMembers.length > 0 ? teamMembers.map((m) => m.full_name).join(", ") : "Belum ada anggota tim aktif."}
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <StatTile icon={ClipboardList} label="Total Tasks" value={String(stats.monthly_total)} />
+              <StatTile icon={CheckCircle2} label="Completed Tasks" value={String(stats.monthly_completed)} tone="success" />
+              <StatTile icon={ClipboardList} label="Remaining Tasks" value={String(stats.monthly_remaining)} />
+              <StatTile icon={CheckCircle2} label="Weekly Achievement" value={`${stats.weekly_achievement_percent}%`} tone="success" />
+              <StatTile icon={CheckCircle2} label="Monthly Achievement" value={`${stats.monthly_achievement_percent}%`} tone="success" />
             </div>
-
-            {performance.length > 0 && (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Karyawan</TableHead>
-                      <TableHead className="text-right">Minggu Ini</TableHead>
-                      <TableHead className="text-right">Bulan Ini</TableHead>
-                      <TableHead className="text-right">Terlambat</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {performance.map((p) => (
-                      <TableRow key={p.employee_id}>
-                        <TableCell className="font-medium">{p.full_name}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="tabular-nums text-xs text-muted-foreground">
-                              {p.weekly_completed}/{p.weekly_assigned}
-                            </span>
-                            <Progress value={p.weekly_achievement_percent} tone="success" className="w-16" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="tabular-nums text-xs text-muted-foreground">
-                              {p.monthly_completed}/{p.monthly_assigned}
-                            </span>
-                            <Progress value={p.monthly_achievement_percent} tone="success" className="w-16" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{p.overdue > 0 ? p.overdue : "-"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Menunggu Verifikasi</CardTitle>
+          <CardTitle className="text-base">Tasks Waiting Review</CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           {!isLoading && tasks.length === 0 ? (
-            <EmptyState icon={CheckCircle2} title="Tidak ada task menunggu" description="Semua task Markom sudah diverifikasi." />
+            <EmptyState icon={CheckCircle2} title="Tidak ada task menunggu" description="Semua task tim Markom sudah direview." />
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Task</TableHead>
-                    <TableHead>Karyawan</TableHead>
                     <TableHead>Minggu</TableHead>
                     <TableHead>Tenggat</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
@@ -182,15 +129,14 @@ export function TaskReviewBoard() {
                   {tasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">{task.title}</TableCell>
-                      <TableCell>{task.assignee?.full_name ?? "-"}</TableCell>
                       <TableCell>Minggu {task.period_week}</TableCell>
                       <TableCell>
                         {task.due_date ? format(new Date(task.due_date), "d MMM yyyy", { locale: idLocale }) : "-"}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" disabled={busyId === task.id} onClick={() => handleComplete(task.id)}>
-                            <CheckCircle2 className="h-4 w-4" /> Selesai
+                          <Button size="sm" variant="outline" disabled={busyId === task.id} onClick={() => handleApprove(task.id)}>
+                            <CheckCircle2 className="h-4 w-4" /> Approve
                           </Button>
                           <Button
                             size="sm"
@@ -199,7 +145,7 @@ export function TaskReviewBoard() {
                             disabled={busyId === task.id}
                             onClick={() => setRejectTarget(task.id)}
                           >
-                            <XCircle className="h-4 w-4" /> Tolak
+                            <XCircle className="h-4 w-4" /> Needs Revision
                           </Button>
                         </div>
                       </TableCell>
@@ -215,14 +161,14 @@ export function TaskReviewBoard() {
       <ConfirmDialog
         open={rejectTarget !== null}
         onOpenChange={(open) => !open && setRejectTarget(null)}
-        title="Tolak task ini?"
-        description="Task akan ditandai Ditolak dan tidak dihitung sebagai selesai pada Achievement karyawan."
-        confirmLabel="Tolak Task"
+        title="Task ini perlu revisi?"
+        description="Task akan ditandai Needs Revision dan tidak dihitung selesai pada Achievement tim."
+        confirmLabel="Needs Revision"
         destructive
         loading={busyId === rejectTarget}
         onConfirm={handleReject}
       >
-        <Textarea placeholder="Alasan penolakan (opsional)" value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} rows={2} />
+        <Textarea placeholder="Catatan revisi (opsional)" value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} rows={2} />
       </ConfirmDialog>
     </div>
   );

@@ -12,6 +12,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { kpiRankingAction } from "../actions/markom-query.actions";
 
+interface TeamMember {
+  employee_id: string;
+  full_name: string;
+}
+
+/** One row per Markom TEAM (branch), never per employee. */
 export function KpiRankingTable() {
   const [scope, setScope] = React.useState<"weekly" | "monthly">("monthly");
 
@@ -25,7 +31,7 @@ export function KpiRankingTable() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Ranking Markom</CardTitle>
+        <CardTitle className="text-base">Ranking Tim Markom</CardTitle>
         <Tabs value={scope} onValueChange={(v) => setScope(v as "weekly" | "monthly")}>
           <TabsList>
             <TabsTrigger value="weekly">Mingguan</TabsTrigger>
@@ -42,29 +48,34 @@ export function KpiRankingTable() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">#</TableHead>
-                  <TableHead>Karyawan</TableHead>
-                  <TableHead>Cabang</TableHead>
+                  <TableHead>Tim</TableHead>
+                  <TableHead>Anggota</TableHead>
                   <TableHead className="text-right">Selesai/Total</TableHead>
                   <TableHead className="text-right">Achievement</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.employee_id}>
-                    <TableCell className="font-medium tabular-nums">{r.rank}</TableCell>
-                    <TableCell className="font-medium">{r.full_name}</TableCell>
-                    <TableCell>{r.branch_name}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {r.completed}/{r.assigned}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <span className="tabular-nums">{r.achievement_percent}%</span>
-                        <Progress value={r.achievement_percent} tone="success" className="w-16" />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {rows.map((r) => {
+                  const members = (r.team_members as unknown as TeamMember[] | null) ?? [];
+                  return (
+                    <TableRow key={r.branch_id}>
+                      <TableCell className="font-medium tabular-nums">{r.rank}</TableCell>
+                      <TableCell className="font-medium">Tim Markom {r.branch_name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {members.length > 0 ? members.map((m) => m.full_name).join(", ") : "-"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.completed}/{r.assigned}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="tabular-nums">{r.achievement_percent}%</span>
+                          <Progress value={r.achievement_percent} tone="success" className="w-16" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

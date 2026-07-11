@@ -7,7 +7,7 @@ const checklistItemSchema = z.object({
 });
 
 export const assignChecklistSchema = z.object({
-  assignedTo: z.string().uuid("Karyawan wajib dipilih"),
+  branchId: z.string().uuid("Cabang wajib dipilih"),
   periodYear: z.coerce.number().int().min(2020).max(2100),
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodWeek: z.coerce.number().int().min(1).max(5),

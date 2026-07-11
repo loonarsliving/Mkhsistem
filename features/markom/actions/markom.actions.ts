@@ -22,7 +22,7 @@ export async function assignChecklistAction(input: AssignChecklistInput): Promis
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("kpi_assign_tasks", {
-    p_assigned_to: parsed.data.assignedTo,
+    p_branch_id: parsed.data.branchId,
     p_period_year: parsed.data.periodYear,
     p_period_month: parsed.data.periodMonth,
     p_period_week: parsed.data.periodWeek,
