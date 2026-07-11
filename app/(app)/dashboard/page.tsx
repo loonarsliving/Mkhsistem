@@ -13,7 +13,14 @@ import { RecentAnnouncementList } from "@/features/dashboard/components/recent-a
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
 import { RecentNotificationsCard } from "@/features/dashboard/components/recent-notifications-card";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
-import { conversionAnalyticsAction, monthlyTrendAction, nationalStatsAction } from "@/features/crm/actions/crm-query.actions";
+import {
+  branchStatsAction as crmBranchStatsAction,
+  conversionAnalyticsAction,
+  monthlyTrendAction,
+  nationalStatsAction,
+} from "@/features/crm/actions/crm-query.actions";
+import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
+import { BranchSalesSummaryCard } from "@/features/crm/components/branch-sales-summary-card";
 import {
   nationalStatsAction as markomNationalStatsAction,
   teamStatsAction as markomTeamStatsAction,
@@ -46,6 +53,9 @@ export default async function DashboardPage() {
   // (needed elsewhere, e.g. the CRM module); either permission qualifies
   // for the Executive Summary section here.
   const isDirector = hasPermission(session, "crm_analytics.view_all") || hasPermission(session, "crm_analytics.view_executive");
+  // Branch Manager's primary responsibility is branch sales performance --
+  // this widget comes first, above Markom, on their Home Dashboard.
+  const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
   const isMarkom = hasPermission(session, "kpi_task.view_own");
   const canViewBranchMarkom = hasPermission(session, "kpi_task.view_branch");
   const canViewNationalMarkom = hasPermission(session, "kpi_task.view_all");
@@ -61,6 +71,7 @@ export default async function DashboardPage() {
     crmConversion,
     crmTrend,
     attendanceSummary,
+    crmBranchStats,
     markomTeamStats,
     markomNationalStats,
   ] = await Promise.all([
@@ -74,6 +85,7 @@ export default async function DashboardPage() {
     isDirector ? conversionAnalyticsAction() : Promise.resolve(null),
     isDirector ? monthlyTrendAction(6) : Promise.resolve([]),
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
+    canViewBranchCrm ? crmBranchStatsAction() : Promise.resolve(null),
     isMarkom || canViewBranchMarkom ? markomTeamStatsAction() : Promise.resolve(null),
     canViewNationalMarkom ? markomNationalStatsAction() : Promise.resolve(null),
   ]);
@@ -99,7 +111,15 @@ export default async function DashboardPage() {
           <RecentNotificationsCard notifications={notifications.items} />
         </div>
       ) : (
-        canReviewRegistrations && <PendingRegistrationCard count={pendingRegistrationCount} />
+        <>
+          {canViewBranchCrm && crmBranchStats && (
+            <>
+              <BranchPerformanceCard stats={crmBranchStats} />
+              <BranchSalesSummaryCard stats={crmBranchStats} />
+            </>
+          )}
+          {canReviewRegistrations && <PendingRegistrationCard count={pendingRegistrationCount} />}
+        </>
       )}
 
       {(isMarkom || canViewBranchMarkom) && (

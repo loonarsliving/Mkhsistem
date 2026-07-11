@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CheckCircle2, Percent, Target, TrendingUp, Users, Wallet } from "lucide-react";
+import { CheckCircle2, Percent, TrendingUp, Users, Wallet } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/shared/breadcrumb-nav";
 import { PageHeader } from "@/components/shared/page-header";
@@ -16,6 +16,7 @@ import {
   monthlyTrendAction,
   nationalStatsAction,
 } from "@/features/crm/actions/crm-query.actions";
+import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
 import { LeadSourceChart } from "@/features/crm/components/lead-source-chart";
 import { MonthlyTrendChart } from "@/features/crm/components/monthly-trend-chart";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
@@ -99,26 +100,7 @@ export default async function CrmDashboardPage() {
         </div>
       ) : (
         // Branch Manager view: whole-branch figures only (crm_branch_stats), never per-sales data.
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatTile
-            icon={Target}
-            label="Target Unit Cabang"
-            value={String((stats as { target_units?: number } | null)?.target_units ?? 0)}
-          />
-          <StatTile
-            icon={CheckCircle2}
-            label="Closing Unit Cabang"
-            value={String((stats as { closing_units?: number } | null)?.closing_units ?? 0)}
-            tone="success"
-          />
-          <StatTile icon={TrendingUp} label="Achievement Cabang" value={`${stats?.achievement_percent ?? 0}%`} tone="success" />
-          <RevenueTile
-            icon={Wallet}
-            label="Target Revenue Cabang"
-            value={formatCurrency((stats as { target_revenue?: number } | null)?.target_revenue ?? 0)}
-          />
-          <RevenueTile icon={Wallet} label="Collection Cabang" value={formatCurrency(stats?.collection ?? 0)} tone="success" />
-        </div>
+        <BranchPerformanceCard stats={stats as Awaited<ReturnType<typeof branchStatsAction>>} />
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
