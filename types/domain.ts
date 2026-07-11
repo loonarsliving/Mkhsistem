@@ -31,6 +31,7 @@ export type Prospect = Tables<"prospects">;
 export type ProspectFollowUp = Tables<"prospect_follow_ups">;
 export type ProspectPayment = Tables<"prospect_payments">;
 export type SalesTarget = Tables<"sales_targets">;
+export type BranchSalesTarget = Tables<"branch_sales_targets">;
 
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {

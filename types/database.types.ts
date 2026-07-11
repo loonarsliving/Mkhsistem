@@ -1087,6 +1087,41 @@ export interface Database {
           },
         ];
       };
+      branch_sales_targets: {
+        Row: {
+          id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          commission_percent: number;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["branch_sales_targets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "branch_sales_targets_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
@@ -1279,6 +1314,16 @@ export interface Database {
           p_commission_percent: number;
         };
         Returns: string;
+      };
+      crm_set_branch_target: {
+        Args: {
+          p_branch_id: string;
+          p_period_month: number;
+          p_period_year: number;
+          p_target_units: number;
+          p_commission_percent: number;
+        };
+        Returns: { branch_target_id: string; distributed_count: number }[];
       };
       crm_sales_stats: {
         Args: { p_sales_id?: string | null; p_month?: number | null; p_year?: number | null };

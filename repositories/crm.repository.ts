@@ -1,15 +1,11 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { ProspectStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
 
-export async function listCrmProjects(supabase: TypedSupabaseClient) {
-  const { data, error } = await supabase
-    .from("crm_projects")
-    .select("*")
-    .eq("is_active", true)
-    .order("name");
-  if (error) throw error;
-  return data ?? [];
-}
+/**
+ * Project Master is kept as inactive future preparation (Phase 2+) -- CRM
+ * and Sales Target no longer depend on it. Only this admin-list read
+ * remains, for the standalone /crm/projects management page.
+ */
 
 /** Full Project Master list (active + archived) for the admin table, with branch name joined in. */
 export async function listCrmProjectsAdmin(supabase: TypedSupabaseClient) {
@@ -56,7 +52,7 @@ export async function listProspects(supabase: TypedSupabaseClient, filters: Pros
 
   let query = supabase
     .from("prospects")
-    .select("*, sales:sales_id(full_name), project:project_id(name), branch:branch_id(name)", { count: "exact" })
+    .select("*, sales:sales_id(full_name), branch:branch_id(name)", { count: "exact" })
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -74,7 +70,7 @@ export async function listProspects(supabase: TypedSupabaseClient, filters: Pros
 export async function getProspectById(supabase: TypedSupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("prospects")
-    .select("*, sales:sales_id(full_name, employee_code), project:project_id(name), branch:branch_id(name)")
+    .select("*, sales:sales_id(full_name, employee_code), branch:branch_id(name)")
     .eq("id", id)
     .is("deleted_at", null)
     .single();
@@ -108,7 +104,7 @@ export async function listPendingPayments(supabase: TypedSupabaseClient) {
   const { data, error } = await supabase
     .from("prospect_payments")
     .select(
-      "*, prospect:prospect_id(customer_name, phone, branch_id, sales:sales_id(full_name), project:project_id(name))",
+      "*, prospect:prospect_id(customer_name, phone, branch_id, sales:sales_id(full_name))",
     )
     .eq("status", "pending")
     .order("created_at", { ascending: true });
@@ -116,28 +112,42 @@ export async function listPendingPayments(supabase: TypedSupabaseClient) {
   return data ?? [];
 }
 
-export async function listSalesEmployees(supabase: TypedSupabaseClient, branchId?: string) {
-  let query = supabase
-    .from("v_employee_directory")
-    .select("id, full_name, employee_code, branch_id, branch_name")
-    .eq("role_key", "sales")
-    .is("deleted_at", null)
-    .order("full_name");
-  if (branchId) query = query.eq("branch_id", branchId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
+/**
+ * One row per branch for the Branch Target admin page: every branch, the
+ * target/commission Director set for this period (if any), and how many
+ * currently-active Sales are in that branch (so the UI can preview "N
+ * active Sales" and the ~per-Sales split before/after saving).
+ */
+export async function listBranchSalesTargets(supabase: TypedSupabaseClient, month: number, year: number) {
+  const [branchesRes, targetsRes, salesRes] = await Promise.all([
+    supabase.from("branches").select("id, name").is("deleted_at", null).eq("is_active", true).order("name"),
+    supabase.from("branch_sales_targets").select("*").eq("period_month", month).eq("period_year", year),
+    supabase
+      .from("v_employee_directory")
+      .select("id, branch_id")
+      .eq("role_key", "sales")
+      .eq("employment_status", "active")
+      .is("deleted_at", null),
+  ]);
+  if (branchesRes.error) throw branchesRes.error;
+  if (targetsRes.error) throw targetsRes.error;
+  if (salesRes.error) throw salesRes.error;
 
-export async function listSalesTargets(supabase: TypedSupabaseClient, month: number, year: number, branchId?: string) {
-  const query = supabase
-    .from("sales_targets")
-    .select("*, sales:sales_id(full_name, branch_id)")
-    .eq("period_month", month)
-    .eq("period_year", year);
-  const { data, error } = await query;
-  if (error) throw error;
-  const items = data ?? [];
-  if (!branchId) return items;
-  return items.filter((t) => (t.sales as unknown as { branch_id: string } | null)?.branch_id === branchId);
+  const targetByBranch = new Map(targetsRes.data.map((t) => [t.branch_id, t]));
+  const salesCountByBranch = new Map<string, number>();
+  for (const emp of salesRes.data) {
+    salesCountByBranch.set(emp.branch_id, (salesCountByBranch.get(emp.branch_id) ?? 0) + 1);
+  }
+
+  return branchesRes.data.map((b) => {
+    const target = targetByBranch.get(b.id);
+    return {
+      branch_id: b.id,
+      branch_name: b.name,
+      target_units: target?.target_units ?? 0,
+      commission_percent: target?.commission_percent ?? 0,
+      has_target: Boolean(target),
+      active_sales_count: salesCountByBranch.get(b.id) ?? 0,
+    };
+  });
 }

@@ -42,7 +42,7 @@ export function ProspectDetail({ data, canAddFollowUp, canSetGreen, canRecordPay
               <Phone className="h-4 w-4 text-muted-foreground" /> {prospect.phone}
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Building2 className="h-4 w-4 text-muted-foreground" /> {prospect.project?.name ?? "-"} ({prospect.house_type})
+              <Building2 className="h-4 w-4 text-muted-foreground" /> {prospect.house_type}
             </div>
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 text-muted-foreground" /> {prospect.city}

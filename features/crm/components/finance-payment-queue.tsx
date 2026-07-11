@@ -81,7 +81,7 @@ export function FinancePaymentQueue() {
                       <Link href={`/crm/${p.prospect_id}`} className="hover:underline">
                         {p.prospect?.customer_name ?? "-"}
                       </Link>
-                      <p className="text-xs text-muted-foreground">{p.prospect?.project?.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.prospect?.phone}</p>
                     </TableCell>
                     <TableCell>{p.prospect?.sales?.full_name ?? "-"}</TableCell>
                     <TableCell>{PAYMENT_TYPE_LABEL[p.payment_type]}</TableCell>

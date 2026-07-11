@@ -11,7 +11,10 @@ export default async function CrmTargetsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Target Sales" description="Atur target unit dan persentase komisi bulanan untuk setiap Sales." />
+      <PageHeader
+        title="Target Sales"
+        description="Atur target unit dan komisi bulanan per cabang — sistem otomatis membagi rata ke setiap Sales aktif."
+      />
       <SalesTargetForm />
     </div>
   );

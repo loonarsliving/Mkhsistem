@@ -5,14 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import {
   getProspectById,
-  listCrmProjects,
+  listBranchSalesTargets,
   listCrmProjectsAdmin,
   listFollowUps,
   listPayments,
   listPendingPayments,
   listProspects,
-  listSalesEmployees,
-  listSalesTargets,
   type ProspectListFilters,
 } from "@/repositories/crm.repository";
 
@@ -43,12 +41,6 @@ export async function getProspectDetailAction(id: string) {
   return { prospect, followUps, payments };
 }
 
-export async function listCrmProjectsAction() {
-  await requireSession();
-  const supabase = await createClient();
-  return listCrmProjects(supabase);
-}
-
 export async function listCrmProjectsAdminAction() {
   await requirePermission("crm_project.manage");
   const supabase = await createClient();
@@ -61,18 +53,19 @@ export async function listPendingPaymentsAction() {
   return listPendingPayments(supabase);
 }
 
-export async function listSalesEmployeesAction(branchOnly: boolean) {
+export async function listBranchSalesTargetsAction(month: number, year: number) {
   const session = await requireSession();
+  if (
+    !hasPermission(session, "sales_target.manage") &&
+    !hasPermission(session, "sales_target.view_all") &&
+    !hasPermission(session, "sales_target.view_branch")
+  ) {
+    throw new Error("Insufficient permission");
+  }
   const supabase = await createClient();
-  const branchId = branchOnly && !hasPermission(session, "sales_target.view_all") ? session.employee.branch_id : undefined;
-  return listSalesEmployees(supabase, branchId);
-}
-
-export async function listSalesTargetsAction(month: number, year: number) {
-  const session = await requireSession();
-  const supabase = await createClient();
-  const branchId = hasPermission(session, "sales_target.view_all") ? undefined : session.employee.branch_id;
-  return listSalesTargets(supabase, month, year, branchId);
+  const rows = await listBranchSalesTargets(supabase, month, year);
+  if (hasPermission(session, "sales_target.view_all") || hasPermission(session, "sales_target.manage")) return rows;
+  return rows.filter((r) => r.branch_id === session.employee.branch_id);
 }
 
 type SalesStatsRow = Database["public"]["Functions"]["crm_sales_stats"]["Returns"][number];

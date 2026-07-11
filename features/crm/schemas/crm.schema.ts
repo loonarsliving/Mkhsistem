@@ -5,7 +5,6 @@ import { FOLLOW_UP_ACTIVITY_TYPE, LEAD_SOURCE, PAYMENT_TYPE } from "@/constants/
 export const addProspectSchema = z.object({
   customerName: z.string().min(2, "Nama pelanggan wajib diisi").max(200),
   phone: z.string().min(8, "Nomor telepon tidak valid").max(20),
-  projectId: z.string().uuid("Project wajib dipilih"),
   houseType: z.string().min(1, "Tipe rumah wajib diisi").max(100),
   city: z.string().min(1, "Kota wajib diisi").max(100),
   leadSource: z.enum(Object.values(LEAD_SOURCE) as [string, ...string[]], { required_error: "Sumber prospek wajib dipilih" }),
@@ -39,11 +38,11 @@ export const rejectPaymentSchema = z.object({
 });
 export type RejectPaymentInput = z.infer<typeof rejectPaymentSchema>;
 
-export const upsertSalesTargetSchema = z.object({
-  salesId: z.string().uuid(),
+export const setBranchTargetSchema = z.object({
+  branchId: z.string().uuid("Cabang wajib dipilih"),
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodYear: z.coerce.number().int().min(2020).max(2100),
   targetUnits: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
   commissionPercent: z.coerce.number().min(0).max(100, "Persentase maksimal 100"),
 });
-export type UpsertSalesTargetInput = z.infer<typeof upsertSalesTargetSchema>;
+export type SetBranchTargetInput = z.infer<typeof setBranchTargetSchema>;

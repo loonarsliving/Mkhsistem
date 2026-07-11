@@ -86,7 +86,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'employee.view_all', 'employee.manage',
   'branch.manage', 'division.manage', 'position.manage',
   'registration.view_all', 'registration.manage',
-  'prospect.view_all', 'sales_target.view_all', 'crm_analytics.view_all', 'crm_project.manage'
+  'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 

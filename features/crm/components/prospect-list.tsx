@@ -28,7 +28,6 @@ interface ProspectRow {
   status: ProspectStatusDb;
   created_at: string;
   sales: { full_name: string } | null;
-  project: { name: string } | null;
 }
 
 export function ProspectList() {
@@ -90,7 +89,7 @@ export function ProspectList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Pelanggan</TableHead>
-                  <TableHead>Project</TableHead>
+                  <TableHead>Kota</TableHead>
                   <TableHead>Sales</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Dibuat</TableHead>
@@ -105,7 +104,7 @@ export function ProspectList() {
                         <p className="text-xs text-muted-foreground">{row.phone}</p>
                       </Link>
                     </TableCell>
-                    <TableCell>{row.project?.name ?? "-"}</TableCell>
+                    <TableCell>{row.city}</TableCell>
                     <TableCell>{row.sales?.full_name ?? "-"}</TableCell>
                     <TableCell>
                       <ProspectStatusBadge status={row.status} />

@@ -21,7 +21,6 @@ import { LEAD_SOURCE_LABEL } from "@/constants/app";
 import { useDebounce } from "@/hooks/use-debounce";
 
 import { checkDuplicateProspectAction, createProspectAction } from "../actions/crm.actions";
-import { listCrmProjectsAction } from "../actions/crm-query.actions";
 import { addProspectSchema, type AddProspectInput } from "../schemas/crm.schema";
 
 export function AddProspectForm() {
@@ -35,10 +34,8 @@ export function AddProspectForm() {
     formState: { errors, isSubmitting },
   } = useForm<AddProspectInput>({
     resolver: zodResolver(addProspectSchema),
-    defaultValues: { customerName: "", phone: "", projectId: "", houseType: "", city: "", leadSource: undefined, notes: "" },
+    defaultValues: { customerName: "", phone: "", houseType: "", city: "", leadSource: undefined, notes: "" },
   });
-
-  const { data: projects } = useQuery({ queryKey: ["crm-projects"], queryFn: listCrmProjectsAction });
 
   const phone = watch("phone");
   const customerName = watch("customerName");
@@ -107,40 +104,18 @@ export function AddProspectForm() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Project</Label>
-              <Controller
-                control={control}
-                name="projectId"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects?.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {errors.projectId && <p className="text-sm text-destructive">{errors.projectId.message}</p>}
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="houseType">Tipe Rumah</Label>
               <Input id="houseType" placeholder="Contoh: Tipe 36/72" {...register("houseType")} />
               {errors.houseType && <p className="text-sm text-destructive">{errors.houseType.message}</p>}
             </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="city">Kota</Label>
               <Input id="city" {...register("city")} />
               {errors.city && <p className="text-sm text-destructive">{errors.city.message}</p>}
             </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Sumber Prospect</Label>
               <Controller

@@ -12,12 +12,12 @@ import {
   addProspectSchema,
   recordPaymentSchema,
   rejectPaymentSchema,
-  upsertSalesTargetSchema,
+  setBranchTargetSchema,
   type AddFollowUpInput,
   type AddProspectInput,
   type RecordPaymentInput,
   type RejectPaymentInput,
-  type UpsertSalesTargetInput,
+  type SetBranchTargetInput,
 } from "../schemas/crm.schema";
 
 export async function checkDuplicateProspectAction(phone: string, customerName: string) {
@@ -41,7 +41,7 @@ export async function createProspectAction(input: AddProspectInput): Promise<Act
   const { data, error } = await supabase.rpc("crm_create_prospect", {
     p_customer_name: parsed.data.customerName,
     p_phone: parsed.data.phone,
-    p_project_id: parsed.data.projectId,
+    p_project_id: null,
     p_house_type: parsed.data.houseType,
     p_city: parsed.data.city,
     p_lead_source: parsed.data.leadSource as LeadSourceDb,
@@ -138,14 +138,14 @@ export async function rejectPaymentAction(input: RejectPaymentInput): Promise<Ac
   return actionSuccess();
 }
 
-export async function upsertSalesTargetAction(input: UpsertSalesTargetInput): Promise<ActionResult> {
+export async function setBranchTargetAction(input: SetBranchTargetInput): Promise<ActionResult<{ distributedCount: number }>> {
   await requireSession();
-  const parsed = upsertSalesTargetSchema.safeParse(input);
+  const parsed = setBranchTargetSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("crm_upsert_sales_target", {
-    p_sales_id: parsed.data.salesId,
+  const { data, error } = await supabase.rpc("crm_set_branch_target", {
+    p_branch_id: parsed.data.branchId,
     p_period_month: parsed.data.periodMonth,
     p_period_year: parsed.data.periodYear,
     p_target_units: parsed.data.targetUnits,
@@ -156,5 +156,5 @@ export async function upsertSalesTargetAction(input: UpsertSalesTargetInput): Pr
 
   revalidatePath("/crm/targets");
   revalidatePath("/dashboard");
-  return actionSuccess();
+  return actionSuccess({ distributedCount: data?.[0]?.distributed_count ?? 0 });
 }
