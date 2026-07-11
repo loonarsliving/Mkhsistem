@@ -6,7 +6,6 @@ import { AttendanceSummaryCard } from "@/features/dashboard/components/attendanc
 import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
 import { PayrollStatusCard } from "@/features/dashboard/components/payroll-status-card";
 import { PendingApprovalsCard } from "@/features/dashboard/components/pending-approvals-card";
-import { PendingRegistrationCard } from "@/features/dashboard/components/pending-registration-card";
 import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summary-card";
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentAnnouncementList } from "@/features/dashboard/components/recent-announcement-list";
@@ -20,13 +19,15 @@ import {
   nationalStatsAction,
 } from "@/features/crm/actions/crm-query.actions";
 import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
-import { BranchSalesSummaryCard } from "@/features/crm/components/branch-sales-summary-card";
+import { ExecutiveDashboardSection } from "@/features/crm/components/executive-dashboard-section";
+import { OperationalDashboardSection } from "@/features/crm/components/operational-dashboard-section";
 import {
   nationalStatsAction as markomNationalStatsAction,
   teamStatsAction as markomTeamStatsAction,
 } from "@/features/markom/actions/markom-query.actions";
 import { DirectorDashboardSection as MarkomDirectorDashboardSection } from "@/features/markom/components/director-dashboard-section";
 import { TeamSummaryCard as MarkomTeamSummaryCard } from "@/features/markom/components/team-summary-card";
+import { ROLE_KEYS } from "@/constants/rbac";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getCompanyAttendanceSummary, getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
@@ -38,11 +39,11 @@ import { listNotifications } from "@/repositories/notification.repository";
 export const metadata: Metadata = { title: "Dashboard" };
 
 /**
- * Dashboard = Executive Summary ("how is the company performing"), never an
- * operational CRM surface. The ONLY CRM element allowed here is
- * CrmDirectorSummaryCard -- one card, one shortcut into /crm/dashboard.
- * Everything operational (Sales Summary, Branch Summary, prospect funnels,
- * rankings, customer tables, analytics) lives exclusively in the CRM module.
+ * Dashboard = Executive Summary ("how is the company performing"), scoped to
+ * each role's own primary responsibility. Markom widgets never appear here
+ * for Direktur Utama / Direktur Operasional / Kepala Cabang -- that module
+ * lives exclusively at /markom. Sales Summary, prospect funnels, rankings,
+ * customer tables, and analytics live exclusively in the CRM module.
  */
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -53,12 +54,21 @@ export default async function DashboardPage() {
   // (needed elsewhere, e.g. the CRM module); either permission qualifies
   // for the Executive Summary section here.
   const isDirector = hasPermission(session, "crm_analytics.view_all") || hasPermission(session, "crm_analytics.view_executive");
+  const isDirekturUtama = session.roleKey === ROLE_KEYS.DIREKTUR_UTAMA;
+  const isDirekturOperasional = session.roleKey === ROLE_KEYS.DIREKTUR_OPERASIONAL;
+  // Finance and Super Admin also satisfy isDirector (they hold crm_analytics.view_all
+  // for other reasons) but keep the generic executive-summary treatment below --
+  // only the two director roles get the pared-down, role-specific sections.
+  const showGenericDirectorTier = isDirector && !isDirekturUtama && !isDirekturOperasional;
   // Branch Manager's primary responsibility is branch sales performance --
   // this widget comes first, above Markom, on their Home Dashboard.
   const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
   const isMarkom = hasPermission(session, "kpi_task.view_own");
-  const canViewBranchMarkom = hasPermission(session, "kpi_task.view_branch");
   const canViewNationalMarkom = hasPermission(session, "kpi_task.view_all");
+  // Markom widgets are removed from Home Dashboard for Direktur Utama / Direktur
+  // Operasional per design -- the Markom module remains fully accessible via the
+  // sidebar. Super Admin (also holds kpi_task.view_all) keeps seeing it here.
+  const showMarkomNational = canViewNationalMarkom && !isDirekturUtama && !isDirekturOperasional;
 
   const [
     attendance,
@@ -82,12 +92,12 @@ export default async function DashboardPage() {
     listNotifications(supabase, session.userId, 1),
     canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
     isDirector ? nationalStatsAction() : Promise.resolve(null),
-    isDirector ? conversionAnalyticsAction() : Promise.resolve(null),
-    isDirector ? monthlyTrendAction(6) : Promise.resolve([]),
+    showGenericDirectorTier ? conversionAnalyticsAction() : Promise.resolve(null),
+    showGenericDirectorTier ? monthlyTrendAction(6) : Promise.resolve([]),
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
     canViewBranchCrm ? crmBranchStatsAction() : Promise.resolve(null),
-    isMarkom || canViewBranchMarkom ? markomTeamStatsAction() : Promise.resolve(null),
-    canViewNationalMarkom ? markomNationalStatsAction() : Promise.resolve(null),
+    isMarkom ? markomTeamStatsAction() : Promise.resolve(null),
+    showMarkomNational ? markomNationalStatsAction() : Promise.resolve(null),
   ]);
 
   return (
@@ -96,36 +106,50 @@ export default async function DashboardPage() {
 
       <ProfileSummaryCard employee={session.employee} />
 
-      {isDirector && nationalStats && (
-        <CrmDirectorSummaryCard stats={nationalStats} conversion={crmConversion} trend={crmTrend} />
-      )}
-
-      {isDirector ? (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
-          <PayrollStatusCard />
-          <PendingApprovalsCard
-            registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
-            financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
-          />
-          <RecentNotificationsCard notifications={notifications.items} />
-        </div>
-      ) : (
+      {isDirekturUtama && nationalStats && (
         <>
-          {canViewBranchCrm && crmBranchStats && (
-            <>
-              <BranchPerformanceCard stats={crmBranchStats} />
-              <BranchSalesSummaryCard stats={crmBranchStats} />
-            </>
-          )}
-          {canReviewRegistrations && <PendingRegistrationCard count={pendingRegistrationCount} />}
+          <ExecutiveDashboardSection stats={nationalStats} />
+          <div className="grid gap-6 sm:grid-cols-2">
+            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
+            <RecentNotificationsCard notifications={notifications.items} />
+          </div>
         </>
       )}
 
-      {(isMarkom || canViewBranchMarkom) && (
-        <MarkomTeamSummaryCard stats={markomTeamStats} reviewMode={canViewBranchMarkom} />
+      {isDirekturOperasional && nationalStats && (
+        <>
+          <OperationalDashboardSection stats={nationalStats} />
+          <div className="grid gap-6 sm:grid-cols-2">
+            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
+            <PendingApprovalsCard
+              registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
+              financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
+            />
+            <RecentNotificationsCard notifications={notifications.items} />
+          </div>
+        </>
       )}
-      {canViewNationalMarkom && <MarkomDirectorDashboardSection stats={markomNationalStats} />}
+
+      {showGenericDirectorTier && (
+        <>
+          {nationalStats && <CrmDirectorSummaryCard stats={nationalStats} conversion={crmConversion} trend={crmTrend} />}
+          <div className="grid gap-6 sm:grid-cols-2">
+            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
+            <PayrollStatusCard />
+            <PendingApprovalsCard
+              registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
+              financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
+            />
+            <RecentNotificationsCard notifications={notifications.items} />
+          </div>
+        </>
+      )}
+
+      {/* Kepala Cabang: branch KPIs only -- no Sales Summary/ranking, no Markom, per Home Dashboard scope. */}
+      {!isDirector && canViewBranchCrm && crmBranchStats && <BranchPerformanceCard stats={crmBranchStats} />}
+
+      {isMarkom && <MarkomTeamSummaryCard stats={markomTeamStats} />}
+      {showMarkomNational && <MarkomDirectorDashboardSection stats={markomNationalStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

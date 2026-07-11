@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardCheck, Percent, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { ClipboardCheck, Percent, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,8 @@ export function ExecutiveDashboardSection({ stats }: { stats: Awaited<ReturnType
         </Button>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatTile icon={Target} label="Company Target" value={String(stats.total_target_units)} />
           <StatTile icon={Wallet} label="Company Revenue" value={formatCurrency(stats.total_target_revenue)} />
           <StatTile icon={Wallet} label="Collection" value={formatCurrency(stats.collection)} tone="success" />
           <StatTile icon={Percent} label="Achievement" value={`${stats.achievement_percent}%`} tone="success" />
