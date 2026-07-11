@@ -1503,6 +1503,17 @@ export interface Database {
           lead_source_performance: Json;
         }[];
       };
+      crm_monthly_trend: {
+        Args: { p_months_back?: number; p_branch_id?: string | null; p_sales_id?: string | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+        }[];
+      };
       kpi_assign_tasks: {
         Args: {
           p_assigned_to: string;

@@ -1,5 +1,5 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
-import type { ProspectStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
+import type { LeadSourceDb, ProspectStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
 
 /**
  * Project Master is kept as inactive future preparation (Phase 2+) -- CRM
@@ -15,6 +15,24 @@ export async function listCrmProjectsAdmin(supabase: TypedSupabaseClient) {
     .order("name");
   if (error) throw error;
   return data ?? [];
+}
+
+/**
+ * Project is optional in the CRM drill-down (Company > Branch > Project? >
+ * Sales > Customer) -- the current business is Branch-based and doesn't use
+ * Project Master operationally. This checks whether any real prospect
+ * actually references a project; the drill-down nav shows the Project level
+ * only when this is true, so it appears automatically once real usage
+ * starts instead of needing a manual toggle.
+ */
+export async function isProjectMasterInUse(supabase: TypedSupabaseClient) {
+  const { count, error } = await supabase
+    .from("prospects")
+    .select("*", { count: "exact", head: true })
+    .not("project_id", "is", null)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return (count ?? 0) > 0;
 }
 
 export async function createCrmProject(supabase: TypedSupabaseClient, input: TablesInsert<"crm_projects">) {
@@ -39,6 +57,9 @@ export interface ProspectListFilters {
   salesId?: string;
   branchId?: string;
   status?: ProspectStatusDb;
+  leadSource?: LeadSourceDb;
+  dateFrom?: string;
+  dateTo?: string;
   search?: string;
   page?: number;
   pageSize?: number;
@@ -60,11 +81,36 @@ export async function listProspects(supabase: TypedSupabaseClient, filters: Pros
   if (filters.salesId) query = query.eq("sales_id", filters.salesId);
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.status) query = query.eq("status", filters.status);
+  if (filters.leadSource) query = query.eq("lead_source", filters.leadSource);
+  if (filters.dateFrom) query = query.gte("created_at", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("created_at", `${filters.dateTo}T23:59:59`);
   if (filters.search) query = query.or(`customer_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
 
   const { data, error, count } = await query;
   if (error) throw error;
   return { items: data ?? [], total: count ?? 0 };
+}
+
+/** All matching prospects, unpaginated, for export -- caller must already be permission-scoped. */
+export async function listProspectsForExport(supabase: TypedSupabaseClient, filters: Omit<ProspectListFilters, "page" | "pageSize">) {
+  let query = supabase
+    .from("prospects")
+    .select("*, sales:sales_id(full_name), branch:branch_id(name)")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+
+  if (filters.salesId) query = query.eq("sales_id", filters.salesId);
+  if (filters.branchId) query = query.eq("branch_id", filters.branchId);
+  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.leadSource) query = query.eq("lead_source", filters.leadSource);
+  if (filters.dateFrom) query = query.gte("created_at", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("created_at", `${filters.dateTo}T23:59:59`);
+  if (filters.search) query = query.or(`customer_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function getProspectById(supabase: TypedSupabaseClient, id: string) {
@@ -84,6 +130,18 @@ export async function listFollowUps(supabase: TypedSupabaseClient, prospectId: s
     .select("*, created_by_employee:created_by(full_name)")
     .eq("prospect_id", prospectId)
     .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Recent follow-up activity across every prospect owned by one Sales -- the Sales View's Follow Up Timeline. */
+export async function listRecentFollowUpsBySales(supabase: TypedSupabaseClient, salesId: string, limit = 20) {
+  const { data, error } = await supabase
+    .from("prospect_follow_ups")
+    .select("*, prospect:prospect_id!inner(customer_name, phone, sales_id), created_by_employee:created_by(full_name)")
+    .eq("prospect.sales_id", salesId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return data ?? [];
 }

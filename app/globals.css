@@ -105,3 +105,26 @@
     display: none;
   }
 }
+
+/* Print / "Export PDF" support: mark the printable region with .print-area
+   and hide chrome (nav, buttons, filters) with .no-print. "Export PDF" is
+   the browser's native print-to-PDF, not a server-generated file -- no new
+   PDF dependency needed. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

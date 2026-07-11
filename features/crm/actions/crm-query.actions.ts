@@ -5,14 +5,33 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import {
   getProspectById,
+  isProjectMasterInUse,
   listBranchSalesTargets,
   listCrmProjectsAdmin,
   listFollowUps,
   listPayments,
   listPendingPayments,
   listProspects,
+  listProspectsForExport,
+  listRecentFollowUpsBySales,
   type ProspectListFilters,
 } from "@/repositories/crm.repository";
+
+/** Scopes a Customer Database / export filter set the same way listProspectsAction does, for Director-level browsing. */
+function scopeProspectFilters(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  filters: Omit<ProspectListFilters, "salesId" | "branchId"> & { salesId?: string; branchId?: string },
+) {
+  const scoped = { ...filters };
+  if (!hasPermission(session, "prospect.view_all")) {
+    if (hasPermission(session, "prospect.view_branch")) {
+      scoped.branchId = session.employee.branch_id;
+    } else {
+      scoped.salesId = session.userId;
+    }
+  }
+  return scoped;
+}
 
 export async function listProspectsAction(filters: ProspectListFilters) {
   const session = await requireSession();
@@ -45,6 +64,13 @@ export async function listCrmProjectsAdminAction() {
   await requirePermission("crm_project.manage");
   const supabase = await createClient();
   return listCrmProjectsAdmin(supabase);
+}
+
+/** Whether the CRM drill-down nav should show a Project level -- true only once a real prospect actually references one. */
+export async function isProjectMasterInUseAction() {
+  await requireSession();
+  const supabase = await createClient();
+  return isProjectMasterInUse(supabase);
 }
 
 export async function listPendingPaymentsAction() {
@@ -129,4 +155,35 @@ export async function conversionAnalyticsAction(branchId?: string, month?: numbe
   });
   if (error) throw error;
   return data?.[0] ?? null;
+}
+
+export async function monthlyTrendAction(monthsBack = 6, branchId?: string, salesId?: string) {
+  await requireSession();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_monthly_trend", {
+    p_months_back: monthsBack,
+    p_branch_id: branchId ?? null,
+    p_sales_id: salesId ?? null,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listRecentFollowUpsBySalesAction(salesId: string, limit = 20) {
+  await requireSession();
+  const supabase = await createClient();
+  return listRecentFollowUpsBySales(supabase, salesId, limit);
+}
+
+/** Customer Database: full-filter browsing for Directors/Branch Managers/Sales, each auto-scoped to what they're allowed to see. */
+export async function listCustomerDatabaseAction(filters: Omit<ProspectListFilters, "salesId" | "branchId"> & { salesId?: string; branchId?: string }) {
+  const session = await requireSession();
+  return listProspects(await createClient(), scopeProspectFilters(session, filters));
+}
+
+export async function exportCustomerDatabaseAction(
+  filters: Omit<ProspectListFilters, "salesId" | "branchId" | "page" | "pageSize"> & { salesId?: string; branchId?: string },
+) {
+  const session = await requireSession();
+  return listProspectsForExport(await createClient(), scopeProspectFilters(session, filters));
 }

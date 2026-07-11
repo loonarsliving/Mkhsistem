@@ -67,6 +67,31 @@ export async function getBranchTodaySummary(supabase: TypedSupabaseClient, branc
   return data ?? [];
 }
 
+export interface CompanyAttendanceSummary {
+  hadir: number;
+  terlambat: number;
+  izin: number;
+  sakit: number;
+  alpha: number;
+  belumAbsen: number;
+  total: number;
+}
+
+/** Today's company-wide attendance rollup for the Executive Dashboard's Attendance Summary widget. */
+export async function getCompanyAttendanceSummary(supabase: TypedSupabaseClient): Promise<CompanyAttendanceSummary> {
+  const rows = await getBranchTodaySummary(supabase);
+  const summary: CompanyAttendanceSummary = { hadir: 0, terlambat: 0, izin: 0, sakit: 0, alpha: 0, belumAbsen: 0, total: rows.length };
+  for (const row of rows) {
+    if (row.status === "hadir") summary.hadir++;
+    else if (row.status === "terlambat") summary.terlambat++;
+    else if (row.status === "izin") summary.izin++;
+    else if (row.status === "sakit") summary.sakit++;
+    else if (row.status === "alpha") summary.alpha++;
+    else summary.belumAbsen++;
+  }
+  return summary;
+}
+
 export async function listPendingLeaveRequests(supabase: TypedSupabaseClient) {
   const { data, error } = await supabase
     .from("leave_requests")
