@@ -40,7 +40,7 @@ export function MonthlyTrendChart({ data }: { data: MonthlyTrendRow[] }) {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis yAxisId="left" fontSize={12} unit="%" />
-                <YAxis yAxisId="right" orientation="right" fontSize={12} tickFormatter={(v: number) => formatCurrency(v)} width={90} />
+                <YAxis yAxisId="right" orientation="right" fontSize={11} tickFormatter={(v: number) => formatCurrency(v)} width={130} />
                 <Tooltip
                   formatter={(value: number, key: string) => (key === "collection" ? formatCurrency(value) : `${value}%`)}
                 />

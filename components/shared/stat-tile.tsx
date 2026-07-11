@@ -25,7 +25,7 @@ export function StatTile({ icon: Icon, label, value, tone = "default", className
       </div>
       <div className="min-w-0">
         <p className="truncate text-xs text-muted-foreground">{label}</p>
-        <p className="truncate text-lg font-semibold tabular-nums">{value}</p>
+        <p className="break-words text-lg font-semibold leading-tight tabular-nums">{value}</p>
       </div>
     </div>
   );
