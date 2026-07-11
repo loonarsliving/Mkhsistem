@@ -1,11 +1,12 @@
 "use server";
 
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import {
   getProspectById,
   listCrmProjects,
+  listCrmProjectsAdmin,
   listFollowUps,
   listPayments,
   listPendingPayments,
@@ -46,6 +47,12 @@ export async function listCrmProjectsAction() {
   await requireSession();
   const supabase = await createClient();
   return listCrmProjects(supabase);
+}
+
+export async function listCrmProjectsAdminAction() {
+  await requirePermission("crm_project.manage");
+  const supabase = await createClient();
+  return listCrmProjectsAdmin(supabase);
 }
 
 export async function listPendingPaymentsAction() {

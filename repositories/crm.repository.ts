@@ -1,5 +1,5 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
-import type { ProspectStatusDb } from "@/types/database.types";
+import type { ProspectStatusDb, TablesInsert, TablesUpdate } from "@/types/database.types";
 
 export async function listCrmProjects(supabase: TypedSupabaseClient) {
   const { data, error } = await supabase
@@ -9,6 +9,34 @@ export async function listCrmProjects(supabase: TypedSupabaseClient) {
     .order("name");
   if (error) throw error;
   return data ?? [];
+}
+
+/** Full Project Master list (active + archived) for the admin table, with branch name joined in. */
+export async function listCrmProjectsAdmin(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase
+    .from("crm_projects")
+    .select("*, branch:branch_id(name)")
+    .order("name");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createCrmProject(supabase: TypedSupabaseClient, input: TablesInsert<"crm_projects">) {
+  const { error } = await supabase.from("crm_projects").insert(input);
+  if (error) throw error;
+}
+
+export async function updateCrmProject(supabase: TypedSupabaseClient, id: string, input: TablesUpdate<"crm_projects">) {
+  const { error } = await supabase.from("crm_projects").update(input).eq("id", id);
+  if (error) throw error;
+}
+
+export async function setCrmProjectActive(supabase: TypedSupabaseClient, id: string, isActive: boolean, updatedBy: string) {
+  const { error } = await supabase
+    .from("crm_projects")
+    .update({ is_active: isActive, updated_by: updatedBy })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export interface ProspectListFilters {

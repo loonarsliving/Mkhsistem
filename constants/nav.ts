@@ -4,6 +4,7 @@ import {
   BarChart3,
   Building2,
   CalendarCheck,
+  FolderKanban,
   LayoutDashboard,
   Megaphone,
   Network,
@@ -53,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { label: "Verifikasi Pembayaran", href: "/crm/finance", icon: ReceiptText, permission: PERMISSIONS.PROSPECT_FINANCE_VERIFY },
       { label: "Target Sales", href: "/crm/targets", icon: Target, permission: PERMISSIONS.SALES_TARGET_MANAGE },
+      { label: "Project Master", href: "/crm/projects", icon: FolderKanban, permission: PERMISSIONS.CRM_PROJECT_MANAGE },
       {
         label: "Analitik CRM",
         href: "/crm/analytics",

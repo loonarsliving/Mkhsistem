@@ -2,12 +2,14 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
   ATTENDANCE_STATUS_LABEL,
   PAYMENT_STATUS_LABEL,
+  PROJECT_STATUS_LABEL,
   PROSPECT_STATUS_LABEL,
   type AttendanceStatus,
   type EmploymentStatus,
   type LeaveStatusType,
   type MemoPriority,
   type PaymentStatus,
+  type ProjectStatus,
   type ProspectStatus,
 } from "@/constants/app";
 
@@ -92,4 +94,14 @@ const PAYMENT_STATUS_VARIANT: Record<PaymentStatus, BadgeProps["variant"]> = {
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   return <Badge variant={PAYMENT_STATUS_VARIANT[status]}>{PAYMENT_STATUS_LABEL[status]}</Badge>;
+}
+
+const PROJECT_STATUS_VARIANT: Record<ProjectStatus, BadgeProps["variant"]> = {
+  planning: "secondary",
+  selling: "success",
+  completed: "default",
+};
+
+export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  return <Badge variant={PROJECT_STATUS_VARIANT[status]}>{PROJECT_STATUS_LABEL[status]}</Badge>;
 }

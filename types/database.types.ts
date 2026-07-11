@@ -27,6 +27,8 @@ export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" |
 export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "survey" | "video_call" | "site_visit" | "negotiation";
 export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
+export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
+export type CrmProjectStatusDb = "planning" | "selling" | "completed";
 
 export interface Database {
   public: {
@@ -854,6 +856,11 @@ export interface Database {
           id: string;
           name: string;
           city: string | null;
+          branch_id: string;
+          project_type: CrmProjectTypeDb;
+          status: CrmProjectStatusDb;
+          start_date: string | null;
+          target_launch_date: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -864,6 +871,11 @@ export interface Database {
           id?: string;
           name: string;
           city?: string | null;
+          branch_id: string;
+          project_type?: CrmProjectTypeDb;
+          status?: CrmProjectStatusDb;
+          start_date?: string | null;
+          target_launch_date?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -871,7 +883,14 @@ export interface Database {
           updated_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_projects"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "crm_projects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       prospects: {
         Row: {

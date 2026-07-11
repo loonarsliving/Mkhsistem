@@ -164,6 +164,34 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   rejected: "Ditolak",
 };
 
+export const PROJECT_TYPE = {
+  COMMERCIAL: "commercial",
+  SUBSIDIZED: "subsidized",
+  VILLA: "villa",
+  LAND: "land",
+} as const;
+export type ProjectType = (typeof PROJECT_TYPE)[keyof typeof PROJECT_TYPE];
+
+export const PROJECT_TYPE_LABEL: Record<ProjectType, string> = {
+  commercial: "Komersial",
+  subsidized: "Subsidi",
+  villa: "Villa",
+  land: "Kavling/Tanah",
+};
+
+export const PROJECT_STATUS = {
+  PLANNING: "planning",
+  SELLING: "selling",
+  COMPLETED: "completed",
+} as const;
+export type ProjectStatus = (typeof PROJECT_STATUS)[keyof typeof PROJECT_STATUS];
+
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  planning: "Perencanaan",
+  selling: "Penjualan",
+  completed: "Selesai",
+};
+
 export const STORAGE_BUCKETS = {
   AVATARS: "avatars",
   ATTENDANCE_SELFIES: "attendance-selfies",
