@@ -10,7 +10,8 @@ import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { branchStatsAction, nationalStatsAction, salesStatsAction } from "@/features/crm/actions/crm-query.actions";
 import { BranchDashboardSection } from "@/features/crm/components/branch-dashboard-section";
-import { DirectorDashboardSection } from "@/features/crm/components/director-dashboard-section";
+import { ExecutiveDashboardSection } from "@/features/crm/components/executive-dashboard-section";
+import { OperationalDashboardSection } from "@/features/crm/components/operational-dashboard-section";
 import { SalesDashboardSection } from "@/features/crm/components/sales-dashboard-section";
 import {
   branchStatsAction as markomBranchStatsAction,
@@ -36,7 +37,14 @@ export default async function DashboardPage() {
     hasPermission(session, "registration.view_all") || hasPermission(session, "registration.view_branch");
   const isSales = hasPermission(session, "prospect.create");
   const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
-  const canViewNationalCrm = hasPermission(session, "crm_analytics.view_all");
+  // Direktur Utama and Direktur Operasional both hold crm_analytics.view_all
+  // (needed elsewhere, e.g. /crm/analytics), so view_executive is the
+  // tie-breaker for which home-dashboard widget to render: whoever holds it
+  // (Direktur Utama) sees the pared-down Executive widget instead of the
+  // full Operational one, even though both share view_all otherwise.
+  const canViewExecutiveCrm = hasPermission(session, "crm_analytics.view_executive");
+  const canViewOperationalCrm = hasPermission(session, "crm_analytics.view_all") && !canViewExecutiveCrm;
+  const canViewNationalCrm = canViewOperationalCrm || canViewExecutiveCrm;
   const isMarkom = hasPermission(session, "kpi_task.view_own");
   const canViewBranchMarkom = hasPermission(session, "kpi_task.view_branch");
   const canViewNationalMarkom = hasPermission(session, "kpi_task.view_all");
@@ -77,7 +85,8 @@ export default async function DashboardPage() {
 
       {isSales && <SalesDashboardSection stats={salesStats} />}
       {canViewBranchCrm && <BranchDashboardSection stats={branchStats} />}
-      {canViewNationalCrm && <DirectorDashboardSection stats={nationalStats} />}
+      {canViewOperationalCrm && <OperationalDashboardSection stats={nationalStats} />}
+      {canViewExecutiveCrm && <ExecutiveDashboardSection stats={nationalStats} />}
 
       {isMarkom && <MarkomEmployeeDashboardSection stats={markomEmployeeStats} />}
       {canViewBranchMarkom && <MarkomBranchDashboardSection stats={markomBranchStats} />}

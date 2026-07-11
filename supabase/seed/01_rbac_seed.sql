@@ -43,6 +43,7 @@ insert into public.permissions (key, description) values
   ('sales_target.manage', 'Set monthly targets and commission % for Sales'),
   ('crm_analytics.view_branch', 'View CRM dashboards/analytics for own branch'),
   ('crm_analytics.view_all', 'View CRM dashboards/analytics across all branches'),
+  ('crm_analytics.view_executive', 'View the pared-down Executive KPI dashboard widget (Direktur Utama)'),
   ('crm_project.manage', 'Manage the property project reference list'),
   ('kpi_task.view_own', 'View own assigned checklist tasks'),
   ('kpi_task.view_branch', 'View checklist tasks for own branch'),
@@ -80,7 +81,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'branch.manage', 'division.manage', 'position.manage',
   'settings.manage', 'audit_log.view',
   'prospect.view_all', 'prospect.manage', 'sales_target.view_all', 'sales_target.manage',
-  'crm_analytics.view_all', 'crm_project.manage',
+  'crm_analytics.view_all', 'crm_analytics.view_executive', 'crm_project.manage',
   'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify'
 ) where r.key = 'direktur_utama'
 on conflict do nothing;

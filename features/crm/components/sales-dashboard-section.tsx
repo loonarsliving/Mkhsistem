@@ -1,21 +1,15 @@
 import Link from "next/link";
-import {
-  AlarmClock,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
-  Coins,
-  Percent,
-  Plus,
-  Target,
-  Wallet,
-} from "lucide-react";
+import { AlarmClock, CalendarClock, CheckCircle2, ClipboardList, Coins, Percent, Plus, Target, Wallet } from "lucide-react";
 
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import type { salesStatsAction } from "../actions/crm-query.actions";
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>;
+}
 
 export function SalesDashboardSection({ stats }: { stats: Awaited<ReturnType<typeof salesStatsAction>> }) {
   if (!stats) return null;
@@ -30,17 +24,36 @@ export function SalesDashboardSection({ stats }: { stats: Awaited<ReturnType<typ
           </Link>
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <SectionLabel>Target</SectionLabel>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile icon={Target} label="Target Unit" value={String(stats.target_units)} />
+            <StatTile icon={Wallet} label="Target Revenue" value={formatCurrency(stats.target_revenue)} />
+            <StatTile icon={Target} label="Sisa Target" value={String(stats.remaining_target)} tone="warning" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <SectionLabel>Realisasi</SectionLabel>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile icon={CheckCircle2} label="Closing Unit" value={String(stats.closing_units)} tone="success" />
+            <StatTile icon={Wallet} label="Collection" value={formatCurrency(stats.collection)} tone="success" />
+            <StatTile icon={Percent} label="Achievement" value={`${stats.achievement_percent}%`} tone="success" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <SectionLabel>Komisi Saya</SectionLabel>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile icon={Coins} label="Estimasi Komisi" value={formatCurrency(stats.estimated_commission)} tone="success" />
+            <StatTile icon={Coins} label="Komisi Terverifikasi (Siap Dibayar)" value={formatCurrency(stats.verified_commission)} tone="success" />
+            <StatTile icon={Coins} label="Komisi Maksimal" value={formatCurrency(stats.max_commission)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile icon={ClipboardList} label="Prospect Hari Ini" value={String(stats.today_prospect)} />
-          <StatTile icon={Target} label="Target Unit" value={String(stats.target_units)} />
-          <StatTile icon={Wallet} label="Target Revenue" value={formatCurrency(stats.target_revenue)} />
-          <StatTile icon={CheckCircle2} label="Unit Tercapai" value={String(stats.closing_units)} tone="success" />
-          <StatTile icon={Wallet} label="Revenue Tercapai" value={formatCurrency(stats.collection)} tone="success" />
-          <StatTile icon={Percent} label="Achievement" value={`${stats.achievement_percent}%`} tone="success" />
-          <StatTile icon={Coins} label="Estimasi Komisi" value={formatCurrency(stats.commission)} tone="success" />
-          <StatTile icon={Coins} label="Komisi Maksimal" value={formatCurrency(stats.max_commission)} />
-          <StatTile icon={Target} label="Sisa Target" value={String(stats.remaining_target)} tone="warning" />
           <StatTile icon={CalendarClock} label="Follow Up Hari Ini" value={String(stats.today_follow_up)} />
           <StatTile
             icon={AlarmClock}
@@ -49,6 +62,7 @@ export function SalesDashboardSection({ stats }: { stats: Awaited<ReturnType<typ
             tone={stats.late_follow_up > 0 ? "destructive" : "default"}
           />
         </div>
+
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="rounded-full bg-destructive/10 px-3 py-1 font-medium text-destructive">Baru {stats.prospects_red}</span>
           <span className="rounded-full bg-warning/10 px-3 py-1 font-medium text-warning">Follow Up {stats.prospects_yellow}</span>

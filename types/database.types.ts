@@ -1426,7 +1426,8 @@ export interface Database {
           achievement_percent: number;
           remaining_target: number;
           collection: number;
-          commission: number;
+          estimated_commission: number;
+          verified_commission: number;
           prospects_red: number;
           prospects_yellow: number;
           prospects_green: number;
@@ -1443,10 +1444,12 @@ export interface Database {
           period_month: number;
           period_year: number;
           target_units: number;
+          target_revenue: number;
           closing_units: number;
           achievement_percent: number;
           collection: number;
-          commission: number;
+          active_sales_count: number;
+          pending_finance_verification: number;
           prospects_red: number;
           prospects_yellow: number;
           prospects_green: number;
@@ -1465,8 +1468,13 @@ export interface Database {
           prospects_green: number;
           prospects_closing: number;
           conversion_percent: number;
+          total_target_units: number;
+          total_target_revenue: number;
+          total_closing_units: number;
+          achievement_percent: number;
           collection: number;
-          commission: number;
+          monthly_growth_percent: number | null;
+          pending_finance_verification: number;
           branch_ranking: Json;
           top_sales: Json;
         }[];
