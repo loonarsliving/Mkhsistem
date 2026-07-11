@@ -14,6 +14,7 @@ export const ROLE_KEYS = {
   STAFF: "staff",
   SALES: "sales",
   FINANCE: "finance",
+  MARKOM: "markom",
   /** Placeholder role for self-registered accounts awaiting approval — grants nothing. */
   PENDING: "pending",
 } as const;
@@ -76,6 +77,12 @@ export const PERMISSIONS = {
   CRM_ANALYTICS_VIEW_BRANCH: "crm_analytics.view_branch",
   CRM_ANALYTICS_VIEW_ALL: "crm_analytics.view_all",
   CRM_PROJECT_MANAGE: "crm_project.manage",
+
+  KPI_TASK_VIEW_OWN: "kpi_task.view_own",
+  KPI_TASK_VIEW_BRANCH: "kpi_task.view_branch",
+  KPI_TASK_VIEW_ALL: "kpi_task.view_all",
+  KPI_TASK_ASSIGN: "kpi_task.assign",
+  KPI_TASK_VERIFY: "kpi_task.verify",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -106,6 +113,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SALES_TARGET_MANAGE,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
     PERMISSIONS.CRM_PROJECT_MANAGE,
+    PERMISSIONS.KPI_TASK_VIEW_ALL,
+    PERMISSIONS.KPI_TASK_ASSIGN,
+    PERMISSIONS.KPI_TASK_VERIFY,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -131,6 +141,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SALES_TARGET_MANAGE,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
     PERMISSIONS.CRM_PROJECT_MANAGE,
+    PERMISSIONS.KPI_TASK_VIEW_ALL,
+    PERMISSIONS.KPI_TASK_ASSIGN,
+    PERMISSIONS.KPI_TASK_VERIFY,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -165,6 +178,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
     PERMISSIONS.SALES_TARGET_VIEW_BRANCH,
     PERMISSIONS.CRM_ANALYTICS_VIEW_BRANCH,
+    PERMISSIONS.KPI_TASK_VIEW_BRANCH,
+    PERMISSIONS.KPI_TASK_ASSIGN,
+    PERMISSIONS.KPI_TASK_VERIFY,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -198,6 +214,13 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_VIEW_ALL,
     PERMISSIONS.PROSPECT_FINANCE_VERIFY,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
+  ],
+  [ROLE_KEYS.MARKOM]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_OWN,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.KPI_TASK_VIEW_OWN,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

@@ -20,7 +20,15 @@ export type LeaveStatusDb = "pending" | "approved" | "rejected";
 export type EmploymentStatusDb = "active" | "inactive" | "on_leave" | "terminated";
 export type MemoPriorityDb = "low" | "normal" | "high" | "urgent";
 export type TargetTypeDb = "all_branch" | "branch" | "all_division" | "division" | "position" | "user";
-export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system" | "registration" | "crm";
+export type NotificationTypeDb =
+  | "memo"
+  | "announcement"
+  | "attendance"
+  | "leave_request"
+  | "system"
+  | "registration"
+  | "crm"
+  | "kpi_task";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
 export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" | "referral" | "whatsapp" | "marketplace" | "other";
@@ -29,6 +37,8 @@ export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disburs
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
 export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
 export type CrmProjectStatusDb = "planning" | "selling" | "completed";
+export type KpiTaskStatusDb = "pending" | "completed" | "rejected";
+export type KpiRankingScopeDb = "weekly" | "monthly";
 
 export interface Database {
   public: {
@@ -1126,6 +1136,77 @@ export interface Database {
           },
         ];
       };
+      kpi_tasks: {
+        Row: {
+          id: string;
+          division_id: string;
+          branch_id: string;
+          assigned_to: string;
+          title: string;
+          description: string | null;
+          period_year: number;
+          period_month: number;
+          period_week: number;
+          due_date: string | null;
+          status: KpiTaskStatusDb;
+          completed_at: string | null;
+          verified_by: string | null;
+          notes: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          division_id: string;
+          branch_id: string;
+          assigned_to: string;
+          title: string;
+          description?: string | null;
+          period_year: number;
+          period_month: number;
+          period_week: number;
+          due_date?: string | null;
+          status?: KpiTaskStatusDb;
+          completed_at?: string | null;
+          verified_by?: string | null;
+          notes?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kpi_tasks"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kpi_tasks_division_id_fkey";
+            columns: ["division_id"];
+            referencedRelation: "divisions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kpi_tasks_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kpi_tasks_assigned_to_fkey";
+            columns: ["assigned_to"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kpi_tasks_verified_by_fkey";
+            columns: ["verified_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
@@ -1412,6 +1493,102 @@ export interface Database {
           avg_follow_up_days: number | null;
           avg_closing_days: number | null;
           lead_source_performance: Json;
+        }[];
+      };
+      kpi_assign_tasks: {
+        Args: {
+          p_assigned_to: string;
+          p_period_year: number;
+          p_period_month: number;
+          p_period_week: number;
+          p_items: Json;
+        };
+        Returns: string[];
+      };
+      kpi_update_task: {
+        Args: { p_task_id: string; p_title: string; p_description: string | null; p_due_date: string | null };
+        Returns: undefined;
+      };
+      kpi_delete_task: {
+        Args: { p_task_id: string };
+        Returns: undefined;
+      };
+      kpi_verify_task: {
+        Args: { p_task_id: string; p_status: string; p_notes?: string | null };
+        Returns: undefined;
+      };
+      kpi_employee_stats: {
+        Args: { p_employee_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          employee_id: string;
+          period_month: number;
+          period_year: number;
+          current_week: number;
+          today_tasks: number;
+          weekly_assigned: number;
+          weekly_completed: number;
+          weekly_rejected: number;
+          weekly_pending: number;
+          weekly_achievement_percent: number;
+          monthly_assigned: number;
+          monthly_completed: number;
+          monthly_rejected: number;
+          monthly_pending: number;
+          monthly_achievement_percent: number;
+          overdue_count: number;
+        }[];
+      };
+      kpi_branch_stats: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null; p_division_id?: string | null };
+        Returns: {
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          current_week: number;
+          employee_count: number;
+          monthly_assigned: number;
+          monthly_completed: number;
+          monthly_achievement_percent: number;
+          overdue_count: number;
+          pending_verification_count: number;
+          employee_performance: Json;
+        }[];
+      };
+      kpi_national_stats: {
+        Args: { p_month?: number | null; p_year?: number | null; p_division_id?: string | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          current_week: number;
+          employee_count: number;
+          monthly_assigned: number;
+          monthly_completed: number;
+          monthly_achievement_percent: number;
+          overdue_count: number;
+          branch_ranking: Json;
+          employee_ranking_weekly: Json;
+          employee_ranking_monthly: Json;
+        }[];
+      };
+      kpi_ranking: {
+        Args: {
+          p_scope?: string;
+          p_month?: number | null;
+          p_year?: number | null;
+          p_week?: number | null;
+          p_branch_id?: string | null;
+          p_division_id?: string | null;
+        };
+        Returns: {
+          rank: number;
+          employee_id: string;
+          full_name: string;
+          branch_name: string;
+          division_name: string;
+          assigned: number;
+          completed: number;
+          rejected: number;
+          achievement_percent: number;
         }[];
       };
     };

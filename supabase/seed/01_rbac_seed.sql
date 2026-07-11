@@ -43,7 +43,12 @@ insert into public.permissions (key, description) values
   ('sales_target.manage', 'Set monthly targets and commission % for Sales'),
   ('crm_analytics.view_branch', 'View CRM dashboards/analytics for own branch'),
   ('crm_analytics.view_all', 'View CRM dashboards/analytics across all branches'),
-  ('crm_project.manage', 'Manage the property project reference list')
+  ('crm_project.manage', 'Manage the property project reference list'),
+  ('kpi_task.view_own', 'View own assigned checklist tasks'),
+  ('kpi_task.view_branch', 'View checklist tasks for own branch'),
+  ('kpi_task.view_all', 'View checklist tasks across all branches'),
+  ('kpi_task.assign', 'Create/edit/delete checklist tasks for employees'),
+  ('kpi_task.verify', 'Mark a checklist task Completed or Rejected')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -55,6 +60,7 @@ insert into public.roles (key, name, level, description, is_system) values
   ('kepala_cabang', 'Kepala Cabang', 30, 'Branch head', true),
   ('manager', 'Manager', 40, 'Division / team manager', true),
   ('sales', 'Sales', 90, 'Prospect intake, follow-up, and own CRM dashboard', true),
+  ('markom', 'Markom', 90, 'Weekly checklist tasks and own KPI dashboard', true),
   ('staff', 'Staff', 100, 'Regular employee', true),
   ('pending', 'Pending Approval', 999, 'Self-registered account awaiting approval', true)
 on conflict (key) do nothing;
@@ -74,7 +80,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'branch.manage', 'division.manage', 'position.manage',
   'settings.manage', 'audit_log.view',
   'prospect.view_all', 'prospect.manage', 'sales_target.view_all', 'sales_target.manage',
-  'crm_analytics.view_all', 'crm_project.manage'
+  'crm_analytics.view_all', 'crm_project.manage',
+  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify'
 ) where r.key = 'direktur_utama'
 on conflict do nothing;
 
@@ -86,7 +93,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'employee.view_all', 'employee.manage',
   'branch.manage', 'division.manage', 'position.manage',
   'registration.view_all', 'registration.manage',
-  'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage'
+  'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage',
+  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -108,7 +116,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'announcement.view', 'announcement.create',
   'employee.view_branch',
   'registration.view_branch', 'registration.manage',
-  'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch'
+  'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch',
+  'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify'
 ) where r.key = 'kepala_cabang'
 on conflict do nothing;
 
@@ -118,6 +127,13 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
   'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own'
 ) where r.key = 'sales'
+on conflict do nothing;
+
+-- markom
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in (
+  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view', 'kpi_task.view_own'
+) where r.key = 'markom'
 on conflict do nothing;
 
 -- finance

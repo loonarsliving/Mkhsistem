@@ -164,6 +164,19 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   rejected: "Ditolak",
 };
 
+export const KPI_TASK_STATUS = {
+  PENDING: "pending",
+  COMPLETED: "completed",
+  REJECTED: "rejected",
+} as const;
+export type KpiTaskStatus = (typeof KPI_TASK_STATUS)[keyof typeof KPI_TASK_STATUS];
+
+export const KPI_TASK_STATUS_LABEL: Record<KpiTaskStatus, string> = {
+  pending: "Pending",
+  completed: "Selesai",
+  rejected: "Ditolak",
+};
+
 export const PROJECT_TYPE = {
   COMMERCIAL: "commercial",
   SUBSIDIZED: "subsidized",

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { CheckCircle2, Coins, Percent, Target, Wallet } from "lucide-react";
 
+import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 import type { branchStatsAction } from "../actions/crm-query.actions";
-
-import { StatTile } from "./stat-tile";
 
 interface SalesPerformanceRow {
   sales_id: string;

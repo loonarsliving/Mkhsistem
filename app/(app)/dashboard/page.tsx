@@ -12,6 +12,14 @@ import { branchStatsAction, nationalStatsAction, salesStatsAction } from "@/feat
 import { BranchDashboardSection } from "@/features/crm/components/branch-dashboard-section";
 import { DirectorDashboardSection } from "@/features/crm/components/director-dashboard-section";
 import { SalesDashboardSection } from "@/features/crm/components/sales-dashboard-section";
+import {
+  branchStatsAction as markomBranchStatsAction,
+  employeeStatsAction as markomEmployeeStatsAction,
+  nationalStatsAction as markomNationalStatsAction,
+} from "@/features/markom/actions/markom-query.actions";
+import { BranchDashboardSection as MarkomBranchDashboardSection } from "@/features/markom/components/branch-dashboard-section";
+import { DirectorDashboardSection as MarkomDirectorDashboardSection } from "@/features/markom/components/director-dashboard-section";
+import { EmployeeDashboardSection as MarkomEmployeeDashboardSection } from "@/features/markom/components/employee-dashboard-section";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
@@ -29,18 +37,35 @@ export default async function DashboardPage() {
   const isSales = hasPermission(session, "prospect.create");
   const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
   const canViewNationalCrm = hasPermission(session, "crm_analytics.view_all");
+  const isMarkom = hasPermission(session, "kpi_task.view_own");
+  const canViewBranchMarkom = hasPermission(session, "kpi_task.view_branch");
+  const canViewNationalMarkom = hasPermission(session, "kpi_task.view_all");
 
-  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount, salesStats, branchStats, nationalStats] =
-    await Promise.all([
-      getTodayAttendance(supabase, session.userId),
-      getMonthlyStats(supabase, session.userId, new Date()),
-      listRecentMemos(supabase, 5),
-      listRecentAnnouncements(supabase, 5),
-      canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
-      isSales ? salesStatsAction() : Promise.resolve(null),
-      canViewBranchCrm ? branchStatsAction() : Promise.resolve(null),
-      canViewNationalCrm ? nationalStatsAction() : Promise.resolve(null),
-    ]);
+  const [
+    attendance,
+    monthlyStats,
+    memos,
+    announcements,
+    pendingRegistrationCount,
+    salesStats,
+    branchStats,
+    nationalStats,
+    markomEmployeeStats,
+    markomBranchStats,
+    markomNationalStats,
+  ] = await Promise.all([
+    getTodayAttendance(supabase, session.userId),
+    getMonthlyStats(supabase, session.userId, new Date()),
+    listRecentMemos(supabase, 5),
+    listRecentAnnouncements(supabase, 5),
+    canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
+    isSales ? salesStatsAction() : Promise.resolve(null),
+    canViewBranchCrm ? branchStatsAction() : Promise.resolve(null),
+    canViewNationalCrm ? nationalStatsAction() : Promise.resolve(null),
+    isMarkom ? markomEmployeeStatsAction() : Promise.resolve(null),
+    canViewBranchMarkom ? markomBranchStatsAction() : Promise.resolve(null),
+    canViewNationalMarkom ? markomNationalStatsAction() : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -53,6 +78,10 @@ export default async function DashboardPage() {
       {isSales && <SalesDashboardSection stats={salesStats} />}
       {canViewBranchCrm && <BranchDashboardSection stats={branchStats} />}
       {canViewNationalCrm && <DirectorDashboardSection stats={nationalStats} />}
+
+      {isMarkom && <MarkomEmployeeDashboardSection stats={markomEmployeeStats} />}
+      {canViewBranchMarkom && <MarkomBranchDashboardSection stats={markomBranchStats} />}
+      {canViewNationalMarkom && <MarkomDirectorDashboardSection stats={markomNationalStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

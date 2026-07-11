@@ -3,12 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { StatTile } from "@/components/shared/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LEAD_SOURCE_LABEL } from "@/constants/app";
 import type { LeadSource } from "@/constants/app";
 
 import { conversionAnalyticsAction } from "../actions/crm-query.actions";
-import { StatTile } from "./stat-tile";
 import { Percent, TrendingUp, Users } from "lucide-react";
 
 interface LeadSourceRow {

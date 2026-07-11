@@ -11,12 +11,11 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import type { salesStatsAction } from "../actions/crm-query.actions";
-
-import { StatTile } from "./stat-tile";
 
 export function SalesDashboardSection({ stats }: { stats: Awaited<ReturnType<typeof salesStatsAction>> }) {
   if (!stats) return null;
