@@ -8,6 +8,10 @@ import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentAnnouncementList } from "@/features/dashboard/components/recent-announcement-list";
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
+import { branchStatsAction, nationalStatsAction, salesStatsAction } from "@/features/crm/actions/crm-query.actions";
+import { BranchDashboardSection } from "@/features/crm/components/branch-dashboard-section";
+import { DirectorDashboardSection } from "@/features/crm/components/director-dashboard-section";
+import { SalesDashboardSection } from "@/features/crm/components/sales-dashboard-section";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
@@ -22,14 +26,21 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const canReviewRegistrations =
     hasPermission(session, "registration.view_all") || hasPermission(session, "registration.view_branch");
+  const isSales = hasPermission(session, "prospect.create");
+  const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
+  const canViewNationalCrm = hasPermission(session, "crm_analytics.view_all");
 
-  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount] = await Promise.all([
-    getTodayAttendance(supabase, session.userId),
-    getMonthlyStats(supabase, session.userId, new Date()),
-    listRecentMemos(supabase, 5),
-    listRecentAnnouncements(supabase, 5),
-    canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
-  ]);
+  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount, salesStats, branchStats, nationalStats] =
+    await Promise.all([
+      getTodayAttendance(supabase, session.userId),
+      getMonthlyStats(supabase, session.userId, new Date()),
+      listRecentMemos(supabase, 5),
+      listRecentAnnouncements(supabase, 5),
+      canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
+      isSales ? salesStatsAction() : Promise.resolve(null),
+      canViewBranchCrm ? branchStatsAction() : Promise.resolve(null),
+      canViewNationalCrm ? nationalStatsAction() : Promise.resolve(null),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -38,6 +49,10 @@ export default async function DashboardPage() {
       <ProfileSummaryCard employee={session.employee} />
 
       {canReviewRegistrations && <PendingRegistrationCard count={pendingRegistrationCount} />}
+
+      {isSales && <SalesDashboardSection stats={salesStats} />}
+      {canViewBranchCrm && <BranchDashboardSection stats={branchStats} />}
+      {canViewNationalCrm && <DirectorDashboardSection stats={nationalStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

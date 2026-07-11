@@ -71,8 +71,98 @@ export const NOTIFICATION_TYPE = {
   ATTENDANCE: "attendance",
   LEAVE_REQUEST: "leave_request",
   SYSTEM: "system",
+  CRM: "crm",
 } as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
+
+export const PROSPECT_STATUS = {
+  RED: "red",
+  YELLOW: "yellow",
+  GREEN: "green",
+  CLOSING: "closing",
+  INACTIVE: "inactive",
+} as const;
+export type ProspectStatus = (typeof PROSPECT_STATUS)[keyof typeof PROSPECT_STATUS];
+
+export const PROSPECT_STATUS_LABEL: Record<ProspectStatus, string> = {
+  red: "Baru",
+  yellow: "Follow Up",
+  green: "Menunggu Verifikasi",
+  closing: "Closing",
+  inactive: "Tidak Aktif",
+};
+
+export const LEAD_SOURCE = {
+  FACEBOOK_ADS: "facebook_ads",
+  INSTAGRAM: "instagram",
+  TIKTOK: "tiktok",
+  WALK_IN: "walk_in",
+  REFERRAL: "referral",
+  WHATSAPP: "whatsapp",
+  MARKETPLACE: "marketplace",
+  OTHER: "other",
+} as const;
+export type LeadSource = (typeof LEAD_SOURCE)[keyof typeof LEAD_SOURCE];
+
+export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
+  facebook_ads: "Facebook Ads",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  walk_in: "Walk In",
+  referral: "Referral",
+  whatsapp: "WhatsApp",
+  marketplace: "Marketplace",
+  other: "Lainnya",
+};
+
+export const FOLLOW_UP_ACTIVITY_TYPE = {
+  PHONE_CALL: "phone_call",
+  WHATSAPP: "whatsapp",
+  MEETING: "meeting",
+  SURVEY: "survey",
+  VIDEO_CALL: "video_call",
+  SITE_VISIT: "site_visit",
+  NEGOTIATION: "negotiation",
+} as const;
+export type FollowUpActivityType = (typeof FOLLOW_UP_ACTIVITY_TYPE)[keyof typeof FOLLOW_UP_ACTIVITY_TYPE];
+
+export const FOLLOW_UP_ACTIVITY_TYPE_LABEL: Record<FollowUpActivityType, string> = {
+  phone_call: "Telepon",
+  whatsapp: "WhatsApp",
+  meeting: "Meeting",
+  survey: "Survey",
+  video_call: "Video Call",
+  site_visit: "Kunjungan Lokasi",
+  negotiation: "Negosiasi",
+};
+
+export const PAYMENT_TYPE = {
+  BOOKING_FEE: "booking_fee",
+  DP: "dp",
+  INSTALLMENT: "installment",
+  BANK_DISBURSEMENT: "bank_disbursement",
+} as const;
+export type PaymentType = (typeof PAYMENT_TYPE)[keyof typeof PAYMENT_TYPE];
+
+export const PAYMENT_TYPE_LABEL: Record<PaymentType, string> = {
+  booking_fee: "Booking Fee",
+  dp: "DP",
+  installment: "Cicilan",
+  bank_disbursement: "Pencairan Bank",
+};
+
+export const PAYMENT_STATUS = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+} as const;
+export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  pending: "Menunggu",
+  approved: "Disetujui",
+  rejected: "Ditolak",
+};
 
 export const STORAGE_BUCKETS = {
   AVATARS: "avatars",

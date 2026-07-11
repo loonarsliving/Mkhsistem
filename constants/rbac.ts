@@ -12,6 +12,8 @@ export const ROLE_KEYS = {
   KEPALA_CABANG: "kepala_cabang",
   MANAGER: "manager",
   STAFF: "staff",
+  SALES: "sales",
+  FINANCE: "finance",
   /** Placeholder role for self-registered accounts awaiting approval — grants nothing. */
   PENDING: "pending",
 } as const;
@@ -57,6 +59,23 @@ export const PERMISSIONS = {
   REGISTRATION_VIEW_ALL: "registration.view_all",
   REGISTRATION_VIEW_BRANCH: "registration.view_branch",
   REGISTRATION_MANAGE: "registration.manage",
+
+  PROSPECT_VIEW_OWN: "prospect.view_own",
+  PROSPECT_VIEW_BRANCH: "prospect.view_branch",
+  PROSPECT_VIEW_ALL: "prospect.view_all",
+  PROSPECT_CREATE: "prospect.create",
+  PROSPECT_MANAGE: "prospect.manage",
+  PROSPECT_FOLLOW_UP_CREATE: "prospect.follow_up_create",
+  PROSPECT_FINANCE_VERIFY: "prospect.finance_verify",
+
+  SALES_TARGET_VIEW_OWN: "sales_target.view_own",
+  SALES_TARGET_VIEW_BRANCH: "sales_target.view_branch",
+  SALES_TARGET_VIEW_ALL: "sales_target.view_all",
+  SALES_TARGET_MANAGE: "sales_target.manage",
+
+  CRM_ANALYTICS_VIEW_BRANCH: "crm_analytics.view_branch",
+  CRM_ANALYTICS_VIEW_ALL: "crm_analytics.view_all",
+  CRM_PROJECT_MANAGE: "crm_project.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -81,6 +100,12 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.POSITION_MANAGE,
     PERMISSIONS.SETTINGS_MANAGE,
     PERMISSIONS.AUDIT_LOG_VIEW,
+    PERMISSIONS.PROSPECT_VIEW_ALL,
+    PERMISSIONS.PROSPECT_MANAGE,
+    PERMISSIONS.SALES_TARGET_VIEW_ALL,
+    PERMISSIONS.SALES_TARGET_MANAGE,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
+    PERMISSIONS.CRM_PROJECT_MANAGE,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -101,6 +126,10 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.POSITION_MANAGE,
     PERMISSIONS.REGISTRATION_VIEW_ALL,
     PERMISSIONS.REGISTRATION_MANAGE,
+    PERMISSIONS.PROSPECT_VIEW_ALL,
+    PERMISSIONS.SALES_TARGET_VIEW_ALL,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
+    PERMISSIONS.CRM_PROJECT_MANAGE,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -131,6 +160,10 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
     PERMISSIONS.REGISTRATION_VIEW_BRANCH,
     PERMISSIONS.REGISTRATION_MANAGE,
+    PERMISSIONS.PROSPECT_VIEW_BRANCH,
+    PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
+    PERMISSIONS.SALES_TARGET_VIEW_BRANCH,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_BRANCH,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -145,6 +178,19 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.ATTENDANCE_VIEW_OWN,
     PERMISSIONS.MEMO_VIEW,
     PERMISSIONS.ANNOUNCEMENT_VIEW,
+  ],
+  [ROLE_KEYS.SALES]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.PROSPECT_VIEW_OWN,
+    PERMISSIONS.PROSPECT_CREATE,
+    PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
+    PERMISSIONS.SALES_TARGET_VIEW_OWN,
+  ],
+  [ROLE_KEYS.FINANCE]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.PROSPECT_VIEW_ALL,
+    PERMISSIONS.PROSPECT_FINANCE_VERIFY,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

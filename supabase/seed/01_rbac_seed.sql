@@ -29,7 +29,21 @@ insert into public.permissions (key, description) values
   ('system.monitoring_view', 'View system health, error logs and performance metrics'),
   ('registration.view_all', 'View self-registration requests for all branches'),
   ('registration.view_branch', 'View self-registration requests for own branch'),
-  ('registration.manage', 'Approve or reject self-registration requests')
+  ('registration.manage', 'Approve or reject self-registration requests'),
+  ('prospect.view_own', 'View own prospects'),
+  ('prospect.view_branch', 'View prospects for own branch'),
+  ('prospect.view_all', 'View prospects across all branches'),
+  ('prospect.create', 'Create new prospects'),
+  ('prospect.manage', 'Full override on any prospect (edit/delete/reassign)'),
+  ('prospect.follow_up_create', 'Add follow-up activity to a prospect'),
+  ('prospect.finance_verify', 'Record and approve/reject prospect payments; only path to Closing status'),
+  ('sales_target.view_own', 'View own monthly target and commission %'),
+  ('sales_target.view_branch', 'View monthly targets for own branch'),
+  ('sales_target.view_all', 'View monthly targets across all branches'),
+  ('sales_target.manage', 'Set monthly targets and commission % for Sales'),
+  ('crm_analytics.view_branch', 'View CRM dashboards/analytics for own branch'),
+  ('crm_analytics.view_all', 'View CRM dashboards/analytics across all branches'),
+  ('crm_project.manage', 'Manage the property project reference list')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -37,8 +51,10 @@ insert into public.roles (key, name, level, description, is_system) values
   ('direktur_utama', 'Direktur Utama', 10, 'Company-wide executive oversight', true),
   ('direktur_operasional', 'Direktur Operasional', 15, 'Operational executive oversight', true),
   ('hr', 'HR', 20, 'Human resources management', true),
+  ('finance', 'Finance', 35, 'Payment verification and closing approval', true),
   ('kepala_cabang', 'Kepala Cabang', 30, 'Branch head', true),
   ('manager', 'Manager', 40, 'Division / team manager', true),
+  ('sales', 'Sales', 90, 'Prospect intake, follow-up, and own CRM dashboard', true),
   ('staff', 'Staff', 100, 'Regular employee', true),
   ('pending', 'Pending Approval', 999, 'Self-registered account awaiting approval', true)
 on conflict (key) do nothing;
@@ -56,7 +72,9 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
   'branch.manage', 'division.manage', 'position.manage',
-  'settings.manage', 'audit_log.view'
+  'settings.manage', 'audit_log.view',
+  'prospect.view_all', 'prospect.manage', 'sales_target.view_all', 'sales_target.manage',
+  'crm_analytics.view_all', 'crm_project.manage'
 ) where r.key = 'direktur_utama'
 on conflict do nothing;
 
@@ -67,7 +85,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
   'branch.manage', 'division.manage', 'position.manage',
-  'registration.view_all', 'registration.manage'
+  'registration.view_all', 'registration.manage',
+  'prospect.view_all', 'sales_target.view_all', 'crm_analytics.view_all', 'crm_project.manage'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -88,8 +107,23 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'memo.view', 'memo.create',
   'announcement.view', 'announcement.create',
   'employee.view_branch',
-  'registration.view_branch', 'registration.manage'
+  'registration.view_branch', 'registration.manage',
+  'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch'
 ) where r.key = 'kepala_cabang'
+on conflict do nothing;
+
+-- sales
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in (
+  'dashboard.view', 'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own'
+) where r.key = 'sales'
+on conflict do nothing;
+
+-- finance
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in (
+  'dashboard.view', 'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all'
+) where r.key = 'finance'
 on conflict do nothing;
 
 -- manager

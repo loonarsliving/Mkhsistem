@@ -26,6 +26,12 @@ export type ErrorLog = Tables<"mkc_error_logs">;
 export type PerformanceMetric = Tables<"mkc_performance_metrics">;
 export type PerformanceSummary = Views<"v_performance_summary">;
 
+export type CrmProject = Tables<"crm_projects">;
+export type Prospect = Tables<"prospects">;
+export type ProspectFollowUp = Tables<"prospect_follow_ups">;
+export type ProspectPayment = Tables<"prospect_payments">;
+export type SalesTarget = Tables<"sales_targets">;
+
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {
   userId: string;

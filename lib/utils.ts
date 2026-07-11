@@ -14,6 +14,10 @@ export function getInitials(name: string): string {
     .join("");
 }
 
+export function formatCurrency(amount: number | null | undefined): string {
+  return `Rp ${Math.round(amount ?? 0).toLocaleString("id-ID")}`;
+}
+
 export function formatDistanceMeters(meters: number | null): string {
   if (meters === null) return "-";
   if (meters < 1000) return `${Math.round(meters)} m`;

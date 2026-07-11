@@ -20,8 +20,13 @@ export type LeaveStatusDb = "pending" | "approved" | "rejected";
 export type EmploymentStatusDb = "active" | "inactive" | "on_leave" | "terminated";
 export type MemoPriorityDb = "low" | "normal" | "high" | "urgent";
 export type TargetTypeDb = "all_branch" | "branch" | "all_division" | "division" | "position" | "user";
-export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system" | "registration";
+export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system" | "registration" | "crm";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
+export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
+export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" | "referral" | "whatsapp" | "marketplace" | "other";
+export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "survey" | "video_call" | "site_visit" | "negotiation";
+export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
+export type PaymentStatusDb = "pending" | "approved" | "rejected";
 
 export interface Database {
   public: {
@@ -844,6 +849,225 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mkc_performance_metrics"]["Insert"]>;
         Relationships: [];
       };
+      crm_projects: {
+        Row: {
+          id: string;
+          name: string;
+          city: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          city?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_projects"]["Insert"]>;
+        Relationships: [];
+      };
+      prospects: {
+        Row: {
+          id: string;
+          customer_name: string;
+          phone: string;
+          phone_normalized: string;
+          project_id: string | null;
+          house_type: string;
+          city: string;
+          lead_source: LeadSourceDb;
+          notes: string | null;
+          status: ProspectStatusDb;
+          sales_id: string;
+          branch_id: string;
+          last_follow_up_at: string | null;
+          last_reminder_sent_at: string | null;
+          total_collection: number;
+          total_commission: number;
+          closed_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          customer_name: string;
+          phone: string;
+          project_id?: string | null;
+          house_type: string;
+          city: string;
+          lead_source: LeadSourceDb;
+          notes?: string | null;
+          status?: ProspectStatusDb;
+          sales_id: string;
+          branch_id: string;
+          last_follow_up_at?: string | null;
+          last_reminder_sent_at?: string | null;
+          total_collection?: number;
+          total_commission?: number;
+          closed_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospects"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospects_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospects_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      prospect_follow_ups: {
+        Row: {
+          id: string;
+          prospect_id: string;
+          activity_type: FollowUpActivityTypeDb;
+          activity_date: string;
+          activity_time: string | null;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prospect_id: string;
+          activity_type: FollowUpActivityTypeDb;
+          activity_date?: string;
+          activity_time?: string | null;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospect_follow_ups"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospect_follow_ups_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_follow_ups_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      prospect_payments: {
+        Row: {
+          id: string;
+          prospect_id: string;
+          payment_type: PaymentTypeDb;
+          amount: number;
+          payment_date: string;
+          status: PaymentStatusDb;
+          commission_amount: number | null;
+          notes: string | null;
+          recorded_by: string;
+          approved_by: string | null;
+          approved_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prospect_id: string;
+          payment_type: PaymentTypeDb;
+          amount: number;
+          payment_date?: string;
+          status?: PaymentStatusDb;
+          commission_amount?: number | null;
+          notes?: string | null;
+          recorded_by: string;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospect_payments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospect_payments_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_payments_recorded_by_fkey";
+            columns: ["recorded_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_payments_approved_by_fkey";
+            columns: ["approved_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sales_targets: {
+        Row: {
+          id: string;
+          sales_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          commission_percent: number;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          sales_id: string;
+          period_month: number;
+          period_year: number;
+          target_units?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["sales_targets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "sales_targets_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
@@ -980,6 +1204,143 @@ export interface Database {
       reject_employee_registration: {
         Args: { p_employee_id: string; p_reason?: string | null };
         Returns: Database["public"]["Tables"]["employees"]["Row"];
+      };
+      crm_find_duplicate_prospect: {
+        Args: { p_phone: string; p_customer_name: string };
+        Returns: {
+          id: string;
+          customer_name: string;
+          phone: string;
+          status: ProspectStatusDb;
+          created_at: string;
+          sales_name: string;
+        }[];
+      };
+      crm_create_prospect: {
+        Args: {
+          p_customer_name: string;
+          p_phone: string;
+          p_project_id: string | null;
+          p_house_type: string;
+          p_city: string;
+          p_lead_source: LeadSourceDb;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_add_follow_up: {
+        Args: {
+          p_prospect_id: string;
+          p_activity_type: FollowUpActivityTypeDb;
+          p_activity_date: string;
+          p_activity_time: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_set_prospect_green: { Args: { p_prospect_id: string }; Returns: undefined };
+      crm_record_payment: {
+        Args: {
+          p_prospect_id: string;
+          p_payment_type: PaymentTypeDb;
+          p_amount: number;
+          p_payment_date: string;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
+      crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
+      crm_upsert_sales_target: {
+        Args: {
+          p_sales_id: string;
+          p_period_month: number;
+          p_period_year: number;
+          p_target_units: number;
+          p_commission_percent: number;
+        };
+        Returns: string;
+      };
+      crm_sales_stats: {
+        Args: { p_sales_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          sales_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          commission_percent: number;
+          closing_units: number;
+          achievement_percent: number;
+          remaining_target: number;
+          collection: number;
+          commission: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          today_prospect: number;
+          today_follow_up: number;
+          late_follow_up: number;
+        }[];
+      };
+      crm_branch_stats: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+          commission: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          sales_performance: Json;
+        }[];
+      };
+      crm_national_stats: {
+        Args: { p_month?: number | null; p_year?: number | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          total_prospects: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          conversion_percent: number;
+          collection: number;
+          commission: number;
+          branch_ranking: Json;
+          top_sales: Json;
+        }[];
+      };
+      crm_sales_ranking: {
+        Args: { p_month?: number | null; p_year?: number | null; p_branch_id?: string | null };
+        Returns: {
+          rank: number;
+          sales_id: string;
+          full_name: string;
+          branch_name: string;
+          target_units: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+        }[];
+      };
+      crm_conversion_analytics: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          total_prospects: number;
+          total_closing: number;
+          conversion_percent: number;
+          avg_follow_up_days: number | null;
+          avg_closing_days: number | null;
+          lead_source_performance: Json;
+        }[];
       };
     };
     Enums: Record<string, never>;
