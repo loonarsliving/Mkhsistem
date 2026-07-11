@@ -10,7 +10,6 @@ import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summ
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentAnnouncementList } from "@/features/dashboard/components/recent-announcement-list";
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
-import { RecentNotificationsCard } from "@/features/dashboard/components/recent-notifications-card";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import {
   branchStatsAction as crmBranchStatsAction,
@@ -21,11 +20,7 @@ import {
 import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
 import { ExecutiveDashboardSection } from "@/features/crm/components/executive-dashboard-section";
 import { OperationalDashboardSection } from "@/features/crm/components/operational-dashboard-section";
-import {
-  nationalStatsAction as markomNationalStatsAction,
-  teamStatsAction as markomTeamStatsAction,
-} from "@/features/markom/actions/markom-query.actions";
-import { DirectorDashboardSection as MarkomDirectorDashboardSection } from "@/features/markom/components/director-dashboard-section";
+import { teamStatsAction as markomTeamStatsAction } from "@/features/markom/actions/markom-query.actions";
 import { TeamSummaryCard as MarkomTeamSummaryCard } from "@/features/markom/components/team-summary-card";
 import { ROLE_KEYS } from "@/constants/rbac";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
@@ -34,16 +29,16 @@ import { getCompanyAttendanceSummary, getMonthlyStats, getTodayAttendance } from
 import { listRecentAnnouncements } from "@/repositories/announcement.repository";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
 import { listRecentMemos } from "@/repositories/memo.repository";
-import { listNotifications } from "@/repositories/notification.repository";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 /**
  * Dashboard = Executive Summary ("how is the company performing"), scoped to
- * each role's own primary responsibility. Markom widgets never appear here
- * for Direktur Utama / Direktur Operasional / Kepala Cabang -- that module
- * lives exclusively at /markom. Sales Summary, prospect funnels, rankings,
- * customer tables, and analytics live exclusively in the CRM module.
+ * each role's own primary responsibility. Notifications live exclusively
+ * behind the bell icon in the topnav (NotificationBell), never as a Home
+ * Dashboard card. Markom widgets only appear here for the Markom role itself
+ * (its own team, i.e. its primary responsibility) -- every other role,
+ * including Super Admin, reaches Markom exclusively via the sidebar module.
  */
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -63,19 +58,15 @@ export default async function DashboardPage() {
   // Branch Manager's primary responsibility is branch sales performance --
   // this widget comes first, above Markom, on their Home Dashboard.
   const canViewBranchCrm = hasPermission(session, "crm_analytics.view_branch");
-  const isMarkom = hasPermission(session, "kpi_task.view_own");
-  const canViewNationalMarkom = hasPermission(session, "kpi_task.view_all");
-  // Markom widgets are removed from Home Dashboard for Direktur Utama / Direktur
-  // Operasional per design -- the Markom module remains fully accessible via the
-  // sidebar. Super Admin (also holds kpi_task.view_all) keeps seeing it here.
-  const showMarkomNational = canViewNationalMarkom && !isDirekturUtama && !isDirekturOperasional;
+  // Role-gated, not permission-gated: kpi_task.view_own is also held by Super
+  // Admin, but Markom's team widget is only that role's actual primary job.
+  const isMarkomRole = session.roleKey === ROLE_KEYS.MARKOM;
 
   const [
     attendance,
     monthlyStats,
     memos,
     announcements,
-    notifications,
     pendingRegistrationCount,
     nationalStats,
     crmConversion,
@@ -83,21 +74,18 @@ export default async function DashboardPage() {
     attendanceSummary,
     crmBranchStats,
     markomTeamStats,
-    markomNationalStats,
   ] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
     getMonthlyStats(supabase, session.userId, new Date()),
     listRecentMemos(supabase, 5),
     listRecentAnnouncements(supabase, 5),
-    listNotifications(supabase, session.userId, 1),
     canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
     isDirector ? nationalStatsAction() : Promise.resolve(null),
     showGenericDirectorTier ? conversionAnalyticsAction() : Promise.resolve(null),
     showGenericDirectorTier ? monthlyTrendAction(6) : Promise.resolve([]),
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
     canViewBranchCrm ? crmBranchStatsAction() : Promise.resolve(null),
-    isMarkom ? markomTeamStatsAction() : Promise.resolve(null),
-    showMarkomNational ? markomNationalStatsAction() : Promise.resolve(null),
+    isMarkomRole ? markomTeamStatsAction() : Promise.resolve(null),
   ]);
 
   return (
@@ -109,10 +97,7 @@ export default async function DashboardPage() {
       {isDirekturUtama && nationalStats && (
         <>
           <ExecutiveDashboardSection stats={nationalStats} />
-          <div className="grid gap-6 sm:grid-cols-2">
-            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
-            <RecentNotificationsCard notifications={notifications.items} />
-          </div>
+          {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
         </>
       )}
 
@@ -125,7 +110,6 @@ export default async function DashboardPage() {
               registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
               financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
             />
-            <RecentNotificationsCard notifications={notifications.items} />
           </div>
         </>
       )}
@@ -140,7 +124,6 @@ export default async function DashboardPage() {
               registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
               financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
             />
-            <RecentNotificationsCard notifications={notifications.items} />
           </div>
         </>
       )}
@@ -148,8 +131,7 @@ export default async function DashboardPage() {
       {/* Kepala Cabang: branch KPIs only -- no Sales Summary/ranking, no Markom, per Home Dashboard scope. */}
       {!isDirector && canViewBranchCrm && crmBranchStats && <BranchPerformanceCard stats={crmBranchStats} />}
 
-      {isMarkom && <MarkomTeamSummaryCard stats={markomTeamStats} />}
-      {showMarkomNational && <MarkomDirectorDashboardSection stats={markomNationalStats} />}
+      {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -160,7 +142,6 @@ export default async function DashboardPage() {
           <AttendanceStatsCard stats={monthlyStats} />
         </div>
         <div className="space-y-6">
-          {!isDirector && <RecentNotificationsCard notifications={notifications.items} />}
           <RecentMemoList memos={memos} />
           <RecentAnnouncementList announcements={announcements} />
         </div>
