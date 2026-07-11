@@ -38,7 +38,12 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Utama",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
-      { label: "Absensi", href: "/attendance", icon: CalendarCheck, permission: PERMISSIONS.ATTENDANCE_VIEW_OWN },
+      {
+        label: "Absensi",
+        href: "/attendance",
+        icon: CalendarCheck,
+        permission: [PERMISSIONS.ATTENDANCE_VIEW_OWN, PERMISSIONS.ATTENDANCE_VIEW_BRANCH, PERMISSIONS.ATTENDANCE_VIEW_ALL],
+      },
       { label: "Memo", href: "/memo", icon: StickyNote, permission: PERMISSIONS.MEMO_VIEW },
       { label: "Pengumuman", href: "/announcements", icon: Megaphone, permission: PERMISSIONS.ANNOUNCEMENT_VIEW },
     ],
@@ -66,7 +71,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Manajemen",
     items: [
-      { label: "Karyawan", href: "/employees", icon: Users, permission: PERMISSIONS.EMPLOYEE_VIEW_BRANCH },
+      {
+        label: "Karyawan",
+        href: "/employees",
+        icon: Users,
+        permission: [PERMISSIONS.EMPLOYEE_VIEW_BRANCH, PERMISSIONS.EMPLOYEE_VIEW_ALL],
+      },
       { label: "Pending Registration", href: "/registrations", icon: UserCheck, permission: PERMISSIONS.REGISTRATION_MANAGE },
       { label: "Cabang", href: "/branches", icon: Building2, permission: PERMISSIONS.BRANCH_MANAGE },
       { label: "Divisi", href: "/divisions", icon: Network, permission: PERMISSIONS.DIVISION_MANAGE },

@@ -115,14 +115,16 @@ on conflict do nothing;
 -- sales
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
-  'dashboard.view', 'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own'
+  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
+  'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own'
 ) where r.key = 'sales'
 on conflict do nothing;
 
 -- finance
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
-  'dashboard.view', 'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all'
+  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
+  'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all'
 ) where r.key = 'finance'
 on conflict do nothing;
 
