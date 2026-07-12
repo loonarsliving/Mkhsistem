@@ -134,14 +134,18 @@ export default async function DashboardPage() {
       {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        {/* Memo/Announcement render first on mobile (order-1) so employees see
+            company communications before the check-in/out action below --
+            desktop keeps its original wide-attendance/narrow-list layout via
+            lg:order-*, unaffected by the mobile stacking order. */}
+        <div className="order-2 space-y-6 lg:order-1 lg:col-span-2">
           <div className="grid gap-6 sm:grid-cols-2">
             <CheckInOutCard userId={session.userId} attendance={attendance} />
             <QuickActions permissions={session.permissions} />
           </div>
           <AttendanceStatsCard stats={monthlyStats} />
         </div>
-        <div className="space-y-6">
+        <div className="order-1 space-y-6 lg:order-2">
           <RecentMemoList memos={memos} />
           <RecentAnnouncementList announcements={announcements} />
         </div>
