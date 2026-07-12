@@ -49,7 +49,10 @@ insert into public.permissions (key, description) values
   ('kpi_task.view_branch', 'View checklist tasks for own branch'),
   ('kpi_task.view_all', 'View checklist tasks across all branches'),
   ('kpi_task.assign', 'Create/edit/delete checklist tasks for employees'),
-  ('kpi_task.verify', 'Mark a checklist task Completed or Rejected')
+  ('kpi_task.verify', 'Mark a checklist task Completed or Rejected'),
+  ('payroll.manage', 'Create and approve payroll runs, generating employee salary lines'),
+  ('hr_expense.create', 'Submit bonus/reimbursement/other HR expense requests'),
+  ('hr_expense.approve', 'Approve or reject bonus/reimbursement/other HR expense requests')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -95,7 +98,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'branch.manage', 'division.manage', 'position.manage',
   'registration.view_all', 'registration.manage',
   'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage',
-  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify'
+  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify', 'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -105,7 +108,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_all', 'attendance.manage', 'attendance.settings_manage', 'attendance.export',
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
-  'employee.view_all', 'employee.manage'
+  'employee.view_all', 'employee.manage',
+  'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
 ) where r.key = 'hr'
 on conflict do nothing;
 
@@ -118,7 +122,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'employee.view_branch',
   'registration.view_branch', 'registration.manage',
   'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch',
-  'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify'
+  'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify', 'hr_expense.create'
 ) where r.key = 'kepala_cabang'
 on conflict do nothing;
 
@@ -126,14 +130,14 @@ on conflict do nothing;
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
-  'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own'
+  'prospect.view_own', 'prospect.create', 'prospect.follow_up_create', 'sales_target.view_own', 'hr_expense.create'
 ) where r.key = 'sales'
 on conflict do nothing;
 
 -- markom
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
-  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view', 'kpi_task.view_own'
+  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view', 'kpi_task.view_own', 'hr_expense.create'
 ) where r.key = 'markom'
 on conflict do nothing;
 
@@ -141,7 +145,8 @@ on conflict do nothing;
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
-  'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all'
+  'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all',
+  'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
 ) where r.key = 'finance'
 on conflict do nothing;
 
@@ -151,13 +156,13 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_branch',
   'memo.view', 'memo.create',
   'announcement.view',
-  'employee.view_branch'
+  'employee.view_branch', 'hr_expense.create'
 ) where r.key = 'manager'
 on conflict do nothing;
 
 -- staff
 insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
-  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view'
+  'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view', 'hr_expense.create'
 ) where r.key = 'staff'
 on conflict do nothing;

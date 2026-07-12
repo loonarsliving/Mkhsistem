@@ -942,6 +942,7 @@ export interface Database {
           start_date: string | null;
           target_launch_date: string | null;
           is_active: boolean;
+          mkh_project_code: string | null;
           created_at: string;
           updated_at: string;
           created_by: string | null;
@@ -957,6 +958,7 @@ export interface Database {
           start_date?: string | null;
           target_launch_date?: string | null;
           is_active?: boolean;
+          mkh_project_code?: string | null;
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;
@@ -1093,6 +1095,11 @@ export interface Database {
           approved_by: string | null;
           approved_at: string | null;
           rejection_reason: string | null;
+          reference_number: string | null;
+          unit_label: string | null;
+          finance_confirmed_at: string | null;
+          finance_confirmed_by: string | null;
+          finance_reference_no: string | null;
           created_at: string;
         };
         Insert: {
@@ -1108,6 +1115,11 @@ export interface Database {
           approved_by?: string | null;
           approved_at?: string | null;
           rejection_reason?: string | null;
+          reference_number?: string | null;
+          unit_label?: string | null;
+          finance_confirmed_at?: string | null;
+          finance_confirmed_by?: string | null;
+          finance_reference_no?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["prospect_payments"]["Insert"]>;
@@ -1131,6 +1143,173 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      payroll_runs: {
+        Row: {
+          id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          status: "draft" | "approved";
+          total_amount: number;
+          created_by: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          status?: "draft" | "approved";
+          total_amount?: number;
+          created_by?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payroll_runs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payroll_runs_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payroll_items: {
+        Row: {
+          id: string;
+          payroll_run_id: string;
+          employee_id: string;
+          base_salary: number;
+          allowances: number;
+          deductions: number;
+          net_salary: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payroll_run_id: string;
+          employee_id: string;
+          base_salary?: number;
+          allowances?: number;
+          deductions?: number;
+          net_salary: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payroll_items"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payroll_items_payroll_run_id_fkey";
+            columns: ["payroll_run_id"];
+            referencedRelation: "payroll_runs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_items_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      hr_expenses: {
+        Row: {
+          id: string;
+          expense_type: "bonus" | "reimbursement" | "other";
+          employee_id: string;
+          branch_id: string;
+          amount: number;
+          expense_date: string;
+          description: string;
+          status: "pending" | "approved" | "rejected";
+          requested_by: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          expense_type: "bonus" | "reimbursement" | "other";
+          employee_id: string;
+          branch_id: string;
+          amount: number;
+          expense_date?: string;
+          description: string;
+          status?: "pending" | "approved" | "rejected";
+          requested_by?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hr_expenses"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "hr_expenses_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "hr_expenses_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sync_log: {
+        Row: {
+          id: string;
+          direction: "outbound" | "inbound";
+          event_type: string;
+          source_table: string;
+          source_id: string;
+          idempotency_key: string;
+          payload: Json;
+          status: "pending" | "sent" | "succeeded" | "failed" | "dead_letter" | "skipped";
+          attempt_count: number;
+          max_attempts: number;
+          last_error: string | null;
+          last_attempt_at: string | null;
+          next_attempt_at: string;
+          request_id: number | null;
+          target_ref: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          direction: "outbound" | "inbound";
+          event_type: string;
+          source_table: string;
+          source_id: string;
+          idempotency_key: string;
+          payload: Json;
+          status?: "pending" | "sent" | "succeeded" | "failed" | "dead_letter" | "skipped";
+          attempt_count?: number;
+          max_attempts?: number;
+          last_error?: string | null;
+          last_attempt_at?: string | null;
+          next_attempt_at?: string;
+          request_id?: number | null;
+          target_ref?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sync_log"]["Insert"]>;
+        Relationships: [];
+      };
+      sync_config: {
+        Row: { key: string; value: string; updated_at: string };
+        Insert: { key: string; value: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["sync_config"]["Insert"]>;
+        Relationships: [];
       };
       sales_targets: {
         Row: {
@@ -1454,6 +1633,27 @@ export interface Database {
       };
       crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
+      create_payroll_run: {
+        Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
+        Returns: string;
+      };
+      approve_payroll_run: { Args: { p_payroll_run_id: string; p_items: Json }; Returns: undefined };
+      create_hr_expense: {
+        Args: {
+          p_expense_type: string;
+          p_employee_id: string;
+          p_branch_id: string;
+          p_amount: number;
+          p_expense_date: string;
+          p_description: string;
+        };
+        Returns: string;
+      };
+      approve_hr_expense: { Args: { p_id: string }; Returns: undefined };
+      reject_hr_expense: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
+      sync_dispatch_pending: { Args: Record<string, never>; Returns: undefined };
+      sync_collect_responses: { Args: Record<string, never>; Returns: undefined };
+      get_sync_secret: { Args: Record<string, never>; Returns: string };
       crm_upsert_sales_target: {
         Args: {
           p_sales_id: string;
