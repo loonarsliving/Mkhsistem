@@ -21,6 +21,7 @@ import {
   UserCheck,
   Users,
   UsersRound,
+  Wallet,
 } from "lucide-react";
 
 import { PERMISSIONS, type PermissionKey } from "@/constants/rbac";
@@ -116,6 +117,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Cabang", href: "/branches", icon: Building2, permission: PERMISSIONS.BRANCH_MANAGE },
       { label: "Divisi", href: "/divisions", icon: Network, permission: PERMISSIONS.DIVISION_MANAGE },
       { label: "Jabatan", href: "/positions", icon: ShieldCheck, permission: PERMISSIONS.POSITION_MANAGE },
+      {
+        label: "Payroll & HR Expense",
+        href: "/hr/finance-sync",
+        icon: Wallet,
+        permission: [PERMISSIONS.PAYROLL_MANAGE, PERMISSIONS.HR_EXPENSE_CREATE, PERMISSIONS.HR_EXPENSE_APPROVE],
+      },
     ],
   },
   {
