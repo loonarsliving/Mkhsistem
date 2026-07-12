@@ -9,6 +9,9 @@ export const COMPANY_NAME = "PT Maha Karya Haluoleo";
  */
 export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://mkh.haluoleo.id").replace(/\/$/, "");
 
+/** VAPID public key for Web Push subscriptions (lib/push/web-push.ts). Not a secret -- shipped to every browser as part of the subscribe flow, same as the private key's counterpart is embedded server-side in app/api/push/send/route.ts. */
+export const VAPID_PUBLIC_KEY = "BNU8k6eYs1cva3cgNaxw7_3LuVDLSOJwWm3_KDB3Ix_Ql5S1rkSY-DDaDozFK1MKL9PGrgVQ9TPvRWmVz2HlsDs";
+
 export const ATTENDANCE_STATUS = {
   HADIR: "hadir",
   TERLAMBAT: "terlambat",

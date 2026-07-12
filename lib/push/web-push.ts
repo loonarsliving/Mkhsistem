@@ -1,3 +1,4 @@
+import { VAPID_PUBLIC_KEY } from "@/constants/app";
 import {
   registerWebPushSubscriptionAction,
   unregisterWebPushSubscriptionAction,
@@ -16,8 +17,7 @@ function isSupported(): boolean {
 
 /** Registers the service worker, requests Notification permission if not yet decided, and (re-)subscribes with the VAPID key. Safe to call on every authenticated page load -- a no-op prompt once permission is already granted or denied. */
 export async function subscribeToWebPush(): Promise<void> {
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  if (!isSupported() || !vapidPublicKey) return;
+  if (!isSupported()) return;
 
   const registration = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
@@ -33,7 +33,7 @@ export async function subscribeToWebPush(): Promise<void> {
     existing ??
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
     }));
 
   const json = subscription.toJSON();
