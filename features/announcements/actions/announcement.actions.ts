@@ -37,6 +37,21 @@ export async function createAnnouncementAction(input: AnnouncementFormInput): Pr
   return actionSuccess({ id: data as string });
 }
 
+/** Directors/Super Admin only (see 0053) -- pre-targeted, pinned, distinctly-categorized broadcast, no target/audience picker needed. */
+export async function sendEmergencyNoticeAction(title: string, content: string): Promise<ActionResult> {
+  await requireSession();
+  if (title.trim().length < 3) return actionError("Judul minimal 3 karakter");
+  if (content.trim().length < 3) return actionError("Isi pesan minimal 3 karakter");
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_emergency_notice", { p_title: title.trim(), p_content: content.trim() });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/announcements");
+  revalidatePath("/dashboard");
+  return actionSuccess();
+}
+
 export async function deleteAnnouncementAction(id: string): Promise<ActionResult> {
   await requireSession();
   const supabase = await createClient();

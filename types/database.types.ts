@@ -28,7 +28,42 @@ export type NotificationTypeDb =
   | "system"
   | "registration"
   | "crm"
-  | "kpi_task";
+  | "kpi_task"
+  | "hr"
+  | "finance"
+  | "project"
+  | "approval";
+export type NotificationCategoryDb =
+  | "attendance_reminder"
+  | "late_attendance"
+  | "forgot_checkout"
+  | "leave_approved"
+  | "leave_rejected"
+  | "payroll_available"
+  | "new_prospect"
+  | "follow_up_reminder"
+  | "new_assignment"
+  | "closing_approved"
+  | "customer_verification"
+  | "markom_new_task"
+  | "task_revision"
+  | "task_approved"
+  | "weekly_reminder"
+  | "project_progress"
+  | "material_request"
+  | "inspection_reminder"
+  | "payment_received"
+  | "invoice_due"
+  | "reimbursement_approved"
+  | "waiting_approval"
+  | "approved"
+  | "rejected"
+  | "new_announcement"
+  | "new_memo"
+  | "maintenance"
+  | "version_update"
+  | "emergency_notice";
+export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
 export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" | "referral" | "whatsapp" | "marketplace" | "other";
@@ -692,11 +727,13 @@ export interface Database {
           id: string;
           user_id: string;
           type: NotificationTypeDb;
+          category: NotificationCategoryDb | null;
           title: string;
           body: string | null;
           link: string | null;
           is_read: boolean;
           read_at: string | null;
+          status: NotificationStatusDb;
           metadata: Json;
           created_at: string;
         };
@@ -704,11 +741,13 @@ export interface Database {
           id?: string;
           user_id: string;
           type: NotificationTypeDb;
+          category?: NotificationCategoryDb | null;
           title: string;
           body?: string | null;
           link?: string | null;
           is_read?: boolean;
           read_at?: string | null;
+          status?: NotificationStatusDb;
           metadata?: Json;
           created_at?: string;
         };
@@ -743,6 +782,37 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "mkc_device_push_tokens_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mkc_push_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth_key: string;
+          user_agent: string | null;
+          created_at: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth_key: string;
+          user_agent?: string | null;
+          created_at?: string;
+          last_seen_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_push_subscriptions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "mkc_push_subscriptions_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
@@ -1320,6 +1390,8 @@ export interface Database {
       };
       mark_notification_read: { Args: { p_notification_id: string }; Returns: undefined };
       mark_all_notifications_read: { Args: Record<string, never>; Returns: undefined };
+      archive_notification: { Args: { p_notification_id: string }; Returns: undefined };
+      create_emergency_notice: { Args: { p_title: string; p_content: string }; Returns: string };
       get_memo_audience: { Args: { p_memo_id: string }; Returns: { user_id: string }[] };
       get_announcement_audience: { Args: { p_announcement_id: string }; Returns: { user_id: string }[] };
       health_check: { Args: Record<string, never>; Returns: Json };

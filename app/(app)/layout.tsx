@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topnav } from "@/components/layout/topnav";
 import { PushRegistration } from "@/components/shared/push-registration";
+import { WebPushRegistration } from "@/components/shared/web-push-registration";
 import { requireSession } from "@/lib/rbac/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <PushRegistration />
+      <WebPushRegistration />
       <Sidebar permissions={session.permissions} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topnav session={session} />

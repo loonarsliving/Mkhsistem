@@ -71,9 +71,55 @@ export const NOTIFICATION_TYPE = {
   ATTENDANCE: "attendance",
   LEAVE_REQUEST: "leave_request",
   SYSTEM: "system",
+  REGISTRATION: "registration",
   CRM: "crm",
+  KPI_TASK: "kpi_task",
+  HR: "hr",
+  FINANCE: "finance",
+  PROJECT: "project",
+  APPROVAL: "approval",
 } as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
+
+export const NOTIFICATION_STATUS = {
+  UNREAD: "unread",
+  READ: "read",
+  ARCHIVED: "archived",
+} as const;
+export type NotificationStatus = (typeof NOTIFICATION_STATUS)[keyof typeof NOTIFICATION_STATUS];
+
+/** Human labels for mkc_notifications.category, grouped the same way the RBAC audit's module list is — used by the Notification Center's filter chips and detail view. */
+export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
+  attendance_reminder: "Pengingat Absensi",
+  late_attendance: "Terlambat",
+  forgot_checkout: "Lupa Check-out",
+  leave_approved: "Izin/Sakit Disetujui",
+  leave_rejected: "Izin/Sakit Ditolak",
+  payroll_available: "Payroll Tersedia",
+  new_prospect: "Prospect Baru",
+  follow_up_reminder: "Pengingat Follow Up",
+  new_assignment: "Penugasan Baru",
+  closing_approved: "Closing Disetujui",
+  customer_verification: "Verifikasi Pelanggan",
+  markom_new_task: "Task Baru",
+  task_revision: "Task Perlu Revisi",
+  task_approved: "Task Disetujui",
+  weekly_reminder: "Pengingat Mingguan",
+  project_progress: "Update Progress Proyek",
+  material_request: "Permintaan Material",
+  inspection_reminder: "Pengingat Inspeksi",
+  payment_received: "Pembayaran Diterima",
+  invoice_due: "Invoice Jatuh Tempo",
+  reimbursement_approved: "Reimbursement Disetujui",
+  waiting_approval: "Menunggu Persetujuan",
+  approved: "Disetujui",
+  rejected: "Ditolak",
+  new_announcement: "Pengumuman Baru",
+  new_memo: "Memo Baru",
+  maintenance: "Pemeliharaan Sistem",
+  version_update: "Update Versi",
+  emergency_notice: "Pemberitahuan Darurat",
+};
 
 export const PROSPECT_STATUS = {
   RED: "red",
