@@ -1,7 +1,9 @@
-import { CheckCircle2, Coins, Target, TrendingUp, Wallet } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Coins, Plus, Target, TrendingUp, Wallet } from "lucide-react";
 
 import { RevenueTile } from "@/components/shared/revenue-tile";
 import { StatTile } from "@/components/shared/stat-tile";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import type { salesStatsAction } from "../actions/crm-query.actions";
@@ -27,12 +29,19 @@ export function SalesTargetCommissionSection({ stats }: { stats: Awaited<ReturnT
 
   return (
     <Card className="border-primary/30">
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle className="text-base">Target &amp; Komisi Bulan Ini</CardTitle>
-        <div className="flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-primary">
-          <TrendingUp className="h-4 w-4" />
-          <span className="text-lg font-bold tabular-nums">{stats.achievement_percent}%</span>
-          <span className="text-xs font-medium">Achievement</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-primary">
+            <TrendingUp className="h-4 w-4" />
+            <span className="text-lg font-bold tabular-nums">{stats.achievement_percent}%</span>
+            <span className="text-xs font-medium">Achievement</span>
+          </div>
+          <Button asChild size="sm">
+            <Link href="/crm/new">
+              <Plus className="h-4 w-4" /> Tambah Prospek
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
