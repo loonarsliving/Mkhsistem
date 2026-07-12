@@ -14,12 +14,17 @@ import { CheckInOutCard } from "@/features/attendance/components/check-in-out-ca
 import {
   branchStatsAction as crmBranchStatsAction,
   conversionAnalyticsAction,
+  listRecentFollowUpsBySalesAction,
   monthlyTrendAction,
   nationalStatsAction,
+  salesStatsAction,
 } from "@/features/crm/actions/crm-query.actions";
 import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
 import { ExecutiveDashboardSection } from "@/features/crm/components/executive-dashboard-section";
 import { OperationalDashboardSection } from "@/features/crm/components/operational-dashboard-section";
+import { RecentProspectActivityCard } from "@/features/crm/components/recent-prospect-activity-card";
+import { SalesCrmActivityCard } from "@/features/crm/components/sales-crm-activity-card";
+import { SalesTargetCommissionSection } from "@/features/crm/components/sales-target-commission-section";
 import { teamStatsAction as markomTeamStatsAction } from "@/features/markom/actions/markom-query.actions";
 import { TeamSummaryCard as MarkomTeamSummaryCard } from "@/features/markom/components/team-summary-card";
 import { ROLE_KEYS } from "@/constants/rbac";
@@ -61,6 +66,7 @@ export default async function DashboardPage() {
   // Role-gated, not permission-gated: kpi_task.view_own is also held by Super
   // Admin, but Markom's team widget is only that role's actual primary job.
   const isMarkomRole = session.roleKey === ROLE_KEYS.MARKOM;
+  const isSalesRole = session.roleKey === ROLE_KEYS.SALES;
 
   const [
     attendance,
@@ -74,6 +80,8 @@ export default async function DashboardPage() {
     attendanceSummary,
     crmBranchStats,
     markomTeamStats,
+    salesStats,
+    recentProspectActivity,
   ] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
     getMonthlyStats(supabase, session.userId, new Date()),
@@ -86,6 +94,8 @@ export default async function DashboardPage() {
     isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
     canViewBranchCrm ? crmBranchStatsAction() : Promise.resolve(null),
     isMarkomRole ? markomTeamStatsAction() : Promise.resolve(null),
+    isSalesRole ? salesStatsAction() : Promise.resolve(null),
+    isSalesRole ? listRecentFollowUpsBySalesAction(session.userId, 8) : Promise.resolve([]),
   ]);
 
   return (
@@ -93,6 +103,30 @@ export default async function DashboardPage() {
       <PageHeader title={`Halo, ${session.employee.full_name.split(" ")[0]}`} description="Berikut ringkasan aktivitas Anda hari ini." />
 
       <ProfileSummaryCard employee={session.employee} />
+
+      {isSalesRole && (
+        <>
+          {/* Sales Home Dashboard order: Profile -> Target & Commission -> Memo/Announcement -> Attendance -> CRM Activity -> Recent Prospect Activity. */}
+          <SalesTargetCommissionSection stats={salesStats} />
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="space-y-6">
+              <RecentMemoList memos={memos} />
+              <RecentAnnouncementList announcements={announcements} />
+            </div>
+            <div className="space-y-6 lg:col-span-2">
+              <div className="grid gap-6 sm:grid-cols-2">
+                <CheckInOutCard userId={session.userId} attendance={attendance} />
+                <QuickActions permissions={session.permissions} />
+              </div>
+              <AttendanceStatsCard stats={monthlyStats} />
+            </div>
+          </div>
+
+          <SalesCrmActivityCard stats={salesStats} />
+          <RecentProspectActivityCard activities={recentProspectActivity as unknown as Parameters<typeof RecentProspectActivityCard>[0]["activities"]} />
+        </>
+      )}
 
       {isDirekturUtama && nationalStats && (
         <>
@@ -133,19 +167,21 @@ export default async function DashboardPage() {
 
       {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6">
-          <RecentMemoList memos={memos} />
-          <RecentAnnouncementList announcements={announcements} />
-        </div>
-        <div className="space-y-6 lg:col-span-2">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <CheckInOutCard userId={session.userId} attendance={attendance} />
-            <QuickActions permissions={session.permissions} />
+      {!isSalesRole && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6">
+            <RecentMemoList memos={memos} />
+            <RecentAnnouncementList announcements={announcements} />
           </div>
-          <AttendanceStatsCard stats={monthlyStats} />
+          <div className="space-y-6 lg:col-span-2">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <CheckInOutCard userId={session.userId} attendance={attendance} />
+              <QuickActions permissions={session.permissions} />
+            </div>
+            <AttendanceStatsCard stats={monthlyStats} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
