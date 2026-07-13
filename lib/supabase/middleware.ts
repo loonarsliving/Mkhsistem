@@ -10,6 +10,8 @@ import type { Database } from "@/types/database.types";
 // files for request-level authorization (re-fetches by id, rejects anything
 // not created in the last 2 minutes). /api/integrations/whatsapp/webhook is
 // called by Meta directly (Meta's own verify-token handshake is its auth).
+// /api/debug/whatsapp-config is TEMPORARY -- meant to be opened directly in a
+// browser for diagnosis, returns booleans/labels only, never a secret value.
 const PUBLIC_PATHS = [
   "/login",
   "/register",
@@ -20,6 +22,7 @@ const PUBLIC_PATHS = [
   "/api/push/send",
   "/api/ai/whatsapp-relay",
   "/api/integrations/whatsapp/webhook",
+  "/api/debug/whatsapp-config",
 ];
 
 function isPublicPath(pathname: string) {
