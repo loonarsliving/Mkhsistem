@@ -22,6 +22,8 @@ export interface AIGenerateRequest {
    * (default retryMaxAttempts) behavior every HR/Markom/CRM/webhook call uses.
    */
   maxAttempts?: number;
+  /** Links every telemetry row this call produces (ai_request_telemetry) back to its ai_job_queue row — set only by the async job processor, omitted for direct/synchronous callers (HR/Markom/CRM dashboard actions). */
+  jobId?: string;
 }
 
 export interface AITokenUsage {

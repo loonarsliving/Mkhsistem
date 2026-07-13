@@ -66,7 +66,8 @@ function parseGeminiFailure(err: unknown): ParsedGeminiFailure {
   return { httpStatus, statusText, retryAfterMs, errorBody: safeTruncate(message) };
 }
 
-function computeBackoffMs(baseDelayMs: number, failedAttempt: number): number {
+/** Exported so the async job queue (app/api/ai/process-job/route.ts) can schedule next_attempt_at with the exact same 20s/40s/80s formula instead of an in-process sleep, for jobs where backoff must span separate invocations to avoid a serverless function timeout. */
+export function computeBackoffMs(baseDelayMs: number, failedAttempt: number): number {
   const raw = baseDelayMs * Math.pow(2, failedAttempt - 1); // attempt 1->base, 2->2*base, 3->4*base (20s/40s/80s at the default 20s base)
   const jitterFactor = 0.8 + Math.random() * 0.4; // +/-20% jitter, so concurrent requests don't retry in lockstep
   return Math.round(raw * jitterFactor);
@@ -76,10 +77,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface GeminiRetryAttemptInfo {
+  attempt: number;
+  maxAttempts: number;
+  httpStatus: number | null;
+  errorBody: string | null;
+  waitMs: number | null;
+  responseTimeMs: number;
+  outcome: "success" | "retrying" | "failed_final" | "model_not_found";
+}
+
 export interface GeminiRetryOptions {
   model: string;
   maxAttempts: number;
   baseDelayMs: number;
+  /**
+   * Called once per attempt (success or failure), before any retry wait.
+   * Deliberately optional and side-effect-free from this module's own
+   * perspective — lets a caller (GeminiProvider) record telemetry/circuit-
+   * breaker state in the database without this module depending on one,
+   * which keeps it unit-testable with plain fake timers (see
+   * tests/unit/lib/gemini-retry.test.ts).
+   */
+  onAttempt?: (info: GeminiRetryAttemptInfo) => void | Promise<void>;
 }
 
 /**
@@ -97,20 +117,16 @@ export interface GeminiRetryOptions {
  * generic outage.
  */
 export async function withGeminiRetry<T>(options: GeminiRetryOptions, attemptFn: (attempt: number) => Promise<T>): Promise<T> {
-  const { model, maxAttempts, baseDelayMs } = options;
+  const { model, maxAttempts, baseDelayMs, onAttempt } = options;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startedAt = Date.now();
     try {
       const result = await attemptFn(attempt);
-      logger.info("gemini request succeeded", {
-        model,
-        attempt,
-        maxAttempts,
-        responseTimeMs: Date.now() - startedAt,
-        outcome: "success",
-      });
+      const responseTimeMs = Date.now() - startedAt;
+      logger.info("gemini request succeeded", { model, attempt, maxAttempts, responseTimeMs, outcome: "success" });
+      await onAttempt?.({ attempt, maxAttempts, httpStatus: null, errorBody: null, waitMs: null, responseTimeMs, outcome: "success" });
       return result;
     } catch (err) {
       const responseTimeMs = Date.now() - startedAt;
@@ -124,6 +140,8 @@ export async function withGeminiRetry<T>(options: GeminiRetryOptions, attemptFn:
       const retryable = !isModelNotFound && (isRetryableStatus || parsed.httpStatus === null);
       const isLastAttempt = attempt === maxAttempts;
       const willRetry = retryable && !isLastAttempt;
+      const waitMs = willRetry ? (parsed.retryAfterMs ?? computeBackoffMs(baseDelayMs, attempt)) : null;
+      const outcome = isModelNotFound ? "model_not_found" : willRetry ? "retrying" : "failed_final";
 
       logger.error("gemini request failed", {
         model,
@@ -133,21 +151,38 @@ export async function withGeminiRetry<T>(options: GeminiRetryOptions, attemptFn:
         errorBody: parsed.errorBody,
         responseTimeMs,
         willRetry,
-        outcome: isModelNotFound ? "model_not_found" : willRetry ? "retrying" : "failed_final",
+        outcome,
       });
-
-      lastError = err;
+      await onAttempt?.({ attempt, maxAttempts, httpStatus: parsed.httpStatus, errorBody: parsed.errorBody, waitMs, responseTimeMs, outcome });
 
       if (isModelNotFound) {
         logger.error("Gemini model not found -- check GEMINI_MODEL", { configuredModel: model });
-        throw err;
+        // Wrapped here (not the raw SDK error) so retryable is accurately
+        // false all the way up the call chain -- a caller that only sees
+        // "an AIProviderError was thrown" (e.g. the async job queue
+        // deciding whether to reschedule vs. dead-letter) needs .retryable
+        // to reflect the real classification, not a blanket "true" applied
+        // later by a generic wrap that no longer has this context.
+        const notFoundErr = new AIProviderError(`Gemini model not found: ${parsed.errorBody}`, "gemini", false, err, parsed.httpStatus);
+        lastError = notFoundErr;
+        throw notFoundErr;
       }
       if (!willRetry) {
-        if (err instanceof AIProviderError) err.exhaustedRetries = isLastAttempt && retryable;
-        throw err;
+        // retryable === false here means a genuinely non-retryable HTTP
+        // status (400/401/403/...); retryable === true means every attempt
+        // was used up on an inherently-retryable failure -- both need to
+        // surface that distinction accurately, not as a uniform "true".
+        const finalErr =
+          err instanceof AIProviderError
+            ? err
+            : new AIProviderError(parsed.errorBody, "gemini", retryable, err, parsed.httpStatus);
+        finalErr.exhaustedRetries = isLastAttempt && retryable;
+        lastError = finalErr;
+        throw finalErr;
       }
 
-      const waitMs = parsed.retryAfterMs ?? computeBackoffMs(baseDelayMs, attempt);
+      lastError = err;
+
       logger.info("gemini retry scheduled", {
         model,
         nextAttempt: attempt + 1,
@@ -155,7 +190,7 @@ export async function withGeminiRetry<T>(options: GeminiRetryOptions, attemptFn:
         waitMs,
         source: parsed.retryAfterMs !== null ? "retry-after" : "backoff",
       });
-      await sleep(waitMs);
+      await sleep(waitMs as number);
     }
   }
 

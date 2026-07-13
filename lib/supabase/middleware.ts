@@ -12,6 +12,11 @@ import type { Database } from "@/types/database.types";
 // called by Meta directly (Meta's own verify-token handshake is its auth).
 // /api/debug/whatsapp-config is TEMPORARY -- meant to be opened directly in a
 // browser for diagnosis, returns booleans/labels only, never a secret value.
+// /api/ai/process-job is called by the ai_job_queue insert trigger and the
+// pg_cron sweep (migration 0065), server-to-server -- its own atomic claim
+// (UPDATE ... WHERE status = 'pending') is the request-level authorization:
+// job_id is an unguessable v4 UUID, and any call against an already-claimed
+// job is a safe no-op, mirroring /api/push/send's re-fetch-by-id pattern.
 const PUBLIC_PATHS = [
   "/login",
   "/register",
@@ -21,6 +26,7 @@ const PUBLIC_PATHS = [
   "/api/health",
   "/api/push/send",
   "/api/ai/whatsapp-relay",
+  "/api/ai/process-job",
   "/api/integrations/whatsapp/webhook",
   "/api/debug/whatsapp-config",
 ];

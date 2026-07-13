@@ -24,7 +24,11 @@ function matchesAny(text: string, keywords: string[]): boolean {
  * simplified from agent-registry matching to direct keyword routing since
  * MK Connect has three domains, not ten digital employees.
  */
-export async function routeAndAnswer(question: string, employee: { id: string; name: string } | null): Promise<string> {
+export async function routeAndAnswer(
+  question: string,
+  employee: { id: string; name: string } | null,
+  opts?: { maxAttempts?: number; jobId?: string },
+): Promise<string> {
   const greeting = employee ? `Pengguna: ${employee.name} (karyawan terdaftar).` : "Pengirim belum teridentifikasi sebagai karyawan terdaftar.";
 
   let systemPrompt = GENERAL_SYSTEM_PROMPT;
@@ -32,5 +36,5 @@ export async function routeAndAnswer(question: string, employee: { id: string; n
   else if (matchesAny(question, MARKOM_KEYWORDS)) systemPrompt = MARKOM_SYSTEM_PROMPT;
   else if (matchesAny(question, CRM_KEYWORDS)) systemPrompt = CRM_SYSTEM_PROMPT;
 
-  return askAI(systemPrompt, `${greeting}\n\nPesan:\n${question}`);
+  return askAI(systemPrompt, `${greeting}\n\nPesan:\n${question}`, opts);
 }

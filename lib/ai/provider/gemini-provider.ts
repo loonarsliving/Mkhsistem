@@ -1,3 +1,5 @@
+import { checkCircuitBreaker, reportCircuitBreakerOutcome } from "../resilience/circuit-breaker";
+import { recordTelemetry } from "../resilience/telemetry";
 import { AIProviderError } from "./errors";
 import type { GeminiClientLike } from "./gemini-client";
 import { withGeminiRetry } from "./gemini-retry";
@@ -47,6 +49,33 @@ export class GeminiProvider implements AIProvider {
     const overallStartedAt = Date.now();
     const maxAttempts = request.maxAttempts ?? this.options.retryMaxAttempts;
 
+    // Shared circuit breaker, checked before spending any quota on this
+    // call: if Gemini has been failing consecutively across the whole
+    // fleet (not just this request), skip straight to the fallback instead
+    // of piling another doomed call on top of an outage — this is what
+    // actually protects the provider and saves quota at high concurrency
+    // (e.g. ~500 employees messaging at once), which per-request retries
+    // alone cannot do since they have no visibility into each other.
+    const breaker = await checkCircuitBreaker();
+    if (!breaker.allowed) {
+      await recordTelemetry({
+        provider: "gemini",
+        model: this.options.model,
+        jobId: request.jobId,
+        attempt: 0,
+        maxAttempts,
+        httpStatus: null,
+        responseTimeMs: 0,
+        outcome: "circuit_open",
+        circuitState: breaker.state,
+      });
+      throw new AIProviderError(
+        `Gemini circuit breaker is open (${breaker.consecutiveFailures} consecutive failures) -- skipping call to protect the provider`,
+        "gemini",
+        true,
+      );
+    }
+
     const config: GenerateContentConfig = {
       temperature: request.temperature ?? this.options.defaultTemperature,
       maxOutputTokens: request.maxOutputTokens ?? this.options.defaultMaxOutputTokens,
@@ -61,7 +90,29 @@ export class GeminiProvider implements AIProvider {
 
     try {
       const response = await withGeminiRetry(
-        { model: this.options.model, maxAttempts, baseDelayMs: this.options.retryBaseDelayMs },
+        {
+          model: this.options.model,
+          maxAttempts,
+          baseDelayMs: this.options.retryBaseDelayMs,
+          onAttempt: async (info) => {
+            await Promise.all([
+              recordTelemetry({
+                provider: "gemini",
+                model: this.options.model,
+                jobId: request.jobId,
+                attempt: info.attempt,
+                maxAttempts: info.maxAttempts,
+                httpStatus: info.httpStatus,
+                errorBody: info.errorBody,
+                waitMs: info.waitMs,
+                responseTimeMs: info.responseTimeMs,
+                outcome: info.outcome,
+                circuitState: breaker.state,
+              }),
+              reportCircuitBreakerOutcome(info.outcome === "success"),
+            ]);
+          },
+        },
         () => this.callOnce(request.userPrompt, config),
       );
 
@@ -82,11 +133,11 @@ export class GeminiProvider implements AIProvider {
         responseTimeMs: Date.now() - overallStartedAt,
       };
     } catch (err) {
-      // withGeminiRetry already logged every attempt (model/status/error
-      // body/wait/response time/outcome) -- this is just the final surface
-      // to callers, always as one AIProviderError regardless of whether the
-      // underlying failure was a timeout (already an AIProviderError) or a
-      // raw Gemini API error (a plain Error, wrapped here).
+      // withGeminiRetry already logged/recorded telemetry for every attempt
+      // -- this is just the final surface to callers, always as one
+      // AIProviderError regardless of whether the underlying failure was a
+      // timeout (already an AIProviderError) or a raw Gemini API error (a
+      // plain Error, wrapped here).
       if (err instanceof AIProviderError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       throw new AIProviderError(`Gemini generate() failed after retries: ${message}`, "gemini", true, err);

@@ -88,17 +88,21 @@ describe("withGeminiRetry", () => {
     expect(attemptFn).toHaveBeenCalledTimes(2);
   });
 
-  it("fails immediately on 404 model-not-found without retrying", async () => {
+  it("fails immediately on 404 model-not-found without retrying, marked non-retryable", async () => {
     const attemptFn = vi.fn().mockRejectedValue(googleError(404, "NOT_FOUND"));
 
-    await expect(withGeminiRetry({ model: "gemini-nonexistent-model", maxAttempts: 4, baseDelayMs: 20_000 }, attemptFn)).rejects.toThrow();
+    await expect(
+      withGeminiRetry({ model: "gemini-nonexistent-model", maxAttempts: 4, baseDelayMs: 20_000 }, attemptFn),
+    ).rejects.toMatchObject({ retryable: false, httpStatus: 404 });
     expect(attemptFn).toHaveBeenCalledTimes(1);
   });
 
-  it("fails immediately on a non-retryable status (400)", async () => {
+  it("fails immediately on a non-retryable status (400), marked non-retryable -- a caller like the async job queue must never reschedule this", async () => {
     const attemptFn = vi.fn().mockRejectedValue(googleError(400, "INVALID_ARGUMENT"));
 
-    await expect(withGeminiRetry({ model: "gemini-flash-latest", maxAttempts: 4, baseDelayMs: 20_000 }, attemptFn)).rejects.toThrow();
+    await expect(
+      withGeminiRetry({ model: "gemini-flash-latest", maxAttempts: 4, baseDelayMs: 20_000 }, attemptFn),
+    ).rejects.toMatchObject({ retryable: false, httpStatus: 400 });
     expect(attemptFn).toHaveBeenCalledTimes(1);
   });
 

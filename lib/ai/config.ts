@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { AIProviderName } from "./provider/types";
+
 /**
  * Env-driven AI Operating System configuration. Nothing here is hardcoded —
  * every value has a safe default so behavior is unchanged until an operator
@@ -7,6 +9,8 @@ import "server-only";
  * layer worked.
  */
 export const AI_CONFIG = {
+  /** Which AIProvider implementation lib/ai/provider/registry.ts resolves — only "gemini" exists today, but this makes provider selection an explicit config value rather than an implicit fact of there being one class. */
+  provider: (process.env.AI_PROVIDER ?? "gemini") as AIProviderName,
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-flash-latest",
   temperature: Number(process.env.GEMINI_TEMPERATURE ?? "0.4"),

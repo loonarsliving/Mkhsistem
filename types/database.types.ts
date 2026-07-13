@@ -1264,6 +1264,98 @@ export interface Database {
           },
         ];
       };
+      ai_job_queue: {
+        Row: {
+          id: string;
+          job_type: "whatsapp_ai_reply";
+          payload: Json;
+          status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
+          attempt_count: number;
+          max_attempts: number;
+          last_error: string | null;
+          next_attempt_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_type: "whatsapp_ai_reply";
+          payload: Json;
+          status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
+          attempt_count?: number;
+          max_attempts?: number;
+          last_error?: string | null;
+          next_attempt_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_job_queue"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_circuit_breaker_state: {
+        Row: {
+          provider: string;
+          state: "closed" | "open" | "half_open";
+          consecutive_failures: number;
+          opened_at: string | null;
+          last_failure_at: string | null;
+          last_success_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          provider: string;
+          state?: "closed" | "open" | "half_open";
+          consecutive_failures?: number;
+          opened_at?: string | null;
+          last_failure_at?: string | null;
+          last_success_at?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_circuit_breaker_state"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_request_telemetry: {
+        Row: {
+          id: string;
+          provider: string;
+          model: string;
+          job_id: string | null;
+          attempt: number;
+          max_attempts: number;
+          http_status: number | null;
+          error_body: string | null;
+          wait_ms: number | null;
+          response_time_ms: number;
+          outcome: "success" | "retrying" | "failed_final" | "model_not_found" | "circuit_open";
+          circuit_state: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider: string;
+          model: string;
+          job_id?: string | null;
+          attempt: number;
+          max_attempts: number;
+          http_status?: number | null;
+          error_body?: string | null;
+          wait_ms?: number | null;
+          response_time_ms: number;
+          outcome: "success" | "retrying" | "failed_final" | "model_not_found" | "circuit_open";
+          circuit_state?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_request_telemetry"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_request_telemetry_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_job_queue";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       ai_integration_logs: {
         Row: {
           id: string;
@@ -2016,6 +2108,18 @@ export interface Database {
       };
       kpi_complete_task: {
         Args: { p_task_id: string };
+        Returns: undefined;
+      };
+      ai_circuit_breaker_check: {
+        Args: { p_provider: string; p_open_cooldown_ms?: number };
+        Returns: Json;
+      };
+      ai_circuit_breaker_report: {
+        Args: { p_provider: string; p_success: boolean; p_failure_threshold?: number };
+        Returns: Json;
+      };
+      ai_job_dispatch_pending: {
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       kpi_verify_task: {

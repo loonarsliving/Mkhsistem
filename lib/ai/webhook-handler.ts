@@ -1,24 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
-import type { NormalizedInboundMessage } from "./connectors/types";
 import { sendWhatsAppText } from "./notifications/engine";
-import { routeAndAnswer } from "./domains/router";
-import { AIProviderError } from "./provider/errors";
+import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
 export interface WhatsAppWebhookHandlerResult {
-  status: "processed" | "ignored" | "error";
+  status: "processed" | "queued" | "ignored" | "error";
   sender?: string;
   replySent?: boolean;
+  jobId?: string;
   reason?: string;
-  /** True when Gemini exhausted every retry and the AI-busy fallback message was sent instead of a real answer — the user still got a reply, never silence. */
-  aiFallbackUsed?: boolean;
   /** TEMPORARY — ordered list of steps actually executed, for production tracing. Remove once the silent-non-reply bug is root-caused. */
   trace: string[];
 }
 
-/** Sent instead of a real answer only once Gemini has exhausted every retry attempt (lib/ai/provider/gemini-retry.ts) — never the raw error or a stack trace. */
-const AI_BUSY_FALLBACK_MESSAGE =
+/** Sent instead of a real answer only once Gemini has exhausted every retry attempt across the whole async job (see app/api/ai/process-job/route.ts) — never the raw error or a stack trace. Exported for the job processor's dead-letter path. */
+export const AI_BUSY_FALLBACK_MESSAGE =
   "Maaf, layanan AI MK Connect sedang sibuk saat ini. Pesan Anda sudah kami terima — silakan coba lagi dalam beberapa menit.";
 
 /** Keeps only digits, for tolerant matching against employees.phone (which may be stored with/without a leading +, spaces, or dashes). */
@@ -37,36 +35,32 @@ async function findEmployeeByPhone(sender: string) {
   return (data ?? []).find((employee) => digitsOnly(employee.phone ?? "").endsWith(suffix)) ?? null;
 }
 
-async function saveConversationTurn(sender: string, inbound: NormalizedInboundMessage, replyText: string | null, employeeId: string | null) {
+/** Exported for reuse by the job processor (app/api/ai/process-job/route.ts), which saves the turn once the queued AI reply is actually known. */
+export async function saveAiConversationTurn(sender: string, inboundText: string, replyText: string | null, employeeId: string | null) {
   const supabase = createAdminClient();
   await supabase.from("ai_conversations").insert({
     connector: "whatsapp",
     sender,
     employee_id: employeeId,
-    inbound_text: inbound.content.kind === "text" ? inbound.content.text : inbound.content.text,
+    inbound_text: inboundText,
     reply_text: replyText,
   });
 }
 
 /**
- * The full "receive one WhatsApp event" pipeline — normalize (via the
- * connector) -> resolve the sender to an employee if possible -> route to
- * the right AI domain (HR/Markom/CRM/general) through the AI Service ->
- * reply via the Notification Engine -> log the conversation. Ported concept
- * from Aiagent's handleWhatsAppWebhookEvent (packages/integrations/src/whatsapp-webhook-handler.ts),
- * simplified to MK Connect's single-connector, single-provider setup.
+ * The "receive one WhatsApp event" front half — normalize (via the
+ * connector) -> resolve the sender to an employee if possible -> either
+ * reply immediately (non-text messages, which never need Gemini) or enqueue
+ * an async job (ai_job_queue) for text messages instead of calling Gemini
+ * synchronously here. Enqueueing is what lets a slow/retrying Gemini call
+ * never risk exceeding this function's own duration budget — the actual AI
+ * call, reply, and conversation log happen in
+ * app/api/ai/process-job/route.ts, dispatched by a DB trigger/pg_cron sweep
+ * (migration 0065), independent of this webhook request's lifetime.
  */
 export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<WhatsAppWebhookHandlerResult> {
   const trace: string[] = ["handler:entry"];
 
-  // TEMPORARY: the entire body is now one try/catch (previously only the
-  // AI-routing/reply/save section was wrapped) -- connector.receiveWebhook()
-  // calls saveIntegrationLog() -> createAdminClient(), which THROWS if
-  // NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing
-  // (lib/supabase/admin.ts:17-19). That call was previously outside any
-  // try/catch in this function, so such a throw discarded the whole trace
-  // and surfaced only as route.ts's generic "handleWhatsAppWebhookEvent:threw"
-  // -- exactly the kind of blind spot that made "where did it stop" unprovable.
   try {
     const connector = getWhatsAppConnector();
     trace.push(connector ? "getWhatsAppConnector:configured" : "getWhatsAppConnector:null");
@@ -88,40 +82,33 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     const employee = await findEmployeeByPhone(inbound.sender);
     trace.push(employee ? "findEmployeeByPhone:matched" : "findEmployeeByPhone:no_match");
 
-    const question = inbound.content.kind === "text" ? inbound.content.text : "";
-
-    let replyText: string;
-    let aiFallbackUsed = false;
-    if (!question) {
-      replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
-    } else {
-      trace.push("routeAndAnswer:calling");
-      try {
-        replyText = await routeAndAnswer(question, employee ? { id: employee.id, name: employee.full_name } : null);
-        trace.push("routeAndAnswer:returned");
-      } catch (err) {
-        // Gemini exhausted every retry (lib/ai/provider/gemini-retry.ts) --
-        // never lose the user's message and never throw here: fall back to
-        // a friendly reply instead of aborting before sendWhatsAppText/
-        // saveConversationTurn run. Only an AI-provider failure gets this
-        // fallback; a genuine bug elsewhere still surfaces as status:"error"
-        // via the outer catch below. Never expose err.message/stack to the user.
-        if (!(err instanceof AIProviderError)) throw err;
-        aiFallbackUsed = true;
-        replyText = AI_BUSY_FALLBACK_MESSAGE;
-        trace.push(`routeAndAnswer:ai_unavailable(${err.message})`);
-      }
+    if (inbound.content.kind !== "text") {
+      // Never needs Gemini -- answer immediately, no queue involved.
+      const replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
+      trace.push("sendWhatsAppText:calling(non-text)");
+      const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+      trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+      await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee?.id ?? null);
+      trace.push("saveAiConversationTurn:done");
+      return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
     }
 
-    trace.push("sendWhatsAppText:calling");
-    const sendResult = await sendWhatsAppText(inbound.sender, replyText);
-    trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
-
-    trace.push("saveConversationTurn:calling");
-    await saveConversationTurn(inbound.sender, inbound, replyText, employee?.id ?? null);
-    trace.push("saveConversationTurn:done");
-
-    return { status: "processed", sender: inbound.sender, replySent: sendResult.success, aiFallbackUsed, trace };
+    trace.push("enqueueWhatsAppAiReplyJob:calling");
+    const job = await enqueueWhatsAppAiReplyJob(
+      {
+        sender: inbound.sender,
+        contentText: inbound.content.text,
+        employeeId: employee?.id ?? null,
+        employeeName: employee?.full_name ?? null,
+      },
+      AI_CONFIG.retryMaxAttempts,
+    );
+    if (!job) {
+      trace.push("enqueueWhatsAppAiReplyJob:failed");
+      return { status: "error", reason: "failed to enqueue AI reply job", sender: inbound.sender, trace };
+    }
+    trace.push(`enqueueWhatsAppAiReplyJob:queued(${job.id})`);
+    return { status: "queued", sender: inbound.sender, jobId: job.id, trace };
   } catch (err) {
     trace.push(`exception:${err instanceof Error ? err.message : String(err)}`);
     return { status: "error", reason: err instanceof Error ? err.message : String(err), trace };
