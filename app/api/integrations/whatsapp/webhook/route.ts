@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("hub.verify_token");
   const challenge = request.nextUrl.searchParams.get("hub.challenge");
 
-  const envConfigured = typeof process.env.WHATSAPP_VERIFY_TOKEN === "string" && process.env.WHATSAPP_VERIFY_TOKEN.trim().length > 0;
+  const expected = process.env.WHATSAPP_VERIFY_TOKEN ?? "";
+  const envConfigured = expected.trim().length > 0;
   const verified = Boolean(challenge) && verifyWhatsAppWebhookChallenge(mode, token);
 
   // TEMPORARY diagnostic logging for the Meta verification handshake bug —
@@ -35,7 +36,31 @@ export async function GET(request: NextRequest) {
   if (verified) {
     return new NextResponse(challenge, { status: 200 });
   }
-  return NextResponse.json({ error: "webhook verification failed" }, { status: 403 });
+
+  // TEMPORARY DIAGNOSTIC RESPONSE — remove once verification is confirmed
+  // working. Deliberately does NOT echo the actual token values: this route
+  // is unauthenticated and public by necessity (Meta must reach it without
+  // auth), so anything in this JSON body is readable by anyone who requests
+  // the URL, not just the operator debugging it. Lengths + exact/trimmed
+  // match results are enough to diagnose a wrong value, extra whitespace,
+  // or truncation without publishing the secret itself.
+  return NextResponse.json(
+    {
+      error: "webhook verification failed",
+      mode,
+      challenge_present: challenge !== null,
+      received_verify_token_present: token !== null,
+      received_verify_token_length: token?.length ?? 0,
+      expected_verify_token_configured: envConfigured,
+      expected_verify_token_length: expected.length,
+      tokens_match_exact: token !== null && token === expected,
+      tokens_match_trimmed: token !== null && token.trim() === expected.trim(),
+      access_token_exists: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
+      phone_number_id_exists: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
+      business_account_exists: Boolean(process.env.WHATSAPP_BUSINESS_ACCOUNT_ID),
+    },
+    { status: 403 },
+  );
 }
 
 /**
