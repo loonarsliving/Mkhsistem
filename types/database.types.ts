@@ -45,6 +45,7 @@ export type NotificationCategoryDb =
   | "new_assignment"
   | "closing_approved"
   | "customer_verification"
+  | "target_reminder"
   | "markom_new_task"
   | "task_revision"
   | "task_approved"
@@ -1259,6 +1260,62 @@ export interface Database {
             foreignKeyName: "hr_expenses_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_integration_logs: {
+        Row: {
+          id: string;
+          connector: "whatsapp";
+          direction: "outgoing" | "incoming";
+          payload: Json;
+          status: "success" | "error";
+          response_status: number | null;
+          error: string | null;
+          latency_ms: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          connector: "whatsapp";
+          direction: "outgoing" | "incoming";
+          payload: Json;
+          status: "success" | "error";
+          response_status?: number | null;
+          error?: string | null;
+          latency_ms?: number | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_integration_logs"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_conversations: {
+        Row: {
+          id: string;
+          connector: "whatsapp";
+          sender: string;
+          employee_id: string | null;
+          inbound_text: string;
+          reply_text: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          connector: "whatsapp";
+          sender: string;
+          employee_id?: string | null;
+          inbound_text: string;
+          reply_text?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_conversations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
             referencedColumns: ["id"];
           },
         ];

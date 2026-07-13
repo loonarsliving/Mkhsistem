@@ -104,6 +104,7 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   new_assignment: "Penugasan Baru",
   closing_approved: "Closing Disetujui",
   customer_verification: "Verifikasi Pelanggan",
+  target_reminder: "Pengingat Target Sales",
   markom_new_task: "Task Baru",
   task_revision: "Task Perlu Revisi",
   task_approved: "Task Disetujui",

@@ -5,11 +5,22 @@ import { logger } from "@/lib/logger";
 import { buildCspHeader } from "@/lib/security/csp";
 import type { Database } from "@/types/database.types";
 
-// /api/push/send is called by the mkc_notifications DB trigger (server-to-
-// server, no browser session) -- see app/api/push/send/route.ts for its own
-// request-level authorization (re-fetches by id, rejects anything not
-// created in the last 2 minutes).
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/api/health", "/api/push/send"];
+// /api/push/send and /api/ai/whatsapp-relay are called by the mkc_notifications
+// DB trigger (server-to-server, no browser session) -- see their own route
+// files for request-level authorization (re-fetches by id, rejects anything
+// not created in the last 2 minutes). /api/integrations/whatsapp/webhook is
+// called by Meta directly (Meta's own verify-token handshake is its auth).
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  "/api/health",
+  "/api/push/send",
+  "/api/ai/whatsapp-relay",
+  "/api/integrations/whatsapp/webhook",
+];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
