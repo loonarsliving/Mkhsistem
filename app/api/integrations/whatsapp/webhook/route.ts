@@ -97,13 +97,21 @@ export async function GET(request: NextRequest) {
  * body is rejected outright.
  */
 export async function POST(request: NextRequest) {
+  // TEMPORARY: unconditional receipt log, independent of whether the body
+  // parses or the connector is configured — previously this handler logged
+  // nothing at all on the "ignored" path (unconfigured connector) or the
+  // success path, so there was no server-side evidence a POST arrived.
+  logger.info("WhatsApp webhook POST received", { contentLength: request.headers.get("content-length") });
+
   const body = await request.json().catch(() => null);
   if (body === null) {
+    logger.info("WhatsApp webhook POST body did not parse as JSON");
     return NextResponse.json({ status: "error", reason: "invalid JSON body" }, { status: 400 });
   }
 
   try {
     const result = await handleWhatsAppWebhookEvent(body);
+    logger.info("WhatsApp webhook POST handled", { status: result.status, reason: result.reason, replySent: result.replySent });
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     logger.error("WhatsApp webhook handling failed", { error: err instanceof Error ? err.message : String(err) });
