@@ -52,22 +52,31 @@ async function saveConversationTurn(sender: string, inbound: NormalizedInboundMe
 export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<WhatsAppWebhookHandlerResult> {
   const trace: string[] = ["handler:entry"];
 
-  const connector = getWhatsAppConnector();
-  trace.push(connector ? "getWhatsAppConnector:configured" : "getWhatsAppConnector:null");
-  if (!connector) {
-    return { status: "ignored", reason: "WhatsApp connector not configured", trace };
-  }
-
-  trace.push("connector.receiveWebhook:calling");
-  const received = await connector.receiveWebhook(rawPayload);
-  trace.push(received.accepted ? "connector.receiveWebhook:accepted" : "connector.receiveWebhook:rejected");
-  if (!received.accepted || !received.normalized) {
-    return { status: "ignored", reason: received.reason, trace };
-  }
-
-  const inbound = received.normalized;
-  trace.push(`normalized.content.kind:${inbound.content.kind}`);
+  // TEMPORARY: the entire body is now one try/catch (previously only the
+  // AI-routing/reply/save section was wrapped) -- connector.receiveWebhook()
+  // calls saveIntegrationLog() -> createAdminClient(), which THROWS if
+  // NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing
+  // (lib/supabase/admin.ts:17-19). That call was previously outside any
+  // try/catch in this function, so such a throw discarded the whole trace
+  // and surfaced only as route.ts's generic "handleWhatsAppWebhookEvent:threw"
+  // -- exactly the kind of blind spot that made "where did it stop" unprovable.
   try {
+    const connector = getWhatsAppConnector();
+    trace.push(connector ? "getWhatsAppConnector:configured" : "getWhatsAppConnector:null");
+    if (!connector) {
+      return { status: "ignored", reason: "WhatsApp connector not configured", trace };
+    }
+
+    trace.push("connector.receiveWebhook:calling");
+    const received = await connector.receiveWebhook(rawPayload);
+    trace.push(received.accepted ? "connector.receiveWebhook:accepted" : "connector.receiveWebhook:rejected");
+    if (!received.accepted || !received.normalized) {
+      return { status: "ignored", reason: received.reason, trace };
+    }
+
+    const inbound = received.normalized;
+    trace.push(`normalized.content.kind:${inbound.content.kind}`);
+
     trace.push("findEmployeeByPhone:calling");
     const employee = await findEmployeeByPhone(inbound.sender);
     trace.push(employee ? "findEmployeeByPhone:matched" : "findEmployeeByPhone:no_match");
