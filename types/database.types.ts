@@ -2014,6 +2014,10 @@ export interface Database {
         Args: { p_task_id: string };
         Returns: undefined;
       };
+      kpi_complete_task: {
+        Args: { p_task_id: string };
+        Returns: undefined;
+      };
       kpi_verify_task: {
         Args: { p_task_id: string; p_status: string; p_notes?: string | null };
         Returns: undefined;

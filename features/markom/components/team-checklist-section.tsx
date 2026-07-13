@@ -1,19 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { AlarmClock, CheckCircle2, Circle, ClipboardList, Percent, Users, XCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { StatTile } from "@/components/shared/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { KpiTaskStatusDb } from "@/types/database.types";
 
+import { completeTaskAction } from "../actions/markom.actions";
 import { listKpiTasksAction, teamStatsAction } from "../actions/markom-query.actions";
 
 const STATUS_ICON: Record<KpiTaskStatusDb, React.ReactNode> = {
@@ -33,12 +36,20 @@ interface KpiTaskRow {
   verifier: { full_name: string } | null;
 }
 
-/** A team member's own read-only view of their team's shared checklist -- no Approve/Needs Revision actions here, only the Branch Manager can decide. */
+/**
+ * A team member's own view of their team's shared checklist. Any member of
+ * the task's team can check off a still-pending task themselves
+ * (kpi_complete_task) -- the Branch Manager's separate Approve/Needs
+ * Revision review (TaskReviewBoard) is for a different concern (correcting
+ * a wrongly-completed task) and is untouched by this.
+ */
 export function TeamChecklistSection() {
   const now = new Date();
   const [month] = React.useState(now.getMonth() + 1);
   const [year] = React.useState(now.getFullYear());
   const [week, setWeek] = React.useState<number | "all">("all");
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: stats } = useQuery({
     queryKey: ["markom-team-stats", month, year],
@@ -54,6 +65,21 @@ export function TeamChecklistSection() {
         periodWeek: week === "all" ? undefined : week,
       }) as Promise<KpiTaskRow[]>,
   });
+
+  async function handleComplete(taskId: string) {
+    setBusyId(taskId);
+    const result = await completeTaskAction({ taskId });
+    setBusyId(null);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal menandai task selesai");
+      return;
+    }
+    toast.success("Task ditandai selesai");
+    queryClient.invalidateQueries({ queryKey: ["markom-team-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["markom-team-tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["markom-national-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["markom-ranking"] });
+  }
 
   const items = tasks ?? [];
   const currentWeek = stats?.current_week ?? 1;
@@ -117,7 +143,18 @@ export function TeamChecklistSection() {
           <ul className="divide-y divide-border rounded-lg border">
             {items.map((task) => (
               <li key={task.id} className="flex items-start gap-3 p-3">
-                <span className="mt-0.5 shrink-0">{STATUS_ICON[task.status]}</span>
+                <span className="mt-0.5 shrink-0">
+                  {task.status === "pending" ? (
+                    <Checkbox
+                      checked={false}
+                      disabled={busyId === task.id}
+                      onCheckedChange={(checked) => checked === true && handleComplete(task.id)}
+                      aria-label={`Tandai selesai: ${task.title}`}
+                    />
+                  ) : (
+                    STATUS_ICON[task.status]
+                  )}
+                </span>
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className={cn("text-sm font-medium", task.status === "rejected" && "text-muted-foreground line-through")}>
                     {task.title}

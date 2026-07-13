@@ -29,3 +29,8 @@ export const verifyTaskSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 export type VerifyTaskInput = z.infer<typeof verifyTaskSchema>;
+
+export const completeTaskSchema = z.object({
+  taskId: z.string().uuid(),
+});
+export type CompleteTaskInput = z.infer<typeof completeTaskSchema>;
