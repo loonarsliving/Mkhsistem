@@ -27,7 +27,17 @@ export function getWhatsAppConnector(): WhatsAppConnector | null {
   return cachedWhatsApp;
 }
 
+/**
+ * Meta's GET verification handshake only needs WHATSAPP_VERIFY_TOKEN — it
+ * must NOT depend on getWhatsAppConnector()/isWhatsAppConfigured(), which
+ * also requires WHATSAPP_ACCESS_TOKEN/PHONE_NUMBER_ID/BUSINESS_ACCOUNT_ID to
+ * be set. Gating verification behind all four previously meant a webhook
+ * with a perfectly correct verify token would still fail verification if
+ * any of the other three (unrelated to verification) had an issue. Values
+ * are trimmed defensively against a trailing newline/space from
+ * copy-pasting into the Vercel dashboard.
+ */
 export function verifyWhatsAppWebhookChallenge(mode: string | null, token: string | null): boolean {
-  const connector = getWhatsAppConnector();
-  return connector ? connector.verifyWebhook(mode, token) : false;
+  const expected = WHATSAPP_CONFIG.verifyToken.trim();
+  return mode === "subscribe" && expected.length > 0 && token !== null && token.trim() === expected;
 }

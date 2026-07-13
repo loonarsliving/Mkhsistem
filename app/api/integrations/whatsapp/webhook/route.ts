@@ -18,7 +18,21 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("hub.verify_token");
   const challenge = request.nextUrl.searchParams.get("hub.challenge");
 
-  if (challenge && verifyWhatsAppWebhookChallenge(mode, token)) {
+  const envConfigured = typeof process.env.WHATSAPP_VERIFY_TOKEN === "string" && process.env.WHATSAPP_VERIFY_TOKEN.trim().length > 0;
+  const verified = Boolean(challenge) && verifyWhatsAppWebhookChallenge(mode, token);
+
+  // TEMPORARY diagnostic logging for the Meta verification handshake bug —
+  // never logs the token value itself, only presence/shape/comparison result.
+  logger.info("WhatsApp webhook GET verification attempt", {
+    hubMode: mode,
+    hubVerifyTokenPresent: token !== null,
+    hubVerifyTokenLength: token?.length ?? 0,
+    hubChallengePresent: challenge !== null,
+    envVarConfigured: envConfigured,
+    verificationResult: verified,
+  });
+
+  if (verified) {
     return new NextResponse(challenge, { status: 200 });
   }
   return NextResponse.json({ error: "webhook verification failed" }, { status: 403 });
