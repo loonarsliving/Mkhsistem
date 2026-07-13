@@ -13,7 +13,20 @@ export const dynamic = "force-dynamic";
  * `hub.challenge` verbatim only when `hub.verify_token` matches
  * WHATSAPP_VERIFY_TOKEN; otherwise 403, per Meta's spec.
  */
+/** Redacts only the verify-token value out of a raw query string, keeping every key name, delimiter, and every other value intact for diagnosis. */
+function redactVerifyToken(rawSearch: string): string {
+  return rawSearch.replace(/(hub\.verify_token=)[^&]*/i, "$1[REDACTED]");
+}
+
 export async function GET(request: NextRequest) {
+  // Raw, unparsed request data — logged (server-side only) BEFORE any
+  // searchParams parsing, so a mismatch between what Meta actually sent and
+  // what .get("hub.xxx") resolves to is visible instead of assumed.
+  const rawUrl = request.url;
+  const rawSearch = request.nextUrl.search;
+  const rawPath = request.nextUrl.pathname;
+  const searchParamKeys = Array.from(request.nextUrl.searchParams.keys());
+
   const mode = request.nextUrl.searchParams.get("hub.mode");
   const token = request.nextUrl.searchParams.get("hub.verify_token");
   const challenge = request.nextUrl.searchParams.get("hub.challenge");
@@ -24,7 +37,14 @@ export async function GET(request: NextRequest) {
 
   // TEMPORARY diagnostic logging for the Meta verification handshake bug —
   // never logs the token value itself, only presence/shape/comparison result.
+  // rawUrl/rawSearch go to the server log only (Vercel logs), never into the
+  // public JSON response below, since they'd contain hub.verify_token in
+  // plaintext if it were present.
   logger.info("WhatsApp webhook GET verification attempt", {
+    rawUrl,
+    rawPath,
+    rawSearchRedacted: redactVerifyToken(rawSearch),
+    searchParamKeys,
     hubMode: mode,
     hubVerifyTokenPresent: token !== null,
     hubVerifyTokenLength: token?.length ?? 0,
@@ -34,19 +54,23 @@ export async function GET(request: NextRequest) {
   });
 
   if (verified) {
-    return new NextResponse(challenge, { status: 200 });
+    return new NextResponse(challenge, { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
   // TEMPORARY DIAGNOSTIC RESPONSE — remove once verification is confirmed
-  // working. Deliberately does NOT echo the actual token values: this route
+  // working. Deliberately does NOT echo the actual token value: this route
   // is unauthenticated and public by necessity (Meta must reach it without
   // auth), so anything in this JSON body is readable by anyone who requests
-  // the URL, not just the operator debugging it. Lengths + exact/trimmed
-  // match results are enough to diagnose a wrong value, extra whitespace,
-  // or truncation without publishing the secret itself.
+  // the URL, not just the operator debugging it. path/param-key-names/
+  // redacted-query-string/lengths/match booleans are enough to tell "Meta
+  // never sent hub.* params" apart from "it sent them but the value/name
+  // was wrong" without publishing the secret itself.
   return NextResponse.json(
     {
       error: "webhook verification failed",
+      raw_path: rawPath,
+      raw_search_redacted: redactVerifyToken(rawSearch),
+      search_param_keys: searchParamKeys,
       mode,
       challenge_present: challenge !== null,
       received_verify_token_present: token !== null,
