@@ -1,7 +1,6 @@
-import { logger } from "@/lib/logger";
-
 import { AIProviderError } from "./errors";
 import type { GeminiClientLike } from "./gemini-client";
+import { withGeminiRetry } from "./gemini-retry";
 import type { AIGenerateRequest, AIGenerateResponse, AIProvider } from "./types";
 
 export interface GeminiProviderOptions {
@@ -11,7 +10,13 @@ export interface GeminiProviderOptions {
   timeoutMs: number;
   /** Applied to every harm category. */
   safetyThreshold: string;
+  /** Default retry budget for generate() calls that don't override AIGenerateRequest.maxAttempts (see withGeminiRetry). */
+  retryMaxAttempts: number;
+  retryBaseDelayMs: number;
 }
+
+type GenerateContentConfig = NonNullable<Parameters<GeminiClientLike["models"]["generateContent"]>[0]["config"]>;
+type GenerateContentResult = Awaited<ReturnType<GeminiClientLike["models"]["generateContent"]>>;
 
 const HARM_CATEGORIES = [
   "HARM_CATEGORY_HARASSMENT",
@@ -25,6 +30,10 @@ const HARM_CATEGORIES = [
  * (packages/ai-provider/src/providers/gemini.provider.ts) — the "thinking
  * budget 0" and safety-settings handling there were both fixed against a
  * live API during that project's Sprint 2, so they're kept verbatim here.
+ *
+ * Every call goes through withGeminiRetry (lib/ai/provider/gemini-retry.ts)
+ * — this is the only place generateContent() is invoked in the codebase, so
+ * there is no direct call anywhere that bypasses the retry layer.
  */
 export class GeminiProvider implements AIProvider {
   readonly name = "gemini" as const;
@@ -35,18 +44,10 @@ export class GeminiProvider implements AIProvider {
   ) {}
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
-    const startedAt = Date.now();
-    const timeoutMs = this.options.timeoutMs;
+    const overallStartedAt = Date.now();
+    const maxAttempts = request.maxAttempts ?? this.options.retryMaxAttempts;
 
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new AIProviderError(`Gemini call timed out after ${timeoutMs}ms`, "gemini", true)),
-        timeoutMs,
-      );
-    });
-
-    const config: NonNullable<Parameters<GeminiClientLike["models"]["generateContent"]>[0]["config"]> = {
+    const config: GenerateContentConfig = {
       temperature: request.temperature ?? this.options.defaultTemperature,
       maxOutputTokens: request.maxOutputTokens ?? this.options.defaultMaxOutputTokens,
       systemInstruction: request.systemPrompt,
@@ -59,20 +60,13 @@ export class GeminiProvider implements AIProvider {
     }));
 
     try {
-      const response = await Promise.race([
-        this.client.models.generateContent({ model: this.options.model, contents: request.userPrompt, config }),
-        timeoutPromise,
-      ]);
+      const response = await withGeminiRetry(
+        { model: this.options.model, maxAttempts, baseDelayMs: this.options.retryBaseDelayMs },
+        () => this.callOnce(request.userPrompt, config),
+      );
 
       const text = response.text ?? "";
       const usage = response.usageMetadata;
-
-      logger.info("gemini generate() succeeded", {
-        model: this.options.model,
-        responseTimeMs: Date.now() - startedAt,
-        promptTokens: usage?.promptTokenCount,
-        completionTokens: usage?.candidatesTokenCount,
-      });
 
       return {
         text,
@@ -85,18 +79,55 @@ export class GeminiProvider implements AIProvider {
           : undefined,
         provider: "gemini",
         model: this.options.model,
-        responseTimeMs: Date.now() - startedAt,
+        responseTimeMs: Date.now() - overallStartedAt,
       };
     } catch (err) {
+      // withGeminiRetry already logged every attempt (model/status/error
+      // body/wait/response time/outcome) -- this is just the final surface
+      // to callers, always as one AIProviderError regardless of whether the
+      // underlying failure was a timeout (already an AIProviderError) or a
+      // raw Gemini API error (a plain Error, wrapped here).
       if (err instanceof AIProviderError) throw err;
       const message = err instanceof Error ? err.message : String(err);
-      logger.error("gemini generate() failed", { model: this.options.model, error: message });
-      throw new AIProviderError(`Gemini generate() failed: ${message}`, "gemini", true, err);
+      throw new AIProviderError(`Gemini generate() failed after retries: ${message}`, "gemini", true, err);
+    }
+  }
+
+  /**
+   * One raw attempt: per-attempt timeout race + the actual API call.
+   * Deliberately does not catch/wrap errors — withGeminiRetry's failure
+   * parser needs the SDK's real error shape (e.g. the {"error":{"code":503,
+   * ...}} envelope) to classify retryability; wrapping it here would hide
+   * that from the retry layer.
+   */
+  private async callOnce(userPrompt: string, config: GenerateContentConfig): Promise<GenerateContentResult> {
+    const timeoutMs = this.options.timeoutMs;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new AIProviderError(`Gemini call timed out after ${timeoutMs}ms`, "gemini", true)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      return await Promise.race([
+        this.client.models.generateContent({ model: this.options.model, contents: userPrompt, config }),
+        timeoutPromise,
+      ]);
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
     }
   }
 
+  /**
+   * maxAttempts: 1 — a health probe is not worth a full 429/503 backoff
+   * sequence (up to 140s+); still goes through the same withGeminiRetry
+   * layer (via generate()), just configured for a single attempt. Caching
+   * successful results is the caller's job (lib/ai/service.ts's
+   * aiHealthCheck()), not this method's — this always performs a real call
+   * when invoked.
+   */
   async healthCheck(): Promise<{ ok: boolean; detail: string }> {
     try {
       const res = await this.generate({
@@ -104,6 +135,7 @@ export class GeminiProvider implements AIProvider {
         userPrompt: "Reply with exactly: OK",
         maxOutputTokens: 64,
         temperature: 0,
+        maxAttempts: 1,
       });
       const ok = res.text.trim().length > 0;
       return { ok, detail: `model=${this.options.model} responseTimeMs=${res.responseTimeMs} text="${res.text.trim().slice(0, 40)}"` };

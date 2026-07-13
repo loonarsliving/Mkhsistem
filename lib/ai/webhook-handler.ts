@@ -4,15 +4,22 @@ import { getWhatsAppConnector } from "./connectors/manager";
 import type { NormalizedInboundMessage } from "./connectors/types";
 import { sendWhatsAppText } from "./notifications/engine";
 import { routeAndAnswer } from "./domains/router";
+import { AIProviderError } from "./provider/errors";
 
 export interface WhatsAppWebhookHandlerResult {
   status: "processed" | "ignored" | "error";
   sender?: string;
   replySent?: boolean;
   reason?: string;
+  /** True when Gemini exhausted every retry and the AI-busy fallback message was sent instead of a real answer — the user still got a reply, never silence. */
+  aiFallbackUsed?: boolean;
   /** TEMPORARY — ordered list of steps actually executed, for production tracing. Remove once the silent-non-reply bug is root-caused. */
   trace: string[];
 }
+
+/** Sent instead of a real answer only once Gemini has exhausted every retry attempt (lib/ai/provider/gemini-retry.ts) — never the raw error or a stack trace. */
+const AI_BUSY_FALLBACK_MESSAGE =
+  "Maaf, layanan AI MK Connect sedang sibuk saat ini. Pesan Anda sudah kami terima — silakan coba lagi dalam beberapa menit.";
 
 /** Keeps only digits, for tolerant matching against employees.phone (which may be stored with/without a leading +, spaces, or dashes). */
 function digitsOnly(value: string): string {
@@ -83,11 +90,28 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
 
     const question = inbound.content.kind === "text" ? inbound.content.text : "";
 
-    trace.push("routeAndAnswer:calling");
-    const replyText = question
-      ? await routeAndAnswer(question, employee ? { id: employee.id, name: employee.full_name } : null)
-      : "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
-    trace.push("routeAndAnswer:returned");
+    let replyText: string;
+    let aiFallbackUsed = false;
+    if (!question) {
+      replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
+    } else {
+      trace.push("routeAndAnswer:calling");
+      try {
+        replyText = await routeAndAnswer(question, employee ? { id: employee.id, name: employee.full_name } : null);
+        trace.push("routeAndAnswer:returned");
+      } catch (err) {
+        // Gemini exhausted every retry (lib/ai/provider/gemini-retry.ts) --
+        // never lose the user's message and never throw here: fall back to
+        // a friendly reply instead of aborting before sendWhatsAppText/
+        // saveConversationTurn run. Only an AI-provider failure gets this
+        // fallback; a genuine bug elsewhere still surfaces as status:"error"
+        // via the outer catch below. Never expose err.message/stack to the user.
+        if (!(err instanceof AIProviderError)) throw err;
+        aiFallbackUsed = true;
+        replyText = AI_BUSY_FALLBACK_MESSAGE;
+        trace.push(`routeAndAnswer:ai_unavailable(${err.message})`);
+      }
+    }
 
     trace.push("sendWhatsAppText:calling");
     const sendResult = await sendWhatsAppText(inbound.sender, replyText);
@@ -97,7 +121,7 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     await saveConversationTurn(inbound.sender, inbound, replyText, employee?.id ?? null);
     trace.push("saveConversationTurn:done");
 
-    return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+    return { status: "processed", sender: inbound.sender, replySent: sendResult.success, aiFallbackUsed, trace };
   } catch (err) {
     trace.push(`exception:${err instanceof Error ? err.message : String(err)}`);
     return { status: "error", reason: err instanceof Error ? err.message : String(err), trace };

@@ -13,6 +13,11 @@ export const AI_CONFIG = {
   maxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "1024"),
   timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? "20000"),
   safetyThreshold: process.env.AI_SAFETY_THRESHOLD ?? "BLOCK_MEDIUM_AND_ABOVE",
+  /** Attempt 1 immediate, then attempts 2/3/4 wait retryBaseDelayMs * 2^(n-1) (20s/40s/80s by default) before retrying a transient (429/500/502/503/504/timeout) failure. */
+  retryMaxAttempts: Number(process.env.GEMINI_RETRY_MAX_ATTEMPTS ?? "4"),
+  retryBaseDelayMs: Number(process.env.GEMINI_RETRY_BASE_DELAY_MS ?? "20000"),
+  /** How long a successful healthCheck() result is reused before probing Gemini again — a failed check is never cached, so it's always re-checked on the next call. */
+  healthCheckCacheMs: Number(process.env.AI_HEALTHCHECK_CACHE_MS ?? "300000"),
 } as const;
 
 export const WHATSAPP_CONFIG = {

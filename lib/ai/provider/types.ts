@@ -14,6 +14,14 @@ export interface AIGenerateRequest {
   maxOutputTokens?: number;
   /** "json" asks the provider to return a parseable JSON string. */
   responseFormat?: "text" | "json";
+  /**
+   * Overrides AI_CONFIG.retryMaxAttempts for this one call — every call still
+   * goes through the same centralized retry wrapper, this only changes how
+   * many attempts it's allowed. healthCheck() passes 1 here so a routine
+   * probe never burns a full 429/503 backoff sequence; omit for the normal
+   * (default retryMaxAttempts) behavior every HR/Markom/CRM/webhook call uses.
+   */
+  maxAttempts?: number;
 }
 
 export interface AITokenUsage {
