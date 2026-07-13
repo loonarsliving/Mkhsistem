@@ -38,12 +38,43 @@ export const rejectPaymentSchema = z.object({
 });
 export type RejectPaymentInput = z.infer<typeof rejectPaymentSchema>;
 
-export const setBranchTargetSchema = z.object({
+// ── Target Management V2 (1 branch -> many products) ────────────────────
+
+export const targetDetailRowSchema = z.object({
+  productId: z.string().uuid("Produk wajib dipilih"),
+  targetUnit: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
+  sellingPrice: z.coerce.number().min(0, "Harga jual tidak boleh negatif"),
+  commissionPercent: z.coerce.number().min(0).max(100, "Persentase maksimal 100"),
+});
+export type TargetDetailRowInput = z.infer<typeof targetDetailRowSchema>;
+
+export const saveAndDistributeTargetSchema = z.object({
   branchId: z.string().uuid("Cabang wajib dipilih"),
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodYear: z.coerce.number().int().min(2020).max(2100),
-  targetUnits: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
-  sellingPricePerUnit: z.coerce.number().min(0, "Harga jual tidak boleh negatif"),
-  commissionPercent: z.coerce.number().min(0).max(100, "Persentase maksimal 100"),
+  details: z
+    .array(targetDetailRowSchema)
+    .min(1, "Minimal satu produk wajib diisi")
+    .refine((rows) => new Set(rows.map((r) => r.productId)).size === rows.length, {
+      message: "Setiap produk hanya boleh muncul satu kali",
+    }),
 });
-export type SetBranchTargetInput = z.infer<typeof setBranchTargetSchema>;
+export type SaveAndDistributeTargetInput = z.infer<typeof saveAndDistributeTargetSchema>;
+
+export const upsertProductSchema = z.object({
+  id: z.string().uuid().optional(),
+  productName: z.string().min(2, "Nama produk wajib diisi").max(200),
+  category: z.string().max(100).optional(),
+  unit: z.string().min(1, "Satuan wajib diisi").max(30).default("unit"),
+  defaultPrice: z.coerce.number().min(0, "Harga tidak boleh negatif"),
+  defaultCommission: z.coerce.number().min(0).max(100, "Persentase maksimal 100"),
+  status: z.enum(["active", "inactive"]).default("active"),
+});
+export type UpsertProductInput = z.infer<typeof upsertProductSchema>;
+
+export const setProductSalesAssignmentSchema = z.object({
+  productId: z.string().uuid(),
+  salesId: z.string().uuid(),
+  assigned: z.boolean(),
+});
+export type SetProductSalesAssignmentInput = z.infer<typeof setProductSalesAssignmentSchema>;

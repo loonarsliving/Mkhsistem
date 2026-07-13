@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
-import { SalesTargetForm } from "@/features/crm/components/sales-target-form";
+import { TargetManagementForm } from "@/features/crm/components/target-management-form";
 import { requirePermission } from "@/lib/rbac/session";
 
 export const metadata: Metadata = { title: "Target Sales" };
@@ -13,9 +13,9 @@ export default async function CrmTargetsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Target Sales"
-        description="Atur target unit dan komisi bulanan per cabang — sistem otomatis membagi rata ke setiap Sales aktif."
+        description="Atur target unit, harga jual, dan komisi per produk untuk setiap cabang — sistem otomatis mendistribusikan ke Sales yang ditugaskan pada masing-masing produk."
       />
-      <SalesTargetForm />
+      <TargetManagementForm />
     </div>
   );
 }

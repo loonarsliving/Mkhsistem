@@ -1315,6 +1315,7 @@ export interface Database {
         Row: {
           id: string;
           sales_id: string;
+          product_id: string | null;
           period_month: number;
           period_year: number;
           target_units: number;
@@ -1328,6 +1329,7 @@ export interface Database {
         Insert: {
           id?: string;
           sales_id: string;
+          product_id?: string | null;
           period_month: number;
           period_year: number;
           target_units?: number;
@@ -1344,6 +1346,144 @@ export interface Database {
             foreignKeyName: "sales_targets_sales_id_fkey";
             columns: ["sales_id"];
             referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sales_targets_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_products: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          product_name: string;
+          category: string | null;
+          unit: string;
+          default_price: number;
+          default_commission: number;
+          status: "active" | "inactive";
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          product_name: string;
+          category?: string | null;
+          unit?: string;
+          default_price?: number;
+          default_commission?: number;
+          status?: "active" | "inactive";
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_products"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_product_sales_assignments: {
+        Row: {
+          id: string;
+          product_id: string;
+          sales_id: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          sales_id: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_product_sales_assignments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_product_sales_assignments_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_product_sales_assignments_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_target_headers: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_target_headers"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_target_headers_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_target_details: {
+        Row: {
+          id: string;
+          target_header_id: string;
+          product_id: string;
+          target_unit: number;
+          selling_price: number;
+          commission_percent: number;
+          target_revenue: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          target_header_id: string;
+          product_id: string;
+          target_unit?: number;
+          selling_price?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_target_details"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_target_details_target_header_id_fkey";
+            columns: ["target_header_id"];
+            referencedRelation: "crm_target_headers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_target_details_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
             referencedColumns: ["id"];
           },
         ];
@@ -1674,6 +1814,26 @@ export interface Database {
           p_commission_percent: number;
         };
         Returns: { branch_target_id: string; distributed_count: number }[];
+      };
+      crm_upsert_product: {
+        Args: {
+          p_id?: string | null;
+          p_product_name: string;
+          p_category?: string | null;
+          p_unit?: string;
+          p_default_price?: number;
+          p_default_commission?: number;
+          p_status?: string;
+        };
+        Returns: string;
+      };
+      crm_set_product_sales_assignment: {
+        Args: { p_product_id: string; p_sales_id: string; p_assigned: boolean };
+        Returns: undefined;
+      };
+      crm_save_and_distribute_target: {
+        Args: { p_branch_id: string; p_period_month: number; p_period_year: number; p_details: Json };
+        Returns: { header_id: string; distributed_count: number; total_target_units: number; total_target_revenue: number }[];
       };
       crm_sales_stats: {
         Args: { p_sales_id?: string | null; p_month?: number | null; p_year?: number | null };
