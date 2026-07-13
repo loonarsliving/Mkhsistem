@@ -10,6 +10,8 @@ export interface WhatsAppWebhookHandlerResult {
   sender?: string;
   replySent?: boolean;
   reason?: string;
+  /** TEMPORARY — ordered list of steps actually executed, for production tracing. Remove once the silent-non-reply bug is root-caused. */
+  trace: string[];
 }
 
 /** Keeps only digits, for tolerant matching against employees.phone (which may be stored with/without a leading +, spaces, or dashes). */
@@ -48,30 +50,47 @@ async function saveConversationTurn(sender: string, inbound: NormalizedInboundMe
  * simplified to MK Connect's single-connector, single-provider setup.
  */
 export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<WhatsAppWebhookHandlerResult> {
+  const trace: string[] = ["handler:entry"];
+
   const connector = getWhatsAppConnector();
+  trace.push(connector ? "getWhatsAppConnector:configured" : "getWhatsAppConnector:null");
   if (!connector) {
-    return { status: "ignored", reason: "WhatsApp connector not configured" };
+    return { status: "ignored", reason: "WhatsApp connector not configured", trace };
   }
 
+  trace.push("connector.receiveWebhook:calling");
   const received = await connector.receiveWebhook(rawPayload);
+  trace.push(received.accepted ? "connector.receiveWebhook:accepted" : "connector.receiveWebhook:rejected");
   if (!received.accepted || !received.normalized) {
-    return { status: "ignored", reason: received.reason };
+    return { status: "ignored", reason: received.reason, trace };
   }
 
   const inbound = received.normalized;
+  trace.push(`normalized.content.kind:${inbound.content.kind}`);
   try {
+    trace.push("findEmployeeByPhone:calling");
     const employee = await findEmployeeByPhone(inbound.sender);
+    trace.push(employee ? "findEmployeeByPhone:matched" : "findEmployeeByPhone:no_match");
+
     const question = inbound.content.kind === "text" ? inbound.content.text : "";
 
+    trace.push("routeAndAnswer:calling");
     const replyText = question
       ? await routeAndAnswer(question, employee ? { id: employee.id, name: employee.full_name } : null)
       : "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
+    trace.push("routeAndAnswer:returned");
 
+    trace.push("sendWhatsAppText:calling");
     const sendResult = await sendWhatsAppText(inbound.sender, replyText);
-    await saveConversationTurn(inbound.sender, inbound, replyText, employee?.id ?? null);
+    trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
 
-    return { status: "processed", sender: inbound.sender, replySent: sendResult.success };
+    trace.push("saveConversationTurn:calling");
+    await saveConversationTurn(inbound.sender, inbound, replyText, employee?.id ?? null);
+    trace.push("saveConversationTurn:done");
+
+    return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
   } catch (err) {
-    return { status: "error", reason: err instanceof Error ? err.message : String(err) };
+    trace.push(`exception:${err instanceof Error ? err.message : String(err)}`);
+    return { status: "error", reason: err instanceof Error ? err.message : String(err), trace };
   }
 }

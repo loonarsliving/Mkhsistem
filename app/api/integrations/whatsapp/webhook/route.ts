@@ -96,25 +96,46 @@ export async function GET(request: NextRequest) {
  * surfaced as an HTTP error to Meta. Only a genuinely unparseable request
  * body is rejected outright.
  */
+/** TEMPORARY — PRESENT/MISSING only, never the actual value, for tracing which of the 4 WhatsApp vars (and Gemini's) this exact running deployment actually sees at runtime. */
+function envPresenceSnapshot() {
+  return {
+    WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN ? "PRESENT" : "MISSING",
+    WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID ? "PRESENT" : "MISSING",
+    WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? "PRESENT" : "MISSING",
+    WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN ? "PRESENT" : "MISSING",
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY ? "PRESENT" : "MISSING",
+  };
+}
+
 export async function POST(request: NextRequest) {
-  // TEMPORARY: unconditional receipt log, independent of whether the body
-  // parses or the connector is configured — previously this handler logged
-  // nothing at all on the "ignored" path (unconfigured connector) or the
-  // success path, so there was no server-side evidence a POST arrived.
-  logger.info("WhatsApp webhook POST received", { contentLength: request.headers.get("content-length") });
+  // TEMPORARY: unconditional receipt log+env snapshot, independent of
+  // whether the body parses or the connector is configured — previously
+  // this handler logged nothing at all on the "ignored" path (unconfigured
+  // connector) or the success path, so there was no server-side evidence a
+  // POST arrived, and no way to see which env var this exact running
+  // deployment actually resolves at request time (Vercel env var changes
+  // require a fresh deployment to take effect on already-running functions
+  // -- the dashboard showing a value set does not guarantee a given
+  // deployment's runtime sees it).
+  const envSnapshot = envPresenceSnapshot();
+  logger.info("WhatsApp webhook POST received", { contentLength: request.headers.get("content-length"), env: envSnapshot });
 
   const body = await request.json().catch(() => null);
   if (body === null) {
     logger.info("WhatsApp webhook POST body did not parse as JSON");
-    return NextResponse.json({ status: "error", reason: "invalid JSON body" }, { status: 400 });
+    return NextResponse.json({ status: "error", reason: "invalid JSON body", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 400 });
   }
 
   try {
     const result = await handleWhatsAppWebhookEvent(body);
-    logger.info("WhatsApp webhook POST handled", { status: result.status, reason: result.reason, replySent: result.replySent });
-    return NextResponse.json(result, { status: 200 });
+    logger.info("WhatsApp webhook POST handled", { status: result.status, reason: result.reason, replySent: result.replySent, trace: result.trace });
+    // TEMPORARY: env snapshot + full step trace returned in the response
+    // body itself (not just the server log), since runtime log access has
+    // been unavailable for this investigation -- this makes the trace
+    // provable from the HTTP response of any test POST, Meta's or manual.
+    return NextResponse.json({ ...result, env: envSnapshot }, { status: 200 });
   } catch (err) {
     logger.error("WhatsApp webhook handling failed", { error: err instanceof Error ? err.message : String(err) });
-    return NextResponse.json({ status: "error" }, { status: 200 });
+    return NextResponse.json({ status: "error", trace: ["entry", "json_parse:ok", "handleWhatsAppWebhookEvent:threw"], env: envSnapshot }, { status: 200 });
   }
 }
