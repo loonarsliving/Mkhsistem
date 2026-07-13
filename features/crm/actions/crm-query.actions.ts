@@ -5,15 +5,19 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 import {
   getProspectById,
+  getTargetHeaderDetail,
   isProjectMasterInUse,
-  listBranchSalesTargets,
   listCrmProjectsAdmin,
   listFollowUps,
   listPayments,
   listPendingPayments,
+  listProducts,
+  listProductSalesAssignments,
   listProspects,
   listProspectsForExport,
   listRecentFollowUpsBySales,
+  listSalesEmployeesForAssignment,
+  listTargetHeadersSummary,
   type ProspectListFilters,
 } from "@/repositories/crm.repository";
 
@@ -79,7 +83,7 @@ export async function listPendingPaymentsAction() {
   return listPendingPayments(supabase);
 }
 
-export async function listBranchSalesTargetsAction(month: number, year: number) {
+export async function listTargetHeadersSummaryAction(month: number, year: number) {
   const session = await requireSession();
   if (
     !hasPermission(session, "sales_target.manage") &&
@@ -89,9 +93,34 @@ export async function listBranchSalesTargetsAction(month: number, year: number) 
     throw new Error("Insufficient permission");
   }
   const supabase = await createClient();
-  const rows = await listBranchSalesTargets(supabase, month, year);
+  const rows = await listTargetHeadersSummary(supabase, month, year);
   if (hasPermission(session, "sales_target.view_all") || hasPermission(session, "sales_target.manage")) return rows;
   return rows.filter((r) => r.branch_id === session.employee.branch_id);
+}
+
+export async function getTargetHeaderDetailAction(branchId: string, month: number, year: number) {
+  await requirePermission("sales_target.manage");
+  const supabase = await createClient();
+  return getTargetHeaderDetail(supabase, branchId, month, year);
+}
+
+/** Active product catalog for the Target form's product picker. */
+export async function listProductsAction(includeInactive = false) {
+  await requireSession();
+  const supabase = await createClient();
+  return listProducts(supabase, includeInactive);
+}
+
+export async function listProductSalesAssignmentsAction(productId: string) {
+  await requirePermission("sales_target.manage");
+  const supabase = await createClient();
+  return listProductSalesAssignments(supabase, productId);
+}
+
+export async function listSalesEmployeesForAssignmentAction(branchId?: string) {
+  await requirePermission("sales_target.manage");
+  const supabase = await createClient();
+  return listSalesEmployeesForAssignment(supabase, branchId);
 }
 
 type SalesStatsRow = Database["public"]["Functions"]["crm_sales_stats"]["Returns"][number];

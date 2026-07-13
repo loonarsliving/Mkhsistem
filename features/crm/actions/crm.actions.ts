@@ -12,12 +12,16 @@ import {
   addProspectSchema,
   recordPaymentSchema,
   rejectPaymentSchema,
-  setBranchTargetSchema,
+  saveAndDistributeTargetSchema,
+  setProductSalesAssignmentSchema,
+  upsertProductSchema,
   type AddFollowUpInput,
   type AddProspectInput,
   type RecordPaymentInput,
   type RejectPaymentInput,
-  type SetBranchTargetInput,
+  type SaveAndDistributeTargetInput,
+  type SetProductSalesAssignmentInput,
+  type UpsertProductInput,
 } from "../schemas/crm.schema";
 
 export async function checkDuplicateProspectAction(phone: string, customerName: string) {
@@ -138,24 +142,74 @@ export async function rejectPaymentAction(input: RejectPaymentInput): Promise<Ac
   return actionSuccess();
 }
 
-export async function setBranchTargetAction(input: SetBranchTargetInput): Promise<ActionResult<{ distributedCount: number }>> {
+export async function saveAndDistributeTargetAction(
+  input: SaveAndDistributeTargetInput,
+): Promise<ActionResult<{ distributedCount: number; totalTargetUnits: number; totalTargetRevenue: number }>> {
   await requireSession();
-  const parsed = setBranchTargetSchema.safeParse(input);
+  const parsed = saveAndDistributeTargetSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("crm_set_branch_target", {
+  const { data, error } = await supabase.rpc("crm_save_and_distribute_target", {
     p_branch_id: parsed.data.branchId,
     p_period_month: parsed.data.periodMonth,
     p_period_year: parsed.data.periodYear,
-    p_target_units: parsed.data.targetUnits,
-    p_selling_price_per_unit: parsed.data.sellingPricePerUnit,
-    p_commission_percent: parsed.data.commissionPercent,
+    p_details: parsed.data.details.map((d) => ({
+      product_id: d.productId,
+      target_unit: d.targetUnit,
+      selling_price: d.sellingPrice,
+      commission_percent: d.commissionPercent,
+    })),
   });
 
   if (error) return actionError(error.message);
 
   revalidatePath("/crm/targets");
   revalidatePath("/dashboard");
-  return actionSuccess({ distributedCount: data?.[0]?.distributed_count ?? 0 });
+  const row = data?.[0];
+  return actionSuccess({
+    distributedCount: row?.distributed_count ?? 0,
+    totalTargetUnits: row?.total_target_units ?? 0,
+    totalTargetRevenue: row?.total_target_revenue ?? 0,
+  });
+}
+
+export async function upsertProductAction(input: UpsertProductInput): Promise<ActionResult<{ id: string }>> {
+  await requireSession();
+  const parsed = upsertProductSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_upsert_product", {
+    p_id: parsed.data.id ?? null,
+    p_product_name: parsed.data.productName,
+    p_category: parsed.data.category ?? null,
+    p_unit: parsed.data.unit,
+    p_default_price: parsed.data.defaultPrice,
+    p_default_commission: parsed.data.defaultCommission,
+    p_status: parsed.data.status,
+  });
+
+  if (error) return actionError(error.message);
+
+  revalidatePath("/crm/targets");
+  return actionSuccess({ id: data as unknown as string });
+}
+
+export async function setProductSalesAssignmentAction(input: SetProductSalesAssignmentInput): Promise<ActionResult> {
+  await requireSession();
+  const parsed = setProductSalesAssignmentSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("crm_set_product_sales_assignment", {
+    p_product_id: parsed.data.productId,
+    p_sales_id: parsed.data.salesId,
+    p_assigned: parsed.data.assigned,
+  });
+
+  if (error) return actionError(error.message);
+
+  revalidatePath("/crm/targets");
+  return actionSuccess();
 }
