@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 import { verifyWhatsAppWebhookChallenge } from "@/lib/ai/connectors/manager";
 import { handleWhatsAppWebhookEvent } from "@/lib/ai/webhook-handler";
+import { saveIntegrationLog } from "@/lib/ai/integration-log";
 
 export const dynamic = "force-dynamic";
 
@@ -108,19 +109,43 @@ function envPresenceSnapshot() {
 }
 
 export async function POST(request: NextRequest) {
-  // TEMPORARY: unconditional receipt log+env snapshot, independent of
-  // whether the body parses or the connector is configured — previously
-  // this handler logged nothing at all on the "ignored" path (unconfigured
-  // connector) or the success path, so there was no server-side evidence a
-  // POST arrived, and no way to see which env var this exact running
-  // deployment actually resolves at request time (Vercel env var changes
-  // require a fresh deployment to take effect on already-running functions
-  // -- the dashboard showing a value set does not guarantee a given
-  // deployment's runtime sees it).
+  // TEMPORARY: absolute first action in POST() — before body parsing or any
+  // other call. Unconditional entry marker, persisted to ai_integration_logs
+  // so a raw hit to this endpoint is provable even if everything downstream
+  // (JSON parsing, connector config, etc.) never runs.
+  const entryMarker = `webhook_entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const entryTimestamp = new Date().toISOString();
+  const requestHeaders: Record<string, string> = {};
+  request.headers.forEach((value, key) => {
+    requestHeaders[key] = value;
+  });
+  const rawBody = await request.text().catch(() => "");
+
+  logger.info(entryMarker, { timestamp: entryTimestamp, headers: requestHeaders, rawBodyLength: rawBody.length });
+
+  try {
+    await saveIntegrationLog({
+      connector: "whatsapp",
+      direction: "incoming",
+      payload: { source: "webhook_entry", marker: entryMarker, timestamp: entryTimestamp, headers: requestHeaders, rawBody },
+      status: "success",
+    });
+  } catch (err) {
+    console.error("webhook_entry log save failed", err instanceof Error ? err.message : String(err));
+  }
+
+  // --- normal execution continues, unchanged, except body is parsed from
+  // the already-captured rawBody string (a Request body stream can only be
+  // consumed once, and it was just consumed above via request.text()).
   const envSnapshot = envPresenceSnapshot();
   logger.info("WhatsApp webhook POST received", { contentLength: request.headers.get("content-length"), env: envSnapshot });
 
-  const body = await request.json().catch(() => null);
+  let body: unknown = null;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : null;
+  } catch {
+    body = null;
+  }
   if (body === null) {
     logger.info("WhatsApp webhook POST body did not parse as JSON");
     return NextResponse.json({ status: "error", reason: "invalid JSON body", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 400 });
