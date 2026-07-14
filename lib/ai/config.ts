@@ -13,15 +13,16 @@ export const AI_CONFIG = {
   provider: (process.env.AI_PROVIDER ?? "gemini") as AIProviderName,
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   /**
-   * Pinned to the current GA release, not the "-latest" alias: production
-   * telemetry (ai_request_telemetry) showed gemini-flash-latest returning
-   * repeated 503 "high demand" errors and 20s timeouts over a sustained
-   * window, consistent with "-latest" tracking a lower-capacity
-   * preview/experimental model rather than the stable GA one. "gemini-2.5-flash"
-   * was tried first and hard-404'd ("no longer available to new users");
-   * gemini-3.5-flash is Google's current documented GA flash model.
+   * gemini-3.1-flash-lite, not gemini-3.5-flash: once the request itself was
+   * fixed (thinkingLevel casing, see gemini-provider.ts), telemetry showed
+   * gemini-3.5-flash succeeding but under heavy real load -- mostly 503
+   * "high demand" / 20s timeouts, one success that itself took 18.3s. That's
+   * Google-side capacity for that specific model, not something fixable
+   * here; the lighter Flash-Lite tier is the practical mitigation.
+   * ("gemini-2.5-flash" 404'd as deprecated; "gemini-flash-latest" tracked a
+   * lower-capacity preview model -- see git history for that trail.)
    */
-  geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite",
   temperature: Number(process.env.GEMINI_TEMPERATURE ?? "0.4"),
   maxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "1024"),
   timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? "20000"),
