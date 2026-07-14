@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
 import { ErrorLogTable } from "@/features/monitoring/components/error-log-table";
 import { HealthStatusCard } from "@/features/monitoring/components/health-status-card";
 import { PerformanceSummaryCards } from "@/features/monitoring/components/performance-summary-cards";
@@ -14,7 +15,10 @@ export default async function MonitoringPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Monitoring" description="Kesehatan sistem, log error, dan performa aplikasi." />
-      <HealthStatusCard />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <HealthStatusCard />
+        <AiHealthStatusCard />
+      </div>
       <PerformanceSummaryCards />
       <ErrorLogTable />
     </div>

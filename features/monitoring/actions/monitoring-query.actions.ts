@@ -1,5 +1,6 @@
 "use server";
 
+import { aiHealthCheck } from "@/lib/ai/service";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getPerformanceSummary, listErrorLogs } from "@/repositories/monitoring.repository";
@@ -22,4 +23,9 @@ export async function getHealthStatusAction() {
   const startedAt = Date.now();
   const { error } = await supabase.rpc("health_check");
   return { ok: !error, latencyMs: Date.now() - startedAt };
+}
+
+export async function getAiHealthStatusAction() {
+  await requirePermission("system.monitoring_view");
+  return aiHealthCheck();
 }
