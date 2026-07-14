@@ -1,5 +1,5 @@
 /** Base URL for the WhatsApp Cloud API (Meta Graph API). */
-export const WHATSAPP_GRAPH_API_BASE_URL = "https://graph.facebook.com/v23.0";
+export const WHATSAPP_GRAPH_API_BASE_URL = "https://app.whacenter.com/api";
 
 export interface WhatsAppHttpResponse {
   status: number;
@@ -27,11 +27,13 @@ export function createFetchWhatsAppHttpClient(accessToken: string, baseUrl: stri
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
+  method,
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: body ? JSON.stringify(body) : undefined,
+  signal: controller.signal,
+});
       const json = await response.json().catch(() => null);
       return { status: response.status, ok: response.ok, json };
     } finally {
