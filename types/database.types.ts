@@ -72,7 +72,8 @@ export type NotificationCategoryDb =
   | "sp1_escalation"
   | "task_pending_verification"
   | "daily_motivation"
-  | "daily_report";
+  | "daily_report"
+  | "birthday_wish";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
