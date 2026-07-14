@@ -12,7 +12,8 @@ export const AI_CONFIG = {
   /** Which AIProvider implementation lib/ai/provider/registry.ts resolves — only "gemini" exists today, but this makes provider selection an explicit config value rather than an implicit fact of there being one class. */
   provider: (process.env.AI_PROVIDER ?? "gemini") as AIProviderName,
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
-  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  /** "-latest" is a Google-maintained alias that always points at the current GA flash model -- pinning to a fixed version (e.g. "gemini-2.5-flash") breaks outright once Google deprecates it for new API keys, which is what happened here. */
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-flash-latest",
   temperature: Number(process.env.GEMINI_TEMPERATURE ?? "0.4"),
   maxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "1024"),
   timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? "20000"),
