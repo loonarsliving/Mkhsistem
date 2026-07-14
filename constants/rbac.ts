@@ -90,6 +90,8 @@ export const PERMISSIONS = {
   HR_EXPENSE_APPROVE: "hr_expense.approve",
 
   MESSAGING_SEND: "messaging.send",
+
+  AI_MODULE_MANAGE: "ai_module.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

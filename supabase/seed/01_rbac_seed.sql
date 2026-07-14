@@ -53,7 +53,8 @@ insert into public.permissions (key, description) values
   ('payroll.manage', 'Create and approve payroll runs, generating employee salary lines'),
   ('hr_expense.create', 'Submit bonus/reimbursement/other HR expense requests'),
   ('hr_expense.approve', 'Approve or reject bonus/reimbursement/other HR expense requests'),
-  ('messaging.send', 'Send an ad-hoc WhatsApp message to any phone number via the MK Connect connector')
+  ('messaging.send', 'Send an ad-hoc WhatsApp message to any phone number via the MK Connect connector'),
+  ('ai_module.manage', 'View and manage the AI module (knowledge base, behavior configuration)')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values

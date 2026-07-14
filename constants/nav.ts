@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   Building2,
   CalendarCheck,
   ClipboardCheck,
@@ -132,6 +133,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Pengaturan", href: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
       { label: "Monitoring", href: "/monitoring", icon: Activity, permission: PERMISSIONS.SYSTEM_MONITORING_VIEW },
       { label: "Kirim Pesan WA", href: "/messaging", icon: MessageCircle, permission: PERMISSIONS.MESSAGING_SEND },
+      { label: "Modul AI", href: "/ai", icon: BrainCircuit, permission: PERMISSIONS.AI_MODULE_MANAGE },
     ],
   },
 ];
