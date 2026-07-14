@@ -48,7 +48,7 @@ async function processCrmSp1Draft(supabase: AdminClient, job: JobRow) {
 
   const { data: warning, error: warningError } = await supabase
     .from("crm_sp1_warnings")
-    .select("id, sales_id, branch_id, period_month, period_year, reason, stuck_prospect_ids")
+    .select("id, sales_id, branch_id, period_month, period_year, reason, stuck_prospect_ids, upload_days_30d, follow_up_count_30d, closings_30d")
     .eq("id", payload.sp1_warning_id)
     .single();
   if (warningError || !warning) throw new Error(`SP1 warning ${payload.sp1_warning_id} not found: ${warningError?.message}`);
@@ -63,7 +63,11 @@ async function processCrmSp1Draft(supabase: AdminClient, job: JobRow) {
     salesName: sales?.full_name ?? "Sales",
     branchName: branch?.name ?? "-",
     periodLabel: `${warning.period_month}/${warning.period_year}`,
-    reason: warning.reason,
+    kpi: {
+      uploadDays30d: warning.upload_days_30d ?? 0,
+      followUpCount30d: warning.follow_up_count_30d ?? 0,
+      closings30d: warning.closings_30d ?? 0,
+    },
     stuckProspects: (prospects ?? []).map((p) => ({
       customerName: p.customer_name,
       lastFollowUpLabel: new Date(p.last_follow_up_at ?? p.created_at).toLocaleDateString("id-ID"),

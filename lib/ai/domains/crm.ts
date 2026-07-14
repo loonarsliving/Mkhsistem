@@ -52,11 +52,20 @@ export async function analyzePipeline(pipelineSummary: string): Promise<string> 
   return askAI(await getSystemPrompt("crm"), userPrompt);
 }
 
+export interface Sp1KpiBreakdown {
+  /** Distinct calendar days with >=1 new prospect input, out of the last 30. KPI 1: upload prospek setiap hari. */
+  uploadDays30d: number;
+  /** Total follow-up activities logged across all prospects in the last 30 days. KPI 2: follow up untuk mendorong closing. */
+  followUpCount30d: number;
+  /** Closings in the last 30 days. KPI 3 (the end result): minimal 1 closing/bulan/sales. */
+  closings30d: number;
+}
+
 export interface Sp1DraftInput {
   salesName: string;
   branchName: string;
   periodLabel: string;
-  reason: string;
+  kpi: Sp1KpiBreakdown;
   stuckProspects: { customerName: string; lastFollowUpLabel: string }[];
 }
 
@@ -68,11 +77,15 @@ export async function draftSp1Warning(input: Sp1DraftInput): Promise<string> {
 Nama Sales: ${input.salesName}
 Cabang: ${input.branchName}
 Periode: ${input.periodLabel}
-Alasan: ${input.reason}
+
+Pelanggaran 3 KPI Sales dalam 30 hari terakhir (SP1 keluar karena ketiganya gagal bersamaan):
+1. Upload prospek setiap hari -- realisasi: hanya ${input.kpi.uploadDays30d} dari 30 hari ada input prospek baru.
+2. Follow up prospek untuk mendorong closing -- realisasi: hanya ${input.kpi.followUpCount30d} aktivitas follow up tercatat pada seluruh prospeknya.
+3. Minimal 1 closing per bulan per sales (hasil akhir dari KPI 1 dan 2) -- realisasi: ${input.kpi.closings30d} closing.
 
 Prospek yang stuck tanpa follow up:
 ${prospectList}
 
-Format surat: kop singkat (nama perusahaan PT Maha Karya Haluoleo, judul "SURAT PERINGATAN 1"), paragraf pembuka, poin-poin pelanggaran/kekurangan kinerja berbasis data di atas, konsekuensi jika tidak ada perbaikan, paragraf penutup, dan baris tanda tangan untuk Kepala Cabang. Nada profesional dan tegas namun tetap membangun (bukan kasar). Ini adalah DRAFT yang akan direview manusia sebelum diterbitkan resmi -- akhiri dengan catatan singkat "[DRAFT -- menunggu review dan persetujuan]".`;
+Format surat: kop singkat (nama perusahaan PT Maha Karya Haluoleo, judul "SURAT PERINGATAN 1"), paragraf pembuka, lalu jelaskan secara eksplisit ketiga pelanggaran KPI di atas dengan angkanya masing-masing dan kaitkan sebab-akibatnya (kurang upload dan follow up menyebabkan tidak ada closing), konsekuensi jika tidak ada perbaikan, paragraf penutup, dan baris tanda tangan untuk Kepala Cabang. Nada profesional dan tegas namun tetap membangun (bukan kasar). Ini adalah DRAFT yang akan direview manusia sebelum diterbitkan resmi -- akhiri dengan catatan singkat "[DRAFT -- menunggu review dan persetujuan]".`;
   return askAI(await getSystemPrompt("crm"), userPrompt);
 }

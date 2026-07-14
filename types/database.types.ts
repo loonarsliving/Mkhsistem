@@ -1316,6 +1316,9 @@ export interface Database {
           reviewed_by: string | null;
           reviewed_at: string | null;
           review_note: string | null;
+          upload_days_30d: number | null;
+          follow_up_count_30d: number | null;
+          closings_30d: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -1332,6 +1335,9 @@ export interface Database {
           reviewed_by?: string | null;
           reviewed_at?: string | null;
           review_note?: string | null;
+          upload_days_30d?: number | null;
+          follow_up_count_30d?: number | null;
+          closings_30d?: number | null;
           created_at?: string;
           updated_at?: string;
         };
