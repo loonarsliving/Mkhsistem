@@ -16,7 +16,7 @@ export interface GeminiClientLike {
         maxOutputTokens?: number;
         systemInstruction?: string;
         responseMimeType?: string;
-        thinkingConfig?: { thinkingBudget?: number };
+        thinkingConfig?: { thinkingLevel?: string };
       };
     }): Promise<{
       text?: string;

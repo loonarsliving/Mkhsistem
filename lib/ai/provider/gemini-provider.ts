@@ -81,7 +81,12 @@ export class GeminiProvider implements AIProvider {
       maxOutputTokens: request.maxOutputTokens ?? this.options.defaultMaxOutputTokens,
       systemInstruction: request.systemPrompt,
       responseMimeType: request.responseFormat === "json" ? "application/json" : undefined,
-      thinkingConfig: { thinkingBudget: 0 },
+      // Gemini 3.x replaced the 2.x token-count "thinking_budget" with a
+      // semantic "thinking_level" -- sending the old param to a 3.x model
+      // is rejected in a way the API surfaces as a misleading 503 "high
+      // demand" rather than a clean validation error. "minimal" is the
+      // documented 3.x equivalent of budget 0 (thinking effectively off).
+      thinkingConfig: { thinkingLevel: "minimal" },
     };
     (config as Record<string, unknown>).safetySettings = HARM_CATEGORIES.map((category) => ({
       category,
