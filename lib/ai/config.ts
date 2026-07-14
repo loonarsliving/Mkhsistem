@@ -12,7 +12,7 @@ export const AI_CONFIG = {
   /** Which AIProvider implementation lib/ai/provider/registry.ts resolves — only "gemini" exists today, but this makes provider selection an explicit config value rather than an implicit fact of there being one class. */
   provider: (process.env.AI_PROVIDER ?? "gemini") as AIProviderName,
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
-  geminiModel: process.env.GEMINI_MODEL ?? "gemini-flash-latest",
+  geminiModel: "gemini-2.5-flash",
   temperature: Number(process.env.GEMINI_TEMPERATURE ?? "0.4"),
   maxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "1024"),
   timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? "20000"),
