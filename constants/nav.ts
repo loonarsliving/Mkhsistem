@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Megaphone,
+  MessageCircle,
   Network,
   PieChart,
   ReceiptText,
@@ -130,6 +131,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Pengaturan", href: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
       { label: "Monitoring", href: "/monitoring", icon: Activity, permission: PERMISSIONS.SYSTEM_MONITORING_VIEW },
+      { label: "Kirim Pesan WA", href: "/messaging", icon: MessageCircle, permission: PERMISSIONS.MESSAGING_SEND },
     ],
   },
 ];

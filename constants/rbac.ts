@@ -88,6 +88,8 @@ export const PERMISSIONS = {
   PAYROLL_MANAGE: "payroll.manage",
   HR_EXPENSE_CREATE: "hr_expense.create",
   HR_EXPENSE_APPROVE: "hr_expense.approve",
+
+  MESSAGING_SEND: "messaging.send",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

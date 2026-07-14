@@ -52,7 +52,8 @@ insert into public.permissions (key, description) values
   ('kpi_task.verify', 'Mark a checklist task Completed or Rejected'),
   ('payroll.manage', 'Create and approve payroll runs, generating employee salary lines'),
   ('hr_expense.create', 'Submit bonus/reimbursement/other HR expense requests'),
-  ('hr_expense.approve', 'Approve or reject bonus/reimbursement/other HR expense requests')
+  ('hr_expense.approve', 'Approve or reject bonus/reimbursement/other HR expense requests'),
+  ('messaging.send', 'Send an ad-hoc WhatsApp message to any phone number via the MK Connect connector')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
