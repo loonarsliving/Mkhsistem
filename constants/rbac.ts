@@ -92,6 +92,9 @@ export const PERMISSIONS = {
   MESSAGING_SEND: "messaging.send",
 
   AI_MODULE_MANAGE: "ai_module.manage",
+
+  SP1_WARNING_MANAGE: "sp1_warning.manage",
+  SP1_WARNING_VIEW_ALL: "sp1_warning.view_all",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -157,6 +160,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
+    PERMISSIONS.SP1_WARNING_MANAGE,
+    PERMISSIONS.SP1_WARNING_VIEW_ALL,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -178,6 +183,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
+    PERMISSIONS.SP1_WARNING_MANAGE,
+    PERMISSIONS.SP1_WARNING_VIEW_ALL,
   ],
   [ROLE_KEYS.KEPALA_CABANG]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -198,6 +205,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.KPI_TASK_ASSIGN,
     PERMISSIONS.KPI_TASK_VERIFY,
     PERMISSIONS.HR_EXPENSE_CREATE,
+    PERMISSIONS.SP1_WARNING_MANAGE,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,

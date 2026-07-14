@@ -38,6 +38,13 @@ export const rejectPaymentSchema = z.object({
 });
 export type RejectPaymentInput = z.infer<typeof rejectPaymentSchema>;
 
+export const reviewSp1WarningSchema = z.object({
+  id: z.string().uuid(),
+  decision: z.enum(["approved", "rejected"]),
+  note: z.string().max(500).optional(),
+});
+export type ReviewSp1WarningInput = z.infer<typeof reviewSp1WarningSchema>;
+
 // ── Target Management V2 (1 branch -> many products) ────────────────────
 
 export const targetDetailRowSchema = z.object({

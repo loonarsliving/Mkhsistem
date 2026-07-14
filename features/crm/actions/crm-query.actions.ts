@@ -21,6 +21,31 @@ import {
   type ProspectListFilters,
 } from "@/repositories/crm.repository";
 
+/** RLS (crm_sp1_warnings_select) already scopes rows to own branch unless the caller holds sp1_warning.view_all -- this just resolves sales/branch names for display since the table only stores ids. */
+export async function listSp1WarningsAction() {
+  await requirePermission("sp1_warning.manage");
+  const supabase = await createClient();
+
+  const { data: warnings, error } = await supabase.from("crm_sp1_warnings").select("*").order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  if (!warnings || warnings.length === 0) return [];
+
+  const salesIds = [...new Set(warnings.map((w) => w.sales_id))];
+  const branchIds = [...new Set(warnings.map((w) => w.branch_id))];
+  const [{ data: sales }, { data: branches }] = await Promise.all([
+    supabase.from("employees").select("id, full_name").in("id", salesIds),
+    supabase.from("branches").select("id, name").in("id", branchIds),
+  ]);
+  const salesById = new Map((sales ?? []).map((s) => [s.id, s.full_name]));
+  const branchById = new Map((branches ?? []).map((b) => [b.id, b.name]));
+
+  return warnings.map((w) => ({
+    ...w,
+    salesName: salesById.get(w.sales_id) ?? "-",
+    branchName: branchById.get(w.branch_id) ?? "-",
+  }));
+}
+
 /** Scopes a Customer Database / export filter set the same way listProspectsAction does, for Director-level browsing. */
 function scopeProspectFilters(
   session: Awaited<ReturnType<typeof requireSession>>,

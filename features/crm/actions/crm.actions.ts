@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireSession } from "@/lib/rbac/session";
+import { requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 import type { FollowUpActivityTypeDb, LeadSourceDb, PaymentTypeDb } from "@/types/database.types";
@@ -12,6 +12,7 @@ import {
   addProspectSchema,
   recordPaymentSchema,
   rejectPaymentSchema,
+  reviewSp1WarningSchema,
   saveAndDistributeTargetSchema,
   setProductSalesAssignmentSchema,
   upsertProductSchema,
@@ -19,6 +20,7 @@ import {
   type AddProspectInput,
   type RecordPaymentInput,
   type RejectPaymentInput,
+  type ReviewSp1WarningInput,
   type SaveAndDistributeTargetInput,
   type SetProductSalesAssignmentInput,
   type UpsertProductInput,
@@ -211,5 +213,23 @@ export async function setProductSalesAssignmentAction(input: SetProductSalesAssi
   if (error) return actionError(error.message);
 
   revalidatePath("/crm/targets");
+  return actionSuccess();
+}
+
+export async function reviewSp1WarningAction(input: ReviewSp1WarningInput): Promise<ActionResult> {
+  await requirePermission("sp1_warning.manage");
+  const parsed = reviewSp1WarningSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("crm_review_sp1_warning", {
+    p_id: parsed.data.id,
+    p_decision: parsed.data.decision,
+    p_note: parsed.data.note ?? null,
+  });
+
+  if (error) return actionError(error.message);
+
+  revalidatePath("/crm/warnings");
   return actionSuccess();
 }

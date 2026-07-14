@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   ClipboardCheck,
   Database,
+  FileWarning,
   FolderKanban,
   LayoutDashboard,
   ListChecks,
@@ -79,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { label: "Verifikasi Pembayaran", href: "/crm/finance", icon: ReceiptText, permission: PERMISSIONS.PROSPECT_FINANCE_VERIFY },
       { label: "Target Sales", href: "/crm/targets", icon: Target, permission: PERMISSIONS.SALES_TARGET_MANAGE },
+      { label: "SP1 Sales", href: "/crm/warnings", icon: FileWarning, permission: PERMISSIONS.SP1_WARNING_MANAGE },
       { label: "Project Master", href: "/crm/projects", icon: FolderKanban, permission: PERMISSIONS.CRM_PROJECT_MANAGE },
       {
         label: "Analitik CRM",

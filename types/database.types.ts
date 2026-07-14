@@ -63,7 +63,13 @@ export type NotificationCategoryDb =
   | "new_memo"
   | "maintenance"
   | "version_update"
-  | "emergency_notice";
+  | "emergency_notice"
+  | "stuck_prospect_reminder"
+  | "stuck_prospect_alert"
+  | "branch_target_reminder"
+  | "sp1_pending_review"
+  | "sp1_issued"
+  | "sp1_escalation";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -1267,7 +1273,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1279,7 +1285,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -1291,6 +1297,64 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["ai_job_queue"]["Insert"]>;
         Relationships: [];
+      };
+      crm_sp1_warnings: {
+        Row: {
+          id: string;
+          sales_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          reason: string;
+          stuck_prospect_ids: string[];
+          ai_draft_content: string | null;
+          status: "pending_ai" | "pending_review" | "approved" | "rejected";
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          sales_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          reason: string;
+          stuck_prospect_ids?: string[];
+          ai_draft_content?: string | null;
+          status?: "pending_ai" | "pending_review" | "approved" | "rejected";
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          review_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_sp1_warnings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_sp1_warnings_sales_id_fkey";
+            columns: ["sales_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_sp1_warnings_branch_id_fkey";
+            columns: ["branch_id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_sp1_warnings_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       ai_circuit_breaker_state: {
         Row: {
@@ -1948,6 +2012,7 @@ export interface Database {
       };
       crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
+      crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       create_payroll_run: {
         Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
         Returns: string;

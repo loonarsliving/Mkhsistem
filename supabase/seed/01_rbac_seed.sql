@@ -54,7 +54,9 @@ insert into public.permissions (key, description) values
   ('hr_expense.create', 'Submit bonus/reimbursement/other HR expense requests'),
   ('hr_expense.approve', 'Approve or reject bonus/reimbursement/other HR expense requests'),
   ('messaging.send', 'Send an ad-hoc WhatsApp message to any phone number via the MK Connect connector'),
-  ('ai_module.manage', 'View and manage the AI module (knowledge base, behavior configuration)')
+  ('ai_module.manage', 'View and manage the AI module (knowledge base, behavior configuration)'),
+  ('sp1_warning.manage', 'Review and approve/reject AI-drafted SP1 (sales performance warning) letters for own branch'),
+  ('sp1_warning.view_all', 'View and manage SP1 warnings across all branches, not just own')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -100,7 +102,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'branch.manage', 'division.manage', 'position.manage',
   'registration.view_all', 'registration.manage',
   'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage',
-  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify', 'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
+  'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify', 'payroll.manage', 'hr_expense.create', 'hr_expense.approve',
+  'sp1_warning.manage', 'sp1_warning.view_all'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -111,7 +114,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
-  'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
+  'payroll.manage', 'hr_expense.create', 'hr_expense.approve',
+  'sp1_warning.manage', 'sp1_warning.view_all'
 ) where r.key = 'hr'
 on conflict do nothing;
 
@@ -124,7 +128,8 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'employee.view_branch',
   'registration.view_branch', 'registration.manage',
   'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch',
-  'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify', 'hr_expense.create'
+  'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify', 'hr_expense.create',
+  'sp1_warning.manage'
 ) where r.key = 'kepala_cabang'
 on conflict do nothing;
 
