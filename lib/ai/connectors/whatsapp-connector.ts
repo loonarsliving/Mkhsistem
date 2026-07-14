@@ -149,9 +149,9 @@ export class WhatsAppConnector {
     const body = {
   device_id: process.env.WHACENTER_DEVICE_ID!,
   number: recipient,
-  message:
-  "text" in messageBody
-    ? messageBody.text.body
+message:
+  typeof asRecord(messageBody)?.text === "object"
+    ? String(asRecord(asRecord(messageBody)?.text)?.body ?? "")
     : JSON.stringify(messageBody),
     };
     const startedAt = Date.now();
