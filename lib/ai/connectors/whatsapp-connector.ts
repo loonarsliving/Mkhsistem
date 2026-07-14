@@ -146,10 +146,19 @@ export class WhatsAppConnector {
   }
 
   private async dispatch(recipient: string, messageBody: Record<string, unknown>): Promise<SendResult> {
-    const body = { messaging_product: "whatsapp", to: recipient, ...messageBody };
+    const body = {
+  device_id: process.env.WHACENTER_DEVICE_ID!,
+  number: recipient,
+  message:
+    (messageBody as any).text?.body ??
+    JSON.stringify(messageBody),
+};
     const startedAt = Date.now();
     try {
-      const response = await this.http.post(`/${this.config.phoneNumberId}/messages`, body);
+      const response = await this.http.post(
+  "/send",
+  body
+);
       const latencyMs = Date.now() - startedAt;
       const result: SendResult = response.ok
         ? { success: true, externalId: extractMessageId(response.json) }
