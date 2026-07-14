@@ -153,6 +153,7 @@ export class WhatsAppConnector {
   "text" in messageBody
     ? messageBody.text.body
     : JSON.stringify(messageBody),
+    };
     const startedAt = Date.now();
     try {
       const response = await this.http.post(
