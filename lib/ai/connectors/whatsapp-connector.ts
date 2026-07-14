@@ -150,9 +150,9 @@ export class WhatsAppConnector {
   device_id: process.env.WHACENTER_DEVICE_ID!,
   number: recipient,
   message:
-    (messageBody as any).text?.body ??
-    JSON.stringify(messageBody),
-};
+  "text" in messageBody
+    ? messageBody.text.body
+    : JSON.stringify(messageBody),
     const startedAt = Date.now();
     try {
       const response = await this.http.post(
