@@ -76,6 +76,10 @@ export class GeminiProvider implements AIProvider {
       );
     }
 
+    // Gemini rejects responseMimeType + the googleSearch tool together, so
+    // callers requesting useWebSearch must not also set responseFormat:
+    // "json" -- ask the model to return plain-text JSON and parse it
+    // instead (see lib/ai/domains/markom.ts's researchAndGenerateChecklist).
     const config: GenerateContentConfig = {
       temperature: request.temperature ?? this.options.defaultTemperature,
       maxOutputTokens: request.maxOutputTokens ?? this.options.defaultMaxOutputTokens,
@@ -88,6 +92,7 @@ export class GeminiProvider implements AIProvider {
       // enum (node_modules/@google/genai/dist/genai.d.ts) is UPPERCASE --
       // "MINIMAL" is the 3.x equivalent of budget 0 (thinking effectively off).
       thinkingConfig: { thinkingLevel: "MINIMAL" },
+      tools: request.useWebSearch ? [{ googleSearch: {} }] : undefined,
     };
     (config as Record<string, unknown>).safetySettings = HARM_CATEGORIES.map((category) => ({
       category,

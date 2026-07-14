@@ -69,7 +69,8 @@ export type NotificationCategoryDb =
   | "branch_target_reminder"
   | "sp1_pending_review"
   | "sp1_issued"
-  | "sp1_escalation";
+  | "sp1_escalation"
+  | "task_pending_verification";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -1273,7 +1274,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1285,7 +1286,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;

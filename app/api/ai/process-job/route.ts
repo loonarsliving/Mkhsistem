@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning } from "@/lib/ai/domains/crm";
+import { researchAndGenerateChecklist } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { AIProviderError } from "@/lib/ai/provider/errors";
@@ -16,6 +17,12 @@ export const dynamic = "force-dynamic";
 
 interface CrmSp1DraftJobPayload {
   sp1_warning_id: string;
+}
+
+interface MarkomChecklistDraftJobPayload {
+  branch_id: string;
+  branch_name: string;
+  division_id: string;
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -89,6 +96,53 @@ async function processCrmSp1Draft(supabase: AdminClient, job: JobRow) {
   return { warningId: warning.id };
 }
 
+/** Clamped 1-5 week-of-month, matching kpi_tasks.period_week's own convention (see AssignChecklistForm). */
+function currentPeriodWeek(date: Date): number {
+  return Math.min(5, Math.ceil(date.getDate() / 7));
+}
+
+/** One Gemini attempt to research + draft exactly 3 Markom checklist items, then inserts them directly (no human approval gate -- matches kpi_assign_tasks' existing behavior when a Branch Manager creates a checklist by hand) and notifies the team, same category/notification shape kpi_assign_tasks already uses. */
+async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as MarkomChecklistDraftJobPayload;
+  const items = await researchAndGenerateChecklist(payload.branch_name);
+
+  const now = new Date();
+  const dueDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const taskRows = items.map((item) => ({
+    division_id: payload.division_id,
+    branch_id: payload.branch_id,
+    title: item.title,
+    description: `${item.description}\n\n(Dibuat otomatis oleh AI berdasarkan riset tren viral & iklan kompetitor.)`,
+    period_year: now.getFullYear(),
+    period_month: now.getMonth() + 1,
+    period_week: currentPeriodWeek(now),
+    due_date: dueDate.toISOString().slice(0, 10),
+  }));
+
+  const { error: insertError } = await supabase.from("kpi_tasks").insert(taskRows);
+  if (insertError) throw new Error(`Failed to insert AI checklist: ${insertError.message}`);
+
+  const { data: team } = await supabase
+    .from("v_employee_directory")
+    .select("id")
+    .eq("branch_id", payload.branch_id)
+    .eq("division_id", payload.division_id)
+    .is("deleted_at", null);
+
+  for (const member of team ?? []) {
+    await supabase.from("mkc_notifications").insert({
+      user_id: member.id,
+      type: "kpi_task",
+      category: "markom_new_task",
+      title: "Checklist Markom baru dari AI",
+      body: `AI membuat ${taskRows.length} task baru berdasarkan riset tren & kompetitor. Selesaikan sebelum ${dueDate.toLocaleDateString("id-ID")}.`,
+      link: "/markom",
+    });
+  }
+
+  return { branchId: payload.branch_id, taskCount: taskRows.length };
+}
+
 /**
  * Dispatched by ai_job_queue_after_insert (immediate, on enqueue) and
  * ai_job_dispatch_pending (pg_cron sweep every 1 minute, migration 0065).
@@ -141,7 +195,12 @@ export async function POST(request: Request) {
   const isWhatsAppReply = job.job_type === "whatsapp_ai_reply";
 
   try {
-    const result = isWhatsAppReply ? await processWhatsAppAiReply(supabase, job) : await processCrmSp1Draft(supabase, job);
+    const result =
+      job.job_type === "whatsapp_ai_reply"
+        ? await processWhatsAppAiReply(supabase, job)
+        : job.job_type === "crm_sp1_draft"
+          ? await processCrmSp1Draft(supabase, job)
+          : await processMarkomChecklistDraft(supabase, job);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
@@ -172,11 +231,12 @@ export async function POST(request: Request) {
     // not found). whatsapp_ai_reply must never leave the user without a
     // reply -- send the friendly fallback now instead of silently
     // dead-lettering with no WhatsApp message ever arriving. crm_sp1_draft
-    // has no chat counterpart waiting on a reply, so it just dead-letters;
-    // the next 3-day analysis cycle will retry drafting it (the unique
-    // (sales_id, period_month, period_year) constraint means this exact
-    // warning row was already created, so nothing re-enqueues it
-    // automatically -- an operator can re-trigger manually if needed).
+    // and markom_checklist_draft have no chat counterpart waiting on a
+    // reply, so they just dead-letter: crm_sp1_draft's warning row already
+    // exists (unique sales_id/period_month/period_year), so nothing
+    // re-enqueues it automatically; markom_checklist_draft simply skips
+    // that team's checklist for this cycle -- the next 3-day dispatch tries
+    // again fresh. An operator can re-trigger either manually if needed.
     logger.error("ai job exhausted", { jobId: job.id, jobType: job.job_type, attemptCount, retryable, error: errorMessage });
 
     if (isWhatsAppReply) {

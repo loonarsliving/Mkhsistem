@@ -17,6 +17,7 @@ export interface GeminiClientLike {
         systemInstruction?: string;
         responseMimeType?: string;
         thinkingConfig?: { thinkingLevel?: string };
+        tools?: { googleSearch?: Record<string, never> }[];
       };
     }): Promise<{
       text?: string;
