@@ -21,6 +21,7 @@ export function getWhatsAppConnector(): WhatsAppConnector | null {
       phoneNumberId: WHATSAPP_CONFIG.phoneNumberId,
       businessAccountId: WHATSAPP_CONFIG.businessAccountId,
       verifyToken: WHATSAPP_CONFIG.verifyToken,
+      whacenterDeviceId: WHATSAPP_CONFIG.whacenterDeviceId,
     },
     http,
   );

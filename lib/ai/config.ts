@@ -29,17 +29,15 @@ export const WHATSAPP_CONFIG = {
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? "",
   businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? "",
   verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? "",
+  /** The one credential the Whacenter gateway actually sends with (see WhatsAppConnector.dispatch) -- the four WHATSAPP_* vars above are Meta Cloud API leftovers only WHATSAPP_VERIFY_TOKEN (webhook verification) still uses. */
+  whacenterDeviceId: process.env.WHACENTER_DEVICE_ID ?? "",
 } as const;
 
 export function isGeminiConfigured(): boolean {
   return AI_CONFIG.geminiApiKey.length > 0;
 }
 
+/** Gated on WHACENTER_DEVICE_ID alone -- that's the only credential WhatsAppConnector.dispatch/healthCheck actually send with against the Whacenter gateway. */
 export function isWhatsAppConfigured(): boolean {
-  return (
-    WHATSAPP_CONFIG.accessToken.length > 0 &&
-    WHATSAPP_CONFIG.phoneNumberId.length > 0 &&
-    WHATSAPP_CONFIG.businessAccountId.length > 0 &&
-    WHATSAPP_CONFIG.verifyToken.length > 0
-  );
+  return WHATSAPP_CONFIG.whacenterDeviceId.length > 0;
 }

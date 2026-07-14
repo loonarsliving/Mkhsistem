@@ -1,5 +1,6 @@
 "use server";
 
+import { whatsAppHealthCheck } from "@/lib/ai/notifications/engine";
 import { aiHealthCheck } from "@/lib/ai/service";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
@@ -28,4 +29,9 @@ export async function getHealthStatusAction() {
 export async function getAiHealthStatusAction() {
   await requirePermission("system.monitoring_view");
   return aiHealthCheck();
+}
+
+export async function getWhatsAppHealthStatusAction() {
+  await requirePermission("system.monitoring_view");
+  return whatsAppHealthCheck();
 }

@@ -7,6 +7,7 @@ export interface WhatsAppConnectorConfig {
   phoneNumberId: string;
   businessAccountId: string;
   verifyToken: string;
+  whacenterDeviceId: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -65,27 +66,30 @@ export class WhatsAppConnector {
     });
   }
 
-  /** Validates credentials against the real Graph API by reading back the phone number's own metadata. */
+  /** Checks the Whacenter device's own session state (GET /statusDevice?device_id=...) -- CONNECTED means the paired phone's WhatsApp session is live and able to send. */
   async healthCheck(): Promise<HealthCheckResult> {
     const startedAt = Date.now();
     try {
-      const response = await this.http.get(`/${this.config.phoneNumberId}?fields=verified_name,display_phone_number`);
+      const response = await this.http.get(`/statusDevice?device_id=${this.config.whacenterDeviceId}`);
       const latencyMs = Date.now() - startedAt;
-      const ok = response.ok;
+      const data = asRecord(asRecord(response.json)?.data);
+      const deviceStatus = typeof data?.status === "string" ? data.status : undefined;
+      const ok = response.ok && deviceStatus === "CONNECTED";
+      const phone = typeof data?.phone === "string" ? data.phone : undefined;
       await saveIntegrationLog({
         connector: "whatsapp",
         direction: "outgoing",
         payload: { kind: "healthCheck" },
         status: ok ? "success" : "error",
         responseStatus: response.status,
-        error: ok ? undefined : extractErrorMessage(response.json),
+        error: ok ? undefined : (deviceStatus ?? extractErrorMessage(response.json)),
         latencyMs,
       });
       return {
         ok,
         detail: ok
-          ? `WhatsApp Cloud API reachable (${latencyMs}ms)`
-          : `WhatsApp Cloud API returned ${response.status}: ${extractErrorMessage(response.json)}`,
+          ? `Whacenter device connected${phone ? ` (${phone})` : ""} (${latencyMs}ms)`
+          : `Whacenter device status: ${deviceStatus ?? `HTTP ${response.status} ${extractErrorMessage(response.json)}`}`,
       };
     } catch (err) {
       const latencyMs = Date.now() - startedAt;
@@ -98,7 +102,7 @@ export class WhatsAppConnector {
         error: message,
         latencyMs,
       });
-      return { ok: false, detail: `WhatsApp Cloud API unreachable: ${message}` };
+      return { ok: false, detail: `Whacenter unreachable: ${message}` };
     }
   }
 
@@ -147,7 +151,7 @@ export class WhatsAppConnector {
 
   private async dispatch(recipient: string, messageBody: Record<string, unknown>): Promise<SendResult> {
     const body = {
-  device_id: process.env.WHACENTER_DEVICE_ID!,
+  device_id: this.config.whacenterDeviceId,
   number: recipient,
 message:
   typeof asRecord(messageBody)?.text === "object"

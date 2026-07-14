@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
 import { AttendanceSummaryCard } from "@/features/dashboard/components/attendance-summary-card";
 import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
@@ -11,6 +14,8 @@ import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentAnnouncementList } from "@/features/dashboard/components/recent-announcement-list";
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
+import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
+import { WhatsAppHealthStatusCard } from "@/features/monitoring/components/whatsapp-health-status-card";
 import {
   branchStatsAction as crmBranchStatsAction,
   conversionAnalyticsAction,
@@ -67,6 +72,7 @@ export default async function DashboardPage() {
   // Admin, but Markom's team widget is only that role's actual primary job.
   const isMarkomRole = session.roleKey === ROLE_KEYS.MARKOM;
   const isSalesRole = session.roleKey === ROLE_KEYS.SALES;
+  const isSuperAdmin = session.roleKey === ROLE_KEYS.SUPER_ADMIN;
 
   const [
     attendance,
@@ -103,6 +109,23 @@ export default async function DashboardPage() {
       <PageHeader title={`Halo, ${session.employee.full_name.split(" ")[0]}`} description="Berikut ringkasan aktivitas Anda hari ini." />
 
       <ProfileSummaryCard employee={session.employee} />
+
+      {isSuperAdmin && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-muted-foreground">Status Koneksi Sistem</p>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/monitoring">
+                Detail Monitoring <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AiHealthStatusCard />
+            <WhatsAppHealthStatusCard />
+          </div>
+        </div>
+      )}
 
       {isSalesRole && (
         <>
