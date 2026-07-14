@@ -1,12 +1,7 @@
 import "server-only";
 
 import { askAI } from "../service";
-import { HR_SYSTEM_PROMPT } from "./hr";
-import { MARKOM_SYSTEM_PROMPT } from "./markom";
-import { CRM_SYSTEM_PROMPT } from "./crm";
-
-const GENERAL_SYSTEM_PROMPT = `Anda adalah MK Connect AI, asisten AI internal PT Maha Karya Haluoleo yang bisa membantu topik HR, Markom (Marketing & Komunikasi), dan CRM (penjualan/prospek).
-Jawab dalam Bahasa Indonesia, singkat dan jelas. Jika pertanyaan di luar cakupan HR/Markom/CRM perusahaan, katakan Anda hanya bisa membantu topik tersebut.`;
+import { getSystemPrompt } from "./prompts";
 
 const HR_KEYWORDS = ["absen", "cuti", "izin", "payroll", "gaji", "kontrak", "sop", "karyawan", "hr ", "evaluasi karyawan"];
 const MARKOM_KEYWORDS = ["campaign", "konten", "marketing", "markom", "checklist marketing", "konten sosial media", "iklan"];
@@ -31,10 +26,10 @@ export async function routeAndAnswer(
 ): Promise<string> {
   const greeting = employee ? `Pengguna: ${employee.name} (karyawan terdaftar).` : "Pengirim belum teridentifikasi sebagai karyawan terdaftar.";
 
-  let systemPrompt = GENERAL_SYSTEM_PROMPT;
-  if (matchesAny(question, HR_KEYWORDS)) systemPrompt = HR_SYSTEM_PROMPT;
-  else if (matchesAny(question, MARKOM_KEYWORDS)) systemPrompt = MARKOM_SYSTEM_PROMPT;
-  else if (matchesAny(question, CRM_KEYWORDS)) systemPrompt = CRM_SYSTEM_PROMPT;
+  let domain: "general" | "hr" | "markom" | "crm" = "general";
+  if (matchesAny(question, HR_KEYWORDS)) domain = "hr";
+  else if (matchesAny(question, MARKOM_KEYWORDS)) domain = "markom";
+  else if (matchesAny(question, CRM_KEYWORDS)) domain = "crm";
 
-  return askAI(systemPrompt, `${greeting}\n\nPesan:\n${question}`, opts);
+  return askAI(await getSystemPrompt(domain), `${greeting}\n\nPesan:\n${question}`, opts);
 }

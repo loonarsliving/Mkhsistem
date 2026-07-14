@@ -1356,6 +1356,32 @@ export interface Database {
           },
         ];
       };
+      ai_system_prompts: {
+        Row: {
+          key: string;
+          label: string;
+          content: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          key: string;
+          label: string;
+          content: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_system_prompts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_system_prompts_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       ai_integration_logs: {
         Row: {
           id: string;
