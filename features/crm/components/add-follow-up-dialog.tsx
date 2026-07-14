@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { format } from "date-fns";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -33,8 +34,11 @@ export function AddFollowUpDialog({ prospectId }: { prospectId: string }) {
     defaultValues: {
       prospectId,
       activityType: undefined,
-      activityDate: new Date().toISOString().slice(0, 10),
-      activityTime: new Date().toISOString().slice(11, 16),
+      // toISOString() would give UTC, not local wall-clock time -- always
+      // off by the local UTC offset (8h for WITA), which is exactly the
+      // "jam tidak sesuai" bug reported. format() uses local time.
+      activityDate: format(new Date(), "yyyy-MM-dd"),
+      activityTime: format(new Date(), "HH:mm"),
       notes: "",
     },
   });

@@ -1979,6 +1979,7 @@ export interface Database {
           status: ProspectStatusDb;
           created_at: string;
           sales_name: string;
+          is_phone_match: boolean;
         }[];
       };
       crm_create_prospect: {

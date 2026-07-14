@@ -49,7 +49,7 @@ export function AddProspectForm() {
   });
 
   async function onSubmit(values: AddProspectInput) {
-    if (duplicate) {
+    if (duplicate?.is_phone_match) {
       toast.error("Prospect ini sudah terdaftar. Tidak dapat menyimpan data duplikat.");
       return;
     }
@@ -84,10 +84,21 @@ export function AddProspectForm() {
           </div>
 
           {duplicate && (
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+            <div
+              className={`flex items-start gap-3 rounded-lg border p-4 ${
+                duplicate.is_phone_match ? "border-destructive/40 bg-destructive/5" : "border-warning/40 bg-warning/5"
+              }`}
+            >
+              <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${duplicate.is_phone_match ? "text-destructive" : "text-warning"}`} />
               <div className="space-y-1 text-sm">
-                <p className="font-medium text-destructive">Prospect ini sudah terdaftar</p>
+                <p className={`font-medium ${duplicate.is_phone_match ? "text-destructive" : "text-warning"}`}>
+                  {duplicate.is_phone_match
+                    ? "Prospect ini sudah terdaftar (nomor telepon sama)"
+                    : "Ada nama mirip di database -- periksa dulu sebelum lanjut"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Nama:</span> {duplicate.customer_name}
+                </p>
                 <p>
                   <span className="text-muted-foreground">Sales:</span> {duplicate.sales_name}
                 </p>
@@ -98,6 +109,9 @@ export function AddProspectForm() {
                 <p className="flex items-center gap-2">
                   <span className="text-muted-foreground">Status:</span> <ProspectStatusBadge status={duplicate.status} />
                 </p>
+                {!duplicate.is_phone_match && (
+                  <p className="text-xs text-muted-foreground">Nomor telepon berbeda -- kemungkinan orang yang berbeda. Anda tetap bisa menyimpan data ini.</p>
+                )}
               </div>
             </div>
           )}
@@ -145,7 +159,7 @@ export function AddProspectForm() {
             <Textarea id="notes" rows={3} {...register("notes")} />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isSubmitting || Boolean(duplicate)}>
+          <Button type="submit" className="w-full" disabled={isSubmitting || Boolean(duplicate?.is_phone_match)}>
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             Simpan Prospect
           </Button>
