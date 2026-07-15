@@ -20,6 +20,10 @@ export async function sendWhatsAppText(recipientPhone: string, text: string): Pr
   return sendWhatsAppNotification(recipientPhone, { kind: "text", text });
 }
 
+export async function sendWhatsAppImage(recipientPhone: string, url: string, caption?: string): Promise<SendResult> {
+  return sendWhatsAppNotification(recipientPhone, { kind: "image", url, caption });
+}
+
 interface CachedWhatsAppHealthCheck {
   result: { ok: boolean; detail: string };
   cachedAt: number;

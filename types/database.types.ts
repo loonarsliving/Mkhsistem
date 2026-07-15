@@ -1024,6 +1024,94 @@ export interface Database {
           },
         ];
       };
+      crm_promo_templates: {
+        Row: {
+          id: string;
+          branch_id: string | null;
+          name: string;
+          message_body: string;
+          photo_storage_path: string | null;
+          photo_public_url: string | null;
+          cadence_days: number;
+          send_hour_local: number;
+          is_active: boolean;
+          last_dispatched_at: string | null;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          branch_id?: string | null;
+          name: string;
+          message_body: string;
+          photo_storage_path?: string | null;
+          photo_public_url?: string | null;
+          cadence_days?: number;
+          send_hour_local?: number;
+          is_active?: boolean;
+          last_dispatched_at?: string | null;
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_promo_templates"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_promo_templates_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_promo_templates_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_promo_sends: {
+        Row: {
+          id: string;
+          template_id: string;
+          prospect_id: string;
+          message_body: string;
+          status: "queued" | "sent" | "failed";
+          sent_at: string | null;
+          error: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          prospect_id: string;
+          message_body: string;
+          status?: "queued" | "sent" | "failed";
+          sent_at?: string | null;
+          error?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_promo_sends"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_promo_sends_template_id_fkey";
+            columns: ["template_id"];
+            referencedRelation: "crm_promo_templates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_promo_sends_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       meta_ad_campaigns: {
         Row: {
           id: string;
