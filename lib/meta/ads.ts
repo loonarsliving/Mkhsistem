@@ -15,7 +15,20 @@ import { metaGraphRequest } from "./client";
 
 /** Fetches an image by its public URL and uploads it to the ad account's image library, returning the image_hash ad creatives reference. Never generates an image -- the URL always points at a real photo Markom uploaded (crm_project_photos). */
 export async function uploadAdImageFromUrl(imageUrl: string): Promise<string> {
-  const imageResponse = await fetch(imageUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  let imageResponse: Response;
+  try {
+    imageResponse = await fetch(imageUrl, { signal: controller.signal });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error && err.name === "AbortError"
+        ? `Gagal mengambil foto sumber (${imageUrl}): tidak merespon dalam 20 detik`
+        : `Gagal mengambil foto sumber (${imageUrl}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!imageResponse.ok) throw new Error(`Failed to fetch source image (${imageUrl}): HTTP ${imageResponse.status}`);
   const buffer = Buffer.from(await imageResponse.arrayBuffer());
 

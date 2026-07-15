@@ -3,6 +3,7 @@ import "server-only";
 import { META_CONFIG, isMetaConfigured } from "./config";
 
 const GRAPH_BASE = "https://graph.facebook.com";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export class MetaApiError extends Error {
   constructor(
@@ -41,7 +42,19 @@ export async function metaGraphRequest<T>(path: string, params: Record<string, u
     url.search = body.toString();
   }
 
-  const response = await fetch(url.toString(), init);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new MetaApiError(`Meta Graph API tidak merespon dalam ${REQUEST_TIMEOUT_MS / 1000} detik (${path})`, 0);
+    }
+    throw new MetaApiError(`Gagal menghubungi Meta Graph API: ${err instanceof Error ? err.message : String(err)}`, 0);
+  } finally {
+    clearTimeout(timeout);
+  }
   const json = (await response.json().catch(() => null)) as (T & GraphErrorBody) | null;
 
   if (!response.ok || json?.error) {

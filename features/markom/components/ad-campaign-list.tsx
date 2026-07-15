@@ -45,52 +45,74 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
       return;
     }
     setResearching(true);
-    const result = await requestAdsResearchAction(project.id, project.branch_id);
-    setResearching(false);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal menjadwalkan riset iklan");
-      return;
+    try {
+      const result = await requestAdsResearchAction(project.id, project.branch_id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menjadwalkan riset iklan");
+        return;
+      }
+      toast.success("AI sedang meriset -- hasilnya akan muncul di bawah sebagai draft dalam beberapa saat");
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menjadwalkan riset iklan");
+    } finally {
+      setResearching(false);
     }
-    toast.success("AI sedang meriset -- hasilnya akan muncul di bawah sebagai draft dalam beberapa saat");
-    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
+  /** try/catch/finally is deliberate here -- without it, any thrown error (network hiccup, Vercel function timeout on a slow Meta launch) leaves the button stuck spinning forever with no toast, since setBusyId(null) would never run. */
   async function handleLaunchDraft(id: string) {
     setBusyId(id);
-    const result = await launchDraftCampaignAction(id);
-    setBusyId(null);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal meluncurkan iklan");
+    try {
+      const result = await launchDraftCampaignAction(id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal meluncurkan iklan");
+        queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+        return;
+      }
+      toast.success("Iklan berhasil diluncurkan ke Meta");
       queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
-      return;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal meluncurkan iklan -- coba lagi");
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } finally {
+      setBusyId(null);
     }
-    toast.success("Iklan berhasil diluncurkan ke Meta");
-    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
   async function handleAnalyze(id: string) {
     setBusyId(id);
-    const result = await analyzeAdCampaignAction(id);
-    setBusyId(null);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal menganalisis performa iklan");
-      return;
+    try {
+      const result = await analyzeAdCampaignAction(id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menganalisis performa iklan");
+        return;
+      }
+      toast.success("Analisis AI selesai");
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menganalisis performa iklan");
+    } finally {
+      setBusyId(null);
     }
-    toast.success("Analisis AI selesai");
-    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
   async function handleToggleStatus(id: string, metaAdId: string | null, currentStatus: string) {
     setBusyId(id);
     const nextStatus = currentStatus === "active" ? "paused" : "active";
-    const result = await setAdCampaignStatusAction(id, metaAdId, nextStatus);
-    setBusyId(null);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal mengubah status iklan");
-      return;
+    try {
+      const result = await setAdCampaignStatusAction(id, metaAdId, nextStatus);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal mengubah status iklan");
+        return;
+      }
+      toast.success(nextStatus === "active" ? "Iklan diaktifkan kembali" : "Iklan dijeda");
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal mengubah status iklan");
+    } finally {
+      setBusyId(null);
     }
-    toast.success(nextStatus === "active" ? "Iklan diaktifkan kembali" : "Iklan dijeda");
-    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
   const items = campaigns ?? [];

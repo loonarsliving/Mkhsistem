@@ -71,7 +71,12 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
     return actionError("Meta integration belum dikonfigurasi (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)");
   }
 
-  const draft = await getAdCampaign(supabase, campaignId);
+  let draft: Awaited<ReturnType<typeof getAdCampaign>>;
+  try {
+    draft = await getAdCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Draft iklan tidak ditemukan");
+  }
   if (draft.status !== "draft") return actionError("Iklan ini sudah diluncurkan atau bukan draft");
 
   const photo = draft.photo as { public_url?: string } | null;
