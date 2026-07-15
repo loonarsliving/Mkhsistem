@@ -103,6 +103,11 @@ export interface CreateCampaignInput {
   status?: "ACTIVE" | "PAUSED";
 }
 
+/** Rollback helper for launchWhatsAppLeadCampaign -- deletes a campaign that was created but whose ad set/creative/ad step failed, so a failed launch attempt never leaves an orphaned empty campaign behind. */
+export async function deleteAdCampaign(campaignId: string): Promise<void> {
+  await metaGraphRequest(`/${campaignId}`, {}, "DELETE");
+}
+
 /**
  * OUTCOME_ENGAGEMENT is the objective family Click-to-WhatsApp ad sets
  * (destination_type: WHATSAPP, optimization_goal: CONVERSATIONS) live under.
@@ -265,23 +270,33 @@ export interface LaunchCampaignResult {
 export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Promise<LaunchCampaignResult> {
   const imageHash = await uploadAdImageFromUrl(input.photoUrl);
   const campaign = await createAdCampaign({ name: `${input.projectName} - Leads WA (AI)`, status: "ACTIVE" });
-  const adSet = await createAdSet({
-    name: `${input.projectName} - Ad Set`,
-    campaignId: campaign.id,
-    dailyBudgetIdr: input.dailyBudgetIdr,
-    targeting: input.targeting ?? { countries: ["ID"] },
-    status: "ACTIVE",
-  });
-  const creative = await createAdCreative({
-    name: `${input.projectName} - Creative`,
-    imageHash,
-    headline: input.headline,
-    primaryText: input.primaryText,
-    description: input.description,
-    welcomeMessage: input.welcomeMessage,
-  });
-  const ad = await createAd({ name: `${input.projectName} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
-  return { campaignId: campaign.id, adSetId: adSet.id, creativeId: creative.id, adId: ad.id };
+
+  // Once the campaign exists, every following step that throws must delete it
+  // first -- otherwise a failed ad set/creative/ad step (e.g. a Page
+  // permission error) leaves an empty, real, ACTIVE campaign sitting in the
+  // ad account forever, and every retry piles up another one.
+  try {
+    const adSet = await createAdSet({
+      name: `${input.projectName} - Ad Set`,
+      campaignId: campaign.id,
+      dailyBudgetIdr: input.dailyBudgetIdr,
+      targeting: input.targeting ?? { countries: ["ID"] },
+      status: "ACTIVE",
+    });
+    const creative = await createAdCreative({
+      name: `${input.projectName} - Creative`,
+      imageHash,
+      headline: input.headline,
+      primaryText: input.primaryText,
+      description: input.description,
+      welcomeMessage: input.welcomeMessage,
+    });
+    const ad = await createAd({ name: `${input.projectName} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
+    return { campaignId: campaign.id, adSetId: adSet.id, creativeId: creative.id, adId: ad.id };
+  } catch (err) {
+    await deleteAdCampaign(campaign.id).catch(() => undefined);
+    throw err;
+  }
 }
 
 /** Human override from the Ads Specialist page -- pause/resume an ad AI already launched. */
