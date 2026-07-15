@@ -23,6 +23,11 @@ const PUBLIC_PATHS = [
   "/forgot-password",
   "/reset-password",
   "/auth/callback",
+  // Must stay publicly reachable without login -- Meta/TikTok app review
+  // (and end users) need to open these URLs directly, not get redirected
+  // to /login.
+  "/privacy-policy",
+  "/terms-of-service",
   "/api/health",
   "/api/push/send",
   "/api/ai/whatsapp-relay",
