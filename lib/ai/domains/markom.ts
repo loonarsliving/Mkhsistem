@@ -42,6 +42,22 @@ export interface MarkomChecklistItem {
   description: string;
 }
 
+interface RawChecklistItem {
+  title: string;
+  description: string;
+  platform?: string;
+  platformReason?: string;
+}
+
+/** Prepends the platform (Instagram/TikTok) + why, so it's the first thing Markom reads -- title stays a plain 80-char content-theme label, kpi_tasks has no dedicated platform column so this is folded into description rather than a schema change. */
+function formatChecklistDescription(item: RawChecklistItem): string {
+  const platform = item.platform?.toLowerCase().includes("tiktok") ? "TikTok" : item.platform?.toLowerCase().includes("instagram") ? "Instagram" : null;
+  const platformLine = platform
+    ? `Platform: ${platform}${item.platformReason ? ` -- ${item.platformReason}` : ""}\n\n`
+    : "";
+  return `${platformLine}${item.description}`.slice(0, 1000);
+}
+
 function parseChecklistJson(text: string): MarkomChecklistItem[] {
   const cleaned = text
     .trim()
@@ -51,8 +67,8 @@ function parseChecklistJson(text: string): MarkomChecklistItem[] {
   const parsed: unknown = JSON.parse(cleaned);
   if (!Array.isArray(parsed)) throw new Error("Expected a JSON array of checklist items");
   return parsed
-    .filter((item): item is MarkomChecklistItem => typeof item?.title === "string" && typeof item?.description === "string")
-    .map((item) => ({ title: item.title.slice(0, 200), description: item.description.slice(0, 1000) }));
+    .filter((item): item is RawChecklistItem => typeof item?.title === "string" && typeof item?.description === "string")
+    .map((item) => ({ title: item.title.slice(0, 200), description: formatChecklistDescription(item) }));
 }
 
 export interface ContentPlannerContext {
@@ -112,10 +128,12 @@ export async function researchAndGenerateChecklist(branchName: string, context?:
 Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik.
 
 Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi tepat 3 object:
-[{"title": "...", "description": "..."}]
+[{"title": "...", "description": "...", "platform": "Instagram atau TikTok", "platformReason": "..."}]
 
 title: singkat (maks 80 karakter), actionable -- nama tema kontennya.
-description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.`;
+description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.
+platform: WAJIB pilih salah satu, "Instagram" atau "TikTok" -- platform mana yang paling cocok untuk konten spesifik ini (boleh beda-beda per checklist, tidak harus semua platform yang sama).
+platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang paling pas untuk konten ini (mis. gaya audiens, format yang lebih works di platform itu, atau data performa kami di platform itu).`;
 
   try {
     const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2560 });
@@ -128,8 +146,10 @@ description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (ree
   const fallbackPrompt = `Buatkan TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar konten villa leasehold dan strategi marketing properti umum, tanpa riset internet.${contextBlock}
 
 description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
+platform: WAJIB pilih "Instagram" atau "TikTok" per checklist, boleh beda-beda.
+platformReason: 1 kalimat kenapa platform itu yang dipilih.
 
-Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "description": "..."}]`;
+Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "description": "...", "platform": "...", "platformReason": "..."}]`;
   const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1536 });
   const fallbackItems = parseChecklistJson(fallbackResponse.text);
   if (fallbackItems.length === 0) throw new Error("AI did not return a parseable checklist");
