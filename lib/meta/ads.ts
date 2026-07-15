@@ -103,7 +103,17 @@ export interface CreateCampaignInput {
   status?: "ACTIVE" | "PAUSED";
 }
 
-/** OUTCOME_ENGAGEMENT is the objective family Click-to-WhatsApp ad sets (destination_type: WHATSAPP, optimization_goal: CONVERSATIONS) live under. */
+/**
+ * OUTCOME_ENGAGEMENT is the objective family Click-to-WhatsApp ad sets
+ * (destination_type: WHATSAPP, optimization_goal: CONVERSATIONS) live under.
+ * No campaign-level daily_budget is ever set here -- budget lives on the ad
+ * set (createAdSet) -- so Meta requires is_adset_budget_sharing_enabled to
+ * be explicit (error_subcode 4834011 otherwise). false keeps this campaign's
+ * single ad set fully in control of its own budget, matching the existing
+ * per-launch dailyBudgetIdr semantics, instead of opting into Meta's
+ * Advantage Campaign Budget sharing behavior (ad sets pooling/reallocating
+ * ~20% of budget among each other).
+ */
 export async function createAdCampaign(input: CreateCampaignInput): Promise<{ id: string }> {
   return metaGraphRequest(
     `/${META_CONFIG.adAccountId}/campaigns`,
@@ -112,6 +122,7 @@ export async function createAdCampaign(input: CreateCampaignInput): Promise<{ id
       objective: "OUTCOME_ENGAGEMENT",
       special_ad_categories: [],
       status: input.status ?? "PAUSED",
+      is_adset_budget_sharing_enabled: false,
     },
     "POST",
   );
