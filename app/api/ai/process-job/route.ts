@@ -117,9 +117,9 @@ function currentPeriodWeek(date: Date): number {
   return Math.min(5, Math.ceil(date.getDate() / 7));
 }
 
-/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations -- real data fed into the checklist prompt instead of relying on web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
+/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations + all registered competitor handles (so AI searches their public activity itself even with zero manual logs yet) -- real data fed into the checklist prompt instead of relying on generic web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
 async function gatherContentPlannerContext(supabase: AdminClient): Promise<ContentPlannerContext> {
-  const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }] = await Promise.all([
+  const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }, { data: competitorAccounts }] = await Promise.all([
     supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
@@ -127,6 +127,7 @@ async function gatherContentPlannerContext(supabase: AdminClient): Promise<Conte
       .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
       .order("logged_at", { ascending: false })
       .limit(10),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true),
   ]);
 
   const competitorNotes = (competitorLogs ?? []).map((log) => {
@@ -150,6 +151,7 @@ async function gatherContentPlannerContext(supabase: AdminClient): Promise<Conte
       : null,
     tiktok: ttSnapshot ? { videoViews: ttSnapshot.impressions ?? 0, likes: ttSnapshot.likes ?? 0, followersCount: ttSnapshot.followers_count ?? 0 } : null,
     competitorNotes,
+    competitorHandles: (competitorAccounts ?? []).map((c) => ({ platform: c.platform, handle: c.handle })),
   };
 }
 

@@ -60,6 +60,8 @@ export interface ContentPlannerContext {
   tiktok?: { videoViews: number; likes: number; followersCount: number } | null;
   /** Formatted one-liners from social_competitor_content_logs -- real human-observed competitor posts, since no API exposes competitor engagement data on either platform. */
   competitorNotes?: string[];
+  /** Registered competitors (social_competitor_accounts) with no manual log yet, or that should be re-checked -- AI searches for their public activity itself instead of waiting on a manual log to exist. TikTok's official API is effectively unobtainable for a business this size, so "TikTok data" here always means Google-searched public information, never a direct API pull. */
+  competitorHandles?: { platform: "instagram" | "tiktok"; handle: string }[];
 }
 
 function buildContentPlannerContextBlock(context?: ContentPlannerContext): string {
@@ -67,7 +69,7 @@ function buildContentPlannerContextBlock(context?: ContentPlannerContext): strin
   if (context?.instagram) {
     const ig = context.instagram;
     lines.push(
-      `Performa Instagram kami (data nyata): reach ${ig.reach}, profile views ${ig.profileViews}, followers ${ig.followersCount}` +
+      `Performa Instagram kami (data nyata dari Meta API): reach ${ig.reach}, profile views ${ig.profileViews}, followers ${ig.followersCount}` +
         (ig.bestHour !== null ? `, jam upload dengan reach terbaik: sekitar jam ${ig.bestHour}:00` : "") +
         (ig.topContentType ? `, jenis konten paling berhasil: ${ig.topContentType}` : "") +
         ".",
@@ -78,27 +80,34 @@ function buildContentPlannerContextBlock(context?: ContentPlannerContext): strin
     lines.push(`Performa TikTok kami (data nyata): ${tt.videoViews} video views, ${tt.likes} likes, ${tt.followersCount} followers.`);
   }
   if (context?.competitorNotes?.length) {
-    lines.push(`Observasi konten kompetitor yang dicatat tim Markom (data nyata, bukan riset umum):\n${context.competitorNotes.join("\n")}`);
+    lines.push(`Observasi konten kompetitor yang dicatat tim Markom secara manual (data nyata):\n${context.competitorNotes.join("\n")}`);
+  }
+  if (context?.competitorHandles?.length) {
+    const handleList = context.competitorHandles.map((c) => `@${c.handle} (${c.platform})`).join(", ");
+    lines.push(
+      `Kompetitor yang perlu dicari aktivitas publiknya lewat Google Search (TikTok tidak punya API publik yang bisa kami akses, jadi cari info publik yang ter-index Google -- video/postingan yang sedang ramai, hashtag yang dipakai, gaya konten): ${handleList}.`,
+    );
   }
   return lines.length > 0 ? `\n\nData performa & kompetitor kami saat ini:\n${lines.join("\n")}` : "";
 }
 
 /**
  * Researches current viral social-media trends and competitor property/villa
- * ads via Gemini's Google Search grounding (useWebSearch), then turns that
- * research into exactly 3 Markom checklist items -- the basis for
- * markom_run_ai_checklist's every-3-days cron (see migration 0070) and the
- * Content Planner module (0085). When real own-account performance and
- * human-logged competitor observations are available (context), the
- * checklist is grounded in that real data instead of generic research
- * alone. Falls back to a plain unresearched checklist prompt if grounded
- * generation fails to parse, rather than losing the whole cycle over one
- * bad response.
+ * content via Gemini's Google Search grounding (useWebSearch) -- the only
+ * "TikTok trend/competitor data" source this module has, since TikTok's
+ * official API is effectively unobtainable for a business this size (the
+ * user confirmed this directly). Own-account performance comes from the
+ * real Meta/Instagram Graph API instead (Meta already connected). Turns
+ * all of that into exactly 3 Markom checklist items -- the basis for
+ * markom_run_ai_checklist's cron (see migration 0070) and the Content
+ * Planner module (0085). Falls back to a plain unresearched checklist
+ * prompt if grounded generation fails to parse, rather than losing the
+ * whole cycle over one bad response.
  */
 export async function researchAndGenerateChecklist(branchName: string, context?: ContentPlannerContext): Promise<MarkomChecklistItem[]> {
   const systemPrompt = await getSystemPrompt("markom");
   const contextBlock = buildContentPlannerContextBlock(context);
-  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram) yang cocok dijadikan konten untuk villa leasehold, dan (2) strategi iklan/konten kompetitor properti/villa yang sedang berjalan.${contextBlock}
+  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram, cari data publik yang ter-index Google karena tidak ada akses API resmi TikTok) yang cocok dijadikan konten untuk villa leasehold, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada) -- cari konten/postingan terbaru mereka yang bisa ditemukan lewat pencarian publik.${contextBlock}
 
 Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik.
 
