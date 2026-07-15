@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { analyzeAdPerformance } from "@/lib/ai/domains/markom";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
-import { getAdAccountBalanceInfo, getAdInsights, getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign, setAdStatus } from "@/lib/meta/ads";
+import {
+  getAdAccountBalanceInfo,
+  getAdInsights,
+  getLeaseholdTargetGeoLocations,
+  getRemainingDailyBudgetIdr,
+  launchWhatsAppLeadCampaign,
+  setAdStatus,
+} from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -68,7 +75,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   if (draft.status !== "draft") return actionError("Iklan ini sudah diluncurkan atau bukan draft");
 
   const photo = draft.photo as { public_url?: string } | null;
-  const project = draft.project as { name?: string } | null;
+  const project = draft.project as { name?: string; project_type?: string } | null;
   if (!photo?.public_url) return actionError("Foto untuk draft ini tidak ditemukan");
 
   let dailyBudgetIdr: number;
@@ -88,6 +95,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
       description: draft.description ?? undefined,
       welcomeMessage: draft.welcome_message ?? undefined,
       dailyBudgetIdr,
+      targeting: project?.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : undefined,
     });
     await markAdCampaignLaunched(supabase, campaignId, {
       campaignId: result.campaignId,

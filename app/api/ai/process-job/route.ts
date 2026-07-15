@@ -12,7 +12,7 @@ import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
-import { getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign } from "@/lib/meta/ads";
+import { LEASEHOLD_TARGET_CITIES, getLeaseholdTargetGeoLocations, getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign } from "@/lib/meta/ads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -214,6 +214,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     projectCity: project.city,
     projectType: project.project_type,
     availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+    targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
   });
   const photo = photos.find((p) => p.id === draft.photoId);
   if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
@@ -229,6 +230,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       description: draft.description,
       welcomeMessage: draft.welcomeMessage,
       dailyBudgetIdr,
+      targeting: project.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : undefined,
     });
 
     await supabase.from("meta_ad_campaigns").insert({
@@ -319,6 +321,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       projectCity: project.city,
       projectType: project.project_type,
       availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+      targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
     });
     const photo = photos.find((p) => p.id === draft.photoId);
     if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);

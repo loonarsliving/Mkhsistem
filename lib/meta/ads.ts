@@ -29,6 +29,62 @@ export async function uploadAdImageFromUrl(imageUrl: string): Promise<string> {
   return entry.hash;
 }
 
+export interface ResolvedGeoLocation {
+  key: string;
+  name: string;
+  type: "city" | "region";
+}
+
+/** Resolves a human place name (e.g. "Yogyakarta", "Bali") to Meta's opaque targeting key via the Targeting Search API -- geo_locations.cities/regions need this key, not the plain name. Returns null if Meta has no match. */
+export async function searchAdGeoLocation(query: string): Promise<ResolvedGeoLocation | null> {
+  const result = await metaGraphRequest<{ data: { key: string; name: string; type: string; country_code?: string }[] }>("/search", {
+    type: "adgeolocation",
+    q: query,
+    location_types: JSON.stringify(["city", "region"]),
+    country_code: "ID",
+    limit: 1,
+  });
+  const match = result.data?.find((r) => r.type === "city" || r.type === "region");
+  if (!match) return null;
+  return { key: match.key, name: match.name, type: match.type === "region" ? "region" : "city" };
+}
+
+/**
+ * Villa leasehold buyer cities per the user's own market knowledge (not
+ * derived from CRM data -- at the time this was added, the CRM had zero
+ * recorded closings and prospect-origin data was dominated by wherever
+ * marketing had already focused, not a reliable "who actually buys"
+ * signal). Plain business config, not something worth spending an AI call
+ * on -- edit this list directly as real closing data accumulates and a
+ * data-driven city list becomes possible.
+ */
+export const LEASEHOLD_TARGET_CITIES = ["Yogyakarta", "Surabaya", "Bandung", "Surakarta", "Bali", "Malang", "Semarang"];
+
+let cachedLeaseholdGeoLocations: AdSetTargeting | null = null;
+
+/**
+ * Resolves LEASEHOLD_TARGET_CITIES into real Meta targeting keys once per
+ * process (they're stable place IDs, no need to re-resolve every launch)
+ * and splits them into cities vs regions since Meta returns "Bali" as a
+ * region, not a city. Falls back to country-wide ["ID"] targeting if
+ * resolution comes back empty (a Meta API hiccup here shouldn't block an
+ * ad launch entirely -- it just makes that one launch less targeted).
+ */
+export async function getLeaseholdTargetGeoLocations(): Promise<AdSetTargeting> {
+  if (cachedLeaseholdGeoLocations) return cachedLeaseholdGeoLocations;
+
+  const resolved = await Promise.all(LEASEHOLD_TARGET_CITIES.map((name) => searchAdGeoLocation(name)));
+  const cities = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "city").map((r) => ({ key: r.key, radiusKm: 30 }));
+  const regions = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "region").map((r) => ({ key: r.key }));
+
+  if (cities.length === 0 && regions.length === 0) {
+    return { countries: ["ID"] };
+  }
+
+  cachedLeaseholdGeoLocations = { cities, regions };
+  return cachedLeaseholdGeoLocations;
+}
+
 export interface CreateCampaignInput {
   name: string;
   status?: "ACTIVE" | "PAUSED";
@@ -49,7 +105,10 @@ export async function createAdCampaign(input: CreateCampaignInput): Promise<{ id
 }
 
 export interface AdSetTargeting {
-  countries: string[];
+  countries?: string[];
+  /** Resolved via searchAdGeoLocation -- Meta's geo_locations.cities needs its opaque `key`, not a plain city name. */
+  cities?: { key: string; radiusKm?: number }[];
+  regions?: { key: string }[];
   ageMin?: number;
   ageMax?: number;
 }
@@ -77,7 +136,13 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
       destination_type: "WHATSAPP",
       promoted_object: { page_id: META_CONFIG.pageId },
       targeting: {
-        geo_locations: { countries: input.targeting.countries },
+        geo_locations: {
+          ...(input.targeting.countries?.length ? { countries: input.targeting.countries } : {}),
+          ...(input.targeting.cities?.length
+            ? { cities: input.targeting.cities.map((c) => ({ key: c.key, radius: c.radiusKm ?? 25, distance_unit: "kilometer" })) }
+            : {}),
+          ...(input.targeting.regions?.length ? { regions: input.targeting.regions.map((r) => ({ key: r.key })) } : {}),
+        },
         age_min: input.targeting.ageMin ?? 21,
         age_max: input.targeting.ageMax ?? 55,
       },
@@ -153,6 +218,8 @@ export interface LaunchCampaignInput {
   description?: string;
   welcomeMessage?: string;
   dailyBudgetIdr: number;
+  /** Defaults to country-wide ["ID"] if omitted -- callers pass getLeaseholdTargetGeoLocations() for villa projects. */
+  targeting?: AdSetTargeting;
 }
 
 export interface LaunchCampaignResult {
@@ -178,7 +245,7 @@ export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Pr
     name: `${input.projectName} - Ad Set`,
     campaignId: campaign.id,
     dailyBudgetIdr: input.dailyBudgetIdr,
-    targeting: { countries: ["ID"] },
+    targeting: input.targeting ?? { countries: ["ID"] },
     status: "ACTIVE",
   });
   const creative = await createAdCreative({

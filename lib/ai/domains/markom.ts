@@ -102,6 +102,8 @@ export interface AdDraftInput {
   projectCity: string | null;
   projectType: string;
   availablePhotos: AdPhotoOption[];
+  /** Real buyer-origin cities this ad set will actually be geo-targeted to (see LEASEHOLD_TARGET_CITIES, lib/meta/ads.ts) -- passed so the copy's angle matches who will actually see it, instead of writing generically for "all of Indonesia." */
+  targetCities?: string[];
 }
 
 export interface AdDraft {
@@ -157,12 +159,16 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
 
   const systemPrompt = await getSystemPrompt("markom");
   const photoList = input.availablePhotos.map((p) => `- id: ${p.id}, keterangan: ${p.caption ?? "(tanpa keterangan)"}`).join("\n");
+  const audienceLine = input.targetCities?.length
+    ? `Audiens: iklan ini akan ditargetkan khusus ke kota-kota ${input.targetCities.join(", ")} (kota-kota asal pembeli villa leasehold berdasarkan data pasar riil kami) -- tulis materi iklan yang relevan untuk audiens dari kota-kota tersebut, bukan generik untuk seluruh Indonesia.`
+    : "";
   const researchPrompt = `Riset dulu lewat Google Search: (1) hal yang sedang viral/tren di media sosial Indonesia yang relevan untuk audiens pembeli properti/villa, dan (2) gaya iklan Click-to-WhatsApp kompetitor properti yang sedang berjalan di Meta Ads.
 
 Gunakan riset itu untuk membuat draft iklan Click-to-WhatsApp untuk project berikut:
 Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}
+${audienceLine}
 
 Foto asli yang tersedia (WAJIB pilih salah satu id ini, jangan mengarang foto lain):
 ${photoList}
@@ -183,6 +189,7 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
 Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}
+${audienceLine}
 
 Foto asli yang tersedia (WAJIB pilih salah satu id ini):
 ${photoList}
