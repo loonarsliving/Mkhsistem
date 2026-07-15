@@ -34,6 +34,7 @@ const PUBLIC_PATHS = [
   "/api/ai/process-job",
   "/api/integrations/whatsapp/webhook",
   "/api/debug/whatsapp-config",
+  "/api/debug/meta-ads-config",
 ];
 
 function isPublicPath(pathname: string) {
