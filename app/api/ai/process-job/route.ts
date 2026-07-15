@@ -307,40 +307,60 @@ interface MetaAdsResearchJobPayload {
  * actually spend, using launchWhatsAppLeadCampaign directly -- no second
  * Gemini call needed at that point.
  */
+/** Unlike processMetaAdsLaunch (a background cron nobody is watching in real time), a human just clicked "Riset" and is looking at /markom/ads waiting for something to appear -- a silent dead-letter with no visible row is a real UX gap, so every failure path here also writes a 'failed' card instead of vanishing. */
 async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
   const payload = job.payload as unknown as MetaAdsResearchJobPayload;
-  const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
 
-  const draft = await researchAndDraftAd({
-    projectName: project.name,
-    projectCity: project.city,
-    projectType: project.project_type,
-    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
-  });
-  const photo = photos.find((p) => p.id === draft.photoId);
-  if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+  try {
+    const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("meta_ad_campaigns")
-    .insert({
-      project_id: project.id,
-      branch_id: project.branch_id,
-      photo_id: photo.id,
-      name: `${project.name} - Leads WA (Draft)`,
-      headline: draft.headline,
-      primary_text: draft.primaryText,
-      description: draft.description,
-      welcome_message: draft.welcomeMessage,
-      daily_budget_idr: Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000),
-      status: "draft",
+    const draft = await researchAndDraftAd({
+      projectName: project.name,
+      projectCity: project.city,
+      projectType: project.project_type,
+      availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+    });
+    const photo = photos.find((p) => p.id === draft.photoId);
+    if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("meta_ad_campaigns")
+      .insert({
+        project_id: project.id,
+        branch_id: project.branch_id,
+        photo_id: photo.id,
+        name: `${project.name} - Leads WA (Draft)`,
+        headline: draft.headline,
+        primary_text: draft.primaryText,
+        description: draft.description,
+        welcome_message: draft.welcomeMessage,
+        daily_budget_idr: Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000),
+        status: "draft",
+        launched_by: "human",
+        research_summary: draft.targetSummary,
+      })
+      .select("id")
+      .single();
+    if (insertError || !inserted) throw new Error(`Failed to save ad draft: ${insertError?.message}`);
+
+    return { projectId: project.id, draftId: inserted.id };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const { data: project } = await supabase.from("crm_projects").select("name").eq("id", payload.project_id).maybeSingle();
+    await supabase.from("meta_ad_campaigns").insert({
+      project_id: payload.project_id,
+      branch_id: payload.branch_id,
+      photo_id: null,
+      name: `${project?.name ?? "Project"} - Riset gagal`,
+      headline: "Riset gagal",
+      primary_text: errorMessage,
+      daily_budget_idr: 0,
+      status: "failed",
       launched_by: "human",
-      research_summary: draft.targetSummary,
-    })
-    .select("id")
-    .single();
-  if (insertError || !inserted) throw new Error(`Failed to save ad draft: ${insertError?.message}`);
-
-  return { projectId: project.id, draftId: inserted.id };
+      failure_reason: errorMessage,
+    });
+    throw new NonRetryableJobError(errorMessage);
+  }
 }
 
 /**
