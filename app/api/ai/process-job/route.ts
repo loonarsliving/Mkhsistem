@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning } from "@/lib/ai/domains/crm";
-import { researchAndDraftAd, researchAndGenerateChecklist } from "@/lib/ai/domains/markom";
+import { evaluateWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { AIProviderError } from "@/lib/ai/provider/errors";
@@ -117,10 +117,47 @@ function currentPeriodWeek(date: Date): number {
   return Math.min(5, Math.ceil(date.getDate() / 7));
 }
 
+/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations -- real data fed into the checklist prompt instead of relying on web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
+async function gatherContentPlannerContext(supabase: AdminClient): Promise<ContentPlannerContext> {
+  const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }] = await Promise.all([
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .order("logged_at", { ascending: false })
+      .limit(10),
+  ]);
+
+  const competitorNotes = (competitorLogs ?? []).map((log) => {
+    const competitor = log.competitor as { handle?: string; platform?: string } | null;
+    const parts = [`@${competitor?.handle ?? "?"} (${competitor?.platform ?? "?"}, ${log.content_type ?? "konten"})`];
+    if (log.hook) parts.push(`hook: "${log.hook}"`);
+    if (log.hashtags) parts.push(`hashtag: ${log.hashtags}`);
+    if (log.engagement_notes) parts.push(`engagement: ${log.engagement_notes}`);
+    return `- ${parts.join(", ")}`;
+  });
+
+  return {
+    instagram: igSnapshot
+      ? {
+          reach: igSnapshot.reach ?? 0,
+          profileViews: igSnapshot.impressions ?? 0,
+          followersCount: igSnapshot.followers_count ?? 0,
+          bestHour: igSnapshot.best_upload_hour,
+          topContentType: igSnapshot.top_content_type,
+        }
+      : null,
+    tiktok: ttSnapshot ? { videoViews: ttSnapshot.impressions ?? 0, likes: ttSnapshot.likes ?? 0, followersCount: ttSnapshot.followers_count ?? 0 } : null,
+    competitorNotes,
+  };
+}
+
 /** One Gemini attempt to research + draft exactly 3 Markom checklist items, then inserts them directly (no human approval gate -- matches kpi_assign_tasks' existing behavior when a Branch Manager creates a checklist by hand) and notifies the team, same category/notification shape kpi_assign_tasks already uses. */
 async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
   const payload = job.payload as unknown as MarkomChecklistDraftJobPayload;
-  const items = await researchAndGenerateChecklist(payload.branch_name);
+  const context = await gatherContentPlannerContext(supabase);
+  const items = await researchAndGenerateChecklist(payload.branch_name, context);
 
   const now = new Date();
   const dueDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -366,6 +403,72 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
   }
 }
 
+/** Monday of the ISO week containing `date`, as YYYY-MM-DD. */
+function getWeekStart(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Weekly AI evaluation of content performance -- compares this week's
+ * own-account numbers (Instagram/TikTok) to last week's, plus this week's
+ * human-logged competitor observations, into a written verdict + next-week
+ * recommendation. Upserted per week_start (unique, migration 0085) so a
+ * retry or re-run for the same week overwrites rather than duplicating.
+ */
+async function processSocialWeeklyEvaluation(supabase: AdminClient) {
+  const now = new Date();
+  const weekStart = getWeekStart(now);
+  const lastWeekStartDate = new Date(weekStart);
+  lastWeekStartDate.setDate(lastWeekStartDate.getDate() - 7);
+  const lastWeekStart = lastWeekStartDate.toISOString().slice(0, 10);
+
+  const [{ data: igThisWeek }, { data: igLastWeek }, { data: ttThisWeek }, { data: competitorLogs }] = await Promise.all([
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_account_snapshots")
+      .select("*")
+      .eq("platform", "instagram")
+      .gte("captured_at", lastWeekStart)
+      .lt("captured_at", weekStart)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .gte("logged_at", weekStart)
+      .order("logged_at", { ascending: false })
+      .limit(15),
+  ]);
+
+  const competitorNotes = (competitorLogs ?? []).map((log) => {
+    const competitor = log.competitor as { handle?: string; platform?: string } | null;
+    const parts = [`@${competitor?.handle ?? "?"} (${competitor?.platform ?? "?"}, ${log.content_type ?? "konten"})`];
+    if (log.hook) parts.push(`hook: "${log.hook}"`);
+    if (log.hashtags) parts.push(`hashtag: ${log.hashtags}`);
+    if (log.engagement_notes) parts.push(`engagement: ${log.engagement_notes}`);
+    return `- ${parts.join(", ")}`;
+  });
+
+  // impressions doubles as "profile views" for Instagram snapshots -- see the capture route's mapping comment.
+  const evaluation = await evaluateWeeklyContentPerformance({
+    instagramThisWeek: igThisWeek ? { reach: igThisWeek.reach ?? 0, profileViews: igThisWeek.impressions ?? 0, followersCount: igThisWeek.followers_count ?? 0 } : null,
+    instagramLastWeek: igLastWeek ? { reach: igLastWeek.reach ?? 0, profileViews: igLastWeek.impressions ?? 0, followersCount: igLastWeek.followers_count ?? 0 } : null,
+    tiktokThisWeek: ttThisWeek ? { videoViews: ttThisWeek.impressions ?? 0, likes: ttThisWeek.likes ?? 0, followersCount: ttThisWeek.followers_count ?? 0 } : null,
+    competitorNotes,
+  });
+
+  const { error: upsertError } = await supabase.from("social_weekly_evaluations").upsert({ week_start: weekStart, evaluation }, { onConflict: "week_start" });
+  if (upsertError) throw new Error(`Failed to save weekly evaluation: ${upsertError.message}`);
+
+  return { weekStart };
+}
+
 /**
  * Dispatched by ai_job_queue_after_insert (immediate, on enqueue) and
  * ai_job_dispatch_pending (pg_cron sweep every 1 minute, migration 0065).
@@ -427,7 +530,9 @@ export async function POST(request: Request) {
             ? await processMarkomChecklistDraft(supabase, job)
             : job.job_type === "meta_ads_launch"
               ? await processMetaAdsLaunch(supabase, job)
-              : await processMetaAdsResearch(supabase, job);
+              : job.job_type === "meta_ads_research"
+                ? await processMetaAdsResearch(supabase, job)
+                : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

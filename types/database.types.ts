@@ -1105,6 +1105,121 @@ export interface Database {
           },
         ];
       };
+      social_competitor_accounts: {
+        Row: {
+          id: string;
+          platform: "instagram" | "tiktok";
+          handle: string;
+          display_name: string | null;
+          notes: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          platform: "instagram" | "tiktok";
+          handle: string;
+          display_name?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_competitor_accounts"]["Insert"]>;
+        Relationships: [];
+      };
+      social_competitor_content_logs: {
+        Row: {
+          id: string;
+          competitor_account_id: string;
+          content_url: string | null;
+          content_type: "reel" | "video" | "photo" | "carousel" | "story" | "other" | null;
+          hook: string | null;
+          duration_seconds: number | null;
+          caption: string | null;
+          hashtags: string | null;
+          engagement_notes: string | null;
+          logged_by: string;
+          logged_at: string;
+        };
+        Insert: {
+          id?: string;
+          competitor_account_id: string;
+          content_url?: string | null;
+          content_type?: "reel" | "video" | "photo" | "carousel" | "story" | "other" | null;
+          hook?: string | null;
+          duration_seconds?: number | null;
+          caption?: string | null;
+          hashtags?: string | null;
+          engagement_notes?: string | null;
+          logged_by: string;
+          logged_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_competitor_content_logs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "social_competitor_content_logs_competitor_account_id_fkey";
+            columns: ["competitor_account_id"];
+            referencedRelation: "social_competitor_accounts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      social_account_snapshots: {
+        Row: {
+          id: string;
+          platform: "instagram" | "tiktok";
+          captured_at: string;
+          followers_count: number | null;
+          reach: number | null;
+          impressions: number | null;
+          likes: number | null;
+          comments: number | null;
+          shares: number | null;
+          saves: number | null;
+          watch_time_seconds: number | null;
+          engagement_rate: number | null;
+          best_upload_hour: number | null;
+          top_content_type: string | null;
+          raw_data: Json | null;
+        };
+        Insert: {
+          id?: string;
+          platform: "instagram" | "tiktok";
+          captured_at?: string;
+          followers_count?: number | null;
+          reach?: number | null;
+          impressions?: number | null;
+          likes?: number | null;
+          comments?: number | null;
+          shares?: number | null;
+          saves?: number | null;
+          watch_time_seconds?: number | null;
+          engagement_rate?: number | null;
+          best_upload_hour?: number | null;
+          top_content_type?: string | null;
+          raw_data?: Json | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_account_snapshots"]["Insert"]>;
+        Relationships: [];
+      };
+      social_weekly_evaluations: {
+        Row: {
+          id: string;
+          week_start: string;
+          evaluation: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          week_start: string;
+          evaluation: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_weekly_evaluations"]["Insert"]>;
+        Relationships: [];
+      };
       prospects: {
         Row: {
           id: string;
@@ -1397,7 +1512,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1409,7 +1524,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;

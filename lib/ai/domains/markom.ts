@@ -55,41 +55,111 @@ function parseChecklistJson(text: string): MarkomChecklistItem[] {
     .map((item) => ({ title: item.title.slice(0, 200), description: item.description.slice(0, 1000) }));
 }
 
+export interface ContentPlannerContext {
+  instagram?: { reach: number; profileViews: number; followersCount: number; bestHour: number | null; topContentType: string | null } | null;
+  tiktok?: { videoViews: number; likes: number; followersCount: number } | null;
+  /** Formatted one-liners from social_competitor_content_logs -- real human-observed competitor posts, since no API exposes competitor engagement data on either platform. */
+  competitorNotes?: string[];
+}
+
+function buildContentPlannerContextBlock(context?: ContentPlannerContext): string {
+  const lines: string[] = [];
+  if (context?.instagram) {
+    const ig = context.instagram;
+    lines.push(
+      `Performa Instagram kami (data nyata): reach ${ig.reach}, profile views ${ig.profileViews}, followers ${ig.followersCount}` +
+        (ig.bestHour !== null ? `, jam upload dengan reach terbaik: sekitar jam ${ig.bestHour}:00` : "") +
+        (ig.topContentType ? `, jenis konten paling berhasil: ${ig.topContentType}` : "") +
+        ".",
+    );
+  }
+  if (context?.tiktok) {
+    const tt = context.tiktok;
+    lines.push(`Performa TikTok kami (data nyata): ${tt.videoViews} video views, ${tt.likes} likes, ${tt.followersCount} followers.`);
+  }
+  if (context?.competitorNotes?.length) {
+    lines.push(`Observasi konten kompetitor yang dicatat tim Markom (data nyata, bukan riset umum):\n${context.competitorNotes.join("\n")}`);
+  }
+  return lines.length > 0 ? `\n\nData performa & kompetitor kami saat ini:\n${lines.join("\n")}` : "";
+}
+
 /**
  * Researches current viral social-media trends and competitor property/villa
  * ads via Gemini's Google Search grounding (useWebSearch), then turns that
  * research into exactly 3 Markom checklist items -- the basis for
- * markom_run_ai_checklist's every-3-days cron (see migration 0070). Falls
- * back to a plain unresearched checklist prompt if grounded generation
- * fails to parse, rather than losing the whole cycle over one bad response.
+ * markom_run_ai_checklist's every-3-days cron (see migration 0070) and the
+ * Content Planner module (0085). When real own-account performance and
+ * human-logged competitor observations are available (context), the
+ * checklist is grounded in that real data instead of generic research
+ * alone. Falls back to a plain unresearched checklist prompt if grounded
+ * generation fails to parse, rather than losing the whole cycle over one
+ * bad response.
  */
-export async function researchAndGenerateChecklist(branchName: string): Promise<MarkomChecklistItem[]> {
+export async function researchAndGenerateChecklist(branchName: string, context?: ContentPlannerContext): Promise<MarkomChecklistItem[]> {
   const systemPrompt = await getSystemPrompt("markom");
-  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia yang cocok dijadikan konten untuk villa leasehold, dan (2) strategi iklan kompetitor properti/villa yang sedang berjalan.
+  const contextBlock = buildContentPlannerContextBlock(context);
+  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram) yang cocok dijadikan konten untuk villa leasehold, dan (2) strategi iklan/konten kompetitor properti/villa yang sedang berjalan.${contextBlock}
 
-Gunakan hasil riset itu sebagai dasar untuk membuat TEPAT 3 checklist task untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset, bukan ide generik.
+Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik.
 
 Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi tepat 3 object:
 [{"title": "...", "description": "..."}]
 
-title: singkat (maks 80 karakter), actionable.
-description: 1-2 kalimat, sebutkan tren/kompetitor spesifik dari hasil riset yang mendasari task ini.`;
+title: singkat (maks 80 karakter), actionable -- nama tema kontennya.
+description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.`;
 
   try {
-    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2048 });
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2560 });
     const items = parseChecklistJson(response.text);
     if (items.length > 0) return items.slice(0, 3);
   } catch {
     // fall through to the unresearched fallback below
   }
 
-  const fallbackPrompt = `Buatkan TEPAT 3 checklist task untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar konten villa leasehold dan strategi marketing properti umum.
+  const fallbackPrompt = `Buatkan TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar konten villa leasehold dan strategi marketing properti umum, tanpa riset internet.${contextBlock}
+
+description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
 
 Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "description": "..."}]`;
-  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1536 });
   const fallbackItems = parseChecklistJson(fallbackResponse.text);
   if (fallbackItems.length === 0) throw new Error("AI did not return a parseable checklist");
   return fallbackItems.slice(0, 3);
+}
+
+export interface WeeklyContentPerformanceInput {
+  instagramThisWeek?: { reach: number; profileViews: number; followersCount: number } | null;
+  instagramLastWeek?: { reach: number; profileViews: number; followersCount: number } | null;
+  tiktokThisWeek?: { videoViews: number; likes: number; followersCount: number } | null;
+  competitorNotes: string[];
+}
+
+/**
+ * Weekly "what worked, what didn't, and why" -- the one part of content
+ * evaluation that genuinely needs AI (interpreting a week of real numbers +
+ * competitor observations into a written verdict and next-week
+ * recommendation), same principle as analyzeAdPerformance.
+ */
+export async function evaluateWeeklyContentPerformance(input: WeeklyContentPerformanceInput): Promise<string> {
+  const igLine = input.instagramThisWeek
+    ? `Instagram minggu ini: reach ${input.instagramThisWeek.reach}, profile views ${input.instagramThisWeek.profileViews}, followers ${input.instagramThisWeek.followersCount}.` +
+      (input.instagramLastWeek ? ` Minggu lalu: reach ${input.instagramLastWeek.reach}, profile views ${input.instagramLastWeek.profileViews}.` : "")
+    : "Data Instagram tidak tersedia.";
+  const ttLine = input.tiktokThisWeek
+    ? `TikTok minggu ini: ${input.tiktokThisWeek.videoViews} video views, ${input.tiktokThisWeek.likes} likes, ${input.tiktokThisWeek.followersCount} followers.`
+    : "Data TikTok tidak tersedia.";
+  const competitorBlock = input.competitorNotes.length > 0 ? `Observasi konten kompetitor minggu ini:\n${input.competitorNotes.join("\n")}` : "Tidak ada catatan kompetitor minggu ini.";
+
+  const userPrompt = `Evaluasi performa konten media sosial perusahaan minggu ini:
+
+${igLine}
+${ttLine}
+
+${competitorBlock}
+
+Berikan evaluasi (Bahasa Indonesia, 4-6 kalimat): (1) apa yang berhasil minggu ini dan kemungkinan penyebabnya, (2) apa yang kurang berhasil dan kemungkinan penyebabnya, (3) perubahan strategi kompetitor yang terlihat (jika ada catatan), (4) rekomendasi konkret untuk strategi konten minggu depan.`;
+
+  return askAI(await getSystemPrompt("markom"), userPrompt);
 }
 
 export interface AdPhotoOption {

@@ -20,6 +20,7 @@ import {
   Rocket,
   Settings,
   ShieldCheck,
+  Sparkles,
   StickyNote,
   Target,
   Trophy,
@@ -110,6 +111,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { label: "Foto Project", href: "/markom/photos", icon: Images, permission: PERMISSIONS.CRM_PROJECT_PHOTO_MANAGE },
       { label: "Ads Specialist", href: "/markom/ads", icon: Rocket, permission: PERMISSIONS.AD_CAMPAIGN_VIEW },
+      { label: "Content Planner", href: "/markom/content-planner", icon: Sparkles, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
     ],
   },
   {

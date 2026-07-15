@@ -4,6 +4,7 @@ import { whatsAppHealthCheck } from "@/lib/ai/notifications/engine";
 import { aiHealthCheck } from "@/lib/ai/service";
 import { metaHealthCheck } from "@/lib/meta/client";
 import { requirePermission } from "@/lib/rbac/session";
+import { tiktokHealthCheck } from "@/lib/social/tiktok";
 import { createClient } from "@/lib/supabase/server";
 import { getPerformanceSummary, listErrorLogs } from "@/repositories/monitoring.repository";
 
@@ -40,4 +41,9 @@ export async function getWhatsAppHealthStatusAction() {
 export async function getMetaHealthStatusAction() {
   await requirePermission("system.monitoring_view");
   return metaHealthCheck();
+}
+
+export async function getTikTokHealthStatusAction() {
+  await requirePermission("system.monitoring_view");
+  return tiktokHealthCheck();
 }
