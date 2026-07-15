@@ -1,5 +1,6 @@
 import "server-only";
 
+import { saveIntegrationLog } from "../ai/integration-log";
 import { META_CONFIG, isMetaConfigured } from "./config";
 
 const GRAPH_BASE = "https://graph.facebook.com";
@@ -17,10 +18,20 @@ export class MetaApiError extends Error {
 }
 
 interface GraphErrorBody {
-  error?: { message?: string; type?: string; code?: number; error_subcode?: number };
+  error?: { message?: string; type?: string; code?: number; error_subcode?: number; error_user_msg?: string; error_user_title?: string };
 }
 
-/** Thin Graph API wrapper -- every Meta call in this module goes through here so auth, error shape, and API version stay in one place. */
+/** Meta's top-level error.message is often a generic bucket ("Invalid parameter"); error_user_msg/error_user_title (when present) name the actual offending field -- both get folded into the thrown message instead of only the generic one. */
+function formatGraphErrorMessage(error: GraphErrorBody["error"], fallback: string): string {
+  if (!error) return fallback;
+  const parts = [error.message ?? fallback];
+  if (error.error_user_title) parts.push(error.error_user_title);
+  if (error.error_user_msg) parts.push(error.error_user_msg);
+  if (error.error_subcode) parts.push(`subcode ${error.error_subcode}`);
+  return parts.join(" -- ");
+}
+
+/** Thin Graph API wrapper -- every Meta call in this module goes through here so auth, error shape, and API version stay in one place. Every call (success or failure) is persisted to ai_integration_logs, mirroring the WhatsApp connector's telemetry, so a failure like "Invalid parameter" can be diagnosed from the actual request/response instead of just the terse thrown message. */
 export async function metaGraphRequest<T>(path: string, params: Record<string, unknown> = {}, method: "GET" | "POST" | "DELETE" = "GET"): Promise<T> {
   if (!isMetaConfigured()) {
     throw new MetaApiError("Meta integration is not configured (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)", 0);
@@ -42,26 +53,47 @@ export async function metaGraphRequest<T>(path: string, params: Record<string, u
     url.search = body.toString();
   }
 
+  // access_token excluded (credential); adimages' base64 `bytes` excluded too (can be megabytes, not useful for diagnosis) -- everything else is kept.
+  const loggedParams = { ...params };
+  delete loggedParams.access_token;
+  if (typeof loggedParams.bytes === "string") loggedParams.bytes = `<${loggedParams.bytes.length} base64 chars omitted>`;
+  const startedAt = Date.now();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetch(url.toString(), { ...init, signal: controller.signal });
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new MetaApiError(`Meta Graph API tidak merespon dalam ${REQUEST_TIMEOUT_MS / 1000} detik (${path})`, 0);
-    }
-    throw new MetaApiError(`Gagal menghubungi Meta Graph API: ${err instanceof Error ? err.message : String(err)}`, 0);
+    const latencyMs = Date.now() - startedAt;
+    const message =
+      err instanceof Error && err.name === "AbortError"
+        ? `Meta Graph API tidak merespon dalam ${REQUEST_TIMEOUT_MS / 1000} detik (${path})`
+        : `Gagal menghubungi Meta Graph API: ${err instanceof Error ? err.message : String(err)}`;
+    await saveIntegrationLog({ connector: "meta", direction: "outgoing", payload: { path, method, params: loggedParams }, status: "error", error: message, latencyMs });
+    clearTimeout(timeout);
+    throw new MetaApiError(message, 0);
   } finally {
     clearTimeout(timeout);
   }
+  const latencyMs = Date.now() - startedAt;
   const json = (await response.json().catch(() => null)) as (T & GraphErrorBody) | null;
 
   if (!response.ok || json?.error) {
-    const message = json?.error?.message ?? `HTTP ${response.status}`;
+    const message = formatGraphErrorMessage(json?.error, `HTTP ${response.status}`);
+    await saveIntegrationLog({
+      connector: "meta",
+      direction: "outgoing",
+      payload: { path, method, params: loggedParams, graphError: json?.error },
+      status: "error",
+      responseStatus: response.status,
+      error: message,
+      latencyMs,
+    });
     throw new MetaApiError(`Meta Graph API error: ${message}`, response.status, json?.error);
   }
 
+  await saveIntegrationLog({ connector: "meta", direction: "outgoing", payload: { path, method, params: loggedParams }, status: "success", responseStatus: response.status, latencyMs });
   return json as T;
 }
 

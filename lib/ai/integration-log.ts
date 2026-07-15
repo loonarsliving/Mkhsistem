@@ -3,7 +3,7 @@ import "server-only";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type ConnectorType = "whatsapp";
+export type ConnectorType = "whatsapp" | "meta";
 export type IntegrationDirection = "outgoing" | "incoming";
 
 export interface IntegrationLogEntry {

@@ -1782,7 +1782,7 @@ export interface Database {
       ai_integration_logs: {
         Row: {
           id: string;
-          connector: "whatsapp";
+          connector: "whatsapp" | "meta";
           direction: "outgoing" | "incoming";
           payload: Json;
           status: "success" | "error";
@@ -1793,7 +1793,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          connector: "whatsapp";
+          connector: "whatsapp" | "meta";
           direction: "outgoing" | "incoming";
           payload: Json;
           status: "success" | "error";
