@@ -173,12 +173,17 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
           ...(input.targeting.regions?.length ? { regions: input.targeting.regions.map((r) => ({ key: r.key })) } : {}),
         },
         age_min: input.targeting.ageMin ?? 21,
-        age_max: input.targeting.ageMax ?? 55,
-        // Advantage+ Audience is now a required explicit flag (error_subcode
-        // 1870227 otherwise). Enabled (1) deliberately -- it lets Meta's
-        // delivery system find people likely to convert beyond our exact
-        // targeting criteria (still bounded by the specified geo/age), which
-        // is what actually drives more clicks/conversations for a fixed
+        // Advantage+ Audience (targeting_automation.advantage_audience: 1
+        // below) rejects any age_max below 65 outright (error_subcode
+        // 1870189) -- it treats a tighter cap as a mere delivery suggestion
+        // it's allowed to override, not a hard ceiling, so Meta requires the
+        // stated max to already be effectively "no cap". age_min is not
+        // restricted the same way, so a real floor (e.g. 21) still holds.
+        age_max: Math.max(input.targeting.ageMax ?? 55, 65),
+        // Required explicit flag (error_subcode 1870227 otherwise). Enabled
+        // (1) deliberately -- it lets Meta's delivery system find people
+        // likely to convert beyond our exact targeting criteria, which is
+        // what actually drives more clicks/conversations for a fixed
         // budget, not just a flag to satisfy the API.
         targeting_automation: { advantage_audience: 1 },
       },
