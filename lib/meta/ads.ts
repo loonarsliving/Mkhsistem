@@ -274,13 +274,15 @@ export async function setAdStatus(adId: string, status: "ACTIVE" | "PAUSED"): Pr
  */
 export async function getRemainingDailyBudgetIdr(): Promise<number> {
   if (META_CONFIG.dailyBudgetCapIdr <= 0) {
-    throw new Error("META_ADS_DAILY_BUDGET_CAP_IDR is not set -- AI cannot launch or scale ad spend until an operator sets a daily budget cap");
+    throw new Error(
+      "Batas budget iklan harian belum diatur. Tambahkan environment variable META_ADS_DAILY_BUDGET_CAP_IDR di Vercel (isi dengan angka Rupiah, mis. 200000 untuk Rp 200.000/hari), lalu redeploy -- ini pengaman wajib agar AI/sistem tidak bisa menghabiskan budget iklan tanpa batas.",
+    );
   }
   const spentToday = await getTodaySpendIdr();
   const remaining = META_CONFIG.dailyBudgetCapIdr - spentToday;
   if (remaining <= 0) {
     throw new Error(
-      `Daily ad budget cap (Rp ${META_CONFIG.dailyBudgetCapIdr.toLocaleString("id-ID")}) already reached today (spent Rp ${spentToday.toLocaleString("id-ID")})`,
+      `Batas budget iklan harian (Rp ${META_CONFIG.dailyBudgetCapIdr.toLocaleString("id-ID")}) sudah tercapai hari ini (sudah terpakai Rp ${spentToday.toLocaleString("id-ID")}). Coba lagi besok, atau naikkan META_ADS_DAILY_BUDGET_CAP_IDR.`,
     );
   }
   return remaining;
