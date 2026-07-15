@@ -174,6 +174,13 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
         },
         age_min: input.targeting.ageMin ?? 21,
         age_max: input.targeting.ageMax ?? 55,
+        // Advantage+ Audience is now a required explicit flag (error_subcode
+        // 1870227 otherwise). Enabled (1) deliberately -- it lets Meta's
+        // delivery system find people likely to convert beyond our exact
+        // targeting criteria (still bounded by the specified geo/age), which
+        // is what actually drives more clicks/conversations for a fixed
+        // budget, not just a flag to satisfy the API.
+        targeting_automation: { advantage_audience: 1 },
       },
       status: input.status ?? "PAUSED",
     },
