@@ -63,7 +63,12 @@ const META_HEALTHCHECK_CACHE_MS = 300_000;
 /** Mirrors lib/ai/service.ts's aiHealthCheck() / whatsAppHealthCheck() caching -- successful result reused for 5 minutes, failures never cached. */
 export async function metaHealthCheck(): Promise<{ ok: boolean; detail: string; configured: boolean }> {
   if (!isMetaConfigured()) {
-    return { ok: false, detail: "META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID belum diatur", configured: false };
+    const missing = [
+      META_CONFIG.accessToken.length === 0 && "META_ACCESS_TOKEN",
+      META_CONFIG.adAccountId.length === 0 && "META_AD_ACCOUNT_ID",
+      META_CONFIG.pageId.length === 0 && "META_PAGE_ID",
+    ].filter((v): v is string => Boolean(v));
+    return { ok: false, detail: `Belum diatur: ${missing.join(", ")}`, configured: false };
   }
 
   if (cachedMetaHealthCheck && Date.now() - cachedMetaHealthCheck.cachedAt < META_HEALTHCHECK_CACHE_MS) {
