@@ -25,11 +25,21 @@ export async function listAdCampaignsAction() {
   return listAdCampaigns(supabase, scopedToOwnBranch ? session.employee.branch_id : undefined);
 }
 
-/** Read-only account balance/spend snapshot -- there is no API to add funds, only to read what's already there (see lib/meta/ads.ts). */
-export async function getAdAccountBalanceAction() {
+export type AdAccountBalanceStatus =
+  | { status: "not_configured" }
+  | { status: "error"; message: string }
+  | { status: "ok"; balanceIdr: number; amountSpentIdr: number; currency: string; fundingSourceDescription: string | null };
+
+/** Read-only account balance/spend snapshot -- there is no API to add funds, only to read what's already there (see lib/meta/ads.ts). Always returns a visible status instead of null, so a misconfigured or rejected Meta call shows up on the page instead of the card just silently not appearing. */
+export async function getAdAccountBalanceAction(): Promise<AdAccountBalanceStatus> {
   await requirePermission("ad_campaign.view");
-  if (!isMetaConfigured()) return null;
-  return getAdAccountBalanceInfo();
+  if (!isMetaConfigured()) return { status: "not_configured" };
+  try {
+    const info = await getAdAccountBalanceInfo();
+    return { status: "ok", ...info };
+  } catch (err) {
+    return { status: "error", message: err instanceof Error ? err.message : "Gagal mengambil info akun iklan dari Meta" };
+  }
 }
 
 /** Step 1: research only, no spend. AI reads current trends/competitor ads and drafts copy + picks a photo, saved as a 'draft' row Markom reviews as a reference before deciding to launch. */
