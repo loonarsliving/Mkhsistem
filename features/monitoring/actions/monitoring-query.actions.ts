@@ -2,6 +2,7 @@
 
 import { whatsAppHealthCheck } from "@/lib/ai/notifications/engine";
 import { aiHealthCheck } from "@/lib/ai/service";
+import { metaHealthCheck } from "@/lib/meta/client";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getPerformanceSummary, listErrorLogs } from "@/repositories/monitoring.repository";
@@ -34,4 +35,9 @@ export async function getAiHealthStatusAction() {
 export async function getWhatsAppHealthStatusAction() {
   await requirePermission("system.monitoring_view");
   return whatsAppHealthCheck();
+}
+
+export async function getMetaHealthStatusAction() {
+  await requirePermission("system.monitoring_view");
+  return metaHealthCheck();
 }

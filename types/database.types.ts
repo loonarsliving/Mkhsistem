@@ -73,7 +73,9 @@ export type NotificationCategoryDb =
   | "task_pending_verification"
   | "daily_motivation"
   | "daily_report"
-  | "birthday_wish";
+  | "birthday_wish"
+  | "ad_campaign_launched"
+  | "ad_campaign_failed";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -985,6 +987,110 @@ export interface Database {
           },
         ];
       };
+      crm_project_photos: {
+        Row: {
+          id: string;
+          project_id: string;
+          storage_path: string;
+          public_url: string;
+          caption: string | null;
+          uploaded_by: string;
+          created_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          storage_path: string;
+          public_url: string;
+          caption?: string | null;
+          uploaded_by: string;
+          created_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_project_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_project_photos_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_project_photos_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meta_ad_campaigns: {
+        Row: {
+          id: string;
+          project_id: string | null;
+          branch_id: string;
+          photo_id: string | null;
+          meta_campaign_id: string | null;
+          meta_adset_id: string | null;
+          meta_creative_id: string | null;
+          meta_ad_id: string | null;
+          name: string;
+          headline: string;
+          primary_text: string;
+          description: string | null;
+          daily_budget_idr: number;
+          status: "active" | "paused" | "ended" | "failed";
+          launched_by: "ai" | "human";
+          research_summary: string | null;
+          failure_reason: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id?: string | null;
+          branch_id: string;
+          photo_id?: string | null;
+          meta_campaign_id?: string | null;
+          meta_adset_id?: string | null;
+          meta_creative_id?: string | null;
+          meta_ad_id?: string | null;
+          name: string;
+          headline: string;
+          primary_text: string;
+          description?: string | null;
+          daily_budget_idr: number;
+          status?: "active" | "paused" | "ended" | "failed";
+          launched_by?: "ai" | "human";
+          research_summary?: string | null;
+          failure_reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ad_campaigns"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_campaigns_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaigns_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaigns_photo_id_fkey";
+            columns: ["photo_id"];
+            referencedRelation: "crm_project_photos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       prospects: {
         Row: {
           id: string;
@@ -1277,7 +1383,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1289,7 +1395,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;

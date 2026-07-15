@@ -15,6 +15,7 @@ import { RecentAnnouncementList } from "@/features/dashboard/components/recent-a
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
+import { MetaHealthStatusCard } from "@/features/monitoring/components/meta-health-status-card";
 import { WhatsAppHealthStatusCard } from "@/features/monitoring/components/whatsapp-health-status-card";
 import {
   branchStatsAction as crmBranchStatsAction,
@@ -120,9 +121,10 @@ export default async function DashboardPage() {
               </Link>
             </Button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <AiHealthStatusCard />
             <WhatsAppHealthStatusCard />
+            <MetaHealthStatusCard />
           </div>
         </div>
       )}

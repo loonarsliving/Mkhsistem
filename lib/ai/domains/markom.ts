@@ -91,3 +91,103 @@ Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "descript
   if (fallbackItems.length === 0) throw new Error("AI did not return a parseable checklist");
   return fallbackItems.slice(0, 3);
 }
+
+export interface AdPhotoOption {
+  id: string;
+  caption: string | null;
+}
+
+export interface AdDraftInput {
+  projectName: string;
+  projectCity: string | null;
+  projectType: string;
+  availablePhotos: AdPhotoOption[];
+}
+
+export interface AdDraft {
+  targetSummary: string;
+  photoId: string;
+  headline: string;
+  primaryText: string;
+  description: string;
+  welcomeMessage: string;
+  /** AI's suggested daily spend -- the launch job (ai_job_queue "meta_ads_launch") always clamps this to the remaining META_ADS_DAILY_BUDGET_CAP_IDR, so this is a research-informed suggestion, never the final authority on real spend. */
+  suggestedDailyBudgetIdr: number;
+}
+
+function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: string): AdDraft {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Partial<AdDraft>;
+  if (
+    typeof parsed.photoId !== "string" ||
+    !validPhotoIds.includes(parsed.photoId) ||
+    typeof parsed.headline !== "string" ||
+    typeof parsed.primaryText !== "string"
+  ) {
+    throw new Error("AI ad draft response missing required fields or picked a photo that doesn't exist");
+  }
+  return {
+    targetSummary: (parsed.targetSummary ?? "-").slice(0, 1000),
+    photoId: parsed.photoId,
+    headline: parsed.headline.slice(0, 40),
+    primaryText: parsed.primaryText.slice(0, 300),
+    description: (parsed.description ?? "").slice(0, 200) || "Hubungi kami sekarang via WhatsApp.",
+    welcomeMessage: (parsed.welcomeMessage ?? "").slice(0, 300) || `Terima kasih sudah menghubungi kami mengenai ${projectName}!`,
+    suggestedDailyBudgetIdr: Number.isFinite(Number(parsed.suggestedDailyBudgetIdr)) ? Math.max(0, Math.round(Number(parsed.suggestedDailyBudgetIdr))) : 0,
+  };
+}
+
+/**
+ * Researches (Google Search grounding) current viral angles + competitor
+ * property ads for ONE specific project, then drafts a complete
+ * Click-to-WhatsApp ad from it: which real Markom-uploaded photo fits best,
+ * headline/primary text/description/WhatsApp greeting, and a suggested
+ * daily budget. Never invents a photo -- must pick photoId from
+ * input.availablePhotos, which the caller sources from crm_project_photos
+ * (real photos only, see migration 0078).
+ */
+export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> {
+  if (input.availablePhotos.length === 0) {
+    throw new Error("No photos available for this project -- Markom must upload at least one real photo before AI can draft an ad");
+  }
+
+  const systemPrompt = await getSystemPrompt("markom");
+  const photoList = input.availablePhotos.map((p) => `- id: ${p.id}, keterangan: ${p.caption ?? "(tanpa keterangan)"}`).join("\n");
+  const researchPrompt = `Riset dulu lewat Google Search: (1) hal yang sedang viral/tren di media sosial Indonesia yang relevan untuk audiens pembeli properti/villa, dan (2) gaya iklan Click-to-WhatsApp kompetitor properti yang sedang berjalan di Meta Ads.
+
+Gunakan riset itu untuk membuat draft iklan Click-to-WhatsApp untuk project berikut:
+Nama Project: ${input.projectName}
+Kota: ${input.projectCity ?? "-"}
+Tipe: ${input.projectType}
+
+Foto asli yang tersedia (WAJIB pilih salah satu id ini, jangan mengarang foto lain):
+${photoList}
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoId": "salah satu id foto di atas", "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian}`;
+
+  const photoIds = input.availablePhotos.map((p) => p.id);
+
+  try {
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2048 });
+    return parseAdDraftJson(response.text, photoIds, input.projectName);
+  } catch {
+    // fall through to the unresearched fallback below -- still picks a real photo, just without grounded research backing the copy.
+  }
+
+  const fallbackPrompt = `Buatkan draft iklan Click-to-WhatsApp untuk project properti berikut, tanpa riset internet:
+Nama Project: ${input.projectName}
+Kota: ${input.projectCity ?? "-"}
+Tipe: ${input.projectType}
+
+Foto asli yang tersedia (WAJIB pilih salah satu id ini):
+${photoList}
+
+Balas HANYA dengan JSON object: {"targetSummary": "...", "photoId": "...", "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
+  return parseAdDraftJson(fallbackResponse.text, photoIds, input.projectName);
+}

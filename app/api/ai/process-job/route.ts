@@ -4,13 +4,15 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning } from "@/lib/ai/domains/crm";
-import { researchAndGenerateChecklist } from "@/lib/ai/domains/markom";
+import { researchAndDraftAd, researchAndGenerateChecklist } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { AIProviderError } from "@/lib/ai/provider/errors";
 import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
+import { isMetaConfigured } from "@/lib/meta/config";
+import { createAd, createAdCreative, createAdSet, createAdCampaign, getRemainingDailyBudgetIdr, uploadAdImageFromUrl } from "@/lib/meta/ads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +25,16 @@ interface MarkomChecklistDraftJobPayload {
   branch_id: string;
   branch_name: string;
   division_id: string;
+}
+
+interface MetaAdsLaunchJobPayload {
+  project_id: string;
+  branch_id: string;
+}
+
+/** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
+class NonRetryableJobError extends Error {
+  readonly retryable = false as const;
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -148,6 +160,137 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
 }
 
 /**
+ * One attempt to research + launch a real Click-to-WhatsApp ad campaign for
+ * one project -- fully autonomous per the user's explicit authorization (no
+ * human pre-approval step, unlike SP1 which stays draft-only). The only gate
+ * is the hard budget cap (getRemainingDailyBudgetIdr, see lib/meta/ads.ts):
+ * fails closed with no cap set. Every object is created ACTIVE in sequence
+ * (campaign -> ad set -> creative -> ad) -- if any step fails, no Ad object
+ * exists yet, so nothing spends; the campaign/ad set left behind (if any)
+ * sits idle with no running ad attached to it.
+ */
+async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as MetaAdsLaunchJobPayload;
+
+  if (!isMetaConfigured()) {
+    throw new NonRetryableJobError("Meta integration is not configured (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)");
+  }
+
+  const { data: project, error: projectError } = await supabase
+    .from("crm_projects")
+    .select("id, name, city, project_type, branch_id")
+    .eq("id", payload.project_id)
+    .single();
+  if (projectError || !project) throw new NonRetryableJobError(`Project ${payload.project_id} not found: ${projectError?.message}`);
+
+  const { data: photos } = await supabase
+    .from("crm_project_photos")
+    .select("id, public_url, caption")
+    .eq("project_id", project.id)
+    .is("deleted_at", null);
+  if (!photos || photos.length === 0) {
+    throw new NonRetryableJobError(`No photos uploaded for project "${project.name}" -- Markom must upload real photos before AI can launch an ad`);
+  }
+
+  let remainingBudgetIdr: number;
+  try {
+    remainingBudgetIdr = await getRemainingDailyBudgetIdr();
+  } catch (err) {
+    throw new NonRetryableJobError(err instanceof Error ? err.message : "Budget cap check failed");
+  }
+
+  const draft = await researchAndDraftAd({
+    projectName: project.name,
+    projectCity: project.city,
+    projectType: project.project_type,
+    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+  });
+  const photo = photos.find((p) => p.id === draft.photoId);
+  if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+
+  const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
+
+  try {
+    const imageHash = await uploadAdImageFromUrl(photo.public_url);
+    const campaign = await createAdCampaign({ name: `${project.name} - Leads WA (AI)`, status: "ACTIVE" });
+    const adSet = await createAdSet({
+      name: `${project.name} - Ad Set`,
+      campaignId: campaign.id,
+      dailyBudgetIdr,
+      targeting: { countries: ["ID"] },
+      status: "ACTIVE",
+    });
+    const creative = await createAdCreative({
+      name: `${project.name} - Creative`,
+      imageHash,
+      headline: draft.headline,
+      primaryText: draft.primaryText,
+      description: draft.description,
+      welcomeMessage: draft.welcomeMessage,
+    });
+    const ad = await createAd({ name: `${project.name} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
+
+    await supabase.from("meta_ad_campaigns").insert({
+      project_id: project.id,
+      branch_id: project.branch_id,
+      photo_id: photo.id,
+      meta_campaign_id: campaign.id,
+      meta_adset_id: adSet.id,
+      meta_creative_id: creative.id,
+      meta_ad_id: ad.id,
+      name: `${project.name} - Leads WA (AI)`,
+      headline: draft.headline,
+      primary_text: draft.primaryText,
+      description: draft.description,
+      daily_budget_idr: dailyBudgetIdr,
+      status: "active",
+      launched_by: "ai",
+      research_summary: draft.targetSummary,
+    });
+
+    const { data: managers } = await supabase
+      .from("v_employee_directory")
+      .select("id")
+      .eq("branch_id", project.branch_id)
+      .eq("role_key", "kepala_cabang")
+      .is("deleted_at", null);
+    for (const manager of managers ?? []) {
+      await supabase.from("mkc_notifications").insert({
+        user_id: manager.id,
+        type: "crm",
+        category: "ad_campaign_launched",
+        title: "AI meluncurkan iklan baru",
+        body: `AI meluncurkan iklan Click-to-WhatsApp untuk project "${project.name}" dengan budget harian Rp ${dailyBudgetIdr.toLocaleString("id-ID")}.`,
+        link: "/markom/ads",
+      });
+    }
+
+    return { projectId: project.id, metaAdId: ad.id, dailyBudgetIdr };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await supabase.from("meta_ad_campaigns").insert({
+      project_id: project.id,
+      branch_id: project.branch_id,
+      photo_id: photo.id,
+      meta_campaign_id: null,
+      meta_adset_id: null,
+      meta_creative_id: null,
+      meta_ad_id: null,
+      name: `${project.name} - Leads WA (AI, gagal)`,
+      headline: draft.headline,
+      primary_text: draft.primaryText,
+      description: draft.description,
+      daily_budget_idr: dailyBudgetIdr,
+      status: "failed",
+      launched_by: "ai",
+      research_summary: draft.targetSummary,
+      failure_reason: errorMessage,
+    });
+    throw new NonRetryableJobError(`Meta API call failed while launching ad for "${project.name}": ${errorMessage}`);
+  }
+}
+
+/**
  * Dispatched by ai_job_queue_after_insert (immediate, on enqueue) and
  * ai_job_dispatch_pending (pg_cron sweep every 1 minute, migration 0065).
  *
@@ -204,14 +347,16 @@ export async function POST(request: Request) {
         ? await processWhatsAppAiReply(supabase, job)
         : job.job_type === "crm_sp1_draft"
           ? await processCrmSp1Draft(supabase, job)
-          : await processMarkomChecklistDraft(supabase, job);
+          : job.job_type === "markom_checklist_draft"
+            ? await processMarkomChecklistDraft(supabase, job)
+            : await processMetaAdsLaunch(supabase, job);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
     return NextResponse.json({ status: "succeeded", result });
   } catch (err) {
     const attemptCount = job.attempt_count + 1;
-    const retryable = err instanceof AIProviderError ? err.retryable : true;
+    const retryable = err instanceof AIProviderError ? err.retryable : err instanceof NonRetryableJobError ? false : true;
     const errorMessage = err instanceof Error ? err.message : String(err);
 
     if (retryable && attemptCount < job.max_attempts) {
@@ -232,15 +377,18 @@ export async function POST(request: Request) {
     }
 
     // Every attempt is used up, or the failure is non-retryable (e.g. model
-    // not found). whatsapp_ai_reply must never leave the user without a
-    // reply -- send the friendly fallback now instead of silently
-    // dead-lettering with no WhatsApp message ever arriving. crm_sp1_draft
-    // and markom_checklist_draft have no chat counterpart waiting on a
-    // reply, so they just dead-letter: crm_sp1_draft's warning row already
-    // exists (unique sales_id/period_month/period_year), so nothing
-    // re-enqueues it automatically; markom_checklist_draft simply skips
-    // that team's checklist for this cycle -- the next 3-day dispatch tries
-    // again fresh. An operator can re-trigger either manually if needed.
+    // not found, Meta not configured, no budget headroom). whatsapp_ai_reply
+    // must never leave the user without a reply -- send the friendly
+    // fallback now instead of silently dead-lettering with no WhatsApp
+    // message ever arriving. crm_sp1_draft, markom_checklist_draft, and
+    // meta_ads_launch have no chat counterpart waiting on a reply, so they
+    // just dead-letter: crm_sp1_draft's warning row already exists (unique
+    // sales_id/period_month/period_year), so nothing re-enqueues it
+    // automatically; markom_checklist_draft simply skips that team's
+    // checklist for this cycle; meta_ads_launch's 7-day cooldown
+    // (markom_run_ai_ads_dispatch, migration 0081) means that project just
+    // gets retried on the next weekly dispatch. An operator can re-trigger
+    // any of them manually if needed.
     logger.error("ai job exhausted", { jobId: job.id, jobType: job.job_type, attemptCount, retryable, error: errorMessage });
 
     if (isWhatsAppReply) {

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
 import { ErrorLogTable } from "@/features/monitoring/components/error-log-table";
 import { HealthStatusCard } from "@/features/monitoring/components/health-status-card";
+import { MetaHealthStatusCard } from "@/features/monitoring/components/meta-health-status-card";
 import { PerformanceSummaryCards } from "@/features/monitoring/components/performance-summary-cards";
 import { WhatsAppHealthStatusCard } from "@/features/monitoring/components/whatsapp-health-status-card";
 import { requirePermission } from "@/lib/rbac/session";
@@ -16,10 +17,11 @@ export default async function MonitoringPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Monitoring" description="Kesehatan sistem, log error, dan performa aplikasi." />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HealthStatusCard />
         <AiHealthStatusCard />
         <WhatsAppHealthStatusCard />
+        <MetaHealthStatusCard />
       </div>
       <PerformanceSummaryCards />
       <ErrorLogTable />

@@ -53,6 +53,38 @@ export async function setCrmProjectActive(supabase: TypedSupabaseClient, id: str
   if (error) throw error;
 }
 
+/** Every active project (for the photo-upload / ad-creative project picker), branch-scoped for Kepala Cabang-level Markom. */
+export async function listActiveCrmProjects(supabase: TypedSupabaseClient, branchId?: string) {
+  let query = supabase.from("crm_projects").select("id, name, city, branch_id").eq("is_active", true).order("name");
+  if (branchId) query = query.eq("branch_id", branchId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** All non-deleted photos across projects, newest first, with the project name joined in -- the gallery Markom uploads to and the AI ads pipeline picks from. */
+export async function listProjectPhotos(supabase: TypedSupabaseClient, projectId?: string) {
+  let query = supabase
+    .from("crm_project_photos")
+    .select("id, project_id, storage_path, public_url, caption, uploaded_by, created_at, project:project_id(name)")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (projectId) query = query.eq("project_id", projectId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createProjectPhoto(supabase: TypedSupabaseClient, input: TablesInsert<"crm_project_photos">) {
+  const { error } = await supabase.from("crm_project_photos").insert(input);
+  if (error) throw error;
+}
+
+export async function deleteProjectPhoto(supabase: TypedSupabaseClient, id: string) {
+  const { error } = await supabase.from("crm_project_photos").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error;
+}
+
 export interface ProspectListFilters {
   salesId?: string;
   branchId?: string;
