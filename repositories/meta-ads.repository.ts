@@ -69,3 +69,27 @@ export async function markAdCampaignFailed(supabase: TypedSupabaseClient, id: st
     .eq("id", id);
   if (error) throw error;
 }
+
+export interface AdCampaignAnalysisResult {
+  spendIdr: number;
+  impressions: number;
+  clicks: number;
+  conversationsStarted: number;
+  aiAnalysis: string;
+}
+
+export async function saveAdCampaignAnalysis(supabase: TypedSupabaseClient, id: string, result: AdCampaignAnalysisResult) {
+  const { error } = await supabase
+    .from("meta_ad_campaigns")
+    .update({
+      spend_idr: result.spendIdr,
+      impressions: result.impressions,
+      clicks: result.clicks,
+      conversations_started: result.conversationsStarted,
+      ai_analysis: result.aiAnalysis,
+      analyzed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}

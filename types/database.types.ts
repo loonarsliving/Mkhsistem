@@ -1044,6 +1044,12 @@ export interface Database {
           launched_by: "ai" | "human";
           research_summary: string | null;
           failure_reason: string | null;
+          spend_idr: number | null;
+          impressions: number | null;
+          clicks: number | null;
+          conversations_started: number | null;
+          ai_analysis: string | null;
+          analyzed_at: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -1067,6 +1073,12 @@ export interface Database {
           launched_by?: "ai" | "human";
           research_summary?: string | null;
           failure_reason?: string | null;
+          spend_idr?: number | null;
+          impressions?: number | null;
+          clicks?: number | null;
+          conversations_started?: number | null;
+          ai_analysis?: string | null;
+          analyzed_at?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;

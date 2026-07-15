@@ -191,3 +191,43 @@ Balas HANYA dengan JSON object: {"targetSummary": "...", "photoId": "...", "head
   const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
   return parseAdDraftJson(fallbackResponse.text, photoIds, input.projectName);
 }
+
+export interface AdPerformanceInput {
+  projectName: string;
+  headline: string;
+  dailyBudgetIdr: number;
+  daysRunning: number;
+  spendIdr: number;
+  impressions: number;
+  clicks: number;
+  conversationsStarted: number;
+}
+
+/**
+ * Turns raw Meta insight numbers (a plain API read, no AI involved in
+ * computing them -- see getAdInsights, lib/meta/ads.ts) into a short
+ * written analysis + recommendation. This is the one part of "analyze the
+ * running ad" that genuinely needs generation: interpreting CTR/cost-per-
+ * conversation against the campaign's own context and saying what to do
+ * next, the way a human ads specialist would -- not just restating numbers
+ * the UI can already display directly.
+ */
+export async function analyzeAdPerformance(input: AdPerformanceInput): Promise<string> {
+  const ctr = input.impressions > 0 ? ((input.clicks / input.impressions) * 100).toFixed(2) : "0";
+  const costPerConversation = input.conversationsStarted > 0 ? Math.round(input.spendIdr / input.conversationsStarted) : null;
+
+  const userPrompt = `Analisa performa iklan Click-to-WhatsApp berikut dan berikan rekomendasi tindakan:
+
+Project: ${input.projectName}
+Headline: ${input.headline}
+Budget harian: Rp ${input.dailyBudgetIdr.toLocaleString("id-ID")}
+Sudah berjalan: ${input.daysRunning} hari
+Total spend: Rp ${input.spendIdr.toLocaleString("id-ID")}
+Impressions: ${input.impressions.toLocaleString("id-ID")}
+Klik: ${input.clicks.toLocaleString("id-ID")} (CTR ${ctr}%)
+Percakapan WhatsApp dimulai: ${input.conversationsStarted}${costPerConversation !== null ? ` (biaya per percakapan: Rp ${costPerConversation.toLocaleString("id-ID")})` : " (belum ada percakapan yang masuk)"}
+
+Berikan analisa singkat (3-5 kalimat, Bahasa Indonesia): (1) apakah performa ini baik/wajar/buruk untuk iklan leads properti, (2) kemungkinan penyebab jika buruk (foto kurang menarik, headline kurang relevan, budget terlalu kecil, atau audiens belum tepat), (3) rekomendasi konkret -- lanjutkan, naikkan budget, ganti foto/materi, atau hentikan.`;
+
+  return askAI(await getSystemPrompt("markom"), userPrompt);
+}

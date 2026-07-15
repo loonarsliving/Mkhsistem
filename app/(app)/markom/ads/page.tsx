@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { AdAccountBalanceCard } from "@/features/markom/components/ad-account-balance-card";
 import { AdCampaignList } from "@/features/markom/components/ad-campaign-list";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 
@@ -19,6 +20,7 @@ export default async function AdsSpecialistPage() {
         title="Ads Specialist"
         description="AI meriset tren & kompetitor lalu meluncurkan iklan Click-to-WhatsApp secara otomatis menggunakan foto asli dari galeri project -- mengarahkan leads langsung ke WhatsApp."
       />
+      <AdAccountBalanceCard />
       <AdCampaignList canManage={canManage} />
     </div>
   );

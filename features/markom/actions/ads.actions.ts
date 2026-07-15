@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { analyzeAdPerformance } from "@/lib/ai/domains/markom";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
-import { getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign, setAdStatus } from "@/lib/meta/ads";
+import { getAdAccountBalanceInfo, getAdInsights, getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign, setAdStatus } from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -12,6 +13,7 @@ import {
   markAdCampaignFailed,
   markAdCampaignLaunched,
   requestAdsResearch,
+  saveAdCampaignAnalysis,
   updateAdCampaignStatus,
 } from "@/repositories/meta-ads.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
@@ -21,6 +23,13 @@ export async function listAdCampaignsAction() {
   const supabase = await createClient();
   const scopedToOwnBranch = !hasPermission(session, "ad_campaign.manage");
   return listAdCampaigns(supabase, scopedToOwnBranch ? session.employee.branch_id : undefined);
+}
+
+/** Read-only account balance/spend snapshot -- there is no API to add funds, only to read what's already there (see lib/meta/ads.ts). */
+export async function getAdAccountBalanceAction() {
+  await requirePermission("ad_campaign.view");
+  if (!isMetaConfigured()) return null;
+  return getAdAccountBalanceInfo();
 }
 
 /** Step 1: research only, no spend. AI reads current trends/competitor ads and drafts copy + picks a photo, saved as a 'draft' row Markom reviews as a reference before deciding to launch. */
@@ -81,6 +90,45 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
     await markAdCampaignFailed(supabase, campaignId, reason);
     revalidatePath("/markom/ads");
     return actionError(`Gagal meluncurkan iklan: ${reason}`);
+  }
+
+  revalidatePath("/markom/ads");
+  return actionSuccess();
+}
+
+/** Fetches fresh spend/impressions/clicks/WhatsApp-conversations from Meta (a plain API read, no AI) then has AI write a short analysis + recommendation from those numbers -- both cached on the row so the page doesn't need to re-fetch/re-generate on every view. */
+export async function analyzeAdCampaignAction(id: string): Promise<ActionResult> {
+  await requirePermission("ad_campaign.manage");
+  const supabase = await createClient();
+
+  const campaign = await getAdCampaign(supabase, id);
+  if (!campaign.meta_ad_id) return actionError("Iklan ini belum diluncurkan ke Meta, belum ada yang bisa dianalisis");
+
+  try {
+    const insights = await getAdInsights(campaign.meta_ad_id);
+    const project = campaign.project as { name?: string } | null;
+    const daysRunning = Math.max(1, Math.ceil((Date.now() - new Date(campaign.created_at).getTime()) / (24 * 60 * 60 * 1000)));
+
+    const analysis = await analyzeAdPerformance({
+      projectName: project?.name ?? campaign.name,
+      headline: campaign.headline,
+      dailyBudgetIdr: campaign.daily_budget_idr,
+      daysRunning,
+      spendIdr: insights.spendIdr,
+      impressions: insights.impressions,
+      clicks: insights.clicks,
+      conversationsStarted: insights.messagingConversationsStarted,
+    });
+
+    await saveAdCampaignAnalysis(supabase, id, {
+      spendIdr: insights.spendIdr,
+      impressions: insights.impressions,
+      clicks: insights.clicks,
+      conversationsStarted: insights.messagingConversationsStarted,
+      aiAnalysis: analysis,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menganalisis performa iklan");
   }
 
   revalidatePath("/markom/ads");

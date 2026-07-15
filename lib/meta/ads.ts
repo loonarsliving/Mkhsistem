@@ -219,6 +219,36 @@ export async function getRemainingDailyBudgetIdr(): Promise<number> {
   return remaining;
 }
 
+export interface AdAccountBalanceInfo {
+  /** Only meaningful for prepaid accounts -- 0 (or absent) for accounts on monthly invoicing/direct debit, where there's no prepaid balance to draw down. */
+  balanceIdr: number;
+  amountSpentIdr: number;
+  currency: string;
+  fundingSourceDescription: string | null;
+}
+
+/**
+ * Read-only -- the Marketing API has no endpoint to add funds to an ad
+ * account. Adding/changing a payment method or topping up a prepaid
+ * balance can only be done by a human in Meta Business Suite -> Billing.
+ * This just surfaces what's already there.
+ */
+export async function getAdAccountBalanceInfo(): Promise<AdAccountBalanceInfo> {
+  const account = await metaGraphRequest<{
+    balance?: string;
+    amount_spent?: string;
+    currency?: string;
+    funding_source_details?: { display_string?: string };
+  }>(`/${META_CONFIG.adAccountId}`, { fields: "balance,amount_spent,currency,funding_source_details" });
+
+  return {
+    balanceIdr: Number(account.balance ?? "0"),
+    amountSpentIdr: Number(account.amount_spent ?? "0"),
+    currency: account.currency ?? "IDR",
+    fundingSourceDescription: account.funding_source_details?.display_string ?? null,
+  };
+}
+
 /** Total spend (IDR) across the whole ad account so far today -- the budget-cap safety check reads this before every new campaign launch. */
 export async function getTodaySpendIdr(): Promise<number> {
   const insights = await metaGraphRequest<{ data: { spend?: string }[] }>(`/${META_CONFIG.adAccountId}/insights`, {

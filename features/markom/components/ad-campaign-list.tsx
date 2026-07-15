@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pause, Play, Rocket, Search, Send } from "lucide-react";
+import { BarChart3, Eye, Loader2, MessageCircle, MousePointerClick, Pause, Play, Rocket, Search, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/empty-state";
+import { StatTile } from "@/components/shared/stat-tile";
 import { listProjectsForPhotoUploadAction } from "../actions/project-photo.actions";
-import { launchDraftCampaignAction, listAdCampaignsAction, requestAdsResearchAction, setAdCampaignStatusAction } from "../actions/ads.actions";
+import {
+  analyzeAdCampaignAction,
+  launchDraftCampaignAction,
+  listAdCampaignsAction,
+  requestAdsResearchAction,
+  setAdCampaignStatusAction,
+} from "../actions/ads.actions";
 
 const STATUS_LABEL: Record<string, { label: string; variant: "secondary" | "default" | "success" | "destructive" }> = {
   draft: { label: "Draft -- menunggu diluncurkan", variant: "default" },
@@ -58,6 +65,18 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
       return;
     }
     toast.success("Iklan berhasil diluncurkan ke Meta");
+    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+  }
+
+  async function handleAnalyze(id: string) {
+    setBusyId(id);
+    const result = await analyzeAdCampaignAction(id);
+    setBusyId(null);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal menganalisis performa iklan");
+      return;
+    }
+    toast.success("Analisis AI selesai");
     queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
@@ -140,23 +159,47 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     <p className="text-sm text-muted-foreground">{c.primary_text}</p>
                     {c.research_summary && <p className="text-xs italic text-muted-foreground">Riset AI: {c.research_summary}</p>}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
-                    {canManage && c.status === "draft" && (
-                      <Button size="sm" disabled={busyId === c.id} onClick={() => handleLaunchDraft(c.id)}>
-                        {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                        Luncurkan
-                      </Button>
+
+                    {c.analyzed_at && (c.status === "active" || c.status === "paused") && (
+                      <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <StatTile icon={Wallet} label="Spend" value={`Rp ${(c.spend_idr ?? 0).toLocaleString("id-ID")}`} className="p-2" />
+                          <StatTile icon={Eye} label="Impressions" value={(c.impressions ?? 0).toLocaleString("id-ID")} className="p-2" />
+                          <StatTile icon={MousePointerClick} label="Klik" value={(c.clicks ?? 0).toLocaleString("id-ID")} className="p-2" />
+                          <StatTile icon={MessageCircle} label="Percakapan WA" value={(c.conversations_started ?? 0).toLocaleString("id-ID")} className="p-2" />
+                        </div>
+                        {c.ai_analysis && <p className="text-xs text-muted-foreground">{c.ai_analysis}</p>}
+                        <p className="text-[11px] text-muted-foreground/70">
+                          Dianalisis {new Date(c.analyzed_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                        </p>
+                      </div>
                     )}
-                    {canManage && (c.status === "active" || c.status === "paused") && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busyId === c.id}
-                        onClick={() => handleToggleStatus(c.id, c.meta_ad_id, c.status)}
-                      >
-                        {c.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                        {c.status === "active" ? "Jeda" : "Aktifkan"}
-                      </Button>
-                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      {canManage && c.status === "draft" && (
+                        <Button size="sm" disabled={busyId === c.id} onClick={() => handleLaunchDraft(c.id)}>
+                          {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                          Luncurkan
+                        </Button>
+                      )}
+                      {canManage && (c.status === "active" || c.status === "paused") && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === c.id}
+                            onClick={() => handleToggleStatus(c.id, c.meta_ad_id, c.status)}
+                          >
+                            {c.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                            {c.status === "active" ? "Jeda" : "Aktifkan"}
+                          </Button>
+                          <Button size="sm" variant="outline" disabled={busyId === c.id} onClick={() => handleAnalyze(c.id)}>
+                            {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                            {c.analyzed_at ? "Analisis Ulang" : "Analisis"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
