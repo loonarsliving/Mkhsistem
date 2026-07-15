@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pause, Play, Rocket } from "lucide-react";
+import { Loader2, Pause, Play, Rocket, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,9 +12,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/empty-state";
 import { listProjectsForPhotoUploadAction } from "../actions/project-photo.actions";
-import { launchAdCampaignAction, listAdCampaignsAction, setAdCampaignStatusAction } from "../actions/ads.actions";
+import { launchDraftCampaignAction, listAdCampaignsAction, requestAdsResearchAction, setAdCampaignStatusAction } from "../actions/ads.actions";
 
 const STATUS_LABEL: Record<string, { label: string; variant: "secondary" | "default" | "success" | "destructive" }> = {
+  draft: { label: "Draft -- menunggu diluncurkan", variant: "default" },
   active: { label: "Aktif", variant: "success" },
   paused: { label: "Dijeda", variant: "secondary" },
   ended: { label: "Selesai", variant: "secondary" },
@@ -24,26 +25,39 @@ const STATUS_LABEL: Record<string, { label: string; variant: "secondary" | "defa
 export function AdCampaignList({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = React.useState<string>("");
-  const [launching, setLaunching] = React.useState(false);
+  const [researching, setResearching] = React.useState(false);
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   const { data: projects } = useQuery({ queryKey: ["markom-projects-for-photos"], queryFn: listProjectsForPhotoUploadAction, enabled: canManage });
   const { data: campaigns, isLoading } = useQuery({ queryKey: ["markom-ad-campaigns"], queryFn: listAdCampaignsAction });
 
-  async function handleLaunch() {
+  async function handleResearch() {
     const project = (projects ?? []).find((p) => p.id === projectId);
     if (!project) {
       toast.error("Pilih project terlebih dahulu");
       return;
     }
-    setLaunching(true);
-    const result = await launchAdCampaignAction(project.id, project.branch_id);
-    setLaunching(false);
+    setResearching(true);
+    const result = await requestAdsResearchAction(project.id, project.branch_id);
+    setResearching(false);
     if (!result.success) {
-      toast.error(result.error ?? "Gagal menjadwalkan peluncuran iklan");
+      toast.error(result.error ?? "Gagal menjadwalkan riset iklan");
       return;
     }
-    toast.success("AI akan meriset dan meluncurkan iklan untuk project ini");
+    toast.success("AI sedang meriset -- hasilnya akan muncul di bawah sebagai draft dalam beberapa saat");
+    queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+  }
+
+  async function handleLaunchDraft(id: string) {
+    setBusyId(id);
+    const result = await launchDraftCampaignAction(id);
+    setBusyId(null);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal meluncurkan iklan");
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+      return;
+    }
+    toast.success("Iklan berhasil diluncurkan ke Meta");
     queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
   }
 
@@ -68,7 +82,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
         <Card>
           <CardContent className="flex flex-wrap items-end gap-3 p-4">
             <div className="min-w-56 space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Luncurkan iklan sekarang untuk project</p>
+              <p className="text-xs font-medium text-muted-foreground">Riset iklan untuk project</p>
               <Select value={projectId} onValueChange={setProjectId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih project" />
@@ -83,19 +97,19 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="button" onClick={handleLaunch} disabled={launching || !projectId}>
-              {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-              Riset &amp; Luncurkan
+            <Button type="button" onClick={handleResearch} disabled={researching || !projectId}>
+              {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Riset
             </Button>
             <p className="w-full text-xs text-muted-foreground">
-              AI akan meriset tren &amp; kompetitor, memilih foto dari galeri project, menulis materi iklan, dan langsung meluncurkan iklan Click-to-WhatsApp -- tanpa perlu persetujuan manual. Project ini juga otomatis dijadwalkan ulang tiap minggu jika sudah punya foto.
+              AI meriset tren &amp; kompetitor, memilih foto dari galeri project, dan menulis materi iklan -- hasilnya muncul di bawah sebagai <strong>Draft</strong> untuk Anda tinjau. Iklan baru benar-benar tayang (dan mulai menghabiskan budget) setelah Anda menekan tombol <strong>Luncurkan</strong> pada draft tersebut. Project ini juga otomatis dijadwalkan ulang tiap minggu untuk diluncurkan otomatis oleh AI jika sudah punya foto.
             </p>
           </CardContent>
         </Card>
       )}
 
       {!isLoading && items.length === 0 && (
-        <EmptyState icon={Rocket} title="Belum ada iklan" description="AI akan meluncurkan iklan otomatis setiap minggu untuk project yang sudah punya foto, atau luncurkan sekarang di atas." />
+        <EmptyState icon={Rocket} title="Belum ada iklan" description="Klik Riset di atas untuk membuat draft iklan pertama, atau tunggu AI menjadwalkan otomatis tiap minggu." />
       )}
 
       {items.length > 0 && (
@@ -126,6 +140,12 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     <p className="text-sm text-muted-foreground">{c.primary_text}</p>
                     {c.research_summary && <p className="text-xs italic text-muted-foreground">Riset AI: {c.research_summary}</p>}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
+                    {canManage && c.status === "draft" && (
+                      <Button size="sm" disabled={busyId === c.id} onClick={() => handleLaunchDraft(c.id)}>
+                        {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        Luncurkan
+                      </Button>
+                    )}
                     {canManage && (c.status === "active" || c.status === "paused") && (
                       <Button
                         size="sm"

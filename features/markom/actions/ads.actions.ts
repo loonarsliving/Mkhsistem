@@ -3,9 +3,17 @@
 import { revalidatePath } from "next/cache";
 
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
-import { setAdStatus } from "@/lib/meta/ads";
+import { getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign, setAdStatus } from "@/lib/meta/ads";
+import { isMetaConfigured } from "@/lib/meta/config";
 import { createClient } from "@/lib/supabase/server";
-import { enqueueAdsLaunchJob, listAdCampaigns, updateAdCampaignStatus } from "@/repositories/meta-ads.repository";
+import {
+  getAdCampaign,
+  listAdCampaigns,
+  markAdCampaignFailed,
+  markAdCampaignLaunched,
+  requestAdsResearch,
+  updateAdCampaignStatus,
+} from "@/repositories/meta-ads.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 export async function listAdCampaignsAction() {
@@ -15,15 +23,66 @@ export async function listAdCampaignsAction() {
   return listAdCampaigns(supabase, scopedToOwnBranch ? session.employee.branch_id : undefined);
 }
 
-/** Manual trigger -- normally AI launches these on its own weekly cron (markom_run_ai_ads_dispatch), this lets Markom ask for a fresh campaign for a specific project right now instead of waiting for the next cycle. */
-export async function launchAdCampaignAction(projectId: string, branchId: string): Promise<ActionResult> {
+/** Step 1: research only, no spend. AI reads current trends/competitor ads and drafts copy + picks a photo, saved as a 'draft' row Markom reviews as a reference before deciding to launch. */
+export async function requestAdsResearchAction(projectId: string, branchId: string): Promise<ActionResult> {
   await requirePermission("ad_campaign.manage");
   const supabase = await createClient();
   try {
-    await enqueueAdsLaunchJob(supabase, projectId, branchId);
+    await requestAdsResearch(supabase, projectId, branchId);
   } catch (err) {
-    return actionError(err instanceof Error ? err.message : "Gagal menjadwalkan peluncuran iklan");
+    return actionError(err instanceof Error ? err.message : "Gagal menjadwalkan riset iklan");
   }
+  revalidatePath("/markom/ads");
+  return actionSuccess();
+}
+
+/** Step 2: explicit human confirmation to actually spend -- launches a saved 'draft' row's exact content via the real Meta API, no new Gemini call. */
+export async function launchDraftCampaignAction(campaignId: string): Promise<ActionResult> {
+  await requirePermission("ad_campaign.manage");
+  const supabase = await createClient();
+
+  if (!isMetaConfigured()) {
+    return actionError("Meta integration belum dikonfigurasi (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)");
+  }
+
+  const draft = await getAdCampaign(supabase, campaignId);
+  if (draft.status !== "draft") return actionError("Iklan ini sudah diluncurkan atau bukan draft");
+
+  const photo = draft.photo as { public_url?: string } | null;
+  const project = draft.project as { name?: string } | null;
+  if (!photo?.public_url) return actionError("Foto untuk draft ini tidak ditemukan");
+
+  let dailyBudgetIdr: number;
+  try {
+    const remaining = await getRemainingDailyBudgetIdr();
+    dailyBudgetIdr = Math.min(draft.daily_budget_idr, remaining);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Cek batas budget gagal");
+  }
+
+  try {
+    const result = await launchWhatsAppLeadCampaign({
+      projectName: project?.name ?? draft.name,
+      photoUrl: photo.public_url,
+      headline: draft.headline,
+      primaryText: draft.primary_text,
+      description: draft.description ?? undefined,
+      welcomeMessage: draft.welcome_message ?? undefined,
+      dailyBudgetIdr,
+    });
+    await markAdCampaignLaunched(supabase, campaignId, {
+      campaignId: result.campaignId,
+      adSetId: result.adSetId,
+      creativeId: result.creativeId,
+      adId: result.adId,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "Meta API call failed";
+    await markAdCampaignFailed(supabase, campaignId, reason);
+    revalidatePath("/markom/ads");
+    return actionError(`Gagal meluncurkan iklan: ${reason}`);
+  }
+
   revalidatePath("/markom/ads");
   return actionSuccess();
 }

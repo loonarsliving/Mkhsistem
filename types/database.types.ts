@@ -1038,8 +1038,9 @@ export interface Database {
           headline: string;
           primary_text: string;
           description: string | null;
+          welcome_message: string | null;
           daily_budget_idr: number;
-          status: "active" | "paused" | "ended" | "failed";
+          status: "draft" | "active" | "paused" | "ended" | "failed";
           launched_by: "ai" | "human";
           research_summary: string | null;
           failure_reason: string | null;
@@ -1060,8 +1061,9 @@ export interface Database {
           headline: string;
           primary_text: string;
           description?: string | null;
+          welcome_message?: string | null;
           daily_budget_idr: number;
-          status?: "active" | "paused" | "ended" | "failed";
+          status?: "draft" | "active" | "paused" | "ended" | "failed";
           launched_by?: "ai" | "human";
           research_summary?: string | null;
           failure_reason?: string | null;
@@ -1383,7 +1385,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1395,7 +1397,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -2130,6 +2132,7 @@ export interface Database {
       crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
+      markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };
       create_payroll_run: {
         Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
         Returns: string;

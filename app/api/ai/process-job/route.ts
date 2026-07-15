@@ -12,7 +12,7 @@ import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
-import { createAd, createAdCreative, createAdSet, createAdCampaign, getRemainingDailyBudgetIdr, uploadAdImageFromUrl } from "@/lib/meta/ads";
+import { getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign } from "@/lib/meta/ads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -159,29 +159,14 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
   return { branchId: payload.branch_id, taskCount: taskRows.length };
 }
 
-/**
- * One attempt to research + launch a real Click-to-WhatsApp ad campaign for
- * one project -- fully autonomous per the user's explicit authorization (no
- * human pre-approval step, unlike SP1 which stays draft-only). The only gate
- * is the hard budget cap (getRemainingDailyBudgetIdr, see lib/meta/ads.ts):
- * fails closed with no cap set. Every object is created ACTIVE in sequence
- * (campaign -> ad set -> creative -> ad) -- if any step fails, no Ad object
- * exists yet, so nothing spends; the campaign/ad set left behind (if any)
- * sits idle with no running ad attached to it.
- */
-async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
-  const payload = job.payload as unknown as MetaAdsLaunchJobPayload;
-
-  if (!isMetaConfigured()) {
-    throw new NonRetryableJobError("Meta integration is not configured (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)");
-  }
-
+/** Shared by processMetaAdsLaunch and processMetaAdsResearch -- both need the same project + photo lookup, with the same "no photos yet" guard. */
+async function loadProjectWithPhotos(supabase: AdminClient, projectId: string) {
   const { data: project, error: projectError } = await supabase
     .from("crm_projects")
     .select("id, name, city, project_type, branch_id")
-    .eq("id", payload.project_id)
+    .eq("id", projectId)
     .single();
-  if (projectError || !project) throw new NonRetryableJobError(`Project ${payload.project_id} not found: ${projectError?.message}`);
+  if (projectError || !project) throw new NonRetryableJobError(`Project ${projectId} not found: ${projectError?.message}`);
 
   const { data: photos } = await supabase
     .from("crm_project_photos")
@@ -191,6 +176,31 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   if (!photos || photos.length === 0) {
     throw new NonRetryableJobError(`No photos uploaded for project "${project.name}" -- Markom must upload real photos before AI can launch an ad`);
   }
+
+  return { project, photos };
+}
+
+/**
+ * One attempt to research + launch a real Click-to-WhatsApp ad campaign for
+ * one project -- fully autonomous per the user's explicit authorization (no
+ * human pre-approval step, unlike SP1 which stays draft-only). Used only by
+ * the weekly cron (markom_run_ai_ads_dispatch, migration 0081); the manual
+ * "Riset" button on /markom/ads goes through processMetaAdsResearch instead,
+ * which stops at a reviewable 'draft' row. The only gate here is the hard
+ * budget cap (getRemainingDailyBudgetIdr, see lib/meta/ads.ts): fails closed
+ * with no cap set. Every object is created ACTIVE in sequence (campaign ->
+ * ad set -> creative -> ad) -- if any step fails, no Ad object exists yet,
+ * so nothing spends; the campaign/ad set left behind (if any) sits idle
+ * with no running ad attached to it.
+ */
+async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as MetaAdsLaunchJobPayload;
+
+  if (!isMetaConfigured()) {
+    throw new NonRetryableJobError("Meta integration is not configured (META_ACCESS_TOKEN/META_AD_ACCOUNT_ID/META_PAGE_ID)");
+  }
+
+  const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
 
   let remainingBudgetIdr: number;
   try {
@@ -211,37 +221,29 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
 
   try {
-    const imageHash = await uploadAdImageFromUrl(photo.public_url);
-    const campaign = await createAdCampaign({ name: `${project.name} - Leads WA (AI)`, status: "ACTIVE" });
-    const adSet = await createAdSet({
-      name: `${project.name} - Ad Set`,
-      campaignId: campaign.id,
-      dailyBudgetIdr,
-      targeting: { countries: ["ID"] },
-      status: "ACTIVE",
-    });
-    const creative = await createAdCreative({
-      name: `${project.name} - Creative`,
-      imageHash,
+    const result = await launchWhatsAppLeadCampaign({
+      projectName: project.name,
+      photoUrl: photo.public_url,
       headline: draft.headline,
       primaryText: draft.primaryText,
       description: draft.description,
       welcomeMessage: draft.welcomeMessage,
+      dailyBudgetIdr,
     });
-    const ad = await createAd({ name: `${project.name} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
 
     await supabase.from("meta_ad_campaigns").insert({
       project_id: project.id,
       branch_id: project.branch_id,
       photo_id: photo.id,
-      meta_campaign_id: campaign.id,
-      meta_adset_id: adSet.id,
-      meta_creative_id: creative.id,
-      meta_ad_id: ad.id,
+      meta_campaign_id: result.campaignId,
+      meta_adset_id: result.adSetId,
+      meta_creative_id: result.creativeId,
+      meta_ad_id: result.adId,
       name: `${project.name} - Leads WA (AI)`,
       headline: draft.headline,
       primary_text: draft.primaryText,
       description: draft.description,
+      welcome_message: draft.welcomeMessage,
       daily_budget_idr: dailyBudgetIdr,
       status: "active",
       launched_by: "ai",
@@ -265,7 +267,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       });
     }
 
-    return { projectId: project.id, metaAdId: ad.id, dailyBudgetIdr };
+    return { projectId: project.id, metaAdId: result.adId, dailyBudgetIdr };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await supabase.from("meta_ad_campaigns").insert({
@@ -280,6 +282,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       headline: draft.headline,
       primary_text: draft.primaryText,
       description: draft.description,
+      welcome_message: draft.welcomeMessage,
       daily_budget_idr: dailyBudgetIdr,
       status: "failed",
       launched_by: "ai",
@@ -288,6 +291,56 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     });
     throw new NonRetryableJobError(`Meta API call failed while launching ad for "${project.name}": ${errorMessage}`);
   }
+}
+
+interface MetaAdsResearchJobPayload {
+  project_id: string;
+  branch_id: string;
+}
+
+/**
+ * One attempt to research (Google Search grounding, no Meta API calls, no
+ * spend) and save a reviewable 'draft' row -- triggered by the manual
+ * "Riset" button (markom_request_ads_research RPC, migration 0082). A human
+ * then reviews the draft on /markom/ads and clicks "Luncurkan" separately
+ * (launchDraftCampaignAction, features/markom/actions/ads.actions.ts) to
+ * actually spend, using launchWhatsAppLeadCampaign directly -- no second
+ * Gemini call needed at that point.
+ */
+async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as MetaAdsResearchJobPayload;
+  const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
+
+  const draft = await researchAndDraftAd({
+    projectName: project.name,
+    projectCity: project.city,
+    projectType: project.project_type,
+    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+  });
+  const photo = photos.find((p) => p.id === draft.photoId);
+  if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("meta_ad_campaigns")
+    .insert({
+      project_id: project.id,
+      branch_id: project.branch_id,
+      photo_id: photo.id,
+      name: `${project.name} - Leads WA (Draft)`,
+      headline: draft.headline,
+      primary_text: draft.primaryText,
+      description: draft.description,
+      welcome_message: draft.welcomeMessage,
+      daily_budget_idr: Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000),
+      status: "draft",
+      launched_by: "human",
+      research_summary: draft.targetSummary,
+    })
+    .select("id")
+    .single();
+  if (insertError || !inserted) throw new Error(`Failed to save ad draft: ${insertError?.message}`);
+
+  return { projectId: project.id, draftId: inserted.id };
 }
 
 /**
@@ -349,7 +402,9 @@ export async function POST(request: Request) {
           ? await processCrmSp1Draft(supabase, job)
           : job.job_type === "markom_checklist_draft"
             ? await processMarkomChecklistDraft(supabase, job)
-            : await processMetaAdsLaunch(supabase, job);
+            : job.job_type === "meta_ads_launch"
+              ? await processMetaAdsLaunch(supabase, job)
+              : await processMetaAdsResearch(supabase, job);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

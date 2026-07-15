@@ -145,6 +145,54 @@ export async function createAd(input: CreateAdInput): Promise<{ id: string }> {
   );
 }
 
+export interface LaunchCampaignInput {
+  projectName: string;
+  photoUrl: string;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  welcomeMessage?: string;
+  dailyBudgetIdr: number;
+}
+
+export interface LaunchCampaignResult {
+  campaignId: string;
+  adSetId: string;
+  creativeId: string;
+  adId: string;
+}
+
+/**
+ * The full Campaign -> AdSet -> Creative -> Ad sequence, real spend from
+ * the moment it returns. Pure Meta orchestration only -- no DB writes, so
+ * both the fully-autonomous job handler (processMetaAdsLaunch,
+ * app/api/ai/process-job/route.ts) and the manual "Luncurkan" server
+ * action (launchDraftCampaignAction, features/markom/actions/ads.actions.ts)
+ * share this instead of duplicating it, each doing its own DB bookkeeping
+ * around the call.
+ */
+export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Promise<LaunchCampaignResult> {
+  const imageHash = await uploadAdImageFromUrl(input.photoUrl);
+  const campaign = await createAdCampaign({ name: `${input.projectName} - Leads WA (AI)`, status: "ACTIVE" });
+  const adSet = await createAdSet({
+    name: `${input.projectName} - Ad Set`,
+    campaignId: campaign.id,
+    dailyBudgetIdr: input.dailyBudgetIdr,
+    targeting: { countries: ["ID"] },
+    status: "ACTIVE",
+  });
+  const creative = await createAdCreative({
+    name: `${input.projectName} - Creative`,
+    imageHash,
+    headline: input.headline,
+    primaryText: input.primaryText,
+    description: input.description,
+    welcomeMessage: input.welcomeMessage,
+  });
+  const ad = await createAd({ name: `${input.projectName} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
+  return { campaignId: campaign.id, adSetId: adSet.id, creativeId: creative.id, adId: ad.id };
+}
+
 /** Human override from the Ads Specialist page -- pause/resume an ad AI already launched. */
 export async function setAdStatus(adId: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: boolean }> {
   return metaGraphRequest(`/${adId}`, { status }, "POST");
