@@ -74,6 +74,22 @@ export async function GET() {
     } catch (err) {
       result.campaignLiveStatusError = err instanceof Error ? err.message : String(err);
     }
+
+    // Investigating "why does the Cibarusah (non-villa) campaign's reach
+    // extend to Yogyakarta" -- this ad set's real geo_locations targeting
+    // straight from Meta, not our DB's copy, to confirm/rule out whether it
+    // actually got the new AI-researched local-area targeting (0094/0096)
+    // or the old countrywide fallback (it was created ~05:57 UTC, right
+    // around when that feature's deploy went live -- meta_ad_campaigns.target_areas
+    // being null on this row already suggests the old code path ran).
+    const cibarusahAdsetId = "120249784471370642";
+    try {
+      result.cibarusahAdsetTargeting = await metaGraphRequest<Record<string, unknown>>(`/${cibarusahAdsetId}`, {
+        fields: "id,name,targeting",
+      });
+    } catch (err) {
+      result.cibarusahAdsetTargetingError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   return NextResponse.json(result);
