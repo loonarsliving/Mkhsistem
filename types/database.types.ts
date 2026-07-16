@@ -2261,6 +2261,9 @@ export interface Database {
           updated_at: string;
           alert_threshold: number;
           notify_dirops: boolean;
+          situation_type: string;
+          situation_note: string | null;
+          reminder_interval_days: number;
         };
         Insert: {
           id?: string;
@@ -2272,6 +2275,9 @@ export interface Database {
           updated_at?: string;
           alert_threshold?: number;
           notify_dirops?: boolean;
+          situation_type?: string;
+          situation_note?: string | null;
+          reminder_interval_days?: number;
         };
         Update: Partial<Database["public"]["Tables"]["finance_branch_balances"]["Insert"]>;
         Relationships: [

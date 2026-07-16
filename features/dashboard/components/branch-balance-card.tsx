@@ -3,7 +3,13 @@ import { AlertTriangle, Wallet } from "lucide-react";
 import { RevenueTile } from "@/components/shared/revenue-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
-import type { BranchBalance } from "@/repositories/finance-branch-balance.repository";
+import type { BranchBalance, BranchSituationType } from "@/repositories/finance-branch-balance.repository";
+
+const SITUATION_LABEL: Record<BranchSituationType, string> = {
+  cash_low: "Saldo di bawah ambang batas",
+  no_project: "Belum ada proyek dibuka",
+  no_sales: "Belum ada penjualan sejak proyek dibuka",
+};
 
 /**
  * Kepala Cabang's own branch cash position, synced live from MKH Property
@@ -32,8 +38,9 @@ export function BranchBalanceCard({ balance }: { balance: BranchBalance | null }
           <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Saldo di bawah ambang batas ({formatCurrency(balance.alert_threshold)} — biaya gaji + operasional bulanan cabang ini).
-              Rekomendasi tindakan AI akan dikirim via WhatsApp.
+              {SITUATION_LABEL[balance.situation_type]}
+              {balance.situation_type === "cash_low" && ` (ambang batas ${formatCurrency(balance.alert_threshold)} — biaya gaji + operasional bulanan cabang ini)`}
+              . Rekomendasi tindakan AI akan dikirim via WhatsApp.
             </span>
           </div>
         )}
@@ -64,7 +71,7 @@ export function AllBranchBalancesCard({ balances }: { balances: BranchBalance[] 
                 <p className={`mt-1 text-lg font-bold tabular-nums ${isLow ? "text-destructive" : ""}`}>{formatCurrency(b.saldo)}</p>
                 {isLow && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                    <AlertTriangle className="h-3 w-3" /> Di bawah ambang batas
+                    <AlertTriangle className="h-3 w-3" /> {SITUATION_LABEL[b.situation_type]}
                   </p>
                 )}
               </div>

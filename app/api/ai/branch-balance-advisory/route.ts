@@ -2,34 +2,38 @@ import { NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generateBranchBalanceAdvisory } from "@/lib/ai/domains/finance";
+import { generateBranchAdvisory, type BranchSituationType } from "@/lib/ai/domains/finance";
 import type { TablesInsert } from "@/types/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Don't re-alert the same branch more than once in this window. */
-const RE_ALERT_COOLDOWN_HOURS = 24;
+const SITUATION_TITLE: Record<BranchSituationType, (branchName: string) => string> = {
+  cash_low: (b) => `Peringatan Saldo Kas — ${b}`,
+  no_project: (b) => `Pengingat: Segera Buka Proyek — ${b}`,
+  no_sales: (b) => `Perhatian: Belum Ada Penjualan — ${b}`,
+};
 
 /**
  * Invoked daily by pg_cron (ai-branch-balance-advisory-daily, see
- * 0098_finance_expense_alerts_and_branch_balance.sql /
- * 0099_branch_balance_thresholds_and_expense_alert_detail.sql) via
- * net.http_post -- mirrors the no-shared-secret, re-derive-everything-
- * from-the-DB pattern of app/api/ai/whatsapp-relay: this route only ever
- * acts on employees.branch_id it looks up itself, so a forged call can't
- * target an arbitrary phone number.
+ * 0098/0099/0100 migrations) via net.http_post -- mirrors the no-shared-
+ * secret, re-derive-everything-from-the-DB pattern of app/api/ai/whatsapp-
+ * relay: this route only ever acts on employees.branch_id it looks up
+ * itself, so a forged call can't target an arbitrary phone number.
  *
- * Each branch has its own alert_threshold (its real monthly payroll +
- * operating cost, set by CFO) and an optional notify_dirops flag --
- * Jabodetabek also alerts Direktur Operasional, not just its Kepala Cabang.
+ * Each branch has its own alert_threshold (real monthly payroll + operating
+ * cost), situation_type (cash_low / no_project / no_sales -- picks the AI
+ * prompt, tone, and recipients), and reminder_interval_days (cooldown
+ * between re-alerts -- most branches daily, Makassar every 2 days).
+ * Jabodetabek's notify_dirops also routes its no_sales advisory to
+ * Direktur Operasional in addition to its Kepala Cabang.
  */
 export async function POST() {
   const supabase = createAdminClient();
 
   const { data: allBalances, error: balancesError } = await supabase
     .from("finance_branch_balances")
-    .select("branch_id, branch_name, saldo, alert_threshold, notify_dirops");
+    .select("branch_id, branch_name, saldo, alert_threshold, notify_dirops, situation_type, situation_note, reminder_interval_days");
 
   if (balancesError) {
     logger.error("branch-balance-advisory: failed to load finance_branch_balances", { error: balancesError.message });
@@ -45,7 +49,8 @@ export async function POST() {
   let alerted = 0;
 
   for (const balance of belowThreshold) {
-    const cooldownSince = new Date(Date.now() - RE_ALERT_COOLDOWN_HOURS * 60 * 60 * 1000).toISOString();
+    const situationType = balance.situation_type as BranchSituationType;
+    const cooldownSince = new Date(Date.now() - balance.reminder_interval_days * 24 * 60 * 60 * 1000).toISOString();
     const { data: recentAlert } = await supabase
       .from("mkc_notifications")
       .select("id")
@@ -79,11 +84,13 @@ export async function POST() {
 
     let advisory: string;
     try {
-      advisory = await generateBranchBalanceAdvisory({
+      advisory = await generateBranchAdvisory({
+        situationType,
         branchName: balance.branch_name,
         saldo: balance.saldo,
         thresholdAmount: balance.alert_threshold,
         dayOfMonth,
+        situationNote: balance.situation_note,
       });
     } catch (err) {
       logger.error("branch-balance-advisory: AI generation failed", { branch: balance.branch_name, error: String(err) });
@@ -94,10 +101,10 @@ export async function POST() {
       user_id: userId,
       type: "system",
       category: "branch_balance_alert",
-      title: `Peringatan Saldo Kas — ${balance.branch_name}`,
+      title: SITUATION_TITLE[situationType](balance.branch_name),
       body: advisory,
       link: "/dashboard",
-      metadata: { branch_id: balance.branch_id, saldo: balance.saldo, threshold: balance.alert_threshold },
+      metadata: { branch_id: balance.branch_id, saldo: balance.saldo, threshold: balance.alert_threshold, situation_type: situationType },
     }));
 
     const { error: insertError } = await supabase.from("mkc_notifications").insert(rows);
