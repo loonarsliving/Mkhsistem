@@ -10,11 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { uploadEntityFile } from "@/lib/supabase/storage";
 
-import { createProjectPhotoAction, deleteProjectPhotoAction, listProjectPhotosAction, listProjectsForPhotoUploadAction } from "../actions/project-photo.actions";
+import {
+  createProjectPhotoAction,
+  deleteProjectPhotoAction,
+  listProjectPhotosAction,
+  listProjectsForPhotoUploadAction,
+  updateProjectProductDescriptionAction,
+} from "../actions/project-photo.actions";
 
 /**
  * Real-photo source for the Ads Specialist AI pipeline: Markom uploads real
@@ -29,6 +36,8 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
   const [uploading, setUploading] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [productDescription, setProductDescription] = React.useState("");
+  const [savingDescription, setSavingDescription] = React.useState(false);
 
   const { data: projects } = useQuery({ queryKey: ["markom-projects-for-photos"], queryFn: listProjectsForPhotoUploadAction });
   const { data: photos, isLoading } = useQuery({ queryKey: ["markom-project-photos"], queryFn: () => listProjectPhotosAction() });
@@ -36,6 +45,24 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
   React.useEffect(() => {
     if (!projectId && projects && projects.length > 0) setProjectId(projects[0].id);
   }, [projects, projectId]);
+
+  const selectedProject = (projects ?? []).find((p) => p.id === projectId);
+  React.useEffect(() => {
+    setProductDescription(selectedProject?.product_description ?? "");
+  }, [selectedProject?.id, selectedProject?.product_description]);
+
+  async function handleSaveProductDescription() {
+    if (!projectId) return;
+    setSavingDescription(true);
+    const result = await updateProjectProductDescriptionAction(projectId, productDescription);
+    setSavingDescription(false);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal menyimpan deskripsi produk");
+      return;
+    }
+    toast.success("Deskripsi produk disimpan");
+    queryClient.invalidateQueries({ queryKey: ["markom-projects-for-photos"] });
+  }
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -108,6 +135,30 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
             <Button type="button" onClick={() => inputRef.current?.click()} disabled={uploading || !projectId}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
               Unggah Foto
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManage && projectId && (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <div>
+              <p className="text-sm font-medium">Deskripsi Produk — {selectedProject?.name ?? ""}</p>
+              <p className="text-xs text-muted-foreground">
+                Jelaskan spesifikasi, harga, dan keunggulan project ini (mis. luas tanah/bangunan, kisaran harga, fasilitas, target pembeli). AI
+                riset iklan memakai ini untuk menulis materi yang benar-benar relevan dengan produk, bukan cuma nama & kota project.
+              </p>
+            </div>
+            <Textarea
+              value={productDescription}
+              onChange={(e) => setProductDescription(e.target.value)}
+              placeholder="Contoh: Villa 2 lantai, LT 150m² / LB 120m², harga mulai Rp 850 juta (leasehold 25 tahun). Kolam renang privat, 3 kamar tidur, akses 10 menit ke Malioboro. Cocok untuk investor yang cari passive income dari sewa harian."
+              rows={4}
+            />
+            <Button size="sm" onClick={handleSaveProductDescription} disabled={savingDescription}>
+              {savingDescription ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Simpan Deskripsi Produk
             </Button>
           </CardContent>
         </Card>

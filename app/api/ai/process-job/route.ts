@@ -202,7 +202,7 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
 async function loadProjectWithPhotos(supabase: AdminClient, projectId: string) {
   const { data: project, error: projectError } = await supabase
     .from("crm_projects")
-    .select("id, name, city, project_type, branch_id")
+    .select("id, name, city, project_type, branch_id, product_description")
     .eq("id", projectId)
     .single();
   if (projectError || !project) throw new NonRetryableJobError(`Project ${projectId} not found: ${projectError?.message}`);
@@ -252,6 +252,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     projectName: project.name,
     projectCity: project.city,
     projectType: project.project_type,
+    productDescription: project.product_description,
     availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
     targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
   });
@@ -359,6 +360,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       projectName: project.name,
       projectCity: project.city,
       projectType: project.project_type,
+      productDescription: project.product_description,
       availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
       targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
     });

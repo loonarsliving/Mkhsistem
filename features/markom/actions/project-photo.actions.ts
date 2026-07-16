@@ -9,6 +9,7 @@ import {
   deleteProjectPhoto,
   listActiveCrmProjects,
   listProjectPhotos,
+  updateProjectProductDescription,
 } from "@/repositories/crm.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
@@ -44,6 +45,22 @@ export async function createProjectPhotoAction(input: CreateProjectPhotoInput): 
     });
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal menyimpan foto");
+  }
+
+  revalidatePath("/markom/photos");
+  return actionSuccess();
+}
+
+/** Grounds the AI ad-drafting pipeline in the actual product (price/specs/USP/target buyer) instead of just name+city+type -- see lib/ai/domains/markom.ts's researchAndDraftAd. */
+export async function updateProjectProductDescriptionAction(projectId: string, productDescription: string): Promise<ActionResult> {
+  const session = await requirePermission("crm_project_photo.manage");
+  if (productDescription.length > 2000) return actionError("Deskripsi produk maksimal 2000 karakter");
+
+  const supabase = await createClient();
+  try {
+    await updateProjectProductDescription(supabase, projectId, productDescription.trim(), session.userId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan deskripsi produk");
   }
 
   revalidatePath("/markom/photos");

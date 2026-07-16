@@ -957,6 +957,7 @@ export interface Database {
           target_launch_date: string | null;
           is_active: boolean;
           mkh_project_code: string | null;
+          product_description: string | null;
           created_at: string;
           updated_at: string;
           created_by: string | null;
@@ -973,6 +974,7 @@ export interface Database {
           target_launch_date?: string | null;
           is_active?: boolean;
           mkh_project_code?: string | null;
+          product_description?: string | null;
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;

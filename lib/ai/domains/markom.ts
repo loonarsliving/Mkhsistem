@@ -203,6 +203,8 @@ export interface AdDraftInput {
   availablePhotos: AdPhotoOption[];
   /** Real buyer-origin cities this ad set will actually be geo-targeted to (see LEASEHOLD_TARGET_CITIES, lib/meta/ads.ts) -- passed so the copy's angle matches who will actually see it, instead of writing generically for "all of Indonesia." */
   targetCities?: string[];
+  /** Markom-authored specs/price/USP/target-buyer for this specific project (crm_projects.product_description) -- without this the AI only had name+city+type to work with, which produced generic property copy instead of copy grounded in what's actually being sold. */
+  productDescription?: string | null;
 }
 
 export interface AdDraft {
@@ -261,6 +263,21 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
   const audienceLine = input.targetCities?.length
     ? `Audiens: iklan ini akan ditargetkan khusus ke kota-kota ${input.targetCities.join(", ")} (kota-kota asal pembeli villa leasehold berdasarkan data pasar riil kami) -- tulis materi iklan yang relevan untuk audiens dari kota-kota tersebut, bukan generik untuk seluruh Indonesia.`
     : "";
+  const productLine = input.productDescription?.trim()
+    ? `Detail produk (dari Markom, WAJIB dipakai sebagai fakta utama materi iklan, jangan mengarang spesifikasi/harga lain):\n${input.productDescription.trim()}`
+    : "Detail produk: belum diisi Markom -- tulis materi berbasis nama/kota/tipe project saja, jangan mengarang harga atau spesifikasi.";
+
+  // Tujuan iklan ini SELALU sama: maksimalkan klik ke percakapan WhatsApp
+  // (hard selling, bukan brand awareness) -- indikator di bawah ini yang
+  // menentukan seberapa maksimal hasilnya saat iklan tayang.
+  const indicatorsBlock = `Tulis materi iklan dengan menimbang indikator riset berikut (ini yang membedakan iklan yang ramai diklik vs yang tenggelam):
+1. HOOK: 3-5 kata pertama primaryText harus menghentikan scroll -- gunakan format hook yang sedang tren di riset Google Search-mu, bukan kalimat pembuka generik ("Dijual villa...", "Kami menawarkan...").
+2. FAKTA PRODUK: angka konkret (harga, luas, fasilitas) dari detail produk di atas jauh lebih meyakinkan daripada kata sifat umum ("mewah", "strategis") -- pakai fakta, bukan hanya klaim.
+3. SATU CTA JELAS: ajakan tunggal yang mendorong klik chat WhatsApp (hard sell) -- jangan pecah perhatian dengan banyak ajakan sekaligus.
+4. RELEVANSI AUDIENS: sesuaikan sudut pandang/bahasa dengan audiens kota target di atas (kalau ada), bukan nada generik nasional.
+5. GAYA KOMPETITOR: pakai pola iklan Click-to-WhatsApp properti yang sedang efektif dari riset kompetitor -- jangan meniru persis, tapi pelajari pola yang berhasil (hook, panjang teks, penempatan CTA).
+6. KEJUJURAN: jangan mengarang urgensi/diskon/stok terbatas yang tidak ada di detail produk -- urgensi palsu merusak kepercayaan dan performa jangka panjang.`;
+
   const researchPrompt = `Riset dulu lewat Google Search: (1) hal yang sedang viral/tren di media sosial Indonesia yang relevan untuk audiens pembeli properti/villa, dan (2) gaya iklan Click-to-WhatsApp kompetitor properti yang sedang berjalan di Meta Ads.
 
 Gunakan riset itu untuk membuat draft iklan Click-to-WhatsApp untuk project berikut:
@@ -268,6 +285,9 @@ Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}
 ${audienceLine}
+${productLine}
+
+${indicatorsBlock}
 
 Foto asli yang tersedia (WAJIB pilih salah satu id ini, jangan mengarang foto lain):
 ${photoList}
@@ -289,6 +309,9 @@ Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}
 ${audienceLine}
+${productLine}
+
+${indicatorsBlock}
 
 Foto asli yang tersedia (WAJIB pilih salah satu id ini):
 ${photoList}

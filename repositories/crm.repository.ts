@@ -55,11 +55,20 @@ export async function setCrmProjectActive(supabase: TypedSupabaseClient, id: str
 
 /** Every active project (for the photo-upload / ad-creative project picker), branch-scoped for Kepala Cabang-level Markom. */
 export async function listActiveCrmProjects(supabase: TypedSupabaseClient, branchId?: string) {
-  let query = supabase.from("crm_projects").select("id, name, city, branch_id").eq("is_active", true).order("name");
+  let query = supabase.from("crm_projects").select("id, name, city, branch_id, product_description").eq("is_active", true).order("name");
   if (branchId) query = query.eq("branch_id", branchId);
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+/** Markom sets this once per project from the Photo Gallery screen -- price/specs/USP grounding for the AI ad-drafting pipeline (see lib/ai/domains/markom.ts's researchAndDraftAd). */
+export async function updateProjectProductDescription(supabase: TypedSupabaseClient, projectId: string, productDescription: string, updatedBy: string) {
+  const { error } = await supabase
+    .from("crm_projects")
+    .update({ product_description: productDescription || null, updated_by: updatedBy })
+    .eq("id", projectId);
+  if (error) throw error;
 }
 
 /** All non-deleted photos across projects, newest first, with the project name joined in -- the gallery Markom uploads to and the AI ads pipeline picks from. */
