@@ -24,7 +24,6 @@ import {
   StickyNote,
   Target,
   Trophy,
-  UploadCloud,
   UserCheck,
   Users,
   UsersRound,
@@ -111,7 +110,11 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: [PERMISSIONS.KPI_TASK_VIEW_BRANCH, PERMISSIONS.KPI_TASK_VIEW_ALL],
       },
       { label: "Foto Project", href: "/markom/photos", icon: Images, permission: PERMISSIONS.CRM_PROJECT_PHOTO_MANAGE },
-      { label: "Upload Konten", href: "/markom/content-submissions", icon: UploadCloud, permission: PERMISSIONS.CONTENT_SUBMISSION_MANAGE },
+      // "Upload Konten" (/markom/content-submissions) deliberately hidden from
+      // the menu -- the feature (0096/0097) still exists and works, the user
+      // just felt it's not polished enough yet (video isn't actually reviewed,
+      // publishing isn't automatic) to surface to Markom. Route/permission are
+      // untouched, so re-adding this one line brings it right back.
       { label: "Ads Specialist", href: "/markom/ads", icon: Rocket, permission: PERMISSIONS.AD_CAMPAIGN_VIEW },
       { label: "Content Planner", href: "/markom/content-planner", icon: Sparkles, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
       { label: "Promo Broadcast", href: "/markom/promo-broadcast", icon: Megaphone, permission: PERMISSIONS.PROMO_TEMPLATE_VIEW },
