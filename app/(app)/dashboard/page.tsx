@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
 import { AttendanceSummaryCard } from "@/features/dashboard/components/attendance-summary-card";
+import { AllBranchBalancesCard, BranchBalanceCard } from "@/features/dashboard/components/branch-balance-card";
 import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
 import { PayrollStatusCard } from "@/features/dashboard/components/payroll-status-card";
 import { PendingApprovalsCard } from "@/features/dashboard/components/pending-approvals-card";
@@ -40,9 +41,17 @@ import { createClient } from "@/lib/supabase/server";
 import { getCompanyAttendanceSummary, getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
 import { listRecentAnnouncements } from "@/repositories/announcement.repository";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
+import { getBranchBalance, listBranchBalances } from "@/repositories/finance-branch-balance.repository";
 import { listRecentMemos } from "@/repositories/memo.repository";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+/**
+ * Must match BALANCE_ALERT_THRESHOLD in app/api/ai/branch-balance-advisory/
+ * route.ts -- a placeholder pending real per-branch payroll/operating-cost
+ * data (see 0098_finance_expense_alerts_and_branch_balance.sql).
+ */
+const BALANCE_ALERT_THRESHOLD = 15_000_000;
 
 /**
  * Dashboard = Executive Summary ("how is the company performing"), scoped to
@@ -90,6 +99,8 @@ export default async function DashboardPage() {
     markomTeamStats,
     salesStats,
     recentProspectActivity,
+    branchBalance,
+    allBranchBalances,
   ] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
     getMonthlyStats(supabase, session.userId, new Date()),
@@ -104,6 +115,10 @@ export default async function DashboardPage() {
     isMarkomRole ? markomTeamStatsAction() : Promise.resolve(null),
     isSalesRole ? salesStatsAction() : Promise.resolve(null),
     isSalesRole ? listRecentFollowUpsBySalesAction(session.userId, 8) : Promise.resolve([]),
+    !isDirector && canViewBranchCrm && session.employee.branch_id
+      ? getBranchBalance(supabase, session.employee.branch_id)
+      : Promise.resolve(null),
+    isDirector ? listBranchBalances(supabase) : Promise.resolve([]),
   ]);
 
   return (
@@ -189,8 +204,15 @@ export default async function DashboardPage() {
         </>
       )}
 
+      {isDirector && allBranchBalances.length > 0 && (
+        <AllBranchBalancesCard balances={allBranchBalances} alertThreshold={BALANCE_ALERT_THRESHOLD} />
+      )}
+
       {/* Kepala Cabang: branch KPIs only -- no Sales Summary/ranking, no Markom, per Home Dashboard scope. */}
       {!isDirector && canViewBranchCrm && crmBranchStats && <BranchPerformanceCard stats={crmBranchStats} />}
+      {!isDirector && canViewBranchCrm && branchBalance && (
+        <BranchBalanceCard balance={branchBalance} alertThreshold={BALANCE_ALERT_THRESHOLD} />
+      )}
 
       {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
 

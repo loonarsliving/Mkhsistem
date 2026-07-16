@@ -78,7 +78,9 @@ export type NotificationCategoryDb =
   | "ad_campaign_launched"
   | "ad_campaign_failed"
   | "content_published"
-  | "content_publish_reminder";
+  | "content_publish_reminder"
+  | "finance_expense_alert"
+  | "branch_balance_alert";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2244,6 +2246,35 @@ export interface Database {
             foreignKeyName: "markom_content_submissions_submitted_by_fkey";
             columns: ["submitted_by"];
             referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      finance_branch_balances: {
+        Row: {
+          id: string;
+          branch_id: string;
+          branch_name: string;
+          saldo: number;
+          source_system: string;
+          synced_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          branch_name: string;
+          saldo?: number;
+          source_system?: string;
+          synced_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["finance_branch_balances"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "finance_branch_balances_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
             referencedColumns: ["id"];
           },
         ];
