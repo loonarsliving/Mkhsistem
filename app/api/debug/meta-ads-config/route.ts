@@ -57,6 +57,23 @@ export async function GET() {
     } catch (err) {
       result.targetPageError = err instanceof Error ? err.message : String(err);
     }
+
+    // Live status of the campaign launched last night (meta_campaign_id
+    // 120249772618290642, per meta_ad_campaigns) -- lets us prove whether
+    // it's genuinely active/delivering per Meta's own API right now (not
+    // just our DB's copy of its status at launch time), independent of
+    // whatever the operator's Meta Business Suite UI happens to be showing
+    // or filtering by. Hardcoded on purpose -- this is a one-off check for
+    // this specific investigation, not a general-purpose lookup.
+    const campaignId = "120249772618290642";
+    try {
+      result.campaignLiveStatus = await metaGraphRequest<Record<string, unknown>>(`/${campaignId}`, {
+        fields: "id,name,status,effective_status,objective,special_ad_categories",
+      });
+      result.adsManagerDeepLink = `https://business.facebook.com/adsmanager/manage/campaigns?act=${META_CONFIG.adAccountId.replace("act_", "")}&selected_campaign_ids=${campaignId}`;
+    } catch (err) {
+      result.campaignLiveStatusError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   return NextResponse.json(result);
