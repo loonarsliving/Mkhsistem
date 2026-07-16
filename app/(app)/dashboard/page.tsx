@@ -47,13 +47,6 @@ import { listRecentMemos } from "@/repositories/memo.repository";
 export const metadata: Metadata = { title: "Dashboard" };
 
 /**
- * Must match BALANCE_ALERT_THRESHOLD in app/api/ai/branch-balance-advisory/
- * route.ts -- a placeholder pending real per-branch payroll/operating-cost
- * data (see 0098_finance_expense_alerts_and_branch_balance.sql).
- */
-const BALANCE_ALERT_THRESHOLD = 15_000_000;
-
-/**
  * Dashboard = Executive Summary ("how is the company performing"), scoped to
  * each role's own primary responsibility. Notifications live exclusively
  * behind the bell icon in the topnav (NotificationBell), never as a Home
@@ -204,15 +197,11 @@ export default async function DashboardPage() {
         </>
       )}
 
-      {isDirector && allBranchBalances.length > 0 && (
-        <AllBranchBalancesCard balances={allBranchBalances} alertThreshold={BALANCE_ALERT_THRESHOLD} />
-      )}
+      {isDirector && allBranchBalances.length > 0 && <AllBranchBalancesCard balances={allBranchBalances} />}
 
       {/* Kepala Cabang: branch KPIs only -- no Sales Summary/ranking, no Markom, per Home Dashboard scope. */}
       {!isDirector && canViewBranchCrm && crmBranchStats && <BranchPerformanceCard stats={crmBranchStats} />}
-      {!isDirector && canViewBranchCrm && branchBalance && (
-        <BranchBalanceCard balance={branchBalance} alertThreshold={BALANCE_ALERT_THRESHOLD} />
-      )}
+      {!isDirector && canViewBranchCrm && branchBalance && <BranchBalanceCard balance={branchBalance} />}
 
       {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
 

@@ -2259,6 +2259,8 @@ export interface Database {
           source_system: string;
           synced_at: string;
           updated_at: string;
+          alert_threshold: number;
+          notify_dirops: boolean;
         };
         Insert: {
           id?: string;
@@ -2268,6 +2270,8 @@ export interface Database {
           source_system?: string;
           synced_at?: string;
           updated_at?: string;
+          alert_threshold?: number;
+          notify_dirops?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["finance_branch_balances"]["Insert"]>;
         Relationships: [

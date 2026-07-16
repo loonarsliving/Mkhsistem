@@ -11,10 +11,10 @@ import type { BranchBalance } from "@/repositories/finance-branch-balance.reposi
  * crm_analytics.view_branch pattern BranchPerformanceCard already uses) --
  * this component only ever receives the caller's own branch row.
  */
-export function BranchBalanceCard({ balance, alertThreshold }: { balance: BranchBalance | null; alertThreshold: number }) {
+export function BranchBalanceCard({ balance }: { balance: BranchBalance | null }) {
   if (!balance) return null;
 
-  const isLow = balance.saldo < alertThreshold;
+  const isLow = balance.saldo < balance.alert_threshold;
 
   return (
     <Card>
@@ -32,7 +32,8 @@ export function BranchBalanceCard({ balance, alertThreshold }: { balance: Branch
           <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Saldo di bawah ambang batas aman ({formatCurrency(alertThreshold)}). Rekomendasi tindakan AI akan dikirim via WhatsApp.
+              Saldo di bawah ambang batas ({formatCurrency(balance.alert_threshold)} — biaya gaji + operasional bulanan cabang ini).
+              Rekomendasi tindakan AI akan dikirim via WhatsApp.
             </span>
           </div>
         )}
@@ -45,7 +46,7 @@ export function BranchBalanceCard({ balance, alertThreshold }: { balance: Branch
 }
 
 /** Company-wide overview for Super Admin / Direktur -- every branch, one glance. */
-export function AllBranchBalancesCard({ balances, alertThreshold }: { balances: BranchBalance[]; alertThreshold: number }) {
+export function AllBranchBalancesCard({ balances }: { balances: BranchBalance[] }) {
   if (!balances.length) return null;
 
   return (
@@ -56,7 +57,7 @@ export function AllBranchBalancesCard({ balances, alertThreshold }: { balances: 
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {balances.map((b) => {
-            const isLow = b.saldo < alertThreshold;
+            const isLow = b.saldo < b.alert_threshold;
             return (
               <div key={b.branch_id} className="rounded-lg border border-border p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{b.branch_name}</p>
