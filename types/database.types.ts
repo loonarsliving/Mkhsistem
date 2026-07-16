@@ -77,7 +77,8 @@ export type NotificationCategoryDb =
   | "birthday_wish"
   | "ad_campaign_launched"
   | "ad_campaign_failed"
-  | "content_published";
+  | "content_published"
+  | "content_publish_reminder";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2192,6 +2193,7 @@ export interface Database {
           ig_container_id: string | null;
           ig_media_id: string | null;
           published_at: string | null;
+          reminder_sent_at: string | null;
           failure_reason: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -2216,6 +2218,7 @@ export interface Database {
           ig_container_id?: string | null;
           ig_media_id?: string | null;
           published_at?: string | null;
+          reminder_sent_at?: string | null;
           failure_reason?: string | null;
           deleted_at?: string | null;
           created_at?: string;

@@ -16,7 +16,7 @@ export default async function ContentSubmissionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Upload Konten"
-        description="Upload konten (foto/video) yang sudah dibuat berdasarkan brief checklist AI. Sistem akan mengecek dulu apakah konten sudah layak tayang, lalu bisa dijadwalkan untuk otomatis dipublish ke Instagram pada jam terbaik."
+        description="Upload konten (foto/video) yang sudah dibuat berdasarkan brief checklist AI. Sistem akan mengecek dulu apakah konten sudah layak tayang, lalu bisa mengingatkan Anda lewat WhatsApp pada jam terbaik untuk posting manual ke Instagram."
       />
       <ContentSubmissionBoard />
     </div>

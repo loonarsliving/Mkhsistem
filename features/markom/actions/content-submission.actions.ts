@@ -11,6 +11,7 @@ import {
   deleteContentSubmission,
   getContentSubmission,
   listContentSubmissions,
+  markContentPublished,
   saveContentReview,
   scheduleContentSubmission,
 } from "@/repositories/content-submissions.repository";
@@ -141,7 +142,14 @@ async function runReviewAndSave(
   }
 }
 
-/** Reads social_account_snapshots' most recent real Instagram best_upload_hour and schedules this (already AI-approved) submission for the next occurrence of that hour -- the actual publish happens on the next 5-minute worker tick (app/api/social/publish-content), not here. */
+/**
+ * Reads social_account_snapshots' most recent real Instagram best_upload_hour
+ * and schedules a WhatsApp reminder for the next occurrence of that hour --
+ * the 5-minute worker (app/api/social/publish-content) sends the actual
+ * reminder, not this action. Markom still posts manually in the real
+ * Instagram app (the company's IG isn't connected to Meta Business, see
+ * that route's doc comment) and confirms via markContentPublishedAction.
+ */
 export async function scheduleAtBestHourAction(submissionId: string): Promise<ActionResult> {
   const session = await requirePermission("content_submission.manage");
   const supabase = await createClient();
@@ -159,7 +167,7 @@ export async function scheduleAtBestHourAction(submissionId: string): Promise<Ac
 
   const bestHour = snapshot?.best_upload_hour;
   if (bestHour === null || bestHour === undefined) {
-    return actionError("Data jam upload terbaik belum tersedia -- coba lagi setelah snapshot Instagram berikutnya, atau gunakan \"Publish Sekarang\".");
+    return actionError("Data jam upload terbaik belum tersedia -- coba lagi setelah snapshot Instagram berikutnya, atau posting manual sekarang lalu tandai selesai.");
   }
 
   const target = new Date();
@@ -176,18 +184,20 @@ export async function scheduleAtBestHourAction(submissionId: string): Promise<Ac
   return actionSuccess();
 }
 
-/** Schedules for right now instead of waiting for the best hour -- the 5-minute worker will pick it up on its next tick. */
-export async function publishNowAction(submissionId: string): Promise<ActionResult> {
+/** Markom's own confirmation after posting the content manually in the real Instagram app -- available as soon as AI has approved it, whether or not a best-hour reminder was scheduled first. */
+export async function markContentPublishedAction(submissionId: string): Promise<ActionResult> {
   const session = await requirePermission("content_submission.manage");
   const supabase = await createClient();
 
   const submission = await getContentSubmission(supabase, submissionId);
-  if (submission.status !== "approved") return actionError("Hanya konten yang sudah disetujui AI yang bisa dipublish");
+  if (submission.status !== "approved" && submission.status !== "scheduled") {
+    return actionError("Hanya konten yang sudah disetujui AI yang bisa ditandai selesai");
+  }
 
   try {
-    await scheduleContentSubmission(supabase, submissionId, new Date().toISOString(), session.userId);
+    await markContentPublished(supabase, submissionId, session.userId);
   } catch (err) {
-    return actionError(err instanceof Error ? err.message : "Gagal menjadwalkan konten");
+    return actionError(err instanceof Error ? err.message : "Gagal menandai konten selesai");
   }
 
   revalidatePath("/markom/content-submissions");

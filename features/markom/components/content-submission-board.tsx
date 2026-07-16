@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Loader2, RefreshCw, Send, Trash2, UploadCloud, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, RefreshCw, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import {
   createContentSubmissionAction,
   deleteContentSubmissionAction,
   listContentSubmissionsAction,
-  publishNowAction,
+  markContentPublishedAction,
   retryContentReviewAction,
   scheduleAtBestHourAction,
 } from "../actions/content-submission.actions";
@@ -134,18 +134,18 @@ export function ContentSubmissionBoard() {
     }
   }
 
-  async function handlePublishNow(id: string) {
+  async function handleMarkPublished(id: string) {
     setBusyId(id);
     try {
-      const result = await publishNowAction(id);
+      const result = await markContentPublishedAction(id);
       if (!result.success) {
-        toast.error(result.error ?? "Gagal mempublish");
+        toast.error(result.error ?? "Gagal menandai konten selesai");
         return;
       }
-      toast.success("Dijadwalkan untuk publish sekarang -- akan tayang dalam beberapa menit");
+      toast.success("Ditandai selesai -- terima kasih sudah posting!");
       invalidateSubmissions();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal mempublish");
+      toast.error(err instanceof Error ? err.message : "Gagal menandai konten selesai");
     } finally {
       setBusyId(null);
     }
@@ -197,7 +197,8 @@ export function ContentSubmissionBoard() {
           </Button>
           <p className="w-full text-xs text-muted-foreground">
             AI akan meninjau konten yang Anda upload (untuk foto, AI benar-benar melihat isi gambarnya; untuk video, AI menilai berdasarkan caption &amp; brief saja karena
-            belum bisa menonton video). Setelah disetujui, konten bisa dijadwalkan otomatis tayang ke Instagram pada jam terbaik menurut data performa akun kami.
+            belum bisa menonton video). Setelah disetujui, sistem bisa mengingatkan Anda lewat WhatsApp pada jam terbaik untuk posting manual ke Instagram -- sistem belum
+            bisa posting otomatis, jadi tetap perlu diposting sendiri lalu ditandai selesai di sini.
           </p>
         </CardContent>
       </Card>
@@ -238,13 +239,15 @@ export function ContentSubmissionBoard() {
                     {s.status === "scheduled" && s.scheduled_publish_at && (
                       <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3.5 w-3.5" />
-                        Dijadwalkan tayang {new Date(s.scheduled_publish_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                        {s.reminder_sent_at
+                          ? "Pengingat sudah dikirim -- posting manual lalu tandai selesai"
+                          : `Akan diingatkan ${new Date(s.scheduled_publish_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}`}
                       </p>
                     )}
                     {s.status === "published" && s.published_at && (
                       <p className="flex items-center gap-1 text-xs text-success">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Tayang {new Date(s.published_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                        Ditandai selesai {new Date(s.published_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
                       </p>
                     )}
                     {s.status === "failed" && s.failure_reason && (
@@ -262,16 +265,16 @@ export function ContentSubmissionBoard() {
                         </Button>
                       )}
                       {s.status === "approved" && (
-                        <>
-                          <Button size="sm" disabled={busyId === s.id} onClick={() => handleScheduleBestHour(s.id)}>
-                            {busyId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
-                            Jadwalkan ke Jam Terbaik
-                          </Button>
-                          <Button size="sm" variant="outline" disabled={busyId === s.id} onClick={() => handlePublishNow(s.id)}>
-                            {busyId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                            Publish Sekarang
-                          </Button>
-                        </>
+                        <Button size="sm" disabled={busyId === s.id} onClick={() => handleScheduleBestHour(s.id)}>
+                          {busyId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
+                          Ingatkan di Jam Terbaik
+                        </Button>
+                      )}
+                      {(s.status === "approved" || s.status === "scheduled") && (
+                        <Button size="sm" variant="outline" disabled={busyId === s.id} onClick={() => handleMarkPublished(s.id)}>
+                          {busyId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Tandai Sudah Dipublish
+                        </Button>
                       )}
                       {(s.status === "pending_review" || s.status === "needs_revision" || s.status === "approved" || s.status === "failed") && (
                         <Button size="sm" variant="ghost" className="text-destructive" disabled={busyId === s.id} onClick={() => setDeleteTarget(s.id)}>

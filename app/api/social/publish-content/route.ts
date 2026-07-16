@@ -1,33 +1,39 @@
 import { NextResponse } from "next/server";
 
+import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
-import { createInstagramMediaContainer, getInstagramContainerStatus, publishInstagramContainer } from "@/lib/social/instagram";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 45;
+export const maxDuration = 30;
 
-/** How many due submissions this single 5-minute tick processes -- Instagram publishing isn't ban-sensitive the way WhatsApp pacing is, this is just a sane batch cap. */
-const BATCH_SIZE = 5;
+/** How many due submissions this single 5-minute tick reminds -- a sane batch cap, not a pacing concern like WhatsApp send limits. */
+const BATCH_SIZE = 10;
 
 /**
- * Paced publish worker for markom_content_submissions (migration 0096) --
+ * Reminder worker for markom_content_submissions (migration 0096/0097) --
  * triggered every 5 minutes by pg_cron (markom-content-publish-worker),
  * same deliberately-separate-from-scheduling pattern as
- * /api/crm/dispatch-promo-sends. A video container can take longer than
- * this request's budget to finish processing on Meta's side -- rather than
- * blocking, one status check is done per tick; if it's not FINISHED yet the
- * row is left in 'scheduled' with ig_container_id already set, so the next
- * tick re-checks the SAME container instead of creating a duplicate one.
+ * /api/crm/dispatch-promo-sends.
+ *
+ * Does NOT call Meta's Content Publishing API -- the company's Instagram
+ * account isn't connected to Meta Business yet and the user explicitly
+ * deferred that setup (see lib/social/instagram.ts for the dormant
+ * create-container/publish code, kept for whenever that connection exists).
+ * Instead: at scheduled_publish_at, send Markom a WhatsApp reminder to post
+ * the content manually in the real Instagram app, then they mark it
+ * published themselves (markContentPublishedAction). reminder_sent_at stops
+ * this from re-sending the same reminder every subsequent tick.
  */
 export async function POST() {
   const supabase = createAdminClient();
 
   const { data: due, error } = await supabase
     .from("markom_content_submissions")
-    .select("id, media_type, public_url, caption, ig_container_id, submitted_by")
+    .select("id, media_type, caption, submitted_by, task:task_id(title)")
     .eq("status", "scheduled")
+    .is("reminder_sent_at", null)
     .lte("scheduled_publish_at", new Date().toISOString())
     .order("scheduled_publish_at", { ascending: true })
     .limit(BATCH_SIZE);
@@ -37,74 +43,38 @@ export async function POST() {
     return NextResponse.json({ status: "error", error: error.message }, { status: 500 });
   }
 
-  let published = 0;
-  let stillProcessing = 0;
+  let reminded = 0;
   let failed = 0;
 
   for (const row of due ?? []) {
     try {
-      let containerId = row.ig_container_id;
+      const task = row.task as { title?: string } | null;
+      const { data: employee } = await supabase.from("employees").select("phone").eq("id", row.submitted_by).maybeSingle();
 
-      if (!containerId) {
-        const container = await createInstagramMediaContainer({
-          mediaType: row.media_type === "video" ? "REELS" : "IMAGE",
-          mediaUrl: row.public_url,
-          caption: row.caption ?? "",
-        });
-        containerId = container.id;
-        await supabase.from("markom_content_submissions").update({ ig_container_id: containerId }).eq("id", row.id);
+      const title = task?.title ?? "konten Anda";
+      const body = `Waktunya posting ke Instagram sekarang -- ini jam terbaik menurut data performa akun kami. Konten: "${title}"${
+        row.caption ? `\nCaption: ${row.caption}` : ""
+      }\n\nSetelah posting, tandai selesai di sistem (/markom/content-submissions) supaya tercatat.`;
+
+      if (employee?.phone) {
+        await sendWhatsAppText(employee.phone, body);
       }
-
-      const status = await getInstagramContainerStatus(containerId);
-
-      if (status === "FINISHED") {
-        const published_media = await publishInstagramContainer(containerId);
-        await supabase
-          .from("markom_content_submissions")
-          .update({ status: "published", ig_media_id: published_media.id, published_at: new Date().toISOString() })
-          .eq("id", row.id);
-        await supabase.from("mkc_notifications").insert({
-          user_id: row.submitted_by,
-          type: "crm",
-          category: "content_published",
-          title: "Konten berhasil dipublish ke Instagram",
-          body: "Konten yang Anda upload sudah live di Instagram.",
-          link: "/markom/content-submissions",
-        });
-        published += 1;
-      } else if (status === "IN_PROGRESS") {
-        // Leave 'scheduled' -- next tick re-checks this same container.
-        stillProcessing += 1;
-      } else {
-        await supabase
-          .from("markom_content_submissions")
-          .update({ status: "failed", failure_reason: `Container status: ${status}` })
-          .eq("id", row.id);
-        await supabase.from("mkc_notifications").insert({
-          user_id: row.submitted_by,
-          type: "crm",
-          category: "content_published",
-          title: "Gagal publish konten ke Instagram",
-          body: `Instagram menolak konten ini (status: ${status}). Cek detailnya di sistem.`,
-          link: "/markom/content-submissions",
-        });
-        failed += 1;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error("publish-content: submission failed", { submissionId: row.id, error: message });
-      await supabase.from("markom_content_submissions").update({ status: "failed", failure_reason: message }).eq("id", row.id);
       await supabase.from("mkc_notifications").insert({
         user_id: row.submitted_by,
         type: "crm",
-        category: "content_published",
-        title: "Gagal publish konten ke Instagram",
-        body: `Terjadi error: ${message}`,
+        category: "content_publish_reminder",
+        title: "Waktunya posting ke Instagram",
+        body,
         link: "/markom/content-submissions",
       });
+      await supabase.from("markom_content_submissions").update({ reminder_sent_at: new Date().toISOString() }).eq("id", row.id);
+      reminded += 1;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("publish-content: reminder failed", { submissionId: row.id, error: message });
       failed += 1;
     }
   }
 
-  return NextResponse.json({ status: "done", dueCount: (due ?? []).length, published, stillProcessing, failed });
+  return NextResponse.json({ status: "done", dueCount: (due ?? []).length, reminded, failed });
 }

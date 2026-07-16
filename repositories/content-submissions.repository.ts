@@ -66,6 +66,16 @@ export async function scheduleContentSubmission(supabase: TypedSupabaseClient, i
   if (error) throw error;
 }
 
+/** Markom's own confirmation that they posted this manually in the real Instagram app -- see app/api/social/publish-content/route.ts's doc comment for why this isn't automated. */
+export async function markContentPublished(supabase: TypedSupabaseClient, id: string, updatedBy: string) {
+  const { error } = await supabase
+    .from("markom_content_submissions")
+    .update({ status: "published", published_at: new Date().toISOString(), updated_by: updatedBy })
+    .eq("id", id)
+    .in("status", ["approved", "scheduled"]);
+  if (error) throw error;
+}
+
 export async function deleteContentSubmission(supabase: TypedSupabaseClient, id: string) {
   const { error } = await supabase
     .from("markom_content_submissions")
