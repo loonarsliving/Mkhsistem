@@ -358,33 +358,45 @@ export interface AdPerformanceInput {
   impressions: number;
   clicks: number;
   conversationsStarted: number;
+  /** Unique people reached -- lets the AI tell apart "audience exhausted" (reach barely growing while frequency climbs) from "audience is fine, the problem is the offer/creative". */
+  reach: number;
+  /** Meta's own computed avg impressions per person -- see getAdInsights, lib/meta/ads.ts. Its usual fatigue guidance is ~3-4+ without a creative refresh. */
+  frequency: number;
 }
 
 /**
  * Turns raw Meta insight numbers (a plain API read, no AI involved in
- * computing them -- see getAdInsights, lib/meta/ads.ts) into a short
- * written analysis + recommendation. This is the one part of "analyze the
- * running ad" that genuinely needs generation: interpreting CTR/cost-per-
- * conversation against the campaign's own context and saying what to do
- * next, the way a human ads specialist would -- not just restating numbers
- * the UI can already display directly.
+ * computing them -- see getAdInsights, lib/meta/ads.ts) into a written
+ * diagnosis + recommendation. Grounded in Google Search (useWebSearch) so
+ * "is this CTR/cost-per-conversation good or bad" is judged against real
+ * current benchmarks for Indonesian property Click-to-WhatsApp ads instead
+ * of the model's own unverified assumption of what's "normal" -- the same
+ * grounding already used for ad copywriting research.
  */
 export async function analyzeAdPerformance(input: AdPerformanceInput): Promise<string> {
   const ctr = input.impressions > 0 ? ((input.clicks / input.impressions) * 100).toFixed(2) : "0";
   const costPerConversation = input.conversationsStarted > 0 ? Math.round(input.spendIdr / input.conversationsStarted) : null;
+  const costPerClick = input.clicks > 0 ? Math.round(input.spendIdr / input.clicks) : null;
 
-  const userPrompt = `Analisa performa iklan Click-to-WhatsApp berikut dan berikan rekomendasi tindakan:
+  const userPrompt = `Riset dulu lewat Google Search: benchmark CTR dan biaya per lead/percakapan yang wajar untuk iklan Click-to-WhatsApp properti di Indonesia tahun ini (mis. dari studi kasus agensi ads, laporan benchmark industri, atau diskusi praktisi Meta Ads). Pakai angka riil dari riset itu sebagai pembanding, jangan menebak sendiri apa yang "wajar".
 
+Data performa iklan ini (sumber: Meta Ads Insights API, date_preset=maximum -- akumulasi sejak iklan tayang, bukan cuplikan beberapa hari terakhir):
 Project: ${input.projectName}
 Headline: ${input.headline}
 Budget harian: Rp ${input.dailyBudgetIdr.toLocaleString("id-ID")}
 Sudah berjalan: ${input.daysRunning} hari
 Total spend: Rp ${input.spendIdr.toLocaleString("id-ID")}
+Reach (orang unik terjangkau): ${input.reach.toLocaleString("id-ID")}
+Frequency (rata-rata iklan dilihat per orang): ${input.frequency.toFixed(2)}
 Impressions: ${input.impressions.toLocaleString("id-ID")}
-Klik: ${input.clicks.toLocaleString("id-ID")} (CTR ${ctr}%)
+Klik: ${input.clicks.toLocaleString("id-ID")} (CTR ${ctr}%)${costPerClick !== null ? `, biaya per klik: Rp ${costPerClick.toLocaleString("id-ID")}` : ""}
 Percakapan WhatsApp dimulai: ${input.conversationsStarted}${costPerConversation !== null ? ` (biaya per percakapan: Rp ${costPerConversation.toLocaleString("id-ID")})` : " (belum ada percakapan yang masuk)"}
 
-Berikan analisa singkat (3-5 kalimat, Bahasa Indonesia): (1) apakah performa ini baik/wajar/buruk untuk iklan leads properti, (2) kemungkinan penyebab jika buruk (foto kurang menarik, headline kurang relevan, budget terlalu kecil, atau audiens belum tepat), (3) rekomendasi konkret -- lanjutkan, naikkan budget, ganti foto/materi, atau hentikan.`;
+Tulis analisa (Bahasa Indonesia, maksimal 6 kalimat) yang mencakup:
+1. Bandingkan CTR dan biaya per percakapan di atas dengan benchmark hasil risetmu -- sebut angka benchmark itu secara eksplisit, jangan hanya bilang "bagus"/"buruk" tanpa pembanding.
+2. Diagnosis akar masalah paling mungkin berdasarkan pola data (bukan tebakan generik): frequency tinggi (>3-4) dengan reach stagnan = audiens jenuh/kelelahan materi, CTR rendah dengan frequency wajar = materi/headline kurang menarik atau audiens kurang tepat, klik ada tapi percakapan WA sedikit = welcome message atau respon lambat, budget kecil dengan hari berjalan sedikit = masih dalam learning phase (belum cukup data untuk dinilai final).
+3. Tutup dengan baris terakhir PERSIS format ini (agar mudah dipindai): "REKOMENDASI: <PERTAHANKAN / NAIKKAN BUDGET / GANTI MATERI IKLAN / HENTIKAN>" diikuti alasan singkat.`;
 
-  return askAI(await getSystemPrompt("markom"), userPrompt);
+  const response = await generateAIText({ systemPrompt: await getSystemPrompt("markom"), userPrompt, useWebSearch: true, maxOutputTokens: 1024 });
+  return response.text;
 }

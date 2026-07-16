@@ -16,6 +16,7 @@ import {
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createClient } from "@/lib/supabase/server";
 import {
+  deleteDraftAdCampaign,
   getAdCampaign,
   listAdCampaigns,
   markAdCampaignFailed,
@@ -121,6 +122,24 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   return actionSuccess();
 }
 
+/** Discards an unreviewed draft -- safe to hard-delete since a 'draft' row never had real Meta campaign/ad set/ad objects created (those only exist once launchDraftCampaignAction succeeds), so there's nothing on Meta's side to clean up. Repository scopes the delete to status='draft' as a second guard against ever deleting a launched campaign's record. */
+export async function deleteAdCampaignDraftAction(id: string): Promise<ActionResult> {
+  await requirePermission("ad_campaign.manage");
+  const supabase = await createClient();
+
+  const draft = await getAdCampaign(supabase, id);
+  if (draft.status !== "draft") return actionError("Hanya draft yang belum diluncurkan yang bisa dihapus");
+
+  try {
+    await deleteDraftAdCampaign(supabase, id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menghapus draft iklan");
+  }
+
+  revalidatePath("/markom/ads");
+  return actionSuccess();
+}
+
 /** Fetches fresh spend/impressions/clicks/WhatsApp-conversations from Meta (a plain API read, no AI) then has AI write a short analysis + recommendation from those numbers -- both cached on the row so the page doesn't need to re-fetch/re-generate on every view. */
 export async function analyzeAdCampaignAction(id: string): Promise<ActionResult> {
   await requirePermission("ad_campaign.manage");
@@ -143,6 +162,8 @@ export async function analyzeAdCampaignAction(id: string): Promise<ActionResult>
       impressions: insights.impressions,
       clicks: insights.clicks,
       conversationsStarted: insights.messagingConversationsStarted,
+      reach: insights.reach,
+      frequency: insights.frequency,
     });
 
     await saveAdCampaignAnalysis(supabase, id, {

@@ -3,18 +3,20 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Eye, Loader2, MessageCircle, MousePointerClick, Pause, Play, Rocket, Search, Send, Wallet } from "lucide-react";
+import { BarChart3, Eye, Loader2, MessageCircle, MousePointerClick, Pause, Play, Rocket, Search, Send, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatTile } from "@/components/shared/stat-tile";
 import { listProjectsForPhotoUploadAction } from "../actions/project-photo.actions";
 import {
   analyzeAdCampaignAction,
+  deleteAdCampaignDraftAction,
   launchDraftCampaignAction,
   listAdCampaignsAction,
   requestAdsResearchAction,
@@ -34,6 +36,8 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
   const [projectId, setProjectId] = React.useState<string>("");
   const [researching, setResearching] = React.useState(false);
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
 
   const { data: projects } = useQuery({ queryKey: ["markom-projects-for-photos"], queryFn: listProjectsForPhotoUploadAction, enabled: canManage });
   const { data: campaigns, isLoading } = useQuery({ queryKey: ["markom-ad-campaigns"], queryFn: listAdCampaignsAction });
@@ -77,6 +81,25 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
       queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleDeleteDraft() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const result = await deleteAdCampaignDraftAction(deleteTarget);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus draft iklan");
+        return;
+      }
+      toast.success("Draft iklan dihapus");
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menghapus draft iklan");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -204,10 +227,16 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
 
                     <div className="flex flex-wrap gap-2">
                       {canManage && c.status === "draft" && (
-                        <Button size="sm" disabled={busyId === c.id} onClick={() => handleLaunchDraft(c.id)}>
-                          {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                          Luncurkan
-                        </Button>
+                        <>
+                          <Button size="sm" disabled={busyId === c.id} onClick={() => handleLaunchDraft(c.id)}>
+                            {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                            Luncurkan
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-destructive" disabled={busyId === c.id} onClick={() => setDeleteTarget(c.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Hapus Draft
+                          </Button>
+                        </>
                       )}
                       {canManage && (c.status === "active" || c.status === "paused") && (
                         <>
@@ -234,6 +263,17 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Hapus draft iklan ini?"
+        description="Draft belum pernah tayang, jadi tidak ada budget yang terpakai. Tindakan ini tidak bisa dibatalkan."
+        confirmLabel="Hapus"
+        destructive
+        loading={deleting}
+        onConfirm={handleDeleteDraft}
+      />
     </div>
   );
 }

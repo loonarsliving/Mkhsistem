@@ -391,13 +391,34 @@ export interface AdInsights {
   impressions: number;
   clicks: number;
   messagingConversationsStarted: number;
+  /** Unique people reached -- combined with frequency, tells apart "audience is exhausted" (high frequency, low reach growth) from "audience is fine, creative/offer is the problem". */
+  reach: number;
+  /** Average times a unique person has seen this ad. Meta's own guidance: above ~3-4 without a creative refresh is a common cause of CTR decay ("ad fatigue"). */
+  frequency: number;
+  ctrPercent: number;
 }
 
-/** Per-ad performance, used both by the Ads Specialist dashboard and by the AI's own decision to keep/pause/scale a campaign. */
+/**
+ * Per-ad performance, used both by the Ads Specialist dashboard and by the
+ * AI's own decision to keep/pause/scale a campaign. date_preset: "maximum"
+ * is deliberate -- without an explicit date range, Meta's insights edge
+ * defaults to a rolling window (not the ad's full lifetime), which silently
+ * produced numbers that didn't match how many days the ad had actually been
+ * running for (the daysRunning figure computed from created_at) and made
+ * every analysis built on it unreliable.
+ */
 export async function getAdInsights(adId: string): Promise<AdInsights> {
   const insights = await metaGraphRequest<{
-    data: { spend?: string; impressions?: string; clicks?: string; actions?: { action_type: string; value: string }[] }[];
-  }>(`/${adId}/insights`, { fields: "spend,impressions,clicks,actions" });
+    data: {
+      spend?: string;
+      impressions?: string;
+      clicks?: string;
+      reach?: string;
+      frequency?: string;
+      ctr?: string;
+      actions?: { action_type: string; value: string }[];
+    }[];
+  }>(`/${adId}/insights`, { fields: "spend,impressions,clicks,reach,frequency,ctr,actions", date_preset: "maximum" });
 
   const row = insights.data?.[0];
   const messagingConversationsStarted = Number(
@@ -409,5 +430,8 @@ export async function getAdInsights(adId: string): Promise<AdInsights> {
     impressions: Number(row?.impressions ?? "0"),
     clicks: Number(row?.clicks ?? "0"),
     messagingConversationsStarted,
+    reach: Number(row?.reach ?? "0"),
+    frequency: Number(row?.frequency ?? "0"),
+    ctrPercent: Number(row?.ctr ?? "0"),
   };
 }

@@ -70,6 +70,12 @@ export async function markAdCampaignFailed(supabase: TypedSupabaseClient, id: st
   if (error) throw error;
 }
 
+/** Only ever deletes rows still in 'draft' (enforced by the caller) -- a draft never had real Meta objects created, so there's nothing to clean up on Meta's side, unlike a launched campaign. */
+export async function deleteDraftAdCampaign(supabase: TypedSupabaseClient, id: string) {
+  const { error } = await supabase.from("meta_ad_campaigns").delete().eq("id", id).eq("status", "draft");
+  if (error) throw error;
+}
+
 export interface AdCampaignAnalysisResult {
   spendIdr: number;
   impressions: number;
