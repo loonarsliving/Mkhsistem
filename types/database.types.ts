@@ -76,7 +76,8 @@ export type NotificationCategoryDb =
   | "daily_report"
   | "birthday_wish"
   | "ad_campaign_launched"
-  | "ad_campaign_failed";
+  | "ad_campaign_failed"
+  | "content_published";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2168,6 +2169,77 @@ export interface Database {
           {
             foreignKeyName: "kpi_tasks_verified_by_fkey";
             columns: ["verified_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      markom_content_submissions: {
+        Row: {
+          id: string;
+          task_id: string;
+          branch_id: string;
+          division_id: string;
+          submitted_by: string;
+          media_type: "image" | "video";
+          storage_path: string;
+          public_url: string;
+          caption: string | null;
+          status: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_verdict: string | null;
+          ai_reviewed_at: string | null;
+          scheduled_publish_at: string | null;
+          ig_container_id: string | null;
+          ig_media_id: string | null;
+          published_at: string | null;
+          failure_reason: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          branch_id: string;
+          division_id: string;
+          submitted_by: string;
+          media_type: "image" | "video";
+          storage_path: string;
+          public_url: string;
+          caption?: string | null;
+          status?: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_verdict?: string | null;
+          ai_reviewed_at?: string | null;
+          scheduled_publish_at?: string | null;
+          ig_container_id?: string | null;
+          ig_media_id?: string | null;
+          published_at?: string | null;
+          failure_reason?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["markom_content_submissions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "markom_content_submissions_task_id_fkey";
+            columns: ["task_id"];
+            referencedRelation: "kpi_tasks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_submitted_by_fkey";
+            columns: ["submitted_by"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
           },

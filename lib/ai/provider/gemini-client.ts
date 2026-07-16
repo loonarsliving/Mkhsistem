@@ -6,11 +6,13 @@ import { GoogleGenAI } from "@google/genai";
  * inject a fake client instead of hitting the real Gemini API. Ported from
  * Aiagent's packages/ai-provider/src/providers/gemini.provider.ts.
  */
+export type GeminiContentPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
 export interface GeminiClientLike {
   models: {
     generateContent(params: {
       model: string;
-      contents: string;
+      contents: string | { role: "user"; parts: GeminiContentPart[] }[];
       config?: {
         temperature?: number;
         maxOutputTokens?: number;

@@ -35,6 +35,14 @@ const PUBLIC_PATHS = [
   "/api/integrations/whatsapp/webhook",
   "/api/debug/whatsapp-config",
   "/api/debug/meta-ads-config",
+  // pg_cron-triggered worker routes (net.http_post carries no session
+  // cookie) -- found missing here while building 0096: every tick of
+  // crm-promo-sends-worker and the daily social-snapshot capture cron has
+  // been silently redirected to /login instead of running, confirmed via
+  // social_account_snapshots/crm_promo_sends both being completely empty.
+  "/api/crm/dispatch-promo-sends",
+  "/api/social/capture-snapshots",
+  "/api/social/publish-content",
 ];
 
 function isPublicPath(pathname: string) {

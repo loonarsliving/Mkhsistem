@@ -270,6 +270,91 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
   return parseObstacleResolutionJson(fallbackResponse.text);
 }
 
+export interface ContentReviewInput {
+  taskTitle: string;
+  taskDescription: string | null;
+  caption: string | null;
+  mediaType: "image" | "video";
+  /** Only set for images -- Gemini can actually look at the photo (see AIGenerateRequest.image). There is no equivalent for video here: no frame-level vision, review is caption/brief-only and says so explicitly to Markom. */
+  imageBase64?: string;
+  imageMimeType?: string;
+}
+
+export interface ContentReviewResult {
+  verdict: "approved" | "needs_revision";
+  feedback: string;
+}
+
+function parseContentReviewJson(text: string): ContentReviewResult {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Partial<ContentReviewResult>;
+  if (parsed.verdict !== "approved" && parsed.verdict !== "needs_revision") {
+    throw new Error("AI content review response missing a valid verdict");
+  }
+  if (typeof parsed.feedback !== "string" || parsed.feedback.trim().length === 0) {
+    throw new Error("AI content review response missing feedback text");
+  }
+  return { verdict: parsed.verdict, feedback: parsed.feedback.slice(0, 1500) };
+}
+
+/**
+ * Reviews a finished piece of content Markom uploaded against the checklist
+ * brief that asked for it, before it's allowed to be scheduled for
+ * publishing. For images this is a REAL visual review -- Gemini is shown
+ * the actual photo (AIGenerateRequest.image, gemini-provider.ts) and judges
+ * it the way a Branch Manager looking at the file would: does it match the
+ * brief's format/subject, is the framing/lighting/quality good enough to
+ * post. For video there is no equivalent -- this codebase has no
+ * frame-level video understanding -- so the review is caption+brief-only
+ * and the prompt makes the AI say so explicitly rather than pretend it
+ * watched the video.
+ */
+export async function reviewContentSubmission(input: ContentReviewInput): Promise<ContentReviewResult> {
+  const systemPrompt = await getSystemPrompt("markom");
+  const captionLine = input.caption?.trim() ? `Caption yang ditulis Markom: "${input.caption.trim()}"` : "Markom belum menulis caption.";
+
+  if (input.mediaType === "image" && input.imageBase64 && input.imageMimeType) {
+    const userPrompt = `Kamu Branch Manager yang meninjau foto konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram. Foto asli terlampir -- benar-benar lihat isinya (framing, pencahayaan, kualitas, kesesuaian subjek dengan brief), jangan hanya menilai dari caption.
+
+Brief asli dari AI:
+Judul: ${input.taskTitle}
+Deskripsi: ${input.taskDescription ?? "-"}
+
+${captionLine}
+
+Putuskan "approved" (foto sudah cukup baik dan sesuai brief untuk ditayangkan) atau "needs_revision" (jelaskan persis apa yang kurang -- framing, kualitas, tidak sesuai brief, caption perlu diperbaiki, dll).
+
+Balas HANYA dengan JSON object: {"verdict": "approved atau needs_revision", "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat di foto"}`;
+
+    const response = await generateAIText({
+      systemPrompt,
+      userPrompt,
+      image: { data: input.imageBase64, mimeType: input.imageMimeType },
+      maxOutputTokens: 1024,
+    });
+    return parseContentReviewJson(response.text);
+  }
+
+  const userPrompt = `Kamu Branch Manager yang meninjau submission konten video berikut sebelum diizinkan dijadwalkan tayang ke Instagram. PENTING: kamu TIDAK bisa menonton isi videonya -- nilai hanya berdasarkan brief dan caption di bawah, dan WAJIB sebutkan keterbatasan ini di feedback-mu serta ingatkan Markom untuk mengecek sendiri kualitas visual/audio videonya sebelum tayang.
+
+Brief asli dari AI:
+Judul: ${input.taskTitle}
+Deskripsi: ${input.taskDescription ?? "-"}
+
+${captionLine}
+
+Putuskan "approved" (caption & konteks sudah sesuai brief, layak lanjut dengan catatan Markom tetap cek kualitas video sendiri) atau "needs_revision" (caption/konteks tidak sesuai brief).
+
+Balas HANYA dengan JSON object: {"verdict": "approved atau needs_revision", "feedback": "penjelasan singkat, Bahasa Indonesia, termasuk pengingat bahwa AI tidak menonton videonya"}`;
+
+  const response = await generateAIText({ systemPrompt, userPrompt, maxOutputTokens: 1024 });
+  return parseContentReviewJson(response.text);
+}
+
 export interface AdPhotoOption {
   id: string;
   caption: string | null;

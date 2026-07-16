@@ -124,7 +124,7 @@ export class GeminiProvider implements AIProvider {
             ]);
           },
         },
-        () => this.callOnce(request.userPrompt, config),
+        () => this.callOnce(request.userPrompt, request.image, config),
       );
 
       const text = response.text ?? "";
@@ -162,7 +162,7 @@ export class GeminiProvider implements AIProvider {
    * ...}} envelope) to classify retryability; wrapping it here would hide
    * that from the retry layer.
    */
-  private async callOnce(userPrompt: string, config: GenerateContentConfig): Promise<GenerateContentResult> {
+  private async callOnce(userPrompt: string, image: AIGenerateRequest["image"], config: GenerateContentConfig): Promise<GenerateContentResult> {
     const timeoutMs = this.options.timeoutMs;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -172,9 +172,15 @@ export class GeminiProvider implements AIProvider {
       );
     });
 
+    // Multimodal (vision) shape only when an image is attached -- every
+    // other call keeps sending contents as a plain string, unchanged.
+    const contents = image
+      ? [{ role: "user" as const, parts: [{ text: userPrompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }]
+      : userPrompt;
+
     try {
       return await Promise.race([
-        this.client.models.generateContent({ model: this.options.model, contents: userPrompt, config }),
+        this.client.models.generateContent({ model: this.options.model, contents, config }),
         timeoutPromise,
       ]);
     } finally {

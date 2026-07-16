@@ -16,6 +16,8 @@ export interface AIGenerateRequest {
   responseFormat?: "text" | "json";
   /** Enables Gemini's Google Search grounding tool for this call (real-time web research, e.g. Markom's viral-trend/competitor-ad checklist generation) -- not on by default since it adds latency/cost every other domain call doesn't need. */
   useWebSearch?: boolean;
+  /** Attaches an image to the prompt (Gemini multimodal vision) -- e.g. reviewing an uploaded content photo against its brief. base64-encoded bytes, no data: URI prefix. */
+  image?: { data: string; mimeType: string };
   /**
    * Overrides AI_CONFIG.retryMaxAttempts for this one call — every call still
    * goes through the same centralized retry wrapper, this only changes how

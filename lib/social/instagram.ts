@@ -129,3 +129,48 @@ export function summarizeBestPostingPattern(posts: InstagramMediaPerformance[]):
 
   return { bestHour, topContentType };
 }
+
+/**
+ * Content Publishing API -- creates a media container from a public
+ * image/video URL (always a real file Markom uploaded to
+ * markom-content-submissions, never AI-generated). REELS requires an extra
+ * async processing step (see getContainerStatus) before it can be
+ * published; images are typically ready right away but are still checked
+ * the same way for consistency and because Meta's own docs recommend it.
+ *
+ * IMPORTANT CAVEAT (unverified against a real token): the module doc
+ * comment above notes the connected token was requested with only
+ * instagram_basic + instagram_manage_insights (read-only) scopes.
+ * Publishing needs instagram_content_publish in addition -- if that scope
+ * was never granted, every call here will fail with a permission error the
+ * same way the Ads module's Page-permission error did, and the fix is the
+ * same: grant the scope to the token in Meta Business Settings, not a code
+ * change. Don't assume this works until a real publish attempt succeeds.
+ */
+export async function createInstagramMediaContainer(input: {
+  mediaType: "IMAGE" | "REELS";
+  mediaUrl: string;
+  caption: string;
+}): Promise<{ id: string }> {
+  return metaGraphRequest<{ id: string }>(
+    `/${META_CONFIG.igUserId}/media`,
+    {
+      ...(input.mediaType === "REELS" ? { media_type: "REELS", video_url: input.mediaUrl } : { image_url: input.mediaUrl }),
+      caption: input.caption,
+    },
+    "POST",
+  );
+}
+
+export type InstagramContainerStatus = "EXPIRED" | "ERROR" | "FINISHED" | "IN_PROGRESS" | "PUBLISHED";
+
+/** Video/Reels containers process asynchronously on Meta's side -- must be FINISHED before media_publish will accept it. */
+export async function getInstagramContainerStatus(containerId: string): Promise<InstagramContainerStatus> {
+  const result = await metaGraphRequest<{ status_code?: string }>(`/${containerId}`, { fields: "status_code" });
+  return (result.status_code as InstagramContainerStatus) ?? "ERROR";
+}
+
+/** Publishes a FINISHED container -- calling this on a container that isn't ready yet is rejected by Meta, so callers must check getInstagramContainerStatus first. */
+export async function publishInstagramContainer(containerId: string): Promise<{ id: string }> {
+  return metaGraphRequest<{ id: string }>(`/${META_CONFIG.igUserId}/media_publish`, { creation_id: containerId }, "POST");
+}

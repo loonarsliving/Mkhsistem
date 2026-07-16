@@ -35,14 +35,15 @@ export async function uploadUserFile(
   return { path, publicUrl: publicUrlData.publicUrl };
 }
 
-/** Uploads a shared (non user-folder) attachment, e.g. memo/announcement files, under `{entityId}/{filename}`. */
+/** Uploads a shared (non user-folder) attachment, e.g. memo/announcement files, under `{entityId}/{filename}`. maxSizeBytes defaults to 10MB (image-sized attachments); pass a larger value for buckets that also accept video, e.g. markom-content-submissions. */
 export async function uploadEntityFile(
   bucket: string,
   entityId: string,
   file: File,
+  maxSizeBytes: number = MAX_UPLOAD_SIZE_BYTES * 2,
 ): Promise<UploadResult> {
-  if (file.size > MAX_UPLOAD_SIZE_BYTES * 2) {
-    throw new Error("Ukuran file melebihi batas maksimum 10MB");
+  if (file.size > maxSizeBytes) {
+    throw new Error(`Ukuran file melebihi batas maksimum ${Math.round(maxSizeBytes / (1024 * 1024))}MB`);
   }
 
   const supabase = createClient();
