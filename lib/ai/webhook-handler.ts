@@ -2,11 +2,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
+import { routeAdDrivenLead } from "./domains/ad-lead-routing";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
 export interface WhatsAppWebhookHandlerResult {
-  status: "processed" | "queued" | "ignored" | "error";
+  status: "processed" | "queued" | "ignored" | "error" | "ad_lead_routed";
   sender?: string;
   replySent?: boolean;
   jobId?: string;
@@ -77,6 +78,17 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
 
     const inbound = received.normalized;
     trace.push(`normalized.content.kind:${inbound.content.kind}`);
+
+    if (inbound.adReferral) {
+      // Ad-driven lead: never hand this to the AI reply pipeline -- the
+      // operator already runs their own auto-reply on this WhatsApp number
+      // (see lib/ai/domains/ad-lead-routing.ts's module doc). This only
+      // gets the lead into prospects and notifies the assigned sales rep.
+      trace.push(`adReferral:present(${inbound.adReferral.sourceId})`);
+      const routed = await routeAdDrivenLead(inbound.sender, inbound.senderName, inbound.adReferral);
+      trace.push(`routeAdDrivenLead:${routed.outcome}`);
+      return { status: "ad_lead_routed", sender: inbound.sender, reason: routed.outcome, trace };
+    }
 
     trace.push("findEmployeeByPhone:calling");
     const employee = await findEmployeeByPhone(inbound.sender);

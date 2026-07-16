@@ -17,10 +17,20 @@ export interface SendResult {
   error?: string;
 }
 
+/** Present only when Whacenter's `ad_reply` carries a real source_id -- i.e. this message opened from someone clicking a Click-to-WhatsApp ad, not an organic chat. */
+export interface AdReferral {
+  sourceId: string;
+  sourceType: string;
+  sourceUrl?: string;
+}
+
 export interface NormalizedInboundMessage {
   sender: string;
+  /** Whacenter's `pushName` -- the sender's WhatsApp display name, when present. */
+  senderName?: string;
   content: { kind: "text"; text: string } | { kind: "raw"; text: string };
   receivedAt: string;
+  adReferral?: AdReferral | null;
 }
 
 export interface WebhookResult {

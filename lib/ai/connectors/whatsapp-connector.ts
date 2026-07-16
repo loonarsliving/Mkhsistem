@@ -14,18 +14,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
-/** Walks a Meta Cloud API webhook payload down to `entry[0].changes[0].value.messages[0]`. */
-function extractFirstMessage(rawPayload: unknown): Record<string, unknown> | null {
-  const entry = asRecord(rawPayload)?.entry;
-  if (!Array.isArray(entry) || entry.length === 0) return null;
-  const changes = asRecord(entry[0])?.changes;
-  if (!Array.isArray(changes) || changes.length === 0) return null;
-  const value = asRecord(changes[0])?.value;
-  const messages = asRecord(value)?.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return null;
-  return asRecord(messages[0]);
-}
-
 function extractErrorMessage(json: unknown): string {
   const error = asRecord(asRecord(json)?.error);
   return typeof error?.message === "string" ? error.message : "unknown error";
@@ -199,19 +187,39 @@ message:
     return { accepted: true, normalized };
   }
 
-  /** Only `text` messages are parsed into structured content; every other type is preserved as `raw` JSON rather than dropped. */
+  /**
+   * Whacenter's own flat webhook shape -- NOT Meta's official Cloud API
+   * format (entry[0].changes[0].value.messages[0]), which this previously
+   * (incorrectly) assumed and silently dropped every real inbound message
+   * as a result. Real payload: {pushName, from, to, message, media,
+   * is_group, timestamp, source: "WHACENTER", ad_reply: {source_type,
+   * source_id, source_url}}. ad_reply carries real values when the chat was
+   * opened by tapping a Click-to-WhatsApp ad -- that's the ad-lead-routing
+   * signal (see lib/ai/domains/ad-lead-routing.ts).
+   */
   normalizeIncomingMessage(rawPayload: unknown): NormalizedInboundMessage | null {
-    const message = extractFirstMessage(rawPayload);
-    if (!message) return null;
-    const sender = message.from;
-    if (typeof sender !== "string") return null;
+    const payload = asRecord(rawPayload);
+    if (!payload) return null;
+    if (payload.is_group === true) return null;
 
-    if (message.type === "text") {
-      const text = asRecord(message.text)?.body;
-      if (typeof text === "string") {
-        return { sender, content: { kind: "text", text }, receivedAt: new Date().toISOString() };
-      }
-    }
-    return { sender, content: { kind: "raw", text: JSON.stringify(message) }, receivedAt: new Date().toISOString() };
+    const sender = payload.from;
+    if (typeof sender !== "string" || sender.length === 0) return null;
+
+    const pushName = typeof payload.pushName === "string" && payload.pushName.length > 0 ? payload.pushName : undefined;
+    const messageText = typeof payload.message === "string" ? payload.message : "";
+
+    const adReplyRaw = asRecord(payload.ad_reply);
+    const sourceId = typeof adReplyRaw?.source_id === "string" && adReplyRaw.source_id.length > 0 ? adReplyRaw.source_id : null;
+    const adReferral = sourceId
+      ? {
+          sourceId,
+          sourceType: typeof adReplyRaw?.source_type === "string" ? adReplyRaw.source_type : "ad",
+          sourceUrl: typeof adReplyRaw?.source_url === "string" ? adReplyRaw.source_url : undefined,
+        }
+      : null;
+
+    const content = messageText.length > 0 ? ({ kind: "text", text: messageText } as const) : ({ kind: "raw", text: JSON.stringify(payload) } as const);
+
+    return { sender, senderName: pushName, content, receivedAt: new Date().toISOString(), adReferral };
   }
 }

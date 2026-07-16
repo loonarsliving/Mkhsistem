@@ -41,6 +41,7 @@ export type NotificationCategoryDb =
   | "leave_rejected"
   | "payroll_available"
   | "new_prospect"
+  | "new_ad_lead"
   | "follow_up_reminder"
   | "new_assignment"
   | "closing_approved"
@@ -2334,6 +2335,7 @@ export interface Database {
         Returns: string;
       };
       crm_set_prospect_green: { Args: { p_prospect_id: string }; Returns: undefined };
+      crm_pick_round_robin_sales: { Args: { p_branch_id: string }; Returns: string | null };
       crm_record_payment: {
         Args: {
           p_prospect_id: string;
