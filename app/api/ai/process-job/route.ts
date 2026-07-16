@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
-import { draftSp1Warning } from "@/lib/ai/domains/crm";
+import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { evaluateWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
@@ -25,6 +25,10 @@ export const dynamic = "force-dynamic";
 
 interface CrmSp1DraftJobPayload {
   sp1_warning_id: string;
+}
+
+interface CrmSalesCoachingJobPayload {
+  sales_id: string;
 }
 
 interface MarkomChecklistDraftJobPayload {
@@ -116,6 +120,52 @@ async function processCrmSp1Draft(supabase: AdminClient, job: JobRow) {
   }
 
   return { warningId: warning.id };
+}
+
+/** One Gemini attempt to coach a sales rep with 0 closings in the last 30 days -- a supportive weekly nudge (see 0101), not a warning. Sent directly to the sales rep only, unlike stuck_prospect_alert/SP1 which also reach their manager. */
+async function processCrmSalesCoaching(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as CrmSalesCoachingJobPayload;
+
+  const [{ data: sales }, { data: activeProspects }, { data: followUps }] = await Promise.all([
+    supabase.from("v_employee_directory").select("full_name, branch_name").eq("id", payload.sales_id).single(),
+    supabase
+      .from("prospects")
+      .select("id, last_follow_up_at, created_at")
+      .eq("sales_id", payload.sales_id)
+      .is("deleted_at", null)
+      .not("status", "in", "(closing,inactive)"),
+    supabase
+      .from("prospect_follow_ups")
+      .select("id, prospect_id, prospects!inner(sales_id)")
+      .eq("prospects.sales_id", payload.sales_id)
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
+  if (!sales) throw new Error(`Sales ${payload.sales_id} not found`);
+
+  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const stuckCount = (activeProspects ?? []).filter((p) => new Date(p.last_follow_up_at ?? p.created_at).getTime() < cutoff).length;
+
+  const now = new Date();
+  const advisory = await generateSalesCoaching({
+    salesName: sales.full_name,
+    branchName: sales.branch_name ?? "-",
+    periodLabel: `${now.getMonth() + 1}/${now.getFullYear()}`,
+    stuckProspectCount: stuckCount,
+    activeProspectCount: (activeProspects ?? []).length,
+    followUpCount30d: (followUps ?? []).length,
+  });
+
+  const { error: insertError } = await supabase.from("mkc_notifications").insert({
+    user_id: payload.sales_id,
+    type: "crm",
+    category: "sales_coaching_tip",
+    title: "Tips dari AI untuk Anda",
+    body: advisory,
+    link: "/crm",
+  });
+  if (insertError) throw new Error(`Failed to insert sales coaching notification: ${insertError.message}`);
+
+  return { salesId: payload.sales_id };
 }
 
 /** Clamped 1-5 week-of-month, matching kpi_tasks.period_week's own convention (see AssignChecklistForm). */
@@ -541,7 +591,9 @@ export async function POST(request: Request) {
         ? await processWhatsAppAiReply(supabase, job)
         : job.job_type === "crm_sp1_draft"
           ? await processCrmSp1Draft(supabase, job)
-          : job.job_type === "markom_checklist_draft"
+          : job.job_type === "crm_sales_coaching"
+            ? await processCrmSalesCoaching(supabase, job)
+            : job.job_type === "markom_checklist_draft"
             ? await processMarkomChecklistDraft(supabase, job)
             : job.job_type === "meta_ads_launch"
               ? await processMetaAdsLaunch(supabase, job)

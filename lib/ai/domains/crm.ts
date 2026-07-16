@@ -52,6 +52,38 @@ export async function analyzePipeline(pipelineSummary: string): Promise<string> 
   return askAI(await getSystemPrompt("crm"), userPrompt);
 }
 
+export interface SalesCoachingInput {
+  salesName: string;
+  branchName: string;
+  periodLabel: string;
+  stuckProspectCount: number;
+  activeProspectCount: number;
+  followUpCount30d: number;
+}
+
+/**
+ * Supportive coaching nudge for a sales rep with 0 closings this period --
+ * a much earlier/softer signal than SP1 (which only fires at 0 closings +
+ * 3+ stuck prospects, and is a formal warning). This is coaching, not a
+ * warning: draws on real sales technique (storytelling, objection handling,
+ * WhatsApp scripting, cold outreach) per the crm system prompt's relevance-
+ * check instruction -- the AI decides what's actually applicable to this
+ * sales rep's real numbers, not a fixed checklist.
+ */
+export async function generateSalesCoaching(input: SalesCoachingInput): Promise<string> {
+  const userPrompt = `Sales: ${input.salesName}
+Cabang: ${input.branchName}
+Periode: ${input.periodLabel}
+Belum ada closing di periode ini.
+Prospek aktif saat ini: ${input.activeProspectCount}
+Prospek stuck tanpa follow up 3+ hari: ${input.stuckProspectCount}
+Total aktivitas follow up 30 hari terakhir: ${input.followUpCount30d}
+
+Buat pesan coaching singkat untuk ${input.salesName} (WhatsApp, Bahasa Indonesia, maksimal 100 kata). Ini pesan MENDUKUNG dan membangun semangat, BUKAN teguran/warning -- fokus pada 1-2 saran konkret dan paling relevan untuk situasi angka di atas (misalnya: cara follow up ulang prospek yang stuck, teknik membuka percakapan yang lebih personal, atau cara menangani keberatan calon pembeli) -- pilih yang paling pas dengan data ini, jangan asal mencantumkan semua teknik yang kamu tahu. Tutup dengan kalimat penyemangat singkat.`;
+
+  return askAI(await getSystemPrompt("crm"), userPrompt, { temperature: 0.7 });
+}
+
 export interface Sp1KpiBreakdown {
   /** Distinct calendar days with >=1 new prospect input, out of the last 30. KPI 1: upload prospek setiap hari. */
   uploadDays30d: number;
