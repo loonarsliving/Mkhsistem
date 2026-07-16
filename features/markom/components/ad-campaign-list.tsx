@@ -180,6 +180,11 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     <p className="text-sm font-medium">{c.headline}</p>
                     <p className="text-sm text-muted-foreground">{c.primary_text}</p>
                     {c.research_summary && <p className="text-xs italic text-muted-foreground">Riset AI: {c.research_summary}</p>}
+                    {c.target_areas && c.target_areas.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Area target hasil riset AI: <span className="font-medium">{c.target_areas.join(", ")}</span>
+                      </p>
+                    )}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
 
                     {c.analyzed_at && (c.status === "active" || c.status === "paused") && (

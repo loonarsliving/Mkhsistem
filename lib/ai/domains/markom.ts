@@ -216,6 +216,16 @@ export interface AdDraft {
   welcomeMessage: string;
   /** AI's suggested daily spend -- the launch job (ai_job_queue "meta_ads_launch") always clamps this to the remaining META_ADS_DAILY_BUDGET_CAP_IDR, so this is a research-informed suggestion, never the final authority on real spend. */
   suggestedDailyBudgetIdr: number;
+  /**
+   * Real Google-Search-researched buyer-origin city/regency names for a
+   * non-villa project (see the "no audienceLine" branch of the prompt
+   * below) -- empty when input.targetCities was already supplied (villa,
+   * which uses the fixed LEASEHOLD_TARGET_CITIES list instead) or when the
+   * unresearched fallback prompt was used (no internet, nothing to ground
+   * a real answer in). Resolved into actual Meta geo targeting by the
+   * caller via resolveGeoLocationsFromNames (lib/meta/ads.ts).
+   */
+  targetAreas: string[];
 }
 
 function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: string): AdDraft {
@@ -241,6 +251,9 @@ function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: st
     description: (parsed.description ?? "").slice(0, 200) || "Hubungi kami sekarang via WhatsApp.",
     welcomeMessage: (parsed.welcomeMessage ?? "").slice(0, 300) || `Terima kasih sudah menghubungi kami mengenai ${projectName}!`,
     suggestedDailyBudgetIdr: Number.isFinite(Number(parsed.suggestedDailyBudgetIdr)) ? Math.max(0, Math.round(Number(parsed.suggestedDailyBudgetIdr))) : 0,
+    targetAreas: Array.isArray(parsed.targetAreas)
+      ? parsed.targetAreas.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim().slice(0, 60)).slice(0, 6)
+      : [],
   };
 }
 
@@ -263,6 +276,20 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
   const audienceLine = input.targetCities?.length
     ? `Audiens: iklan ini akan ditargetkan khusus ke kota-kota ${input.targetCities.join(", ")} (kota-kota asal pembeli villa leasehold berdasarkan data pasar riil kami) -- tulis materi iklan yang relevan untuk audiens dari kota-kota tersebut, bukan generik untuk seluruh Indonesia.`
     : "";
+  /**
+   * Villa already has a curated, fixed buyer-origin list (LEASEHOLD_TARGET_CITIES)
+   * passed in via targetCities -- investor/leasehold buyers can come from any
+   * major city. A local housing project (e.g. "perumahan di Cibarusah") has no
+   * such list and a different buyer profile: mostly commuters/locals near that
+   * specific place, not nationwide investors -- so instead of falling back to
+   * wasteful nationwide targeting, have the AI actually research (via the same
+   * Google Search grounding used above) real signals about where that area's
+   * home buyers typically come from (commuter corridors, toll/train access,
+   * property portal listings, local news/forum discussion of the area).
+   */
+  const areaResearchLine = input.targetCities?.length
+    ? ""
+    : `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal rata-rata pembeli rumah di lokasi "${input.projectCity ?? input.projectName}" -- pertimbangkan akses tol/kereta, kota-kota komuter terdekat, dan pola pembeli perumahan sejenis di area itu berdasarkan artikel/listing properti/diskusi yang benar-benar kamu temukan. Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/perumahan yang terlalu spesifik, karena harus bisa dikenali sistem targeting iklan) di field "targetAreas". Kalau riset tidak menemukan data yang cukup meyakinkan, kembalikan array kosong -- jangan menebak.`;
   const productLine = input.productDescription?.trim()
     ? `Detail produk (dari Markom, WAJIB dipakai sebagai fakta utama materi iklan, jangan mengarang spesifikasi/harga lain):\n${input.productDescription.trim()}`
     : "Detail produk: belum diisi Markom -- tulis materi berbasis nama/kota/tipe project saja, jangan mengarang harga atau spesifikasi.";
@@ -285,6 +312,7 @@ Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}
 ${audienceLine}
+${areaResearchLine}
 ${productLine}
 
 ${indicatorsBlock}
@@ -293,7 +321,7 @@ Foto asli yang tersedia (WAJIB pilih salah satu id ini, jangan mengarang foto la
 ${photoList}
 
 Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
-{"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoId": "salah satu id foto di atas", "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian}`;
+{"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoId": "salah satu id foto di atas", "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian, "targetAreas": ["kota/kabupaten hasil riset area target di atas, array kosong jika tidak relevan/tidak diminta"]}`;
 
   const photoIds = input.availablePhotos.map((p) => p.id);
 

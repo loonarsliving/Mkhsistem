@@ -12,7 +12,13 @@ import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
-import { LEASEHOLD_TARGET_CITIES, getLeaseholdTargetGeoLocations, getRemainingDailyBudgetIdr, launchWhatsAppLeadCampaign } from "@/lib/meta/ads";
+import {
+  LEASEHOLD_TARGET_CITIES,
+  getLeaseholdTargetGeoLocations,
+  getRemainingDailyBudgetIdr,
+  launchWhatsAppLeadCampaign,
+  resolveGeoLocationsFromNames,
+} from "@/lib/meta/ads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -260,6 +266,8 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
 
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
+  const targeting =
+    project.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : await resolveGeoLocationsFromNames(draft.targetAreas, 25);
 
   try {
     const result = await launchWhatsAppLeadCampaign({
@@ -270,7 +278,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       description: draft.description,
       welcomeMessage: draft.welcomeMessage,
       dailyBudgetIdr,
-      targeting: project.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : undefined,
+      targeting,
     });
 
     await supabase.from("meta_ad_campaigns").insert({
@@ -290,6 +298,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       status: "active",
       launched_by: "ai",
       research_summary: draft.targetSummary,
+      target_areas: draft.targetAreas,
     });
 
     const { data: managers } = await supabase
@@ -329,6 +338,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       status: "failed",
       launched_by: "ai",
       research_summary: draft.targetSummary,
+      target_areas: draft.targetAreas,
       failure_reason: errorMessage,
     });
     throw new NonRetryableJobError(`Meta API call failed while launching ad for "${project.name}": ${errorMessage}`);
@@ -382,6 +392,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
         status: "draft",
         launched_by: "human",
         research_summary: draft.targetSummary,
+        target_areas: draft.targetAreas,
       })
       .select("id")
       .single();

@@ -73,28 +73,36 @@ export async function searchAdGeoLocation(query: string): Promise<ResolvedGeoLoc
  */
 export const LEASEHOLD_TARGET_CITIES = ["Yogyakarta", "Surabaya", "Bandung", "Surakarta", "Bali", "Malang", "Semarang"];
 
-let cachedLeaseholdGeoLocations: AdSetTargeting | null = null;
-
 /**
- * Resolves LEASEHOLD_TARGET_CITIES into real Meta targeting keys once per
- * process (they're stable place IDs, no need to re-resolve every launch)
- * and splits them into cities vs regions since Meta returns "Bali" as a
- * region, not a city. Falls back to country-wide ["ID"] targeting if
- * resolution comes back empty (a Meta API hiccup here shouldn't block an
- * ad launch entirely -- it just makes that one launch less targeted).
+ * Resolves a list of place names into real Meta targeting keys, splitting
+ * them into cities vs regions since Meta returns e.g. "Bali" as a region,
+ * not a city. Falls back to country-wide ["ID"] targeting if nothing
+ * resolves (a Meta API hiccup or an unrecognized place name shouldn't block
+ * an ad launch entirely -- it just makes that one launch less targeted).
  */
-export async function getLeaseholdTargetGeoLocations(): Promise<AdSetTargeting> {
-  if (cachedLeaseholdGeoLocations) return cachedLeaseholdGeoLocations;
-
-  const resolved = await Promise.all(LEASEHOLD_TARGET_CITIES.map((name) => searchAdGeoLocation(name)));
-  const cities = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "city").map((r) => ({ key: r.key, radiusKm: 30 }));
+export async function resolveGeoLocationsFromNames(names: string[], radiusKm: number): Promise<AdSetTargeting> {
+  const resolved = await Promise.all(names.map((name) => searchAdGeoLocation(name)));
+  const cities = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "city").map((r) => ({ key: r.key, radiusKm }));
   const regions = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "region").map((r) => ({ key: r.key }));
 
   if (cities.length === 0 && regions.length === 0) {
     return { countries: ["ID"] };
   }
 
-  cachedLeaseholdGeoLocations = { cities, regions };
+  return { cities, regions };
+}
+
+let cachedLeaseholdGeoLocations: AdSetTargeting | null = null;
+
+/**
+ * Resolves LEASEHOLD_TARGET_CITIES into real Meta targeting keys once per
+ * process (they're stable place IDs, no need to re-resolve every launch).
+ */
+export async function getLeaseholdTargetGeoLocations(): Promise<AdSetTargeting> {
+  if (cachedLeaseholdGeoLocations) return cachedLeaseholdGeoLocations;
+  const resolved = await resolveGeoLocationsFromNames(LEASEHOLD_TARGET_CITIES, 30);
+  if (!resolved.cities?.length && !resolved.regions?.length) return resolved;
+  cachedLeaseholdGeoLocations = resolved;
   return cachedLeaseholdGeoLocations;
 }
 

@@ -1141,6 +1141,7 @@ export interface Database {
           conversations_started: number | null;
           ai_analysis: string | null;
           analyzed_at: string | null;
+          target_areas: string[] | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -1170,6 +1171,7 @@ export interface Database {
           conversations_started?: number | null;
           ai_analysis?: string | null;
           analyzed_at?: string | null;
+          target_areas?: string[] | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
