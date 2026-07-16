@@ -34,3 +34,9 @@ export const completeTaskSchema = z.object({
   taskId: z.string().uuid(),
 });
 export type CompleteTaskInput = z.infer<typeof completeTaskSchema>;
+
+export const submitObstacleSchema = z.object({
+  taskId: z.string().uuid(),
+  response: z.string().min(5, "Jelaskan kendala Anda (minimal 5 karakter)").max(1000),
+});
+export type SubmitObstacleInput = z.infer<typeof submitObstacleSchema>;

@@ -2117,6 +2117,10 @@ export interface Database {
           completed_at: string | null;
           verified_by: string | null;
           notes: string | null;
+          assignee_response: string | null;
+          assignee_response_at: string | null;
+          ai_guidance: string | null;
+          ai_guidance_at: string | null;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -2137,6 +2141,10 @@ export interface Database {
           completed_at?: string | null;
           verified_by?: string | null;
           notes?: string | null;
+          assignee_response?: string | null;
+          assignee_response_at?: string | null;
+          ai_guidance?: string | null;
+          ai_guidance_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -2540,6 +2548,14 @@ export interface Database {
       };
       kpi_complete_task: {
         Args: { p_task_id: string };
+        Returns: undefined;
+      };
+      kpi_submit_obstacle_response: {
+        Args: { p_task_id: string; p_response: string };
+        Returns: undefined;
+      };
+      kpi_apply_ai_response: {
+        Args: { p_task_id: string; p_action: string; p_new_title: string | null; p_new_description: string | null; p_ai_guidance: string };
         Returns: undefined;
       };
       ai_circuit_breaker_check: {

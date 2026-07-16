@@ -191,6 +191,85 @@ Berikan evaluasi (Bahasa Indonesia, 4-6 kalimat): (1) apa yang berhasil minggu i
   return askAI(await getSystemPrompt("markom"), userPrompt);
 }
 
+export interface MarkomObstacleInput {
+  taskTitle: string;
+  taskDescription: string | null;
+  /** Markom's own free-text explanation of what's blocking them from completing the brief as given. */
+  obstacleResponse: string;
+}
+
+export interface MarkomObstacleResolution {
+  action: "revise_brief" | "give_guidance";
+  /** Always populated -- the message shown to Markom regardless of which action was taken. */
+  guidance: string;
+  /** Only set when action is "revise_brief". */
+  newTitle?: string;
+  newDescription?: string;
+}
+
+function parseObstacleResolutionJson(text: string): MarkomObstacleResolution {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Partial<MarkomObstacleResolution>;
+  if (parsed.action !== "revise_brief" && parsed.action !== "give_guidance") {
+    throw new Error("AI obstacle response missing a valid action");
+  }
+  if (typeof parsed.guidance !== "string" || parsed.guidance.trim().length === 0) {
+    throw new Error("AI obstacle response missing guidance text");
+  }
+  return {
+    action: parsed.action,
+    guidance: parsed.guidance.slice(0, 1500),
+    newTitle: parsed.action === "revise_brief" && typeof parsed.newTitle === "string" ? parsed.newTitle.slice(0, 200) : undefined,
+    newDescription: parsed.action === "revise_brief" && typeof parsed.newDescription === "string" ? parsed.newDescription.slice(0, 1000) : undefined,
+  };
+}
+
+/**
+ * Reads what Markom actually reported as their obstacle to a checklist
+ * brief and decides, like a real Branch Manager would, whether the brief
+ * itself was unrealistic given that constraint (revise it to something
+ * genuinely achievable, keeping the original marketing intent as close as
+ * possible) or whether the obstacle has a workable solution without
+ * touching the brief (give concrete, actionable guidance instead). Grounded
+ * in Google Search so a revised brief -- or a suggested workaround -- can
+ * still be based on a real current idea/tool/reference, not just generic
+ * reassurance. Deliberately NOT a rubber stamp: the prompt requires genuine
+ * reasoning so the AI doesn't just water down every task someone claims is
+ * hard.
+ */
+export async function resolveMarkomTaskObstacle(input: MarkomObstacleInput): Promise<MarkomObstacleResolution> {
+  const systemPrompt = await getSystemPrompt("markom");
+  const userPrompt = `Seorang anggota tim Markom melaporkan kendala pada brief checklist konten berikut. Kamu berperan sebagai Branch Manager yang memutuskan tindak lanjutnya -- boleh pakai Google Search kalau perlu referensi konkret (ide konten alternatif yang sedang tren, tutorial/tool untuk mengatasi kendala teknis, dsb).
+
+Brief asli:
+Judul: ${input.taskTitle}
+Deskripsi: ${input.taskDescription ?? "-"}
+
+Kendala yang dilaporkan Markom:
+"${input.obstacleResponse}"
+
+Putuskan salah satu, dengan penalaran jujur (jangan otomatis membenarkan setiap alasan, tapi juga jangan kaku kalau kendalanya memang nyata):
+1. "revise_brief" -- jika brief memang tidak realistis dengan kendala nyata ini (mis. tidak ada akses lokasi/bahan, di luar kapasitas tim minggu ini) -- buat versi brief baru yang tetap mencapai tujuan marketing yang sama sedekat mungkin, tapi benar-benar bisa dieksekusi dengan kondisi yang ada. Jangan sekadar menghapus/meniadakan tugasnya.
+2. "give_guidance" -- jika kendala itu bisa diatasi tanpa mengubah brief (mis. kurang tahu caranya, perlu koordinasi dengan orang lain, perlu alat/rujukan tertentu) -- berikan langkah konkret yang harus dilakukan Markom untuk menyelesaikan brief aslinya.
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{"action": "revise_brief atau give_guidance", "guidance": "pesan lengkap untuk Markom, Bahasa Indonesia, jelaskan alasan keputusan lalu langkah konkret berikutnya", "newTitle": "judul brief baru, HANYA isi jika action revise_brief", "newDescription": "deskripsi brief baru (format sama seperti brief asli), HANYA isi jika action revise_brief"}`;
+
+  try {
+    const response = await generateAIText({ systemPrompt, userPrompt, useWebSearch: true, maxOutputTokens: 1536 });
+    return parseObstacleResolutionJson(response.text);
+  } catch {
+    // fall through to the unresearched fallback below
+  }
+
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: `${userPrompt}\n\n(Jawab tanpa riset internet.)`, maxOutputTokens: 1024 });
+  return parseObstacleResolutionJson(fallbackResponse.text);
+}
+
 export interface AdPhotoOption {
   id: string;
   caption: string | null;

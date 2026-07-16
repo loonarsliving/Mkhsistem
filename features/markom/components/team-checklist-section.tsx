@@ -8,15 +8,17 @@ import { AlarmClock, CheckCircle2, Circle, ClipboardList, Percent, Users, XCircl
 import { toast } from "sonner";
 
 import { StatTile } from "@/components/shared/stat-tile";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { KpiTaskStatusDb } from "@/types/database.types";
 
-import { completeTaskAction } from "../actions/markom.actions";
+import { completeTaskAction, submitTaskObstacleAction } from "../actions/markom.actions";
 import { listKpiTasksAction, teamStatsAction } from "../actions/markom-query.actions";
 
 const STATUS_ICON: Record<KpiTaskStatusDb, React.ReactNode> = {
@@ -33,6 +35,8 @@ interface KpiTaskRow {
   status: KpiTaskStatusDb;
   period_week: number;
   notes: string | null;
+  assignee_response: string | null;
+  ai_guidance: string | null;
   verifier: { full_name: string } | null;
 }
 
@@ -49,6 +53,9 @@ export function TeamChecklistSection() {
   const [year] = React.useState(now.getFullYear());
   const [week, setWeek] = React.useState<number | "all">("all");
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [obstacleOpenId, setObstacleOpenId] = React.useState<string | null>(null);
+  const [obstacleText, setObstacleText] = React.useState("");
+  const [submittingObstacle, setSubmittingObstacle] = React.useState(false);
   const queryClient = useQueryClient();
 
   const { data: stats } = useQuery({
@@ -79,6 +86,24 @@ export function TeamChecklistSection() {
     queryClient.invalidateQueries({ queryKey: ["markom-team-tasks"] });
     queryClient.invalidateQueries({ queryKey: ["markom-national-stats"] });
     queryClient.invalidateQueries({ queryKey: ["markom-ranking"] });
+  }
+
+  async function handleSubmitObstacle(taskId: string) {
+    if (obstacleText.trim().length < 5) {
+      toast.error("Jelaskan kendala Anda (minimal 5 karakter)");
+      return;
+    }
+    setSubmittingObstacle(true);
+    const result = await submitTaskObstacleAction({ taskId, response: obstacleText.trim() });
+    setSubmittingObstacle(false);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal mengirim kendala");
+      return;
+    }
+    toast.success(result.data?.aiResponded ? "Kendala terkirim, AI sudah merespons" : "Kendala tersimpan, tapi AI belum sempat merespons -- coba lagi nanti");
+    setObstacleOpenId(null);
+    setObstacleText("");
+    queryClient.invalidateQueries({ queryKey: ["markom-team-tasks"] });
   }
 
   const items = tasks ?? [];
@@ -166,6 +191,58 @@ export function TeamChecklistSection() {
                     {task.verifier && <span>Direview {task.verifier.full_name}</span>}
                   </div>
                   {task.notes && task.status === "rejected" && <p className="text-xs text-destructive">Catatan: {task.notes}</p>}
+
+                  {task.assignee_response && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Kendala Anda:</span> {task.assignee_response}
+                    </p>
+                  )}
+                  {task.ai_guidance && (
+                    <p className="rounded-md bg-muted/50 p-2 text-xs text-foreground">
+                      <span className="font-medium">Jawaban AI:</span> {task.ai_guidance}
+                    </p>
+                  )}
+
+                  {task.status === "pending" &&
+                    (obstacleOpenId === task.id ? (
+                      <div className="space-y-1.5 pt-1">
+                        <Textarea
+                          value={obstacleText}
+                          onChange={(e) => setObstacleText(e.target.value)}
+                          placeholder="Jelaskan kondisi/kendala Anda dalam mengerjakan brief ini -- AI akan merespons: merevisi brief atau memberi saran penyelesaian."
+                          rows={3}
+                          disabled={submittingObstacle}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" disabled={submittingObstacle} onClick={() => handleSubmitObstacle(task.id)}>
+                            Kirim ke AI
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={submittingObstacle}
+                            onClick={() => {
+                              setObstacleOpenId(null);
+                              setObstacleText("");
+                            }}
+                          >
+                            Batal
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="link"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => {
+                          setObstacleOpenId(task.id);
+                          setObstacleText("");
+                        }}
+                      >
+                        Ada kendala mengerjakan ini?
+                      </Button>
+                    ))}
                 </div>
               </li>
             ))}
