@@ -29,6 +29,8 @@ interface CrmSp1DraftJobPayload {
 
 interface CrmSalesCoachingJobPayload {
   sales_id: string;
+  /** Test-only escape hatch: analyze sales_id's real data but deliver the notification here instead -- lets a Super Admin see a real coaching message without paging an actual sales rep. Omitted in normal cron-driven runs. */
+  notify_user_id?: string;
 }
 
 interface MarkomChecklistDraftJobPayload {
@@ -155,12 +157,13 @@ async function processCrmSalesCoaching(supabase: AdminClient, job: JobRow) {
     followUpCount30d: (followUps ?? []).length,
   });
 
+  const isTestForward = Boolean(payload.notify_user_id && payload.notify_user_id !== payload.sales_id);
   const { error: insertError } = await supabase.from("mkc_notifications").insert({
-    user_id: payload.sales_id,
+    user_id: payload.notify_user_id ?? payload.sales_id,
     type: "crm",
     category: "sales_coaching_tip",
-    title: "Tips dari AI untuk Anda",
-    body: advisory,
+    title: isTestForward ? `[TEST] Tips AI untuk ${sales.full_name}` : "Tips dari AI untuk Anda",
+    body: isTestForward ? `🧪 Pesan test -- normalnya terkirim ke ${sales.full_name} (${sales.branch_name ?? "-"}), bukan ke Anda.\n\n${advisory}` : advisory,
     link: "/crm",
   });
   if (insertError) throw new Error(`Failed to insert sales coaching notification: ${insertError.message}`);
