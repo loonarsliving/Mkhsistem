@@ -3,38 +3,40 @@
 import { revalidatePath } from "next/cache";
 
 import { draftLoonarsFaqReply, generateLoonarsContentIdeas } from "@/lib/ai/domains/loonars-beauty";
-import { isLoonarsDashboardConfigured } from "@/lib/supabase/loonars-dashboard-client";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
   createContentItem,
+  createOrder,
   getLatestWeeklyEvaluation,
+  getOrderStats,
   listContentItems,
   listContentMetrics,
-  listOrderSnapshots,
+  listOrders,
   listRecentMetricsForPublishedContent,
   softDeleteContentItem,
   updateContentItem,
+  updateOrderStatus,
   upsertContentMetric,
-  upsertOrderSnapshot,
 } from "@/repositories/loonars-beauty.repository";
-import { getOrderSummary, listLowStockProducts, listRecentOrders } from "@/repositories/loonars-dashboard-sync.repository";
 import type { Tables } from "@/types/database.types";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
   createContentItemSchema,
+  createOrderSchema,
   draftFaqReplySchema,
   generateContentIdeasSchema,
   logContentMetricsSchema,
-  logOrderSnapshotSchema,
   updateContentItemStatusSchema,
+  updateOrderStatusSchema,
   type CreateContentItemInput,
+  type CreateOrderInput,
   type DraftFaqReplyInput,
   type GenerateContentIdeasInput,
   type LogContentMetricsInput,
-  type LogOrderSnapshotInput,
   type UpdateContentItemStatusInput,
+  type UpdateOrderStatusInput,
 } from "../schemas/loonars-beauty.schema";
 
 /** Agreed rotation from the content strategy: 40% problem-solution / 30% UGC / 20% edukasi / 10% promosi. */
@@ -43,6 +45,8 @@ const CATEGORY_KEYS = Object.keys(RATIO_TARGET) as Array<keyof typeof RATIO_TARG
 
 type LoonarsContentCategory = Tables<"loonars_content_items">["category"];
 type LoonarsContentStatus = Tables<"loonars_content_items">["status"];
+type LoonarsOrderStatus = Tables<"loonars_orders">["status"];
+type LoonarsOrderChannel = Tables<"loonars_orders">["channel"];
 
 export async function listContentItemsAction(filters?: { category?: LoonarsContentCategory; status?: LoonarsContentStatus }) {
   await requirePermission("loonars_beauty.view");
@@ -141,37 +145,6 @@ export async function listContentMetricsAction(contentItemId: string) {
   return listContentMetrics(supabase, contentItemId);
 }
 
-export async function logOrderSnapshotAction(input: LogOrderSnapshotInput): Promise<ActionResult> {
-  const session = await requirePermission("loonars_beauty.manage");
-  const parsed = logOrderSnapshotSchema.safeParse(input);
-  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
-
-  const supabase = await createClient();
-  try {
-    await upsertOrderSnapshot(supabase, {
-      snapshot_date: parsed.data.snapshotDate || new Date().toISOString().slice(0, 10),
-      channel: parsed.data.channel,
-      orders_count: parsed.data.ordersCount,
-      units_sold: parsed.data.unitsSold,
-      revenue_idr: parsed.data.revenueIdr,
-      notes: parsed.data.notes || null,
-      created_by: session.userId,
-    });
-  } catch (err) {
-    return actionError(err instanceof Error ? err.message : "Gagal mencatat data order");
-  }
-  revalidatePath("/loonars-beauty/performance");
-  return actionSuccess();
-}
-
-export async function listOrderSnapshotsAction(days = 30) {
-  await requirePermission("loonars_beauty.view");
-  const supabase = await createClient();
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  return listOrderSnapshots(supabase, since.toISOString().slice(0, 10));
-}
-
 /** Trailing-30-day actual mix vs the agreed 40/30/20/10 rotation -- computed here, not enforced by the DB, so the team can go deliberately off-ratio for a week without a constraint fighting them. */
 export async function getContentRatioSummaryAction(days = 30) {
   await requirePermission("loonars_beauty.view");
@@ -254,34 +227,67 @@ export async function draftFaqReplyAction(input: DraftFaqReplyInput): Promise<Ac
   }
 }
 
-export type LiveOrderSyncResult =
-  | { configured: false }
-  | {
-      configured: true;
-      summary: Awaited<ReturnType<typeof getOrderSummary>>;
-      recentOrders: Awaited<ReturnType<typeof listRecentOrders>>;
-      lowStockProducts: Awaited<ReturnType<typeof listLowStockProducts>>;
-    };
+/** Standalone order log, native to MK Connect's own database -- see migration 0107's header note for why this isn't synced with the separate Loonars Dashboard project. */
+export async function createOrderAction(input: CreateOrderInput): Promise<ActionResult<{ id: string; orderNumber: string }>> {
+  const session = await requirePermission("loonars_beauty.manage");
+  const parsed = createOrderSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
 
-/**
- * Live read from Loonars Dashboard's own database (LOONARS_DASHBOARD_SUPABASE_URL/
- * LOONARS_DASHBOARD_SERVICE_ROLE_KEY, both server-only) -- replaces manually
- * typing in order numbers with real data, the moment those two env vars
- * are set in Vercel. Degrades to configured:false (not an error) when
- * they aren't, so this module keeps working without the sync.
- */
-export async function getLiveOrderSyncAction(): Promise<LiveOrderSyncResult> {
+  const totalAmount = parsed.data.quantity * parsed.data.unitPrice;
+
+  const supabase = await createClient();
+  try {
+    const created = await createOrder(supabase, {
+      customer_name: parsed.data.customerName,
+      customer_phone: parsed.data.customerPhone || null,
+      customer_address: parsed.data.customerAddress || null,
+      channel: parsed.data.channel,
+      product_name: parsed.data.productName || undefined,
+      quantity: parsed.data.quantity,
+      unit_price: parsed.data.unitPrice,
+      total_amount: totalAmount,
+      courier: parsed.data.courier || null,
+      tracking_number: parsed.data.trackingNumber || null,
+      notes: parsed.data.notes || null,
+      created_by: session.userId,
+      updated_by: session.userId,
+    });
+    revalidatePath("/loonars-beauty/orders");
+    return actionSuccess({ id: created.id, orderNumber: created.order_number });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan order");
+  }
+}
+
+export async function listOrdersAction(filters?: { status?: LoonarsOrderStatus; channel?: LoonarsOrderChannel; search?: string }) {
   await requirePermission("loonars_beauty.view");
-  if (!isLoonarsDashboardConfigured()) return { configured: false };
+  const supabase = await createClient();
+  return listOrders(supabase, filters);
+}
 
+export async function updateOrderStatusAction(input: UpdateOrderStatusInput): Promise<ActionResult> {
+  const session = await requirePermission("loonars_beauty.manage");
+  const parsed = updateOrderStatusSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  try {
+    await updateOrderStatus(supabase, parsed.data.id, {
+      status: parsed.data.status,
+      tracking_number: parsed.data.trackingNumber || undefined,
+      updated_by: session.userId,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengubah status order");
+  }
+  revalidatePath("/loonars-beauty/orders");
+  return actionSuccess();
+}
+
+export async function getOrderStatsAction(days = 30) {
+  await requirePermission("loonars_beauty.view");
+  const supabase = await createClient();
   const since = new Date();
-  since.setDate(since.getDate() - 30);
-
-  const [summary, recentOrders, lowStockProducts] = await Promise.all([
-    getOrderSummary(since.toISOString()),
-    listRecentOrders(10),
-    listLowStockProducts(),
-  ]);
-
-  return { configured: true, summary, recentOrders, lowStockProducts };
+  since.setDate(since.getDate() - days);
+  return getOrderStats(supabase, since.toISOString());
 }

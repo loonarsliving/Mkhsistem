@@ -71,19 +71,55 @@ export async function listRecentMetricsForPublishedContent(supabase: TypedSupaba
   }));
 }
 
-export async function upsertOrderSnapshot(supabase: TypedSupabaseClient, input: TablesInsert<"loonars_order_snapshots">) {
-  const { error } = await supabase.from("loonars_order_snapshots").upsert(input, { onConflict: "snapshot_date,channel" });
+type LoonarsOrderStatus = Tables<"loonars_orders">["status"];
+type LoonarsOrderChannel = Tables<"loonars_orders">["channel"];
+
+export async function createOrder(supabase: TypedSupabaseClient, input: TablesInsert<"loonars_orders">) {
+  const { data, error } = await supabase.from("loonars_orders").insert(input).select("id, order_number").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listOrders(
+  supabase: TypedSupabaseClient,
+  filters?: { status?: LoonarsOrderStatus; channel?: LoonarsOrderChannel; search?: string },
+  limit = 50,
+) {
+  let query = supabase.from("loonars_orders").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (filters?.status) query = query.eq("status", filters.status);
+  if (filters?.channel) query = query.eq("channel", filters.channel);
+  if (filters?.search) query = query.or(`order_number.ilike.%${filters.search}%,customer_name.ilike.%${filters.search}%`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function updateOrderStatus(supabase: TypedSupabaseClient, id: string, patch: TablesUpdate<"loonars_orders">) {
+  const { error } = await supabase.from("loonars_orders").update(patch).eq("id", id);
   if (error) throw error;
 }
 
-export async function listOrderSnapshots(supabase: TypedSupabaseClient, sinceISODate: string) {
-  const { data, error } = await supabase
-    .from("loonars_order_snapshots")
-    .select("*")
-    .gte("snapshot_date", sinceISODate)
-    .order("snapshot_date", { ascending: false });
+export interface LoonarsOrderStats {
+  ordersCount: number;
+  revenue: number;
+  byStatus: Record<string, number>;
+  byChannel: Record<string, number>;
+}
+
+export async function getOrderStats(supabase: TypedSupabaseClient, sinceISODate: string): Promise<LoonarsOrderStats> {
+  const { data, error } = await supabase.from("loonars_orders").select("status, channel, total_amount").gte("created_at", sinceISODate);
   if (error) throw error;
-  return data ?? [];
+
+  const rows = data ?? [];
+  const byStatus: Record<string, number> = {};
+  const byChannel: Record<string, number> = {};
+  let revenue = 0;
+  for (const row of rows) {
+    byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+    byChannel[row.channel] = (byChannel[row.channel] ?? 0) + 1;
+    if (row.status !== "cancelled") revenue += Number(row.total_amount ?? 0);
+  }
+  return { ordersCount: rows.length, revenue, byStatus, byChannel };
 }
 
 export async function getLatestWeeklyEvaluation(supabase: TypedSupabaseClient) {

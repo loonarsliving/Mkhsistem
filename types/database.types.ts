@@ -1405,30 +1405,48 @@ export interface Database {
           },
         ];
       };
-      loonars_order_snapshots: {
+      loonars_orders: {
         Row: {
           id: string;
-          snapshot_date: string;
-          channel: "shopee" | "tokopedia" | "website" | "offline" | "other";
-          orders_count: number;
-          units_sold: number;
-          revenue_idr: number;
+          order_number: string;
+          customer_name: string;
+          customer_phone: string | null;
+          customer_address: string | null;
+          channel: "shopee" | "tokopedia" | "whatsapp" | "instagram" | "website" | "offline" | "other";
+          product_name: string;
+          quantity: number;
+          unit_price: number;
+          total_amount: number;
+          status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
+          courier: string | null;
+          tracking_number: string | null;
           notes: string | null;
-          created_by: string | null;
           created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
         };
         Insert: {
           id?: string;
-          snapshot_date?: string;
-          channel: "shopee" | "tokopedia" | "website" | "offline" | "other";
-          orders_count?: number;
-          units_sold?: number;
-          revenue_idr?: number;
+          order_number?: string;
+          customer_name: string;
+          customer_phone?: string | null;
+          customer_address?: string | null;
+          channel: "shopee" | "tokopedia" | "whatsapp" | "instagram" | "website" | "offline" | "other";
+          product_name?: string;
+          quantity?: number;
+          unit_price?: number;
+          total_amount?: number;
+          status?: "pending" | "processing" | "shipped" | "completed" | "cancelled";
+          courier?: string | null;
+          tracking_number?: string | null;
           notes?: string | null;
-          created_by?: string | null;
           created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["loonars_order_snapshots"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["loonars_orders"]["Insert"]>;
         Relationships: [];
       };
       loonars_weekly_evaluations: {

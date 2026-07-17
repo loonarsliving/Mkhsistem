@@ -17,11 +17,15 @@
 --     in this project -- see .env.example -- so there is nothing to pull
 --     automatically, same situation content_planner already documented for
 --     TikTok snapshots).
---   - loonars_order_snapshots: daily order/revenue counts per channel,
---     entered by hand from Loonars Dashboard (a separate Supabase project,
---     gluoioiimapyhchdasfl -- no live DB-to-DB link exists). Automating this
---     via the sync_log outbound/inbound pattern (0055) is a follow-up once
---     this MVP is validated, not part of this migration.
+--   - loonars_orders: a simple, standalone order log native to MK Connect's
+--     own database -- deliberately NOT synced with the separate Loonars
+--     Dashboard Supabase project (gluoioiimapyhchdasfl runs its own
+--     marketplace order flow independently; cross-project sync was tried
+--     and dropped as unnecessary complexity for what this module needs,
+--     which is just "how many orders/how much revenue is content driving").
+--     One row per order, entered by whoever closes it (WhatsApp/DM, or
+--     logged from a marketplace order) -- not a full e-commerce system,
+--     no separate order_items/product catalog, single product line per row.
 --   - loonars_weekly_evaluations: AI's Monday evaluation of the past week
 --     (ratio compliance, which content to Spark-Ads-boost, retargeting
 --     candidates) -- same shape as social_weekly_evaluations (0085), queued
@@ -29,7 +33,7 @@
 -- ============================================================================
 
 insert into public.permissions (key, description) values
-  ('loonars_beauty.view', 'View Loonars Beauty: content items, performance metrics, order snapshots, weekly AI evaluation'),
+  ('loonars_beauty.view', 'View Loonars Beauty: content items, performance metrics, orders, weekly AI evaluation'),
   ('loonars_beauty.manage', 'Manage Loonars Beauty: create/edit content items, log performance & order data, trigger AI evaluation')
 on conflict (key) do nothing;
 
@@ -105,23 +109,60 @@ create table public.loonars_content_metrics (
 create index loonars_content_metrics_content_idx on public.loonars_content_metrics (content_item_id, captured_at desc);
 
 -- ----------------------------------------------------------------------------
--- loonars_order_snapshots: daily order/revenue counts per channel, entered
--- by hand from Loonars Dashboard until an automated sync exists.
+-- loonars_orders: standalone order log (see header note above) -- one row
+-- per order, order_number auto-generated per day (LB-YYYYMMDD-####).
 -- ----------------------------------------------------------------------------
-create table public.loonars_order_snapshots (
+create table public.loonars_orders (
   id uuid primary key default gen_random_uuid(),
-  snapshot_date date not null default current_date,
-  channel text not null check (channel in ('shopee', 'tokopedia', 'website', 'offline', 'other')),
-  orders_count integer not null default 0,
-  units_sold integer not null default 0,
-  revenue_idr numeric(12, 2) not null default 0,
+  order_number text not null unique,
+  customer_name text not null,
+  customer_phone text,
+  customer_address text,
+  channel text not null check (channel in ('shopee', 'tokopedia', 'whatsapp', 'instagram', 'website', 'offline', 'other')),
+  product_name text not null default 'HydraGlow Advanced Brightening Lotion',
+  quantity integer not null default 1,
+  unit_price numeric(12, 2) not null default 0,
+  total_amount numeric(12, 2) not null default 0,
+  status text not null default 'pending' check (status in ('pending', 'processing', 'shipped', 'completed', 'cancelled')),
+  courier text,
+  tracking_number text,
   notes text,
-  created_by uuid references public.employees(id) on delete set null,
   created_at timestamptz not null default now(),
-  unique (snapshot_date, channel)
+  updated_at timestamptz not null default now(),
+  created_by uuid references public.employees(id) on delete set null,
+  updated_by uuid references public.employees(id) on delete set null
 );
 
-create index loonars_order_snapshots_date_idx on public.loonars_order_snapshots (snapshot_date desc);
+create index loonars_orders_created_idx on public.loonars_orders (created_at desc);
+create index loonars_orders_status_idx on public.loonars_orders (status);
+
+create trigger set_updated_at before update on public.loonars_orders
+  for each row execute function public.set_updated_at();
+
+create trigger audit_log after insert or update or delete on public.loonars_orders
+  for each row execute function public.audit_log_trigger();
+
+-- Auto-generate order_number when not supplied -- same count-per-day
+-- pattern as generate_order_number() in Loonars Dashboard's own schema.
+-- Low-volume internal tool, so the rare concurrent-insert collision isn't
+-- worth a sequence table.
+create or replace function public.loonars_orders_generate_number()
+returns trigger
+language plpgsql
+as $$
+declare
+  cnt integer;
+begin
+  if new.order_number is null or new.order_number = '' then
+    select count(*) + 1 into cnt from public.loonars_orders where date(created_at) = current_date;
+    new.order_number := 'LB-' || to_char(now(), 'YYYYMMDD') || '-' || lpad(cnt::text, 4, '0');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger loonars_orders_set_number before insert on public.loonars_orders
+  for each row execute function public.loonars_orders_generate_number();
 
 -- ----------------------------------------------------------------------------
 -- loonars_weekly_evaluations: AI's written weekly evaluation, one row per
@@ -139,7 +180,7 @@ create unique index loonars_weekly_evaluations_week_start_key on public.loonars_
 
 alter table public.loonars_content_items enable row level security;
 alter table public.loonars_content_metrics enable row level security;
-alter table public.loonars_order_snapshots enable row level security;
+alter table public.loonars_orders enable row level security;
 alter table public.loonars_weekly_evaluations enable row level security;
 
 create policy loonars_content_items_select on public.loonars_content_items for select to authenticated
@@ -154,9 +195,9 @@ create policy loonars_content_metrics_write on public.loonars_content_metrics fo
   using (public.app_has_permission('loonars_beauty.manage'))
   with check (public.app_has_permission('loonars_beauty.manage'));
 
-create policy loonars_order_snapshots_select on public.loonars_order_snapshots for select to authenticated
+create policy loonars_orders_select on public.loonars_orders for select to authenticated
   using (public.app_has_permission('loonars_beauty.view'));
-create policy loonars_order_snapshots_write on public.loonars_order_snapshots for all to authenticated
+create policy loonars_orders_write on public.loonars_orders for all to authenticated
   using (public.app_has_permission('loonars_beauty.manage'))
   with check (public.app_has_permission('loonars_beauty.manage'));
 

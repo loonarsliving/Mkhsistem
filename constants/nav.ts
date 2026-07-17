@@ -21,6 +21,7 @@ import {
   Rocket,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   StickyNote,
   Target,
@@ -132,7 +133,13 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],
       },
       {
-        label: "Performa & Order",
+        label: "Order",
+        href: "/loonars-beauty/orders",
+        icon: ShoppingBag,
+        permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],
+      },
+      {
+        label: "Performa Konten",
         href: "/loonars-beauty/performance",
         icon: TrendingUp,
         permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],

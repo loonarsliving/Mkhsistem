@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
-import { LiveOrderSync } from "@/features/loonars-beauty/components/live-order-sync";
 import { PerformanceLog } from "@/features/loonars-beauty/components/performance-log";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 
-export const metadata: Metadata = { title: "Loonars Beauty - Performa & Order" };
+export const metadata: Metadata = { title: "Loonars Beauty - Performa Konten" };
 
 export default async function LoonarsBeautyPerformancePage() {
   const session = await requireSession();
@@ -15,11 +14,7 @@ export default async function LoonarsBeautyPerformancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Performa & Order"
-        description="Order otomatis tersinkron dari Loonars Dashboard (kalau sudah dikonfigurasi), plus catat performa harian konten (view/klik/watch-time) manual."
-      />
-      <LiveOrderSync />
+      <PageHeader title="Performa Konten" description="Catat performa harian konten (view/klik/watch-time) untuk memantau efektivitas rotasi konten." />
       <PerformanceLog />
     </div>
   );

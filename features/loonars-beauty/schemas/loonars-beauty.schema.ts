@@ -3,7 +3,8 @@ import { z } from "zod";
 export const CONTENT_CATEGORIES = ["problem_solution", "ugc", "edukasi", "promosi"] as const;
 export const CONTENT_PLATFORMS = ["tiktok", "instagram"] as const;
 export const CONTENT_STATUSES = ["idea", "draft", "scheduled", "published", "archived"] as const;
-export const ORDER_CHANNELS = ["shopee", "tokopedia", "website", "offline", "other"] as const;
+export const ORDER_CHANNELS = ["shopee", "tokopedia", "whatsapp", "instagram", "website", "offline", "other"] as const;
+export const ORDER_STATUSES = ["pending", "processing", "shipped", "completed", "cancelled"] as const;
 
 export const createContentItemSchema = z.object({
   category: z.enum(CONTENT_CATEGORIES),
@@ -38,15 +39,26 @@ export const logContentMetricsSchema = z.object({
 });
 export type LogContentMetricsInput = z.infer<typeof logContentMetricsSchema>;
 
-export const logOrderSnapshotSchema = z.object({
-  snapshotDate: z.string().optional(),
+export const createOrderSchema = z.object({
+  customerName: z.string().min(2, "Nama pembeli wajib diisi").max(200),
+  customerPhone: z.string().max(30).optional(),
+  customerAddress: z.string().max(1000).optional(),
   channel: z.enum(ORDER_CHANNELS),
-  ordersCount: z.coerce.number().int().min(0).default(0),
-  unitsSold: z.coerce.number().int().min(0).default(0),
-  revenueIdr: z.coerce.number().min(0).default(0),
+  productName: z.string().max(200).optional(),
+  quantity: z.coerce.number().int().min(1).default(1),
+  unitPrice: z.coerce.number().min(0).default(0),
+  courier: z.string().max(100).optional(),
+  trackingNumber: z.string().max(100).optional(),
   notes: z.string().max(500).optional(),
 });
-export type LogOrderSnapshotInput = z.infer<typeof logOrderSnapshotSchema>;
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+
+export const updateOrderStatusSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(ORDER_STATUSES),
+  trackingNumber: z.string().max(100).optional(),
+});
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 
 export const generateContentIdeasSchema = z.object({
   category: z.enum(CONTENT_CATEGORIES),

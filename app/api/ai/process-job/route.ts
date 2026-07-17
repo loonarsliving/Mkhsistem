@@ -559,15 +559,20 @@ async function processLoonarsBeautyWeeklyEvaluation(supabase: AdminClient) {
   const ratioWindowStart = new Date();
   ratioWindowStart.setDate(ratioWindowStart.getDate() - 30);
 
-  const [{ data: recentContent }, { data: ordersThisWeekRows }, { data: ordersLastWeekRows }] = await Promise.all([
+  const [{ data: recentContent }, { count: ordersThisWeekCount }, { count: ordersLastWeekCount }] = await Promise.all([
     supabase
       .from("loonars_content_items")
       .select("id, title, category, published_at")
       .eq("status", "published")
       .gte("published_at", ratioWindowStart.toISOString())
       .is("deleted_at", null),
-    supabase.from("loonars_order_snapshots").select("orders_count").gte("snapshot_date", weekStart),
-    supabase.from("loonars_order_snapshots").select("orders_count").gte("snapshot_date", lastWeekStart).lt("snapshot_date", weekStart),
+    supabase.from("loonars_orders").select("id", { count: "exact", head: true }).gte("created_at", weekStart).neq("status", "cancelled"),
+    supabase
+      .from("loonars_orders")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", lastWeekStart)
+      .lt("created_at", weekStart)
+      .neq("status", "cancelled"),
   ]);
 
   const items = recentContent ?? [];
@@ -620,8 +625,8 @@ async function processLoonarsBeautyWeeklyEvaluation(supabase: AdminClient) {
     }
   }
 
-  const ordersThisWeek = (ordersThisWeekRows ?? []).reduce((sum, row) => sum + (row.orders_count ?? 0), 0);
-  const ordersLastWeek = (ordersLastWeekRows ?? []).reduce((sum, row) => sum + (row.orders_count ?? 0), 0);
+  const ordersThisWeek = ordersThisWeekCount ?? 0;
+  const ordersLastWeek = ordersLastWeekCount ?? 0;
 
   const evaluation = await evaluateLoonarsWeeklyPerformance({
     weekStart,
