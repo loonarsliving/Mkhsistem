@@ -109,10 +109,12 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
 
   if (salesEmployee?.phone) {
     const projectLabel = project?.name ? ` (${project.name})` : "";
+    const adSourceLabel = campaign.headline || campaign.name || "-";
+    const enteredAtLabel = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
     const notifyText =
       outcome === "new_prospect_routed"
-        ? `Lead baru dari iklan${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSegera hubungi sebelum lead ini dingin.`
-        : `Lead lama klik iklan lagi${projectLabel} -- tanda minat masih ada.\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSegera follow up.`;
+        ? `Lead baru dari iklan${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera hubungi sebelum lead ini dingin.`
+        : `Lead lama klik iklan lagi${projectLabel} -- tanda minat masih ada.\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera follow up.`;
     const sendResult = await sendWhatsAppText(salesEmployee.phone, notifyText);
     if (!sendResult.success) {
       logger.error("routeAdDrivenLead: WA notify to sales failed", { salesId, error: sendResult.error });
