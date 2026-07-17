@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
-import { evaluateWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
+import { auditWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { AIProviderError } from "@/lib/ai/provider/errors";
@@ -13,6 +13,7 @@ import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
+import { getRecentInstagramMediaPerformance, isInstagramConfigured } from "@/lib/social/instagram";
 import {
   LEASEHOLD_TARGET_CITIES,
   getLeaseholdTargetGeoLocations,
@@ -20,6 +21,7 @@ import {
   launchWhatsAppLeadCampaign,
   resolveGeoLocationsFromNames,
 } from "@/lib/meta/ads";
+import type { Json } from "@/types/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -524,15 +526,34 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
     return `- ${parts.join(", ")}`;
   });
 
+  // Live per-post data (captions + real per-post engagement) -- the daily
+  // snapshot only stores account-level aggregates, so a genuine
+  // hook/value/CTA audit needs a fresh read of actual recent posts. Best
+  // effort: a transient Instagram API failure here must not fail the whole
+  // weekly audit, just narrow it to account-level-only (same fallback
+  // auditWeeklyContentPerformance already handles for an empty post list).
+  let instagramTopPosts: Awaited<ReturnType<typeof getRecentInstagramMediaPerformance>> = [];
+  if (isInstagramConfigured()) {
+    try {
+      const recentPosts = await getRecentInstagramMediaPerformance(12);
+      instagramTopPosts = recentPosts.filter((p) => p.timestamp >= weekStart);
+    } catch (err) {
+      logger.error("processSocialWeeklyEvaluation: failed to fetch recent Instagram posts, auditing account-level only", { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   // impressions doubles as "profile views" for Instagram snapshots -- see the capture route's mapping comment.
-  const evaluation = await evaluateWeeklyContentPerformance({
+  const audit = await auditWeeklyContentPerformance({
     instagramThisWeek: igThisWeek ? { reach: igThisWeek.reach ?? 0, profileViews: igThisWeek.impressions ?? 0, followersCount: igThisWeek.followers_count ?? 0 } : null,
     instagramLastWeek: igLastWeek ? { reach: igLastWeek.reach ?? 0, profileViews: igLastWeek.impressions ?? 0, followersCount: igLastWeek.followers_count ?? 0 } : null,
+    instagramTopPosts,
     tiktokThisWeek: ttThisWeek ? { videoViews: ttThisWeek.impressions ?? 0, likes: ttThisWeek.likes ?? 0, followersCount: ttThisWeek.followers_count ?? 0 } : null,
     competitorNotes,
   });
 
-  const { error: upsertError } = await supabase.from("social_weekly_evaluations").upsert({ week_start: weekStart, evaluation }, { onConflict: "week_start" });
+  const { error: upsertError } = await supabase
+    .from("social_weekly_evaluations")
+    .upsert({ week_start: weekStart, evaluation: audit.narrative, audit: audit as unknown as Json }, { onConflict: "week_start" });
   if (upsertError) throw new Error(`Failed to save weekly evaluation: ${upsertError.message}`);
 
   return { weekStart };

@@ -156,39 +156,154 @@ Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "descript
   return fallbackItems.slice(0, 3);
 }
 
-export interface WeeklyContentPerformanceInput {
+export interface WeeklyContentAuditPost {
+  permalink: string | null;
+  caption: string | null;
+  mediaType: string;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+}
+
+export interface WeeklyContentAuditInput {
   instagramThisWeek?: { reach: number; profileViews: number; followersCount: number } | null;
   instagramLastWeek?: { reach: number; profileViews: number; followersCount: number } | null;
+  /** Real recent posts (lib/social/instagram.ts's getRecentInstagramMediaPerformance) -- lets the audit score actual hook/value/CTA/niche-fit/engagement per post instead of only account-level aggregates. */
+  instagramTopPosts?: WeeklyContentAuditPost[];
   tiktokThisWeek?: { videoViews: number; likes: number; followersCount: number } | null;
   competitorNotes: string[];
 }
 
+export interface WeeklyContentAuditScores {
+  hook: number;
+  value: number;
+  cta: number;
+  nicheFit: number;
+  engagementPotential: number;
+  platformOptimization: number;
+  overall: number;
+}
+
+export interface WeeklyContentAuditHighlight {
+  permalink: string | null;
+  reasoning: string;
+}
+
+export type WeeklyContentGrowthSignal = "excellent" | "on_track" | "below_benchmark";
+
+export interface WeeklyContentAuditResult {
+  narrative: string;
+  scores: WeeklyContentAuditScores;
+  growthSignal: WeeklyContentGrowthSignal;
+  bestPost: WeeklyContentAuditHighlight | null;
+  worstPost: WeeklyContentAuditHighlight | null;
+  recommendations: string[];
+}
+
+function clampScore(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 5;
+  return Math.max(1, Math.min(10, Math.round(n * 10) / 10));
+}
+
+function parseWeeklyContentAuditJson(text: string): WeeklyContentAuditResult {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Omit<Partial<WeeklyContentAuditResult>, "scores"> & { scores?: Partial<WeeklyContentAuditScores> };
+
+  if (typeof parsed.narrative !== "string" || parsed.narrative.trim().length === 0) {
+    throw new Error("AI weekly content audit response missing narrative text");
+  }
+  const rawScores = parsed.scores ?? {};
+  const scores: WeeklyContentAuditScores = {
+    hook: clampScore(rawScores.hook),
+    value: clampScore(rawScores.value),
+    cta: clampScore(rawScores.cta),
+    nicheFit: clampScore(rawScores.nicheFit),
+    engagementPotential: clampScore(rawScores.engagementPotential),
+    platformOptimization: clampScore(rawScores.platformOptimization),
+    overall: 5,
+  };
+  scores.overall = Math.round(((scores.hook + scores.value + scores.cta + scores.nicheFit + scores.engagementPotential + scores.platformOptimization) / 6) * 10) / 10;
+
+  const growthSignal: WeeklyContentGrowthSignal =
+    parsed.growthSignal === "excellent" || parsed.growthSignal === "below_benchmark" ? parsed.growthSignal : "on_track";
+
+  return {
+    narrative: parsed.narrative.trim().slice(0, 2000),
+    scores,
+    growthSignal,
+    bestPost:
+      parsed.bestPost && typeof parsed.bestPost.reasoning === "string"
+        ? { permalink: typeof parsed.bestPost.permalink === "string" ? parsed.bestPost.permalink : null, reasoning: parsed.bestPost.reasoning.slice(0, 500) }
+        : null,
+    worstPost:
+      parsed.worstPost && typeof parsed.worstPost.reasoning === "string"
+        ? { permalink: typeof parsed.worstPost.permalink === "string" ? parsed.worstPost.permalink : null, reasoning: parsed.worstPost.reasoning.slice(0, 500) }
+        : null,
+    recommendations: Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.filter((r): r is string => typeof r === "string" && r.trim().length > 0).map((r) => r.trim().slice(0, 300)).slice(0, 5)
+      : [],
+  };
+}
+
 /**
- * Weekly "what worked, what didn't, and why" -- the one part of content
- * evaluation that genuinely needs AI (interpreting a week of real numbers +
- * competitor observations into a written verdict and next-week
- * recommendation), same principle as analyzeAdPerformance.
+ * Weekly Content Audit -- scores real posted content against the same
+ * hook/value/CTA/niche-fit/engagement-potential/platform-optimization
+ * rubric a content-audit agency would use (each 1-10, overall = average),
+ * flags the week's strongest and weakest real post with concrete reasoning
+ * (never "content bagus" without a number attached), and reads growth
+ * against Instagram's own algorithm signal hierarchy (saves > shares >
+ * completion > comments > likes) rather than raw follower count alone.
+ * Falls back to account-level-only scoring when instagramTopPosts is empty
+ * (e.g. Instagram token temporarily can't list media) -- narrower input,
+ * same rubric, no crash.
  */
-export async function evaluateWeeklyContentPerformance(input: WeeklyContentPerformanceInput): Promise<string> {
+export async function auditWeeklyContentPerformance(input: WeeklyContentAuditInput): Promise<WeeklyContentAuditResult> {
   const igLine = input.instagramThisWeek
     ? `Instagram minggu ini: reach ${input.instagramThisWeek.reach}, profile views ${input.instagramThisWeek.profileViews}, followers ${input.instagramThisWeek.followersCount}.` +
       (input.instagramLastWeek ? ` Minggu lalu: reach ${input.instagramLastWeek.reach}, profile views ${input.instagramLastWeek.profileViews}.` : "")
-    : "Data Instagram tidak tersedia.";
+    : "Data akun Instagram tidak tersedia.";
   const ttLine = input.tiktokThisWeek
     ? `TikTok minggu ini: ${input.tiktokThisWeek.videoViews} video views, ${input.tiktokThisWeek.likes} likes, ${input.tiktokThisWeek.followersCount} followers.`
-    : "Data TikTok tidak tersedia.";
+    : "TikTok belum terhubung ke sistem -- audit minggu ini hanya mencakup Instagram.";
   const competitorBlock = input.competitorNotes.length > 0 ? `Observasi konten kompetitor minggu ini:\n${input.competitorNotes.join("\n")}` : "Tidak ada catatan kompetitor minggu ini.";
+  const postsBlock =
+    input.instagramTopPosts && input.instagramTopPosts.length > 0
+      ? `Post Instagram nyata minggu ini (data asli dari Instagram Graph API, nilai satu per satu -- JANGAN menilai rata-rata saja):\n${input.instagramTopPosts
+          .map(
+            (p, i) =>
+              `${i + 1}. [${p.mediaType}] "${(p.caption ?? "(tanpa caption)").slice(0, 200)}" -- reach ${p.reach}, likes ${p.likes}, comments ${p.comments}, shares ${p.shares}, saves ${p.saves}${p.permalink ? `, url: ${p.permalink}` : ""}`,
+          )
+          .join("\n")}`
+      : "Tidak ada data post individual minggu ini (mungkin belum ada post baru, atau API sedang bermasalah) -- audit skor di bawah berdasarkan data akun secara umum saja, sebutkan keterbatasan ini di narrative.";
 
-  const userPrompt = `Evaluasi performa konten media sosial perusahaan minggu ini:
+  const userPrompt = `Audit performa konten media sosial perusahaan minggu ini, sebagai content auditor yang objektif (skor jujur, bukan basa-basi).
 
 ${igLine}
 ${ttLine}
 
+${postsBlock}
+
 ${competitorBlock}
 
-Berikan evaluasi (Bahasa Indonesia, 4-6 kalimat): (1) apa yang berhasil minggu ini dan kemungkinan penyebabnya, (2) apa yang kurang berhasil dan kemungkinan penyebabnya, (3) perubahan strategi kompetitor yang terlihat (jika ada catatan), (4) rekomendasi konkret untuk strategi konten minggu depan.`;
+Tugas kamu:
+1. Beri skor 1-10 (boleh desimal) untuk 6 dimensi berikut, berdasarkan pola dari post-post nyata di atas (kalau tidak ada data post, nilai berdasarkan data akun + observasi kompetitor, dan jelaskan keterbatasan ini di narrative): hook (apakah 3 kata/detik pertama menghentikan scroll?), value (insight/informasi konkret, bukan tips umum?), cta (ajakan bertindak spesifik, bukan generik "like & follow"?), nicheFit (relevan & terasa khusus untuk audiens target?), engagementPotential (ada alasan orang mau save/share/comment bermakna?), platformOptimization (format, panjang caption, hashtag sesuai platform?).
+2. Tentukan growthSignal: "excellent" (reach/followers naik jelas dibanding minggu lalu, tidak ada tanda stagnan), "on_track" (stabil/naik tipis, tidak ada masalah mendesak), atau "below_benchmark" (reach/followers turun atau stagnan berkepanjangan).
+3. Identifikasi SATU post terbaik dan SATU post terlemah minggu ini dari data di atas (permalink + alasan konkret merujuk ke isi post-nya, bukan cuma angka) -- null kalau tidak ada data post untuk dibandingkan.
+4. Tulis narrative (4-6 kalimat Bahasa Indonesia): apa yang berhasil dan kemungkinan sebabnya, apa yang kurang berhasil dan kemungkinan sebabnya, perubahan strategi kompetitor yang terlihat (jika ada catatan).
+5. Berikan 2-4 rekomendasi konkret dan actionable untuk minggu depan (bukan saran generik "posting lebih sering").
 
-  return askAI(await getSystemPrompt("markom"), userPrompt);
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{"narrative": "...", "scores": {"hook": angka, "value": angka, "cta": angka, "nicheFit": angka, "engagementPotential": angka, "platformOptimization": angka}, "growthSignal": "excellent atau on_track atau below_benchmark", "bestPost": {"permalink": "url atau null", "reasoning": "..."} atau null, "worstPost": {"permalink": "url atau null", "reasoning": "..."} atau null, "recommendations": ["...", "..."]}`;
+
+  const response = await generateAIText({ systemPrompt: await getSystemPrompt("markom"), userPrompt, maxOutputTokens: 2048 });
+  return parseWeeklyContentAuditJson(response.text);
 }
 
 export interface MarkomObstacleInput {
@@ -561,7 +676,9 @@ Percakapan WhatsApp dimulai: ${input.conversationsStarted}${costPerConversation 
 Tulis analisa (Bahasa Indonesia, maksimal 6 kalimat) yang mencakup:
 1. Bandingkan CTR dan biaya per percakapan di atas dengan benchmark hasil risetmu -- sebut angka benchmark itu secara eksplisit, jangan hanya bilang "bagus"/"buruk" tanpa pembanding.
 2. Diagnosis akar masalah paling mungkin berdasarkan pola data (bukan tebakan generik): frequency tinggi (>3-4) dengan reach stagnan = audiens jenuh/kelelahan materi, CTR rendah dengan frequency wajar = materi/headline kurang menarik atau audiens kurang tepat, klik ada tapi percakapan WA sedikit = welcome message atau respon lambat, budget kecil dengan hari berjalan sedikit = masih dalam learning phase (belum cukup data untuk dinilai final).
-3. Tutup dengan baris terakhir PERSIS format ini (agar mudah dipindai): "REKOMENDASI: <PERTAHANKAN / NAIKKAN BUDGET / GANTI MATERI IKLAN / HENTIKAN>" diikuti alasan singkat.`;
+3. Tutup dengan dua baris terakhir PERSIS format ini (agar mudah dipindai):
+"STATUS: <HIJAU / KUNING / MERAH>" -- HIJAU jika cost per hasil stabil/turun dan tidak ada tanda kelelahan (aman dinaikkan budget), KUNING jika cost per hasil naik 10-20% atau hasil mulai tidak stabil (jangan naikkan dulu), MERAH jika cost per hasil naik >30% atau frequency >3-4 tanpa ganti materi atau CTR turun tajam (hentikan/ganti materi sekarang).
+"REKOMENDASI: <PERTAHANKAN / NAIKKAN BUDGET / GANTI MATERI IKLAN / HENTIKAN>" diikuti alasan singkat.`;
 
   const response = await generateAIText({ systemPrompt: await getSystemPrompt("markom"), userPrompt, useWebSearch: true, maxOutputTokens: 1024 });
   return response.text;

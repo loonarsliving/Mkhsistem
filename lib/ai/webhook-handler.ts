@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
-import { routeAdDrivenLead } from "./domains/ad-lead-routing";
+import { routeAdDrivenLead, tryConfirmAdLeadFollowUp, tryReassignAdLeadFollowUp } from "./domains/ad-lead-routing";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -32,8 +32,15 @@ async function findEmployeeByPhone(sender: string) {
   const suffix = senderDigits.slice(-9);
   if (suffix.length < 9) return null;
 
-  const { data } = await supabase.from("employees").select("id, full_name, phone, role_id").not("phone", "is", null);
+  const { data } = await supabase.from("employees").select("id, full_name, phone, role_id, branch_id").not("phone", "is", null);
   return (data ?? []).find((employee) => digitsOnly(employee.phone ?? "").endsWith(suffix)) ?? null;
+}
+
+/** Only used to gate the Kepala Cabang lead-reassign WhatsApp command (tryReassignAdLeadFollowUp) -- everyone else's role is irrelevant to the webhook flow. */
+async function getRoleKey(roleId: string): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase.from("roles").select("key").eq("id", roleId).maybeSingle();
+  return data?.key ?? null;
 }
 
 /** Exported for reuse by the job processor (app/api/ai/process-job/route.ts), which saves the turn once the queued AI reply is actually known. */
@@ -107,6 +114,61 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text message]", null, null);
       trace.push("saveAiConversationTurn:done");
       return { status: "ignored", sender: inbound.sender, reason: "sender is not a registered employee -- AI does not reply to customers", trace };
+    }
+
+    if (inbound.content.kind === "text") {
+      // Kepala Cabang reassigning a lead escalated to them after 3 unanswered
+      // Sales reminders (0110_ad_lead_3x_daily_reminder_and_reassign.sql).
+      // Gated on role so a stray "lempar <digits>" from anyone else never
+      // moves a lead. Must run before the general AI pipeline for the same
+      // reason as the confirm block below.
+      trace.push("getRoleKey:calling");
+      const roleKey = await getRoleKey(employee.role_id);
+      trace.push(`getRoleKey:${roleKey ?? "null"}`);
+      if (roleKey === "kepala_cabang" && employee.branch_id) {
+        trace.push("tryReassignAdLeadFollowUp:calling");
+        const reassignResult = await tryReassignAdLeadFollowUp(employee.id, employee.branch_id, inbound.content.text);
+        trace.push(`tryReassignAdLeadFollowUp:${reassignResult.outcome}`);
+        if (reassignResult.outcome !== "not_a_reassign_command") {
+          const replyText =
+            reassignResult.outcome === "reassigned"
+              ? `✅ Lead ${reassignResult.customerName ?? "ini"} sudah dialihkan dari ${reassignResult.previousSalesName ?? "sales sebelumnya"} ke ${reassignResult.newSalesName ?? "sales lain"}.`
+              : reassignResult.outcome === "ambiguous"
+                ? "Ada lebih dari satu lead di cabang Anda yang cocok dengan nomor itu. Sebutkan digit yang lebih lengkap, atau alihkan manual di Menu Prospek."
+                : reassignResult.outcome === "no_other_sales"
+                  ? "Tidak ada Sales lain yang aktif di cabang Anda untuk menerima lead ini. Silakan alihkan manual di Menu Prospek."
+                  : "Nomor itu tidak cocok dengan lead yang sedang menunggu di cabang Anda (mungkin sudah di-follow up). Cek lagi digitnya, atau lihat di Menu Prospek.";
+          trace.push("sendWhatsAppText:calling(reassign)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+
+      // Sales confirming an ad-lead follow-up reminder just by mentioning
+      // the customer's phone digits (0104_ad_lead_followup_monitoring.sql).
+      // Deterministic match, never needs Gemini, and must run before the
+      // general AI pipeline so it doesn't get answered as a stray question
+      // instead of acted on.
+      trace.push("tryConfirmAdLeadFollowUp:calling");
+      const confirmResult = await tryConfirmAdLeadFollowUp(employee.id, inbound.content.text);
+      trace.push(`tryConfirmAdLeadFollowUp:${confirmResult.outcome}`);
+      if (confirmResult.outcome !== "not_a_confirm_command") {
+        const replyText =
+          confirmResult.outcome === "confirmed"
+            ? `✅ Follow up untuk ${confirmResult.customerName ?? "lead ini"} sudah tercatat. Reminder untuk lead ini berhenti.`
+            : confirmResult.outcome === "ambiguous"
+              ? "Ada lebih dari satu lead Anda yang cocok dengan nomor itu. Sebutkan digit yang lebih lengkap, atau input manual di Menu Prospek."
+              : "Nomor itu tidak cocok dengan lead Anda yang belum di-follow up (mungkin sudah tercatat sebelumnya). Cek lagi digitnya, atau lihat di Menu Prospek.";
+        trace.push("sendWhatsAppText:calling(followup-confirm)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
     }
 
     if (inbound.content.kind !== "text") {
