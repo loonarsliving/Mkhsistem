@@ -204,3 +204,110 @@ export async function tryConfirmAdLeadFollowUp(salesId: string, messageText: str
 
   return { outcome: "confirmed", customerName: prospect.customer_name };
 }
+
+export type AdLeadReassignOutcome =
+  | "not_a_reassign_command"
+  | "reassigned"
+  | "not_found"
+  | "ambiguous"
+  | "no_other_sales";
+
+export interface AdLeadReassignResult {
+  outcome: AdLeadReassignOutcome;
+  customerName?: string;
+  previousSalesName?: string;
+  newSalesName?: string;
+}
+
+/** Requires an explicit keyword (unlike tryConfirmAdLeadFollowUp) since this reassigns lead ownership, not just logs a follow-up -- a stray digit run in an unrelated Kepala Cabang message must never accidentally move a lead. */
+const REASSIGN_KEYWORD_PATTERN = /\b(lempar|oper|alihkan)\b/i;
+
+/**
+ * Lets a Kepala Cabang reassign a lead that's been escalated to them (3x
+ * reminded, still not followed up -- see crm_run_ad_lead_monitoring) to
+ * another Sales in their branch, just by replying "LEMPAR <4 digit
+ * terakhir nomor>" (or "oper"/"alihkan") on WhatsApp -- see the exact
+ * instruction sent in the branch-escalation notification
+ * (0110_ad_lead_3x_daily_reminder_and_reassign.sql). Only ever matches
+ * against leads in the Kepala Cabang's own branch that are still pending
+ * (mirrors tryConfirmAdLeadFollowUp's safety scoping), and only fires when
+ * both the keyword and a digit run are present so it never hijacks an
+ * unrelated message.
+ */
+export async function tryReassignAdLeadFollowUp(
+  kepalaCabangId: string,
+  branchId: string,
+  messageText: string,
+): Promise<AdLeadReassignResult> {
+  if (!REASSIGN_KEYWORD_PATTERN.test(messageText)) return { outcome: "not_a_reassign_command" };
+
+  const digitRuns = messageText.match(/\d{3,}/g);
+  if (!digitRuns || digitRuns.length === 0) return { outcome: "not_a_reassign_command" };
+
+  const supabase = createAdminClient();
+  const { data: candidates } = await supabase
+    .from("prospects")
+    .select("id, customer_name, phone_normalized, sales_id, status")
+    .eq("branch_id", branchId)
+    .eq("lead_source", "facebook_ads")
+    .is("created_by", null)
+    .is("deleted_at", null)
+    .is("last_follow_up_at", null)
+    .not("status", "in", "(closing,inactive)");
+
+  if (!candidates || candidates.length === 0) return { outcome: "not_a_reassign_command" };
+
+  const matches = candidates.filter((p) => digitRuns.some((run) => (p.phone_normalized ?? "").endsWith(run)));
+  if (matches.length === 0) return { outcome: "not_found" };
+  if (matches.length > 1) return { outcome: "ambiguous" };
+
+  const prospect = matches[0];
+  const previousSalesId = prospect.sales_id;
+
+  const { data: newSalesId } = await supabase.rpc("crm_pick_round_robin_sales_excluding", {
+    p_branch_id: branchId,
+    p_exclude_sales_id: previousSalesId,
+  });
+  if (!newSalesId) return { outcome: "no_other_sales" };
+
+  const [{ data: previousSales }, { data: newSales }] = await Promise.all([
+    supabase.from("employees").select("full_name, phone").eq("id", previousSalesId).maybeSingle(),
+    supabase.from("employees").select("full_name, phone").eq("id", newSalesId as string).maybeSingle(),
+  ]);
+
+  await supabase
+    .from("prospects")
+    .update({ sales_id: newSalesId as string, last_reminder_sent_at: null, updated_by: kepalaCabangId })
+    .eq("id", prospect.id);
+
+  if (newSales?.phone) {
+    const notifyText = `Lead dialihkan dari Sales lain oleh Kepala Cabang.\nNama: ${prospect.customer_name ?? "Tidak diketahui"}\nSegera follow up.`;
+    const sendResult = await sendWhatsAppText(newSales.phone, notifyText);
+    if (!sendResult.success) {
+      logger.error("tryReassignAdLeadFollowUp: WA notify to new sales failed", { newSalesId, error: sendResult.error });
+    }
+  }
+  if (previousSales?.phone) {
+    const notifyText = `Lead ${prospect.customer_name ?? "-"} sudah dialihkan ke Sales lain oleh Kepala Cabang karena belum sempat di-follow up. Reminder untuk lead ini berhenti.`;
+    const sendResult = await sendWhatsAppText(previousSales.phone, notifyText);
+    if (!sendResult.success) {
+      logger.error("tryReassignAdLeadFollowUp: WA notify to previous sales failed", { previousSalesId, error: sendResult.error });
+    }
+  }
+
+  await supabase.from("mkc_notifications").insert({
+    user_id: newSalesId as string,
+    type: "crm",
+    category: "new_ad_lead",
+    title: "Lead dialihkan dari Sales lain",
+    body: `${prospect.customer_name ?? "Lead"} dialihkan ke Anda oleh Kepala Cabang -- segera follow up.`,
+    link: `/crm/${prospect.id}`,
+  });
+
+  return {
+    outcome: "reassigned",
+    customerName: prospect.customer_name ?? undefined,
+    previousSalesName: previousSales?.full_name ?? undefined,
+    newSalesName: newSales?.full_name ?? undefined,
+  };
+}
