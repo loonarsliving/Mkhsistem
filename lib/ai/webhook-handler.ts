@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
-import { routeAdDrivenLead } from "./domains/ad-lead-routing";
+import { routeAdDrivenLead, tryConfirmAdLeadFollowUp } from "./domains/ad-lead-routing";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -107,6 +107,30 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text message]", null, null);
       trace.push("saveAiConversationTurn:done");
       return { status: "ignored", sender: inbound.sender, reason: "sender is not a registered employee -- AI does not reply to customers", trace };
+    }
+
+    if (inbound.content.kind === "text") {
+      // "SUDAH <4 digit>" -- Sales confirming an ad-lead follow-up reminder
+      // (0104_ad_lead_followup_monitoring.sql). Deterministic pattern match,
+      // never needs Gemini, and must run before the general AI pipeline so
+      // it doesn't get answered as a stray question instead of acted on.
+      trace.push("tryConfirmAdLeadFollowUp:calling");
+      const confirmResult = await tryConfirmAdLeadFollowUp(employee.id, inbound.content.text);
+      trace.push(`tryConfirmAdLeadFollowUp:${confirmResult.outcome}`);
+      if (confirmResult.outcome !== "not_a_confirm_command") {
+        const replyText =
+          confirmResult.outcome === "confirmed"
+            ? `✅ Follow up untuk ${confirmResult.customerName ?? "lead ini"} sudah tercatat. Reminder untuk lead ini berhenti.`
+            : confirmResult.outcome === "ambiguous"
+              ? "Ada lebih dari satu lead dengan kode itu. Balas dengan nomor lengkap pelanggan, atau input manual di Menu Prospek."
+              : "Kode tidak cocok dengan lead Anda yang belum di-follow up. Cek lagi kodenya, atau input manual di Menu Prospek.";
+        trace.push("sendWhatsAppText:calling(followup-confirm)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
     }
 
     if (inbound.content.kind !== "text") {

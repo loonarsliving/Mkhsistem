@@ -134,3 +134,69 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
 
   return { outcome, prospectId };
 }
+
+export type AdLeadFollowUpConfirmOutcome = "not_a_confirm_command" | "confirmed" | "not_found" | "ambiguous";
+
+export interface AdLeadFollowUpConfirmResult {
+  outcome: AdLeadFollowUpConfirmOutcome;
+  customerName?: string;
+}
+
+const FOLLOWUP_CONFIRM_PATTERN = /^sudah\s+(\d{3,6})\s*$/i;
+
+/**
+ * Lets a Sales rep clear the hourly "belum di-follow up" reminder
+ * (0104_ad_lead_followup_monitoring.sql) by replying "SUDAH <4 digit
+ * terakhir nomor pelanggan>" instead of opening Menu Prospek -- the
+ * reminder message itself now includes that code. Matches prospects.phone_
+ * normalized's suffix rather than a full number since that's realistically
+ * what a Sales rep can type from memory on their phone. Only ever touches
+ * a prospect already assigned to the replying sales_id, so there's no way
+ * to mark someone else's lead as followed up by guessing a code. Mirrors
+ * crm_add_follow_up's exact effect (prospect_follow_ups insert +
+ * last_follow_up_at + status bump) since that RPC requires an
+ * authenticated auth.uid() session this server-to-server webhook doesn't
+ * have.
+ */
+export async function tryConfirmAdLeadFollowUp(salesId: string, messageText: string): Promise<AdLeadFollowUpConfirmResult> {
+  const match = messageText.match(FOLLOWUP_CONFIRM_PATTERN);
+  if (!match) return { outcome: "not_a_confirm_command" };
+  const code = match[1];
+
+  const supabase = createAdminClient();
+  const { data: candidates } = await supabase
+    .from("prospects")
+    .select("id, customer_name, phone_normalized, status")
+    .eq("sales_id", salesId)
+    .eq("lead_source", "facebook_ads")
+    .is("deleted_at", null)
+    .is("last_follow_up_at", null)
+    .not("status", "in", "(closing,inactive)");
+
+  const matches = (candidates ?? []).filter((p) => (p.phone_normalized ?? "").endsWith(code));
+  if (matches.length === 0) return { outcome: "not_found" };
+  if (matches.length > 1) return { outcome: "ambiguous" };
+
+  const prospect = matches[0];
+  const now = new Date();
+
+  await supabase.from("prospect_follow_ups").insert({
+    prospect_id: prospect.id,
+    activity_type: "whatsapp",
+    activity_date: now.toISOString().slice(0, 10),
+    activity_time: now.toTimeString().slice(0, 8),
+    notes: "Follow up dikonfirmasi otomatis via balasan WhatsApp ke reminder AI Lead Dispatcher.",
+    created_by: salesId,
+  });
+
+  await supabase
+    .from("prospects")
+    .update({
+      last_follow_up_at: now.toISOString(),
+      status: prospect.status === "red" || prospect.status === "inactive" ? "yellow" : prospect.status,
+      updated_by: salesId,
+    })
+    .eq("id", prospect.id);
+
+  return { outcome: "confirmed", customerName: prospect.customer_name };
+}
