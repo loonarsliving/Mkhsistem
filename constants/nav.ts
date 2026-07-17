@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Database,
   FileWarning,
+  Flower2,
   FolderKanban,
   Images,
   LayoutDashboard,
@@ -23,6 +24,7 @@ import {
   Sparkles,
   StickyNote,
   Target,
+  TrendingUp,
   Trophy,
   UserCheck,
   Users,
@@ -118,6 +120,29 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Ads Specialist", href: "/markom/ads", icon: Rocket, permission: PERMISSIONS.AD_CAMPAIGN_VIEW },
       { label: "Content Planner", href: "/markom/content-planner", icon: Sparkles, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
       { label: "Promo Broadcast", href: "/markom/promo-broadcast", icon: Megaphone, permission: PERMISSIONS.PROMO_TEMPLATE_VIEW },
+    ],
+  },
+  {
+    label: "Loonars Beauty",
+    items: [
+      {
+        label: "Konten",
+        href: "/loonars-beauty",
+        icon: Flower2,
+        permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],
+      },
+      {
+        label: "Performa & Order",
+        href: "/loonars-beauty/performance",
+        icon: TrendingUp,
+        permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],
+      },
+      {
+        label: "Evaluasi Mingguan",
+        href: "/loonars-beauty/evaluation",
+        icon: Sparkles,
+        permission: [PERMISSIONS.LOONARS_BEAUTY_VIEW, PERMISSIONS.LOONARS_BEAUTY_MANAGE],
+      },
     ],
   },
   {

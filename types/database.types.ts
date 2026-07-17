@@ -1318,6 +1318,146 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_weekly_evaluations"]["Insert"]>;
         Relationships: [];
       };
+      loonars_content_items: {
+        Row: {
+          id: string;
+          category: "problem_solution" | "ugc" | "edukasi" | "promosi";
+          platform: "tiktok" | "instagram";
+          title: string;
+          hook: string | null;
+          caption: string | null;
+          script_notes: string | null;
+          cta: string | null;
+          product_name: string;
+          status: "idea" | "draft" | "scheduled" | "published" | "archived";
+          content_url: string | null;
+          scheduled_at: string | null;
+          published_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          category: "problem_solution" | "ugc" | "edukasi" | "promosi";
+          platform: "tiktok" | "instagram";
+          title: string;
+          hook?: string | null;
+          caption?: string | null;
+          script_notes?: string | null;
+          cta?: string | null;
+          product_name?: string;
+          status?: "idea" | "draft" | "scheduled" | "published" | "archived";
+          content_url?: string | null;
+          scheduled_at?: string | null;
+          published_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_content_items"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_content_metrics: {
+        Row: {
+          id: string;
+          content_item_id: string;
+          captured_at: string;
+          views: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          watch_through_50pct: boolean;
+          link_clicks: number;
+          boosted_spark_ads: boolean;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_item_id: string;
+          captured_at?: string;
+          views?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          watch_through_50pct?: boolean;
+          link_clicks?: number;
+          boosted_spark_ads?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_content_metrics"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_content_metrics_content_item_id_fkey";
+            columns: ["content_item_id"];
+            referencedRelation: "loonars_content_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_order_snapshots: {
+        Row: {
+          id: string;
+          snapshot_date: string;
+          channel: "shopee" | "tokopedia" | "website" | "offline" | "other";
+          orders_count: number;
+          units_sold: number;
+          revenue_idr: number;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          snapshot_date?: string;
+          channel: "shopee" | "tokopedia" | "website" | "offline" | "other";
+          orders_count?: number;
+          units_sold?: number;
+          revenue_idr?: number;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_order_snapshots"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_weekly_evaluations: {
+        Row: {
+          id: string;
+          week_start: string;
+          evaluation: string;
+          content_ratio_actual: Json | null;
+          recommended_boost_content_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          week_start: string;
+          evaluation: string;
+          content_ratio_actual?: Json | null;
+          recommended_boost_content_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_weekly_evaluations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_weekly_evaluations_recommended_boost_content_id_fkey";
+            columns: ["recommended_boost_content_id"];
+            referencedRelation: "loonars_content_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       prospects: {
         Row: {
           id: string;
@@ -1610,7 +1750,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1622,7 +1762,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -2479,6 +2619,7 @@ export interface Database {
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };
+      loonars_beauty_request_weekly_evaluation: { Args: Record<PropertyKey, never>; Returns: undefined };
       create_payroll_run: {
         Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
         Returns: string;

@@ -35,6 +35,11 @@ export type BranchSalesTarget = Tables<"branch_sales_targets">;
 
 export type KpiTask = Tables<"kpi_tasks">;
 
+export type LoonarsContentItem = Tables<"loonars_content_items">;
+export type LoonarsContentMetric = Tables<"loonars_content_metrics">;
+export type LoonarsOrderSnapshot = Tables<"loonars_order_snapshots">;
+export type LoonarsWeeklyEvaluation = Tables<"loonars_weekly_evaluations">;
+
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {
   userId: string;

@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
+import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
 import { evaluateWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
@@ -537,6 +538,111 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   return { weekStart };
 }
 
+const LOONARS_RATIO_TARGET = { problem_solution: 40, ugc: 30, edukasi: 20, promosi: 10 } as const;
+type LoonarsCategory = keyof typeof LOONARS_RATIO_TARGET;
+
+/**
+ * Weekly AI evaluation for the Loonars Beauty module (migration 0107).
+ * Ratio/top-performer/retargeting numbers are computed here from real rows
+ * (loonars_content_items/metrics/order_snapshots) -- the AI only writes the
+ * narrative + recommendation from that pre-computed context, it never
+ * invents the numbers. Upserted per week_start, same pattern as
+ * processSocialWeeklyEvaluation above.
+ */
+async function processLoonarsBeautyWeeklyEvaluation(supabase: AdminClient) {
+  const now = new Date();
+  const weekStart = getWeekStart(now);
+  const lastWeekStartDate = new Date(weekStart);
+  lastWeekStartDate.setDate(lastWeekStartDate.getDate() - 7);
+  const lastWeekStart = lastWeekStartDate.toISOString().slice(0, 10);
+
+  const ratioWindowStart = new Date();
+  ratioWindowStart.setDate(ratioWindowStart.getDate() - 30);
+
+  const [{ data: recentContent }, { data: ordersThisWeekRows }, { data: ordersLastWeekRows }] = await Promise.all([
+    supabase
+      .from("loonars_content_items")
+      .select("id, title, category, published_at")
+      .eq("status", "published")
+      .gte("published_at", ratioWindowStart.toISOString())
+      .is("deleted_at", null),
+    supabase.from("loonars_order_snapshots").select("orders_count").gte("snapshot_date", weekStart),
+    supabase.from("loonars_order_snapshots").select("orders_count").gte("snapshot_date", lastWeekStart).lt("snapshot_date", weekStart),
+  ]);
+
+  const items = recentContent ?? [];
+  const counts: Record<LoonarsCategory, number> = { problem_solution: 0, ugc: 0, edukasi: 0, promosi: 0 };
+  for (const item of items) {
+    const category = item.category as LoonarsCategory;
+    counts[category] = (counts[category] ?? 0) + 1;
+  }
+  const total = items.length;
+  const ratioActual = (Object.keys(counts) as LoonarsCategory[]).reduce(
+    (acc, key) => ({ ...acc, [key]: total > 0 ? Math.round((counts[key] / total) * 100) : 0 }),
+    {} as Record<LoonarsCategory, number>,
+  );
+
+  const publishedThisWeekCount = items.filter((item) => item.published_at && item.published_at.slice(0, 10) >= weekStart).length;
+  const contentIds = items.map((item) => item.id);
+
+  let topPerformer: { title: string; views: number; linkClicks: number } | null = null;
+  let recommendedBoostContentId: string | null = null;
+  const retargetingCandidates: { title: string; views: number }[] = [];
+
+  if (contentIds.length > 0) {
+    const { data: metrics } = await supabase
+      .from("loonars_content_metrics")
+      .select("content_item_id, views, link_clicks, watch_through_50pct")
+      .in("content_item_id", contentIds)
+      .gte("captured_at", weekStart);
+
+    const byContent = new Map<string, { views: number; linkClicks: number; highRetention: boolean }>();
+    for (const metric of metrics ?? []) {
+      const agg = byContent.get(metric.content_item_id) ?? { views: 0, linkClicks: 0, highRetention: false };
+      agg.views += metric.views ?? 0;
+      agg.linkClicks += metric.link_clicks ?? 0;
+      agg.highRetention = agg.highRetention || Boolean(metric.watch_through_50pct);
+      byContent.set(metric.content_item_id, agg);
+    }
+
+    let bestViews = -1;
+    for (const item of items) {
+      const agg = byContent.get(item.id);
+      if (!agg) continue;
+      if (agg.views > bestViews) {
+        bestViews = agg.views;
+        topPerformer = { title: item.title, views: agg.views, linkClicks: agg.linkClicks };
+        recommendedBoostContentId = item.id;
+      }
+      if (agg.highRetention && agg.linkClicks === 0 && agg.views > 0) {
+        retargetingCandidates.push({ title: item.title, views: agg.views });
+      }
+    }
+  }
+
+  const ordersThisWeek = (ordersThisWeekRows ?? []).reduce((sum, row) => sum + (row.orders_count ?? 0), 0);
+  const ordersLastWeek = (ordersLastWeekRows ?? []).reduce((sum, row) => sum + (row.orders_count ?? 0), 0);
+
+  const evaluation = await evaluateLoonarsWeeklyPerformance({
+    weekStart,
+    contentPublishedCount: publishedThisWeekCount,
+    ratioActual,
+    ratioTarget: LOONARS_RATIO_TARGET,
+    topPerformer,
+    retargetingCandidates,
+    ordersThisWeek,
+    ordersLastWeek,
+  });
+
+  const { error: upsertError } = await supabase.from("loonars_weekly_evaluations").upsert(
+    { week_start: weekStart, evaluation, content_ratio_actual: ratioActual, recommended_boost_content_id: recommendedBoostContentId },
+    { onConflict: "week_start" },
+  );
+  if (upsertError) throw new Error(`Failed to save Loonars Beauty weekly evaluation: ${upsertError.message}`);
+
+  return { weekStart };
+}
+
 /**
  * Dispatched by ai_job_queue_after_insert (immediate, on enqueue) and
  * ai_job_dispatch_pending (pg_cron sweep every 1 minute, migration 0065).
@@ -602,7 +708,9 @@ export async function POST(request: Request) {
               ? await processMetaAdsLaunch(supabase, job)
               : job.job_type === "meta_ads_research"
                 ? await processMetaAdsResearch(supabase, job)
-                : await processSocialWeeklyEvaluation(supabase);
+                : job.job_type === "loonars_beauty_weekly_evaluation"
+                  ? await processLoonarsBeautyWeeklyEvaluation(supabase)
+                  : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
