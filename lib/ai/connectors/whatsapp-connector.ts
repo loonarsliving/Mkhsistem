@@ -29,6 +29,23 @@ function extractMessageId(json: unknown): string | undefined {
 }
 
 /**
+ * Strips everything but digits before a number ever reaches Whacenter --
+ * root-caused a real incident where an employee's phone field had invisible
+ * Unicode bidi-control characters (U+202A/U+202C, likely a copy-paste
+ * artifact) wrapping the digits. Whacenter's /send still returned HTTP 200
+ * for that malformed number (it accepts the job, doesn't validate the
+ * number synchronously), so the failure was completely silent -- nothing in
+ * ai_integration_logs showed an error, the message just never arrived. This
+ * runs for every outbound send regardless of caller (notifications, AI
+ * replies, ad-hoc messaging, promo broadcasts), so a bad phone value from
+ * any source is defused here once instead of needing every call site to
+ * remember to sanitize.
+ */
+function sanitizeRecipientNumber(recipient: string): string {
+  return recipient.replace(/[^0-9]/g, "");
+}
+
+/**
  * Real WhatsApp Cloud API connector — ported from Aiagent's Sprint 4B
  * WhatsAppCloudConnector (packages/integrations/src/connectors/whatsapp-cloud-connector.ts).
  * Every call is logged via saveIntegrationLog (ai_integration_logs), same as
@@ -138,9 +155,16 @@ export class WhatsAppConnector {
   }
 
   private async dispatch(recipient: string, messageBody: Record<string, unknown>): Promise<SendResult> {
+    const sanitizedNumber = sanitizeRecipientNumber(recipient);
+    if (sanitizedNumber.length < 8) {
+      const result: SendResult = { success: false, error: `Recipient number has no usable digits after sanitizing: "${recipient}"` };
+      await this.logOutgoing({ device_id: this.config.whacenterDeviceId, number: recipient }, result, 0, 0);
+      return result;
+    }
+
     const body = {
   device_id: this.config.whacenterDeviceId,
-  number: recipient,
+  number: sanitizedNumber,
 message:
   typeof asRecord(messageBody)?.text === "object"
     ? String(asRecord(asRecord(messageBody)?.text)?.body ?? "")
