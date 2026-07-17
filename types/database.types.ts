@@ -1307,12 +1307,14 @@ export interface Database {
           id: string;
           week_start: string;
           evaluation: string;
+          audit: Json | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           week_start: string;
           evaluation: string;
+          audit?: Json | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["social_weekly_evaluations"]["Insert"]>;

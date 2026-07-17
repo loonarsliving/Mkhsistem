@@ -12,6 +12,7 @@ import {
   listCompetitorAccounts,
   listCompetitorContentLogs,
   listRecentAccountSnapshots,
+  listWeeklyEvaluations,
 } from "@/repositories/social.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
@@ -27,6 +28,12 @@ export async function listCompetitorContentLogsAction(competitorAccountId?: stri
   await requirePermission("content_planner.view");
   const supabase = await createClient();
   return listCompetitorContentLogs(supabase, competitorAccountId);
+}
+
+export async function listWeeklyContentAuditsAction() {
+  await requirePermission("content_planner.view");
+  const supabase = await createClient();
+  return listWeeklyEvaluations(supabase, 12);
 }
 
 export async function getContentPlannerOverviewAction() {

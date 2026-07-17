@@ -65,3 +65,10 @@ export async function getLatestWeeklyEvaluation(supabase: TypedSupabaseClient) {
   if (error) throw error;
   return data;
 }
+
+/** Content Audit module -- past weekly scored audits, newest first (0111). */
+export async function listWeeklyEvaluations(supabase: TypedSupabaseClient, limit = 12) {
+  const { data, error } = await supabase.from("social_weekly_evaluations").select("*").order("week_start", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
