@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { draftLoonarsFaqReply, generateLoonarsContentIdeas } from "@/lib/ai/domains/loonars-beauty";
+import { isLoonarsDashboardConfigured } from "@/lib/supabase/loonars-dashboard-client";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -17,6 +18,7 @@ import {
   upsertContentMetric,
   upsertOrderSnapshot,
 } from "@/repositories/loonars-beauty.repository";
+import { getOrderSummary, listLowStockProducts, listRecentOrders } from "@/repositories/loonars-dashboard-sync.repository";
 import type { Tables } from "@/types/database.types";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
@@ -250,4 +252,36 @@ export async function draftFaqReplyAction(input: DraftFaqReplyInput): Promise<Ac
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal membuat draf balasan AI");
   }
+}
+
+export type LiveOrderSyncResult =
+  | { configured: false }
+  | {
+      configured: true;
+      summary: Awaited<ReturnType<typeof getOrderSummary>>;
+      recentOrders: Awaited<ReturnType<typeof listRecentOrders>>;
+      lowStockProducts: Awaited<ReturnType<typeof listLowStockProducts>>;
+    };
+
+/**
+ * Live read from Loonars Dashboard's own database (LOONARS_DASHBOARD_SUPABASE_URL/
+ * LOONARS_DASHBOARD_SERVICE_ROLE_KEY, both server-only) -- replaces manually
+ * typing in order numbers with real data, the moment those two env vars
+ * are set in Vercel. Degrades to configured:false (not an error) when
+ * they aren't, so this module keeps working without the sync.
+ */
+export async function getLiveOrderSyncAction(): Promise<LiveOrderSyncResult> {
+  await requirePermission("loonars_beauty.view");
+  if (!isLoonarsDashboardConfigured()) return { configured: false };
+
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+
+  const [summary, recentOrders, lowStockProducts] = await Promise.all([
+    getOrderSummary(since.toISOString()),
+    listRecentOrders(10),
+    listLowStockProducts(),
+  ]);
+
+  return { configured: true, summary, recentOrders, lowStockProducts };
 }
