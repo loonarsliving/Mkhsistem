@@ -238,6 +238,12 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                           </Button>
                         </>
                       )}
+                      {canManage && c.status === "failed" && (
+                        <Button size="sm" variant="ghost" className="text-destructive" disabled={busyId === c.id} onClick={() => setDeleteTarget(c.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Hapus
+                        </Button>
+                      )}
                       {canManage && (c.status === "active" || c.status === "paused") && (
                         <>
                           <Button
@@ -267,8 +273,8 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Hapus draft iklan ini?"
-        description="Draft belum pernah tayang, jadi tidak ada budget yang terpakai. Tindakan ini tidak bisa dibatalkan."
+        title="Hapus iklan ini?"
+        description="Belum pernah tayang di Meta, jadi tidak ada budget yang terpakai. Tindakan ini tidak bisa dibatalkan."
         confirmLabel="Hapus"
         destructive
         loading={deleting}

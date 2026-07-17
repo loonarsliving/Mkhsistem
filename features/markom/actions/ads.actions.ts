@@ -122,13 +122,13 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   return actionSuccess();
 }
 
-/** Discards an unreviewed draft -- safe to hard-delete since a 'draft' row never had real Meta campaign/ad set/ad objects created (those only exist once launchDraftCampaignAction succeeds), so there's nothing on Meta's side to clean up. Repository scopes the delete to status='draft' as a second guard against ever deleting a launched campaign's record. */
+/** Discards an unreviewed draft or a failed launch attempt -- both are safe to hard-delete since neither ever ends up with real Meta campaign/ad set/ad objects (a 'draft' never attempted the Meta calls; a 'failed' row's partial objects were already rolled back by launchWhatsAppLeadCampaign's own cleanup, see lib/meta/ads.ts). Repository scopes the delete to status in ('draft', 'failed') as a second guard against ever deleting a launched campaign's record. */
 export async function deleteAdCampaignDraftAction(id: string): Promise<ActionResult> {
   await requirePermission("ad_campaign.manage");
   const supabase = await createClient();
 
   const draft = await getAdCampaign(supabase, id);
-  if (draft.status !== "draft") return actionError("Hanya draft yang belum diluncurkan yang bisa dihapus");
+  if (draft.status !== "draft" && draft.status !== "failed") return actionError("Hanya draft atau iklan yang gagal tayang yang bisa dihapus");
 
   try {
     await deleteDraftAdCampaign(supabase, id);

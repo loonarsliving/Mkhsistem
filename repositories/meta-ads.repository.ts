@@ -71,8 +71,9 @@ export async function markAdCampaignFailed(supabase: TypedSupabaseClient, id: st
 }
 
 /** Only ever deletes rows still in 'draft' (enforced by the caller) -- a draft never had real Meta objects created, so there's nothing to clean up on Meta's side, unlike a launched campaign. */
+/** Covers both 'draft' (never launched) and 'failed' (launch attempt rolled back, see deleteAdCampaign in lib/meta/ads.ts) -- both statuses are guaranteed to have no real campaign/ad set/creative/ad objects on Meta, so a DB-only delete never orphans anything server-side. Any other status is refused, since those rows do have real Meta objects that need pausing/proper handling instead of a silent delete. */
 export async function deleteDraftAdCampaign(supabase: TypedSupabaseClient, id: string) {
-  const { error } = await supabase.from("meta_ad_campaigns").delete().eq("id", id).eq("status", "draft");
+  const { error } = await supabase.from("meta_ad_campaigns").delete().eq("id", id).in("status", ["draft", "failed"]);
   if (error) throw error;
 }
 
