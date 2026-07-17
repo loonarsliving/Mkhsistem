@@ -6,6 +6,20 @@ import { getSystemPrompt } from "./prompts";
 const HR_KEYWORDS = ["absen", "cuti", "izin", "payroll", "gaji", "kontrak", "sop", "karyawan", "hr ", "evaluasi karyawan"];
 const MARKOM_KEYWORDS = ["campaign", "konten", "marketing", "markom", "checklist marketing", "konten sosial media", "iklan"];
 const CRM_KEYWORDS = ["prospek", "closing", "follow up", "pipeline", "customer", "pelanggan", "penjualan", "sales"];
+const LOONARS_BEAUTY_KEYWORDS = [
+  "hydraglow",
+  "loonars",
+  "skincare",
+  "lotion",
+  "serum",
+  "brightening",
+  "mencerahkan",
+  "cara pakai",
+  "bpom",
+  "cod",
+  "shopee",
+  "tokopedia",
+];
 
 function matchesAny(text: string, keywords: string[]): boolean {
   const lower = text.toLowerCase();
@@ -26,8 +40,9 @@ export async function routeAndAnswer(
 ): Promise<string> {
   const greeting = employee ? `Pengguna: ${employee.name} (karyawan terdaftar).` : "Pengirim belum teridentifikasi sebagai karyawan terdaftar.";
 
-  let domain: "general" | "hr" | "markom" | "crm" = "general";
-  if (matchesAny(question, HR_KEYWORDS)) domain = "hr";
+  let domain: "general" | "hr" | "markom" | "crm" | "loonars_beauty" = "general";
+  if (matchesAny(question, LOONARS_BEAUTY_KEYWORDS)) domain = "loonars_beauty";
+  else if (matchesAny(question, HR_KEYWORDS)) domain = "hr";
   else if (matchesAny(question, MARKOM_KEYWORDS)) domain = "markom";
   else if (matchesAny(question, CRM_KEYWORDS)) domain = "crm";
 
