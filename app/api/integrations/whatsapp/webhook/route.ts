@@ -58,34 +58,40 @@ export async function GET(request: NextRequest) {
     return new NextResponse(challenge, { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
-  // TEMPORARY DIAGNOSTIC RESPONSE — remove once verification is confirmed
-  // working. Deliberately does NOT echo the actual token value: this route
-  // is unauthenticated and public by necessity (Meta must reach it without
-  // auth), so anything in this JSON body is readable by anyone who requests
-  // the URL, not just the operator debugging it. path/param-key-names/
-  // redacted-query-string/lengths/match booleans are enough to tell "Meta
-  // never sent hub.* params" apart from "it sent them but the value/name
-  // was wrong" without publishing the secret itself.
-  return NextResponse.json(
-    {
-      error: "webhook verification failed",
-      raw_path: rawPath,
-      raw_search_redacted: redactVerifyToken(rawSearch),
-      search_param_keys: searchParamKeys,
-      mode,
-      challenge_present: challenge !== null,
-      received_verify_token_present: token !== null,
-      received_verify_token_length: token?.length ?? 0,
-      expected_verify_token_configured: envConfigured,
-      expected_verify_token_length: expected.length,
-      tokens_match_exact: token !== null && token === expected,
-      tokens_match_trimmed: token !== null && token.trim() === expected.trim(),
-      access_token_exists: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
-      phone_number_id_exists: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
-      business_account_exists: Boolean(process.env.WHATSAPP_BUSINESS_ACCOUNT_ID),
-    },
-    { status: 403 },
-  );
+  // A request carrying hub.* params that FAILED to verify is a genuine
+  // Meta Cloud API verification attempt with a wrong/missing token --
+  // reject it per Meta's spec (403), and keep the diagnostic detail since
+  // that's the one case actually worth debugging against WHATSAPP_VERIFY_TOKEN.
+  if (mode !== null || token !== null || challenge !== null) {
+    logger.info("WhatsApp webhook GET verification attempt with hub.* params failed", { rawUrl, rawPath });
+    return NextResponse.json(
+      {
+        error: "webhook verification failed",
+        raw_path: rawPath,
+        raw_search_redacted: redactVerifyToken(rawSearch),
+        search_param_keys: searchParamKeys,
+        mode,
+        challenge_present: challenge !== null,
+        received_verify_token_present: token !== null,
+        received_verify_token_length: token?.length ?? 0,
+        expected_verify_token_configured: envConfigured,
+        expected_verify_token_length: expected.length,
+        tokens_match_exact: token !== null && token === expected,
+        tokens_match_trimmed: token !== null && token.trim() === expected.trim(),
+      },
+      { status: 403 },
+    );
+  }
+
+  // No hub.* params at all -- not a Meta verification attempt. This is
+  // almost certainly a third-party gateway (Whacenter, etc.) pinging the
+  // URL to confirm it's reachable before saving it as a webhook endpoint.
+  // Those gateways don't speak Meta's hub.challenge protocol and were
+  // getting a hard 403 here, which read as "verification failed" in their
+  // dashboard even though nothing was actually wrong -- a plain 200 lets
+  // any such reachability check succeed without weakening Meta's own
+  // token-checked handshake above.
+  return NextResponse.json({ status: "ok", note: "WhatsApp webhook endpoint is reachable" }, { status: 200 });
 }
 
 /**
@@ -147,8 +153,14 @@ export async function POST(request: NextRequest) {
     body = null;
   }
   if (body === null) {
-    logger.info("WhatsApp webhook POST body did not parse as JSON");
-    return NextResponse.json({ status: "error", reason: "invalid JSON body", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 400 });
+    // Empty/unparseable body -- most likely a gateway (Whacenter, etc.)
+    // pinging this URL to verify it's reachable before saving it as a
+    // webhook endpoint, not a real event. Same reasoning as Meta's own
+    // "always ack with 200" guidance below: a non-200 here reads as
+    // "verification failed" in the gateway's dashboard even though nothing
+    // is actually wrong, so acknowledge instead of erroring.
+    logger.info("WhatsApp webhook POST body did not parse as JSON -- acknowledging as a likely verification ping");
+    return NextResponse.json({ status: "ok", reason: "empty or non-JSON body acknowledged", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 200 });
   }
 
   try {
