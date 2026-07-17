@@ -94,6 +94,21 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     const employee = await findEmployeeByPhone(inbound.sender);
     trace.push(employee ? "findEmployeeByPhone:matched" : "findEmployeeByPhone:no_match");
 
+    if (!employee) {
+      // Never let the internal AI assistant (HR/Markom/CRM/general prompts,
+      // meant for employees) talk to an external number -- a customer's
+      // follow-up message after clicking an ad (which carries no ad_reply
+      // referral by then) would otherwise fall straight into this pipeline
+      // and could easily read as tone-deaf or off-topic to them. Sales
+      // stays the only one who talks to leads; WhatsApp Business's own
+      // configured Auto Reply (outside this app) covers the canned
+      // "terima kasih, sales kami akan segera menghubungi" greeting.
+      trace.push("unrecognized_sender:ignored_no_ai_reply");
+      await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text message]", null, null);
+      trace.push("saveAiConversationTurn:done");
+      return { status: "ignored", sender: inbound.sender, reason: "sender is not a registered employee -- AI does not reply to customers", trace };
+    }
+
     if (inbound.content.kind !== "text") {
       // Never needs Gemini -- answer immediately, no queue involved.
       const replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
