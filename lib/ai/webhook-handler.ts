@@ -110,10 +110,11 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     }
 
     if (inbound.content.kind === "text") {
-      // "SUDAH <4 digit>" -- Sales confirming an ad-lead follow-up reminder
-      // (0104_ad_lead_followup_monitoring.sql). Deterministic pattern match,
-      // never needs Gemini, and must run before the general AI pipeline so
-      // it doesn't get answered as a stray question instead of acted on.
+      // Sales confirming an ad-lead follow-up reminder just by mentioning
+      // the customer's phone digits (0104_ad_lead_followup_monitoring.sql).
+      // Deterministic match, never needs Gemini, and must run before the
+      // general AI pipeline so it doesn't get answered as a stray question
+      // instead of acted on.
       trace.push("tryConfirmAdLeadFollowUp:calling");
       const confirmResult = await tryConfirmAdLeadFollowUp(employee.id, inbound.content.text);
       trace.push(`tryConfirmAdLeadFollowUp:${confirmResult.outcome}`);
@@ -122,8 +123,8 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           confirmResult.outcome === "confirmed"
             ? `✅ Follow up untuk ${confirmResult.customerName ?? "lead ini"} sudah tercatat. Reminder untuk lead ini berhenti.`
             : confirmResult.outcome === "ambiguous"
-              ? "Ada lebih dari satu lead dengan kode itu. Balas dengan nomor lengkap pelanggan, atau input manual di Menu Prospek."
-              : "Kode tidak cocok dengan lead Anda yang belum di-follow up. Cek lagi kodenya, atau input manual di Menu Prospek.";
+              ? "Ada lebih dari satu lead Anda yang cocok dengan nomor itu. Sebutkan digit yang lebih lengkap, atau input manual di Menu Prospek."
+              : "Nomor itu tidak cocok dengan lead Anda yang belum di-follow up (mungkin sudah tercatat sebelumnya). Cek lagi digitnya, atau lihat di Menu Prospek.";
         trace.push("sendWhatsAppText:calling(followup-confirm)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);

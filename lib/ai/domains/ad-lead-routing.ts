@@ -142,26 +142,28 @@ export interface AdLeadFollowUpConfirmResult {
   customerName?: string;
 }
 
-const FOLLOWUP_CONFIRM_PATTERN = /^sudah\s+(\d{3,6})\s*$/i;
-
 /**
  * Lets a Sales rep clear the hourly "belum di-follow up" reminder
- * (0104_ad_lead_followup_monitoring.sql) by replying "SUDAH <4 digit
- * terakhir nomor pelanggan>" instead of opening Menu Prospek -- the
- * reminder message itself now includes that code. Matches prospects.phone_
- * normalized's suffix rather than a full number since that's realistically
- * what a Sales rep can type from memory on their phone. Only ever touches
- * a prospect already assigned to the replying sales_id, so there's no way
- * to mark someone else's lead as followed up by guessing a code. Mirrors
+ * (0104_ad_lead_followup_monitoring.sql) just by mentioning the last few
+ * digits of the customer's phone number anywhere in a reply -- "sudah
+ * 9827", "9827 udah dihubungi", or plain "9827" all work. Deliberately not
+ * a strict "SUDAH <code>" command: real people don't type exact syntax
+ * (a first version requiring that exact format with a space produced
+ * "SUDAH9827" with no space, which nothing matched, and the Sales rep gave
+ * up and used Menu Prospek manually instead). Only ever matches against
+ * prospects already assigned to the replying sales_id with no logged
+ * follow-up yet, so there's no way to mark someone else's lead (or an
+ * already-resolved one) via a guessed number, and nothing pending at all
+ * means this doesn't intercept the message -- it falls through to the
+ * normal AI reply instead of hijacking an unrelated chat. Mirrors
  * crm_add_follow_up's exact effect (prospect_follow_ups insert +
  * last_follow_up_at + status bump) since that RPC requires an
  * authenticated auth.uid() session this server-to-server webhook doesn't
  * have.
  */
 export async function tryConfirmAdLeadFollowUp(salesId: string, messageText: string): Promise<AdLeadFollowUpConfirmResult> {
-  const match = messageText.match(FOLLOWUP_CONFIRM_PATTERN);
-  if (!match) return { outcome: "not_a_confirm_command" };
-  const code = match[1];
+  const digitRuns = messageText.match(/\d{3,}/g);
+  if (!digitRuns || digitRuns.length === 0) return { outcome: "not_a_confirm_command" };
 
   const supabase = createAdminClient();
   const { data: candidates } = await supabase
@@ -173,7 +175,9 @@ export async function tryConfirmAdLeadFollowUp(salesId: string, messageText: str
     .is("last_follow_up_at", null)
     .not("status", "in", "(closing,inactive)");
 
-  const matches = (candidates ?? []).filter((p) => (p.phone_normalized ?? "").endsWith(code));
+  if (!candidates || candidates.length === 0) return { outcome: "not_a_confirm_command" };
+
+  const matches = candidates.filter((p) => digitRuns.some((run) => (p.phone_normalized ?? "").endsWith(run)));
   if (matches.length === 0) return { outcome: "not_found" };
   if (matches.length > 1) return { outcome: "ambiguous" };
 
