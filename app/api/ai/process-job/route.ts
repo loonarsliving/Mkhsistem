@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
+import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
 import { auditWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
@@ -45,6 +46,10 @@ interface MarkomChecklistDraftJobPayload {
 interface MetaAdsLaunchJobPayload {
   project_id: string;
   branch_id: string;
+}
+
+interface KnowledgeBankRefreshJobPayload {
+  topic: string;
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -490,6 +495,12 @@ function getWeekStart(date: Date): string {
  * recommendation. Upserted per week_start (unique, migration 0085) so a
  * retry or re-run for the same week overwrites rather than duplicating.
  */
+/** One topic per job (0115) -- Gemini + Google Search grounding, upserted into ai_knowledge_bank. Isolated per topic so one failing (e.g. a transient search error) doesn't block the others from refreshing. */
+async function processKnowledgeBankRefresh(job: JobRow) {
+  const payload = job.payload as unknown as KnowledgeBankRefreshJobPayload;
+  return processKnowledgeBankRefreshJob(payload.topic);
+}
+
 async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const now = new Date();
   const weekStart = getWeekStart(now);
@@ -736,7 +747,9 @@ export async function POST(request: Request) {
                 ? await processMetaAdsResearch(supabase, job)
                 : job.job_type === "loonars_beauty_weekly_evaluation"
                   ? await processLoonarsBeautyWeeklyEvaluation(supabase)
-                  : await processSocialWeeklyEvaluation(supabase);
+                  : job.job_type === "knowledge_bank_refresh"
+                    ? await processKnowledgeBankRefresh(job)
+                    : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

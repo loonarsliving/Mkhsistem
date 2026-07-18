@@ -3,6 +3,8 @@ import "server-only";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { getKnowledgeBankContext } from "./knowledge-bank";
+
 export const PROMPT_KEYS = ["general", "hr", "markom", "crm", "loonars_beauty"] as const;
 export type PromptKey = (typeof PROMPT_KEYS)[number];
 
@@ -79,8 +81,28 @@ async function loadPrompts(): Promise<Record<PromptKey, string>> {
   return prompts;
 }
 
-/** Admin-editable system prompt for a domain (Modul AI) -- always resolves to *something*, falling back to the original hardcoded copy on any read failure or missing row. */
+/** Domains whose expertise benefits from the weekly-refreshed platform-knowledge cache (Meta Ads/Instagram/TikTok) -- see knowledge-bank.ts. */
+const KNOWLEDGE_BANK_DOMAINS: readonly PromptKey[] = ["markom", "loonars_beauty"];
+
+/**
+ * Admin-editable system prompt for a domain (Modul AI) -- always resolves to
+ * *something*, falling back to the original hardcoded copy on any read
+ * failure or missing row. For markom/loonars_beauty, appends the cached
+ * knowledge bank (weekly-researched Meta/Instagram/TikTok strategy) as
+ * extra context -- grounds answers in recent platform knowledge without a
+ * live Google Search call on every single question. Silently omitted if
+ * the bank is empty (first weekly refresh hasn't run yet) or unreadable.
+ */
 export async function getSystemPrompt(key: PromptKey): Promise<string> {
   const prompts = await loadPrompts();
-  return prompts[key];
+  const base = prompts[key];
+
+  if (KNOWLEDGE_BANK_DOMAINS.includes(key)) {
+    const knowledge = await getKnowledgeBankContext();
+    if (knowledge) {
+      return `${base}\n\n---\nPENGETAHUAN TERKINI (hasil riset berkala, dipakai sebagai referensi tambahan -- evaluasi dulu relevansinya terhadap pertanyaan, jangan asal tempel):\n${knowledge}`;
+    }
+  }
+
+  return base;
 }
