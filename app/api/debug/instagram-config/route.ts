@@ -67,14 +67,29 @@ export async function GET() {
 
   // Ground truth on Business Verification -- the Meta UI's verification status
   // badges live in different, inconsistently-named places across Business
-  // Settings pages, so read it straight from the API instead: every Business
-  // Manager this token belongs to, with its actual verification_status.
+  // Settings pages, so read it straight from the API instead. /me/businesses
+  // is empty for a System User token (that edge is for personal user
+  // identities, not System Users -- a System User belongs to exactly one
+  // Business by construction), so go via the Page instead: every Page this
+  // token can manage already carries its owning Business's id, which we can
+  // then look up directly for verification_status.
   try {
-    const businesses = await metaGraphRequest<{ data: { id: string; name: string; verification_status?: string }[] }>("/me/businesses", {
-      fields: "id,name,verification_status",
-      limit: 50,
+    const pagesWithBusiness = await metaGraphRequest<{ data: { id: string; name: string; business?: { id: string; name?: string } }[] }>("/me/accounts", {
+      fields: "id,name,business",
+      limit: 100,
     });
-    result.businesses = businesses.data;
+    result.pagesWithBusiness = pagesWithBusiness.data;
+
+    const businessIds = [...new Set((pagesWithBusiness.data ?? []).map((p) => p.business?.id).filter((id): id is string => Boolean(id)))];
+    const businesses: unknown[] = [];
+    for (const businessId of businessIds) {
+      try {
+        businesses.push(await metaGraphRequest<{ id: string; name: string; verification_status?: string }>(`/${businessId}`, { fields: "id,name,verification_status" }));
+      } catch (err) {
+        businesses.push({ businessId, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    result.businesses = businesses;
   } catch (err) {
     result.businessesError = err instanceof Error ? err.message : String(err);
   }
