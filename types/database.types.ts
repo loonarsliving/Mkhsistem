@@ -80,6 +80,7 @@ export type NotificationCategoryDb =
   | "content_published"
   | "content_publish_reminder"
   | "finance_expense_alert"
+  | "finance_expense_pending_verification"
   | "branch_balance_alert"
   | "sales_coaching_tip";
 export type NotificationStatusDb = "unread" | "read" | "archived";
