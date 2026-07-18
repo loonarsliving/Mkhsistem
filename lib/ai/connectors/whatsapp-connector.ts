@@ -123,38 +123,38 @@ export class WhatsAppConnector {
     return this.dispatch(recipient, this.normalizeOutgoingMessage({ kind: "image", url, caption }));
   }
 
-  normalizeOutgoingMessage(content: OutboundMessageContent): Record<string, unknown> {
-    if (content.kind === "template") {
-      const values = Object.values(content.params);
-      return {
-        type: "template",
-        template: {
-          name: content.templateName,
-          language: { code: "id" },
-          components: values.length ? [{ type: "body", parameters: values.map((value) => ({ type: "text", text: value })) }] : [],
-        },
-      };
-    }
+  /**
+   * Whacenter's real /send API is flat -- {device_id, number, message, file?}
+   * -- NOT Meta Cloud API's typed message objects (type/image/document/
+   * interactive). `file` (a publicly reachable URL) is what actually
+   * attaches an image/document; `message` is plain text (used as the
+   * caption when `file` is present). Confirmed against Whacenter's own PHP
+   * example (order.whacenter.com/docs) after the previous Meta-shaped image
+   * payload was silently getting JSON.stringify'd into the message field
+   * instead of ever attaching a real file -- Whacenter has no native
+   * template/button message type, so those two kinds degrade to a plain
+   * text approximation (best-effort; neither is actually used anywhere in
+   * this app yet).
+   */
+  normalizeOutgoingMessage(content: OutboundMessageContent): { message: string; file?: string } {
     if (content.kind === "image") {
-      return { type: "image", image: { link: content.url, caption: content.caption } };
+      return { message: content.caption ?? "", file: content.url };
     }
     if (content.kind === "pdf") {
-      return { type: "document", document: { link: content.url, filename: content.filename } };
+      return { message: content.filename, file: content.url };
+    }
+    if (content.kind === "template") {
+      const values = Object.values(content.params);
+      return { message: values.length ? values.join(" ") : content.templateName };
     }
     if (content.kind === "buttons") {
-      return {
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: content.text },
-          action: { buttons: content.buttons.map((button) => ({ type: "reply", reply: { id: button.id, title: button.label } })) },
-        },
-      };
+      const options = content.buttons.map((button, i) => `${i + 1}. ${button.label}`).join("\n");
+      return { message: `${content.text}\n\n${options}` };
     }
-    return { type: "text", text: { body: content.text } };
+    return { message: content.text };
   }
 
-  private async dispatch(recipient: string, messageBody: Record<string, unknown>): Promise<SendResult> {
+  private async dispatch(recipient: string, outgoing: { message: string; file?: string }): Promise<SendResult> {
     const sanitizedNumber = sanitizeRecipientNumber(recipient);
     if (sanitizedNumber.length < 8) {
       const result: SendResult = { success: false, error: `Recipient number has no usable digits after sanitizing: "${recipient}"` };
@@ -162,14 +162,12 @@ export class WhatsAppConnector {
       return result;
     }
 
-    const body = {
-  device_id: this.config.whacenterDeviceId,
-  number: sanitizedNumber,
-message:
-  typeof asRecord(messageBody)?.text === "object"
-    ? String(asRecord(asRecord(messageBody)?.text)?.body ?? "")
-    : JSON.stringify(messageBody),
+    const body: Record<string, unknown> = {
+      device_id: this.config.whacenterDeviceId,
+      number: sanitizedNumber,
+      message: outgoing.message,
     };
+    if (outgoing.file) body.file = outgoing.file;
     const startedAt = Date.now();
     try {
       const response = await this.http.post(

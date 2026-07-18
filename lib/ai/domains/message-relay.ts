@@ -127,6 +127,13 @@ async function resolveRecipients(senderEmployeeId: string, extraction: RelayExtr
  * the real employee via the DB, and genuinely sends the WhatsApp message
  * -- so the confirmation reply is never a lie about something that
  * happened.
+ *
+ * Deliberately does NOT name the original sender in the outgoing message
+ * (per owner's explicit instruction) -- it reads as an instruction
+ * originating from MK Connect itself, not "so-and-so asked me to tell
+ * you." senderEmployee is still passed into the Gemini extraction call for
+ * context (who's asking helps judge intent), just never surfaced to the
+ * recipient.
  */
 export async function tryRelayMessageToEmployee(senderEmployee: { id: string; name: string }, messageText: string): Promise<MessageRelayResult> {
   const extraction = await extractRelayIntent(senderEmployee, messageText, true);
@@ -137,7 +144,7 @@ export async function tryRelayMessageToEmployee(senderEmployee: { id: string; na
   if (candidates.length > 1) return { outcome: "recipient_ambiguous", candidateNames: candidates.map((c) => c.full_name) };
 
   const recipient = candidates[0];
-  const relayText = `Pesan dari ${senderEmployee.name} (diteruskan oleh AI MK Connect):\n\n${extraction.messageToRelay}`;
+  const relayText = `📋 Instruksi dari MK Connect:\n\n${extraction.messageToRelay}`;
   const sendResult = await sendWhatsAppText(recipient.phone, relayText);
   if (!sendResult.success) return { outcome: "send_failed", recipientName: recipient.full_name };
 
@@ -164,7 +171,7 @@ export async function tryRelayImageToEmployee(senderEmployee: { id: string; name
   if (candidates.length > 1) return { outcome: "recipient_ambiguous", candidateNames: candidates.map((c) => c.full_name) };
 
   const recipient = candidates[0];
-  const relayCaption = `Dari ${senderEmployee.name} (diteruskan oleh AI MK Connect)${extraction.messageToRelay ? `: ${extraction.messageToRelay}` : ""}`;
+  const relayCaption = `📋 Dari MK Connect${extraction.messageToRelay ? `: ${extraction.messageToRelay}` : ""}`;
   const sendResult = await sendWhatsAppImage(recipient.phone, imageUrl, relayCaption);
   if (!sendResult.success) return { outcome: "send_failed", recipientName: recipient.full_name };
 
