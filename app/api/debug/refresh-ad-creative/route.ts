@@ -16,15 +16,33 @@ export const dynamic = "force-dynamic";
  * around after use. No auth guard, same as debug/instagram-config -- both
  * are meant to be deleted right after their one-time use, not to persist.
  */
-export async function POST(req: Request) {
-  const body = (await req.json()) as {
-    campaignDbId: string;
-    headline: string;
-    primaryText: string;
-    description?: string;
-    welcomeMessage: string;
-  };
+interface RefreshBody {
+  campaignDbId: string;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  welcomeMessage: string;
+}
 
+/** GET variant (query params) so this can be triggered from an environment that can only issue GET fetches to Vercel deployment URLs, not arbitrary POSTs. */
+export async function GET(req: Request) {
+  const params = new URL(req.url).searchParams;
+  const campaignDbId = params.get("campaignDbId");
+  const headline = params.get("headline");
+  const primaryText = params.get("primaryText");
+  const welcomeMessage = params.get("welcomeMessage");
+  if (!campaignDbId || !headline || !primaryText || !welcomeMessage) {
+    return NextResponse.json({ error: "missing required query params" }, { status: 400 });
+  }
+  return runRefresh({ campaignDbId, headline, primaryText, description: params.get("description") ?? undefined, welcomeMessage });
+}
+
+export async function POST(req: Request) {
+  const body = (await req.json()) as RefreshBody;
+  return runRefresh(body);
+}
+
+async function runRefresh(body: RefreshBody) {
   const supabase = createAdminClient();
   const { data: campaign, error } = await supabase
     .from("meta_ad_campaigns")
