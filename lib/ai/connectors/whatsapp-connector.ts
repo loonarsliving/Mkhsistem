@@ -242,7 +242,26 @@ message:
         }
       : null;
 
-    const content = messageText.length > 0 ? ({ kind: "text", text: messageText } as const) : ({ kind: "raw", text: JSON.stringify(payload) } as const);
+    // media shape is UNVERIFIED against a real Whacenter image webhook (no
+    // documented schema, this codebase's usual "fix once a real payload
+    // proves the shape wrong" situation) -- tries the field names Whacenter
+    // most plausibly uses, and falls through to text/raw if none match
+    // rather than crashing on an unexpected shape.
+    const mediaRaw = payload.media;
+    let imageUrl: string | null = null;
+    if (typeof mediaRaw === "string" && mediaRaw.length > 0) {
+      imageUrl = mediaRaw;
+    } else {
+      const mediaRecord = asRecord(mediaRaw);
+      const candidate = mediaRecord?.url ?? mediaRecord?.link ?? mediaRecord?.mediaUrl ?? mediaRecord?.file;
+      if (typeof candidate === "string" && candidate.length > 0) imageUrl = candidate;
+    }
+
+    const content = imageUrl
+      ? ({ kind: "image", url: imageUrl, caption: messageText.length > 0 ? messageText : undefined } as const)
+      : messageText.length > 0
+        ? ({ kind: "text", text: messageText } as const)
+        : ({ kind: "raw", text: JSON.stringify(payload) } as const);
 
     return { sender, senderName: pushName, content, receivedAt: new Date().toISOString(), adReferral };
   }

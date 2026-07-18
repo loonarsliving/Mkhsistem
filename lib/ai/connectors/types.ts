@@ -28,7 +28,7 @@ export interface NormalizedInboundMessage {
   sender: string;
   /** Whacenter's `pushName` -- the sender's WhatsApp display name, when present. */
   senderName?: string;
-  content: { kind: "text"; text: string } | { kind: "raw"; text: string };
+  content: { kind: "text"; text: string } | { kind: "image"; url: string; caption?: string } | { kind: "raw"; text: string };
   receivedAt: string;
   adReferral?: AdReferral | null;
 }
