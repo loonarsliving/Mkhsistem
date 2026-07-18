@@ -406,19 +406,27 @@ export interface AdInsights {
  * produced numbers that didn't match how many days the ad had actually been
  * running for (the daysRunning figure computed from created_at) and made
  * every analysis built on it unreliable.
+ *
+ * Reads inline_link_clicks (+ its own CTR), NOT the plain `clicks`/`ctr`
+ * fields -- Meta's `clicks` is "all clicks" (photo expand, page likes,
+ * comments, profile taps, everything), which runs far higher than actual
+ * clicks on the WhatsApp CTA and made the dashboard's "Klik" number look
+ * inflated/unrealistic for a Click-to-WhatsApp campaign whose only real
+ * goal is the link click that opens the chat. inline_link_clicks is the
+ * metric that actually corresponds to that.
  */
 export async function getAdInsights(adId: string): Promise<AdInsights> {
   const insights = await metaGraphRequest<{
     data: {
       spend?: string;
       impressions?: string;
-      clicks?: string;
+      inline_link_clicks?: string;
       reach?: string;
       frequency?: string;
-      ctr?: string;
+      inline_link_click_ctr?: string;
       actions?: { action_type: string; value: string }[];
     }[];
-  }>(`/${adId}/insights`, { fields: "spend,impressions,clicks,reach,frequency,ctr,actions", date_preset: "maximum" });
+  }>(`/${adId}/insights`, { fields: "spend,impressions,inline_link_clicks,reach,frequency,inline_link_click_ctr,actions", date_preset: "maximum" });
 
   const row = insights.data?.[0];
   const messagingConversationsStarted = Number(
@@ -428,10 +436,10 @@ export async function getAdInsights(adId: string): Promise<AdInsights> {
   return {
     spendIdr: Number(row?.spend ?? "0"),
     impressions: Number(row?.impressions ?? "0"),
-    clicks: Number(row?.clicks ?? "0"),
+    clicks: Number(row?.inline_link_clicks ?? "0"),
     messagingConversationsStarted,
     reach: Number(row?.reach ?? "0"),
     frequency: Number(row?.frequency ?? "0"),
-    ctrPercent: Number(row?.ctr ?? "0"),
+    ctrPercent: Number(row?.inline_link_click_ctr ?? "0"),
   };
 }
