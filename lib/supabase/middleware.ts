@@ -35,9 +35,6 @@ const PUBLIC_PATHS = [
   "/api/integrations/whatsapp/webhook",
   "/api/debug/whatsapp-config",
   "/api/debug/meta-ads-config",
-  // TEMPORARY -- one-off ad creative refresh, meant to be hit twice then
-  // deleted (route file itself explains why). Not tied to a user session.
-  "/api/debug/refresh-ad-creative",
   // pg_cron-triggered worker routes (net.http_post carries no session
   // cookie) -- found missing here while building 0096: every tick of
   // crm-promo-sends-worker and the daily social-snapshot capture cron has
