@@ -239,6 +239,22 @@ export async function createAdCreative(input: CreateAdCreativeInput): Promise<{ 
   );
 }
 
+/**
+ * Ad creatives are immutable on Meta's side once created -- there is no
+ * "edit creative" endpoint. Refreshing copy on an already-live ad means
+ * creating a brand new creative object and swapping it onto the existing
+ * ad (POST /{adId} {creative:{creative_id}}), which keeps the same ad_id
+ * (and therefore its accumulated insights/learning) while changing what
+ * people actually see. Meta re-reviews the new creative, which can cause
+ * a brief delivery pause -- an accepted tradeoff for fixing a proven
+ * low-converting creative rather than leaving it running as-is.
+ */
+export async function updateAdCreative(adId: string, input: CreateAdCreativeInput): Promise<{ creativeId: string }> {
+  const creative = await createAdCreative(input);
+  await metaGraphRequest(`/${adId}`, { creative: { creative_id: creative.id } }, "POST");
+  return { creativeId: creative.id };
+}
+
 export interface CreateAdInput {
   name: string;
   adSetId: string;
