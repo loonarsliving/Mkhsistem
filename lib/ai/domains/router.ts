@@ -1,6 +1,7 @@
 import "server-only";
 
 import { askAI } from "../service";
+import { tryAnswerWithData } from "./data-queries";
 import { formatRelayReply, tryRelayToEmployees } from "./message-relay";
 import { getSystemPrompt } from "./prompts";
 
@@ -54,6 +55,16 @@ export async function routeAndAnswer(
     if (relayResult.outcome !== "not_a_relay_request") {
       return formatRelayReply(relayResult);
     }
+  }
+
+  // "Berapa lead minggu ini", "saldo cabang Jogja berapa" -- questions that
+  // need a real number from the database, not the domain prompts' static
+  // expertise. Must also run before the keyword-routed general chat below,
+  // for the same reason the relay check does: without this, Gemini would
+  // just answer from its own guesswork instead of the system's actual data.
+  if (employee) {
+    const dataResult = await tryAnswerWithData(question, employee);
+    if (dataResult.applicable) return dataResult.answer;
   }
 
   let domain: "general" | "hr" | "markom" | "crm" | "loonars_beauty" = "general";
