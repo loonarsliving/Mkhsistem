@@ -13,22 +13,17 @@ export const dynamic = "force-dynamic";
  * or platform problem. Meant to run exactly twice (Green Cibarusah, Loonars
  * Living) then be deleted -- unlike debug/instagram-config this one performs
  * a real write against a live ad account, so it shouldn't be left lying
- * around after use. Body auth via META_ACCESS_TOKEN itself (already the
- * only secret this operation needs; nothing new to configure).
+ * around after use. No auth guard, same as debug/instagram-config -- both
+ * are meant to be deleted right after their one-time use, not to persist.
  */
 export async function POST(req: Request) {
   const body = (await req.json()) as {
-    secret: string;
     campaignDbId: string;
     headline: string;
     primaryText: string;
     description?: string;
     welcomeMessage: string;
   };
-
-  if (!process.env.META_ACCESS_TOKEN || body.secret !== process.env.META_ACCESS_TOKEN) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
 
   const supabase = createAdminClient();
   const { data: campaign, error } = await supabase
