@@ -65,5 +65,19 @@ export async function GET() {
     }
   }
 
+  // Ground truth on Business Verification -- the Meta UI's verification status
+  // badges live in different, inconsistently-named places across Business
+  // Settings pages, so read it straight from the API instead: every Business
+  // Manager this token belongs to, with its actual verification_status.
+  try {
+    const businesses = await metaGraphRequest<{ data: { id: string; name: string; verification_status?: string }[] }>("/me/businesses", {
+      fields: "id,name,verification_status",
+      limit: 50,
+    });
+    result.businesses = businesses.data;
+  } catch (err) {
+    result.businessesError = err instanceof Error ? err.message : String(err);
+  }
+
   return NextResponse.json(result);
 }
