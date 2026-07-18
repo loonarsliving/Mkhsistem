@@ -1,7 +1,7 @@
 import "server-only";
 
 import { askAI } from "../service";
-import { tryRelayMessageToEmployee } from "./message-relay";
+import { formatRelayReply, tryRelayToEmployees } from "./message-relay";
 import { getSystemPrompt } from "./prompts";
 
 const HR_KEYWORDS = ["absen", "cuti", "izin", "payroll", "gaji", "kontrak", "sop", "karyawan", "hr ", "evaluasi karyawan"];
@@ -37,7 +37,7 @@ function matchesAny(text: string, keywords: string[]): boolean {
 export async function routeAndAnswer(
   question: string,
   employee: { id: string; name: string } | null,
-  opts?: { maxAttempts?: number; jobId?: string },
+  opts?: { maxAttempts?: number; jobId?: string; senderWaNumber?: string },
 ): Promise<string> {
   const greeting = employee ? `Pengguna: ${employee.name} (karyawan terdaftar).` : "Pengirim belum teridentifikasi sebagai karyawan terdaftar.";
 
@@ -46,20 +46,13 @@ export async function routeAndAnswer(
   // actual delivery (see message-relay.ts's module doc). Only meaningful
   // for a confirmed employee -- an unrecognized sender never reaches this
   // function at all (webhook-handler.ts's early return), so no risk of an
-  // outsider using this to message an employee.
-  if (employee) {
-    const relayResult = await tryRelayMessageToEmployee(employee, question);
+  // outsider using this to message an employee. Also flushes any staged
+  // photos (wa_pending_media_relay) this same sender sent earlier -- so
+  // "kirim 2 foto lalu bilang untuk siapa" relays both together.
+  if (employee && opts?.senderWaNumber) {
+    const relayResult = await tryRelayToEmployees(employee, opts.senderWaNumber, question);
     if (relayResult.outcome !== "not_a_relay_request") {
-      switch (relayResult.outcome) {
-        case "relayed":
-          return `✅ Pesan sudah diteruskan ke ${relayResult.recipientName} via WhatsApp.`;
-        case "recipient_not_found":
-          return "Maaf, saya tidak menemukan karyawan aktif yang cocok dengan penerima yang dimaksud. Mohon cek lagi nama/jabatannya, atau sampaikan langsung.";
-        case "recipient_ambiguous":
-          return `Ada lebih dari satu karyawan yang cocok: ${relayResult.candidateNames?.join(", ")}. Mohon sebutkan nama lengkap yang lebih spesifik.`;
-        case "send_failed":
-          return `Maaf, saya menemukan ${relayResult.recipientName} tapi pesan WhatsApp gagal terkirim ke nomornya. Mohon sampaikan langsung atau cek nomor HP-nya di data karyawan.`;
-      }
+      return formatRelayReply(relayResult);
     }
   }
 

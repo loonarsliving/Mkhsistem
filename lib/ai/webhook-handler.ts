@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
 import { routeAdDrivenLead, tryConfirmAdLeadFollowUp, tryReassignAdLeadFollowUp } from "./domains/ad-lead-routing";
-import { tryRelayImageToEmployee } from "./domains/message-relay";
+import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -118,31 +118,45 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     }
 
     if (inbound.content.kind === "image") {
-      // "Kirim bukti transfer ini ke X" -- forwards the actual image, not
-      // just text (see message-relay.ts's tryRelayImageToEmployee). Falls
-      // through to the generic "can't process" reply below if there's no
-      // caption or the caption isn't a relay instruction -- an unrelated
-      // photo (e.g. a screenshot someone sends just to ask about) still
-      // shouldn't get a made-up "sudah diteruskan" response.
-      trace.push("tryRelayImageToEmployee:calling");
-      const imageRelayResult = await tryRelayImageToEmployee({ id: employee.id, name: employee.full_name }, inbound.content.caption, inbound.content.url);
-      trace.push(`tryRelayImageToEmployee:${imageRelayResult.outcome}`);
-      if (imageRelayResult.outcome !== "not_a_relay_request") {
-        const replyText =
-          imageRelayResult.outcome === "relayed"
-            ? `✅ Foto sudah diteruskan ke ${imageRelayResult.recipientName} via WhatsApp.`
-            : imageRelayResult.outcome === "recipient_not_found"
-              ? "Maaf, saya tidak menemukan karyawan aktif yang cocok dengan penerima yang dimaksud. Mohon cek lagi nama/jabatannya di keterangan foto."
-              : imageRelayResult.outcome === "recipient_ambiguous"
-                ? `Ada lebih dari satu karyawan yang cocok: ${imageRelayResult.candidateNames?.join(", ")}. Mohon sebutkan nama lengkap yang lebih spesifik.`
-                : `Maaf, saya menemukan ${imageRelayResult.recipientName} tapi foto gagal terkirim ke nomornya. Mohon kirim langsung.`;
-        trace.push("sendWhatsAppText:calling(image-relay)");
+      // "Kirim bukti transfer ini ke X" -- forwards the real photo(s), not
+      // just text (see message-relay.ts). Always staged first (regardless
+      // of caption) so 2+ photos sent in a row can later be relayed
+      // together as one batch, whether the recipient is named on the last
+      // photo's caption or in a separate follow-up text message.
+      trace.push("stagePendingPhoto:calling");
+      const alreadyHasPending = await hasOtherPendingPhotos(inbound.sender);
+      await stagePendingPhoto(inbound.sender, employee.id, inbound.content.url, inbound.content.caption);
+      trace.push("stagePendingPhoto:done");
+
+      if (inbound.content.caption) {
+        trace.push("tryRelayToEmployees:calling(image)");
+        const relayResult = await tryRelayToEmployees({ id: employee.id, name: employee.full_name }, inbound.sender, inbound.content.caption);
+        trace.push(`tryRelayToEmployees:${relayResult.outcome}`);
+        if (relayResult.outcome !== "not_a_relay_request") {
+          const replyText = formatRelayReply(relayResult);
+          trace.push("sendWhatsAppText:calling(image-relay)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+
+      // No caption, or caption wasn't a relay instruction -- only prompt
+      // once per batch (not on every single photo) so sending several
+      // photos in a row doesn't spam the same reminder each time.
+      if (!alreadyHasPending) {
+        const replyText = 'Foto diterima. Kalau ingin saya teruskan ke seseorang, kirim foto lain (kalau ada) lalu ketik/tulis di keterangan siapa penerimanya (mis. "untuk Vando").';
+        trace.push("sendWhatsAppText:calling(image-no-caption)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
         await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[image]", replyText, employee.id);
         trace.push("saveAiConversationTurn:done");
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
+      trace.push("image_batched:no_reply");
+      return { status: "processed", sender: inbound.sender, replySent: false, trace };
     }
 
     if (inbound.content.kind === "text") {
@@ -202,18 +216,13 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
 
     if (inbound.content.kind !== "text") {
       // Never needs Gemini -- answer immediately, no queue involved. Only
-      // reachable for "image" when it wasn't a relay instruction (handled
-      // above) and for "raw" (unrecognized content the connector couldn't
-      // parse into text or image).
-      const replyText =
-        inbound.content.kind === "image"
-          ? "Foto diterima. Kalau ingin saya teruskan ke seseorang, sertakan nama/jabatan penerimanya di keterangan foto (mis. \"untuk Vando\")."
-          : "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
-      const inboundLogText = inbound.content.kind === "image" ? (inbound.content.caption ?? "[image]") : inbound.content.text;
+      // reachable for "raw" now ("image" always returns above) --
+      // unrecognized content the connector couldn't parse into text or image.
+      const replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
       trace.push("sendWhatsAppText:calling(non-text)");
       const sendResult = await sendWhatsAppText(inbound.sender, replyText);
       trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
-      await saveAiConversationTurn(inbound.sender, inboundLogText, replyText, employee?.id ?? null);
+      await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee?.id ?? null);
       trace.push("saveAiConversationTurn:done");
       return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
     }

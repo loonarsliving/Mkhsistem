@@ -1320,6 +1320,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_weekly_evaluations"]["Insert"]>;
         Relationships: [];
       };
+      wa_pending_media_relay: {
+        Row: {
+          id: string;
+          sender: string;
+          employee_id: string;
+          image_url: string;
+          caption: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sender: string;
+          employee_id: string;
+          image_url: string;
+          caption?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["wa_pending_media_relay"]["Insert"]>;
+        Relationships: [];
+      };
       loonars_content_items: {
         Row: {
           id: string;

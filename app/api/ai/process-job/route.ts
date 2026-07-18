@@ -61,7 +61,7 @@ async function processWhatsAppAiReply(supabase: AdminClient, job: JobRow) {
   const replyText = await routeAndAnswer(
     payload.contentText,
     payload.employeeId !== null && payload.employeeName !== null ? { id: payload.employeeId, name: payload.employeeName } : null,
-    { maxAttempts: 1, jobId: job.id },
+    { maxAttempts: 1, jobId: job.id, senderWaNumber: payload.sender },
   );
 
   const sendResult = await sendWhatsAppText(payload.sender, replyText);
