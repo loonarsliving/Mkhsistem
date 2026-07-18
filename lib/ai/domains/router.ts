@@ -1,6 +1,7 @@
 import "server-only";
 
 import { askAI } from "../service";
+import { tryRelayMessageToEmployee } from "./message-relay";
 import { getSystemPrompt } from "./prompts";
 
 const HR_KEYWORDS = ["absen", "cuti", "izin", "payroll", "gaji", "kontrak", "sop", "karyawan", "hr ", "evaluasi karyawan"];
@@ -39,6 +40,28 @@ export async function routeAndAnswer(
   opts?: { maxAttempts?: number; jobId?: string },
 ): Promise<string> {
   const greeting = employee ? `Pengguna: ${employee.name} (karyawan terdaftar).` : "Pengirim belum teridentifikasi sebagai karyawan terdaftar.";
+
+  // "Sampaikan ke X: Y" -- must run before the general chat prompt below,
+  // which otherwise just role-plays "akan segera saya teruskan" with no
+  // actual delivery (see message-relay.ts's module doc). Only meaningful
+  // for a confirmed employee -- an unrecognized sender never reaches this
+  // function at all (webhook-handler.ts's early return), so no risk of an
+  // outsider using this to message an employee.
+  if (employee) {
+    const relayResult = await tryRelayMessageToEmployee(employee, question);
+    if (relayResult.outcome !== "not_a_relay_request") {
+      switch (relayResult.outcome) {
+        case "relayed":
+          return `✅ Pesan sudah diteruskan ke ${relayResult.recipientName} via WhatsApp.`;
+        case "recipient_not_found":
+          return "Maaf, saya tidak menemukan karyawan aktif yang cocok dengan penerima yang dimaksud. Mohon cek lagi nama/jabatannya, atau sampaikan langsung.";
+        case "recipient_ambiguous":
+          return `Ada lebih dari satu karyawan yang cocok: ${relayResult.candidateNames?.join(", ")}. Mohon sebutkan nama lengkap yang lebih spesifik.`;
+        case "send_failed":
+          return `Maaf, saya menemukan ${relayResult.recipientName} tapi pesan WhatsApp gagal terkirim ke nomornya. Mohon sampaikan langsung atau cek nomor HP-nya di data karyawan.`;
+      }
+    }
+  }
 
   let domain: "general" | "hr" | "markom" | "crm" | "loonars_beauty" = "general";
   if (matchesAny(question, LOONARS_BEAUTY_KEYWORDS)) domain = "loonars_beauty";
