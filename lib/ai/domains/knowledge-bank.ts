@@ -6,36 +6,45 @@ import { generateAIText } from "../service";
 
 /**
  * Fixed topic list -- each gets its own row in ai_knowledge_bank and its own
- * knowledge_bank_refresh job, refreshed weekly (0115). Deliberately narrow:
- * platform-level knowledge that changes slowly (algorithm behavior, current
- * best practices), not project-specific research (that stays live-searched
- * in markom.ts's dedicated functions, which need current, per-campaign data
- * a weekly cache can't provide).
+ * knowledge_bank_refresh job, refreshed weekly (0115). Deliberately scoped
+ * to PT Maha Karya Haluoleo's actual two products (rumah subsidi/komersial
+ * and villa leasehold) -- generic multi-product marketing knowledge made
+ * the WhatsApp AI's answers feel disconnected from what employees actually
+ * discuss (leasehold vs freehold objections, FLPP financing questions,
+ * property-specific closing technique), not the underlying platform trivia.
+ * Never injected into loonars_beauty's prompt (see prompts.ts) -- that's a
+ * different product (skincare) this knowledge would only pollute.
  */
 export const KNOWLEDGE_TOPICS = [
   {
-    topic: "meta_ads_strategy",
-    title: "Strategi & Algoritma Meta Ads (Facebook/Instagram Ads, Click-to-WhatsApp)",
+    topic: "villa_leasehold_market",
+    title: "Pasar & Strategi Penjualan Villa Leasehold Indonesia",
     researchPrompt:
-      "Riset temuan TERBARU (beberapa bulan terakhir) tentang: cara kerja sistem lelang & algoritma Meta Ads saat ini, best practice untuk Click-to-WhatsApp ads, benchmark biaya per klik/per percakapan WhatsApp yang wajar untuk industri properti di Indonesia, dan perubahan kebijakan/fitur Meta Ads yang relevan untuk pengiklan skala kecil-menengah.",
+      "Riset temuan TERBARU tentang pasar villa leasehold di Indonesia (fokus Bali, Jogja, dan lokasi investasi populer sejenis): profil & motivasi pembeli (investor asing vs lokal), perbedaan leasehold vs freehold dari sisi hukum dan daya tarik jual, argumen ROI/yield sewa yang biasa dipakai dalam pitch penjualan, keberatan/pertanyaan umum calon pembeli (legalitas, masa sewa, exit strategy) dan cara menjawabnya, serta tren harga/permintaan terkini.",
   },
   {
-    topic: "instagram_strategy",
-    title: "Algoritma & Strategi Konten Instagram",
+    topic: "subsidized_housing_market",
+    title: "Pasar & Strategi Penjualan Rumah Subsidi/Komersial Indonesia",
     researchPrompt:
-      "Riset temuan TERBARU tentang algoritma Instagram (Reels, feed, Explore) -- sinyal ranking yang paling berpengaruh saat ini, format/panjang konten yang sedang berkinerja baik, dan perubahan kebijakan/fitur terbaru yang relevan untuk akun bisnis kecil-menengah.",
+      "Riset temuan TERBARU tentang pasar rumah subsidi dan rumah komersial di Indonesia: profil pembeli, proses & syarat KPR/FLPP terkini, kebijakan pemerintah terbaru soal perumahan subsidi (plafon harga, subsidi bunga, dll), keberatan/pertanyaan umum calon pembeli dan cara menjawabnya, serta strategi marketing yang terbukti efektif untuk segmen ini.",
   },
   {
-    topic: "tiktok_strategy",
-    title: "Algoritma & Strategi Konten/TikTok Ads",
+    topic: "property_sales_closing_technique",
+    title: "Teknik Closing & Objection Handling Penjualan Properti",
     researchPrompt:
-      "Riset temuan TERBARU tentang algoritma FYP TikTok, tren format konten yang sedang viral, strategi TikTok Ads/Spark Ads, dan perubahan kebijakan/fitur terbaru yang relevan untuk pengiklan skala kecil-menengah di Indonesia.",
+      "Riset temuan TERBARU tentang teknik closing dan penanganan keberatan yang efektif KHUSUS untuk penjualan properti (rumah/villa) -- bukan produk konsumer biasa, karena siklus keputusan lebih panjang dan nilai transaksi besar. Cakup: cara menangani keberatan harga, keraguan terhadap kredibilitas developer, kekhawatiran proses legal/KPR, dan strategi follow-up yang terbukti efektif untuk lead properti yang belum closing.",
   },
   {
-    topic: "digital_marketing_general",
-    title: "Tren Pemasaran Digital Properti Indonesia",
+    topic: "meta_ads_property_ctwa",
+    title: "Strategi Meta Ads Click-to-WhatsApp untuk Properti",
     researchPrompt:
-      "Riset temuan TERBARU tentang tren pemasaran digital untuk industri properti di Indonesia: perilaku pencarian/pembelian rumah subsidi, rumah komersial, dan villa investasi, channel yang paling efektif saat ini, dan benchmark biaya marketing/lead yang wajar per segmen.",
+      "Riset temuan TERBARU tentang praktik terbaik Meta Ads Click-to-WhatsApp KHUSUS untuk industri properti: benchmark biaya per klik/per percakapan WhatsApp yang wajar, dibedakan untuk segmen rumah subsidi (harga rendah, keputusan cepat) vs villa leasehold investasi (harga tinggi, keputusan panjang), cara menyusun audiens dan funnel yang efektif untuk masing-masing segmen, dan perubahan kebijakan/fitur Meta Ads yang relevan.",
+  },
+  {
+    topic: "instagram_tiktok_property_content",
+    title: "Strategi Konten Instagram & TikTok untuk Properti",
+    researchPrompt:
+      "Riset temuan TERBARU tentang strategi konten Instagram dan TikTok KHUSUS untuk marketing properti: format/hook yang terbukti efektif menarik minat pembeli rumah subsidi maupun villa investasi (studi kasus/contoh nyata kalau ada), algoritma terkini kedua platform, dan perubahan fitur/kebijakan yang relevan untuk akun bisnis properti skala kecil-menengah.",
   },
 ] as const;
 

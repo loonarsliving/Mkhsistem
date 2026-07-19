@@ -81,16 +81,24 @@ async function loadPrompts(): Promise<Record<PromptKey, string>> {
   return prompts;
 }
 
-/** Domains whose expertise benefits from the weekly-refreshed platform-knowledge cache (Meta Ads/Instagram/TikTok) -- see knowledge-bank.ts. */
-const KNOWLEDGE_BANK_DOMAINS: readonly PromptKey[] = ["markom", "loonars_beauty"];
+/**
+ * Domains whose expertise benefits from the weekly-refreshed knowledge bank
+ * (villa leasehold / rumah subsidi market, property sales closing
+ * technique, Meta/Instagram/TikTok strategy for property) -- see
+ * knowledge-bank.ts. Deliberately excludes loonars_beauty: the bank is
+ * scoped to PT Maha Karya Haluoleo's property products (rumah subsidi,
+ * villa leasehold), and injecting it into a skincare-product prompt would
+ * only produce off-topic answers there.
+ */
+const KNOWLEDGE_BANK_DOMAINS: readonly PromptKey[] = ["markom", "crm"];
 
 /**
  * Admin-editable system prompt for a domain (Modul AI) -- always resolves to
  * *something*, falling back to the original hardcoded copy on any read
- * failure or missing row. For markom/loonars_beauty, appends the cached
- * knowledge bank (weekly-researched Meta/Instagram/TikTok strategy) as
- * extra context -- grounds answers in recent platform knowledge without a
- * live Google Search call on every single question. Silently omitted if
+ * failure or missing row. For markom/crm, appends the cached knowledge bank
+ * (weekly-researched property market + sales/marketing strategy) as extra
+ * context -- grounds answers in recent, product-specific knowledge without
+ * a live Google Search call on every single question. Silently omitted if
  * the bank is empty (first weekly refresh hasn't run yet) or unreadable.
  */
 export async function getSystemPrompt(key: PromptKey): Promise<string> {
