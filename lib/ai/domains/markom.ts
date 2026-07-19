@@ -93,7 +93,13 @@ function buildContentPlannerContextBlock(context?: ContentPlannerContext): strin
   }
   if (context?.tiktok) {
     const tt = context.tiktok;
-    lines.push(`Performa TikTok kami (data nyata): ${tt.videoViews} video views, ${tt.likes} likes, ${tt.followersCount} followers.`);
+    const isColdStart = tt.followersCount < 1000;
+    lines.push(
+      `Performa TikTok kami (data nyata): ${tt.videoViews} video views, ${tt.likes} likes, ${tt.followersCount} followers.` +
+        (isColdStart
+          ? " Akun ini MASIH BARU/cold-start (di bawah 1000 followers) -- checklist untuk TikTok WAJIB fokus ke taktik growth/discovery (trend-jacking, hook FYP, frekuensi upload tinggi, hashtag discovery), BUKAN strategi mempertahankan audiens yang sudah ada."
+          : ""),
+    );
   }
   if (context?.competitorNotes?.length) {
     lines.push(`Observasi konten kompetitor yang dicatat tim Markom secara manual (data nyata):\n${context.competitorNotes.join("\n")}`);

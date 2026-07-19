@@ -52,6 +52,13 @@ export const KNOWLEDGE_TOPICS = [
       "Riset temuan TERBARU tentang strategi konten Instagram dan TikTok KHUSUS untuk marketing properti: format/hook yang terbukti efektif menarik minat pembeli rumah subsidi maupun villa investasi (studi kasus/contoh nyata kalau ada), algoritma terkini kedua platform, dan perubahan fitur/kebijakan yang relevan untuk akun bisnis properti skala kecil-menengah.",
   },
   {
+    topic: "tiktok_cold_start_growth",
+    productLine: "property" as ProductLine,
+    title: "Strategi Growth TikTok untuk Akun Baru (0 Followers)",
+    researchPrompt:
+      "Riset temuan TERBARU tentang strategi pertumbuhan akun TikTok yang BENAR-BENAR BARU (mulai dari 0 followers, belum ada engagement sama sekali): frekuensi upload ideal di fase awal, teknik trend-jacking/pakai sound viral untuk menjangkau non-follower lewat FYP, mekanika hook 3 detik pertama yang terbukti menahan penonton, strategi hashtag untuk discovery (bukan untuk audiens yang sudah ada), dan kesalahan umum akun baru properti/real estate yang membuat growth lambat (misal: konten terlalu jualan/formal di awal, upload tidak konsisten). Fokus pada TAKTIK KONKRET untuk 0-1000 followers pertama, bukan strategi mempertahankan audiens yang sudah besar.",
+  },
+  {
     topic: "beauty_market_indonesia",
     productLine: "beauty" as ProductLine,
     title: "Pasar & Tren Skincare Brightening Indonesia",
