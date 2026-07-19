@@ -1,11 +1,14 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { TablesInsert } from "@/types/database.types";
 
-export async function listCompetitorAccounts(supabase: TypedSupabaseClient) {
+export type CompetitorFocus = "leasehold_sales" | "occupancy" | "beauty";
+
+export async function listCompetitorAccounts(supabase: TypedSupabaseClient, focus: CompetitorFocus) {
   const { data, error } = await supabase
     .from("social_competitor_accounts")
     .select("*")
     .eq("is_active", true)
+    .eq("content_focus", focus)
     .order("platform")
     .order("handle");
   if (error) throw error;
@@ -22,10 +25,55 @@ export async function deactivateCompetitorAccount(supabase: TypedSupabaseClient,
   if (error) throw error;
 }
 
-export async function listCompetitorContentLogs(supabase: TypedSupabaseClient, competitorAccountId?: string, limit = 30) {
+export async function countActiveCompetitors(supabase: TypedSupabaseClient, focus: CompetitorFocus): Promise<number> {
+  const { count, error } = await supabase
+    .from("social_competitor_accounts")
+    .select("id", { count: "exact", head: true })
+    .eq("content_focus", focus)
+    .eq("is_active", true);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * AI-discovered competitors (0125) -- inserted with source='ai_discovered',
+ * skipping any handle (case-insensitive, any focus/platform) that's already
+ * registered so a rediscovery run never creates a duplicate of a
+ * manually-added or previously-discovered competitor.
+ */
+export async function insertDiscoveredCompetitors(
+  supabase: TypedSupabaseClient,
+  focus: CompetitorFocus,
+  discovered: { platform: "instagram" | "tiktok"; handle: string; displayName: string | null; notes: string | null }[],
+): Promise<number> {
+  if (discovered.length === 0) return 0;
+
+  const { data: existing, error: existingError } = await supabase.from("social_competitor_accounts").select("platform, handle");
+  if (existingError) throw existingError;
+  const existingKeys = new Set((existing ?? []).map((e) => `${e.platform}:${e.handle.toLowerCase()}`));
+
+  const toInsert = discovered.filter((d) => !existingKeys.has(`${d.platform}:${d.handle.toLowerCase()}`));
+  if (toInsert.length === 0) return 0;
+
+  const { error } = await supabase.from("social_competitor_accounts").insert(
+    toInsert.map((d) => ({
+      platform: d.platform,
+      handle: d.handle,
+      display_name: d.displayName,
+      notes: d.notes,
+      content_focus: focus,
+      source: "ai_discovered" as const,
+    })),
+  );
+  if (error) throw error;
+  return toInsert.length;
+}
+
+export async function listCompetitorContentLogs(supabase: TypedSupabaseClient, focus: CompetitorFocus, competitorAccountId?: string, limit = 30) {
   let query = supabase
     .from("social_competitor_content_logs")
-    .select("*, competitor:competitor_account_id(platform, handle, display_name)")
+    .select("*, competitor:competitor_account_id!inner(platform, handle, display_name, content_focus)")
+    .eq("competitor.content_focus", focus)
     .order("logged_at", { ascending: false })
     .limit(limit);
   if (competitorAccountId) query = query.eq("competitor_account_id", competitorAccountId);

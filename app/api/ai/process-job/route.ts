@@ -4,13 +4,15 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
-import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
+import { discoverBeautyCompetitors, evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
 import {
   auditWeeklyContentPerformance,
   compareLeaseholdCompetitorContent,
+  discoverPropertyCompetitors,
   researchAndDraftAd,
   researchAndGenerateChecklist,
+  type ChecklistContentFocus,
   type ContentPlannerContext,
 } from "@/lib/ai/domains/markom";
 import { getSystemPrompt } from "@/lib/ai/domains/prompts";
@@ -22,6 +24,7 @@ import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
+import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
@@ -690,6 +693,44 @@ async function processLeaseholdCompetitorComparison(supabase: AdminClient) {
   return { gapsFound: result.gaps.length };
 }
 
+interface CompetitorDiscoveryJobPayload {
+  focus: CompetitorFocus;
+}
+
+/** Active competitors per focus is capped so an auto-discovery rerun doesn't grow the list unbounded -- quality over quantity for what's meant to be a small reference set. */
+const COMPETITOR_DISCOVERY_CAP = 6;
+
+/**
+ * AI finds its own reference competitors (0125) instead of a human
+ * registering them one by one -- dispatched weekly for all 3 foci
+ * (leasehold_sales, occupancy, beauty) plus on-demand per Content Planner
+ * tab. Property foci use discoverPropertyCompetitors (markom.ts); beauty
+ * uses discoverBeautyCompetitors (loonars-beauty.ts) -- kept as two
+ * separate AI calls with their own domain system prompt so beauty
+ * reasoning never touches property knowledge and vice versa, same
+ * separation already enforced everywhere else in this codebase.
+ * insertDiscoveredCompetitors silently skips anything already registered
+ * (any source, any focus/platform match on handle), so reruns never
+ * duplicate a manually-added or previously-discovered competitor.
+ */
+async function processCompetitorDiscovery(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as CompetitorDiscoveryJobPayload;
+  const focus = payload.focus;
+
+  const activeCount = await countActiveCompetitors(supabase, focus);
+  const remaining = COMPETITOR_DISCOVERY_CAP - activeCount;
+  if (remaining <= 0) return { focus, discovered: 0, skipped: "cap reached" };
+
+  const discovered = focus === "beauty" ? await discoverBeautyCompetitors() : await discoverPropertyCompetitors(focus as ChecklistContentFocus);
+  const inserted = await insertDiscoveredCompetitors(
+    supabase,
+    focus,
+    discovered.slice(0, remaining).map((d) => ({ platform: d.platform, handle: d.handle, displayName: d.displayName, notes: d.reason || null })),
+  );
+
+  return { focus, discovered: inserted };
+}
+
 const LOONARS_RATIO_TARGET = { problem_solution: 40, ugc: 30, edukasi: 20, promosi: 10 } as const;
 type LoonarsCategory = keyof typeof LOONARS_RATIO_TARGET;
 
@@ -873,7 +914,9 @@ export async function POST(request: Request) {
                       ? await processSalesClosingTipsBroadcast(job)
                       : job.job_type === "leasehold_competitor_comparison"
                         ? await processLeaseholdCompetitorComparison(supabase)
-                        : await processSocialWeeklyEvaluation(supabase);
+                        : job.job_type === "competitor_discovery"
+                          ? await processCompetitorDiscovery(supabase, job)
+                          : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

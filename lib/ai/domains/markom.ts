@@ -154,6 +154,62 @@ function focusResearchTopic(focus: ChecklistContentFocus): string {
     : "konten penjualan villa leasehold untuk calon INVESTOR (nilai investasi, ROI/yield, legalitas leasehold, urgensi unit terbatas)";
 }
 
+export interface DiscoveredCompetitor {
+  platform: "instagram" | "tiktok";
+  handle: string;
+  displayName: string | null;
+  reason: string;
+}
+
+export function parseDiscoveredCompetitorsJson(text: string): DiscoveredCompetitor[] {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed: unknown = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) throw new Error("Expected a JSON array of discovered competitors");
+  return parsed
+    .filter((item): item is { platform: string; handle: string; displayName?: unknown; reason?: unknown } => typeof item?.handle === "string" && (item?.platform === "instagram" || item?.platform === "tiktok"))
+    .map((item) => ({
+      platform: item.platform as "instagram" | "tiktok",
+      handle: item.handle.replace(/^@/, "").trim().slice(0, 100),
+      displayName: typeof item.displayName === "string" && item.displayName.trim().length > 0 ? item.displayName.trim().slice(0, 200) : null,
+      reason: typeof item.reason === "string" ? item.reason.trim().slice(0, 500) : "",
+    }))
+    .filter((item) => item.handle.length > 0)
+    .slice(0, 5);
+}
+
+function competitorDiscoveryTopic(focus: ChecklistContentFocus): string {
+  return focus === "occupancy"
+    ? "akun Instagram/TikTok villa/penginapan di Indonesia (terutama Jogja, Bali, dan destinasi wisata sejenis) yang MENYEWAKAN properti untuk wisatawan/tamu menginap -- murni akun booking/rental villa yang bersaing merebut tamu menginap, BUKAN akun jual-beli properti/investasi"
+    : "akun Instagram/TikTok yang menjual villa/properti leasehold untuk INVESTOR di Indonesia (terutama Bali, Jogja) -- akun yang memasarkan properti sebagai peluang investasi (ROI, yield, leasehold), BUKAN akun sewa harian untuk wisatawan";
+}
+
+/**
+ * Phase: AI finds its own reference competitors instead of waiting on a
+ * human to register them (0125) -- social_competitor_accounts had zero
+ * manual logs after weeks of the manual-entry feature existing. Grounded in
+ * Google Search so every handle returned is something the model actually
+ * found, not invented -- the prompt explicitly forbids guessing a username,
+ * and the caller (process-job/route.ts) skips anything already registered
+ * before inserting, so a rerun never creates duplicates.
+ */
+export async function discoverPropertyCompetitors(focus: ChecklistContentFocus): Promise<DiscoveredCompetitor[]> {
+  const systemPrompt = await getSystemPrompt("markom");
+  const topic = competitorDiscoveryTopic(focus);
+  const researchPrompt = `Riset lewat Google Search: cari 3-5 akun Instagram/TikTok NYATA (bukan mengarang) yang merupakan ${topic}. Prioritaskan akun yang benar-benar aktif (ada postingan dalam beberapa bulan terakhir) dan relevan untuk dijadikan pembanding konten kami.
+
+Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi maksimal 5 object:
+[{"platform": "instagram atau tiktok", "handle": "username tanpa @", "displayName": "nama akun jika ada, atau null", "reason": "1 kalimat kenapa akun ini relevan jadi pembanding"}]
+
+Jangan mengarang username -- kalau hasil pencarianmu tidak yakin akun itu benar-benar ada, jangan masukkan ke daftar.`;
+
+  const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 1536 });
+  return parseDiscoveredCompetitorsJson(response.text);
+}
+
 export async function researchAndGenerateChecklist(
   branchName: string,
   context?: ContentPlannerContext,

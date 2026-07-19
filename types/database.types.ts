@@ -1215,6 +1215,8 @@ export interface Database {
           display_name: string | null;
           notes: string | null;
           is_active: boolean;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          source: "manual" | "ai_discovered";
           created_by: string | null;
           created_at: string;
         };
@@ -1225,6 +1227,8 @@ export interface Database {
           display_name?: string | null;
           notes?: string | null;
           is_active?: boolean;
+          content_focus?: "leasehold_sales" | "occupancy" | "beauty";
+          source?: "manual" | "ai_discovered";
           created_by?: string | null;
           created_at?: string;
         };
@@ -1836,7 +1840,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -1848,7 +1852,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -2710,6 +2714,7 @@ export interface Database {
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };
       loonars_beauty_request_weekly_evaluation: { Args: Record<PropertyKey, never>; Returns: undefined };
       markom_request_leasehold_competitor_comparison: { Args: Record<PropertyKey, never>; Returns: undefined };
+      markom_request_competitor_discovery: { Args: { p_focus: string }; Returns: undefined };
       create_payroll_run: {
         Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
         Returns: string;

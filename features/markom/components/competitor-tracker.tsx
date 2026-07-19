@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Instagram, Loader2, Music2, Plus, Trash2 } from "lucide-react";
+import { Instagram, Loader2, Music2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
+import type { CompetitorFocus } from "@/repositories/social.repository";
 
 import {
   createCompetitorAccountAction,
@@ -28,16 +29,30 @@ import {
   deactivateCompetitorAccountAction,
   listCompetitorAccountsAction,
   listCompetitorContentLogsAction,
+  triggerCompetitorDiscoveryAction,
 } from "../actions/social.actions";
 
 const PLATFORM_ICON = { instagram: Instagram, tiktok: Music2 } as const;
 
-export function CompetitorTracker({ canManage }: { canManage: boolean }) {
+interface CompetitorTrackerProps {
+  focus: CompetitorFocus;
+  canManage: boolean;
+}
+
+/**
+ * Competitor list for ONE Content Planner tab (leasehold_sales/occupancy/
+ * beauty, 0125) -- AI discovery ("Cari Kompetitor Otomatis") is now the
+ * primary way this list fills up, running automatically every week; manual
+ * "Tambah Kompetitor" stays available as a human override/correction, not
+ * the main path anymore.
+ */
+export function CompetitorTracker({ focus, canManage }: CompetitorTrackerProps) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
   const [logTarget, setLogTarget] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [discovering, setDiscovering] = React.useState(false);
 
   const [newPlatform, setNewPlatform] = React.useState<"instagram" | "tiktok">("instagram");
   const [newHandle, setNewHandle] = React.useState("");
@@ -51,12 +66,27 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
   const [logHashtags, setLogHashtags] = React.useState("");
   const [logEngagement, setLogEngagement] = React.useState("");
 
-  const { data: competitors, isLoading } = useQuery({ queryKey: ["content-planner-competitors"], queryFn: listCompetitorAccountsAction });
-  const { data: recentLogs } = useQuery({ queryKey: ["content-planner-competitor-logs"], queryFn: () => listCompetitorContentLogsAction() });
+  const competitorsQueryKey = ["content-planner-competitors", focus];
+  const logsQueryKey = ["content-planner-competitor-logs", focus];
+
+  const { data: competitors, isLoading } = useQuery({ queryKey: competitorsQueryKey, queryFn: () => listCompetitorAccountsAction(focus) });
+  const { data: recentLogs } = useQuery({ queryKey: logsQueryKey, queryFn: () => listCompetitorContentLogsAction(focus) });
+
+  async function handleDiscover() {
+    setDiscovering(true);
+    const result = await triggerCompetitorDiscoveryAction(focus);
+    setDiscovering(false);
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal menjalankan pencarian kompetitor");
+      return;
+    }
+    toast.success("AI sedang mencari kompetitor, daftar akan diperbarui dalam beberapa saat");
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: competitorsQueryKey }), 8000);
+  }
 
   async function handleAddCompetitor() {
     setSubmitting(true);
-    const result = await createCompetitorAccountAction({ platform: newPlatform, handle: newHandle, displayName: newDisplayName || undefined });
+    const result = await createCompetitorAccountAction({ platform: newPlatform, handle: newHandle, displayName: newDisplayName || undefined, contentFocus: focus });
     setSubmitting(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal menambahkan kompetitor");
@@ -66,13 +96,13 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
     setNewHandle("");
     setNewDisplayName("");
     setAddOpen(false);
-    queryClient.invalidateQueries({ queryKey: ["content-planner-competitors"] });
+    queryClient.invalidateQueries({ queryKey: competitorsQueryKey });
   }
 
   async function handleDeleteCompetitor() {
     if (!deleteTarget) return;
     setSubmitting(true);
-    const result = await deactivateCompetitorAccountAction(deleteTarget);
+    const result = await deactivateCompetitorAccountAction(deleteTarget, focus);
     setSubmitting(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal menghapus kompetitor");
@@ -80,7 +110,7 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
     }
     toast.success("Kompetitor dihapus dari daftar pantauan");
     setDeleteTarget(null);
-    queryClient.invalidateQueries({ queryKey: ["content-planner-competitors"] });
+    queryClient.invalidateQueries({ queryKey: competitorsQueryKey });
   }
 
   async function handleAddLog() {
@@ -88,6 +118,7 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
     setSubmitting(true);
     const result = await createCompetitorContentLogAction({
       competitorAccountId: logTarget,
+      focus,
       contentUrl: logUrl || undefined,
       contentType: logType as "reel" | "video" | "photo" | "carousel" | "story" | "other",
       hook: logHook || undefined,
@@ -109,52 +140,62 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
     setLogCaption("");
     setLogHashtags("");
     setLogEngagement("");
-    queryClient.invalidateQueries({ queryKey: ["content-planner-competitor-logs"] });
+    queryClient.invalidateQueries({ queryKey: logsQueryKey });
   }
 
   const items = competitors ?? [];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">Kompetitor Dipantau</p>
         {canManage && (
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                <Plus className="h-3.5 w-3.5" /> Tambah Kompetitor
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tambah Kompetitor</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Select value={newPlatform} onValueChange={(v) => setNewPlatform(v as "instagram" | "tiktok")}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="tiktok">TikTok</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input placeholder="@handle" value={newHandle} onChange={(e) => setNewHandle(e.target.value)} />
-                <Input placeholder="Nama tampilan (opsional)" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} />
-              </div>
-              <DialogFooter>
-                <Button disabled={submitting || !newHandle} onClick={handleAddCompetitor}>
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Simpan
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={discovering} onClick={handleDiscover}>
+              {discovering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Cari Kompetitor Otomatis
+            </Button>
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Plus className="h-3.5 w-3.5" /> Tambah Manual
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Tambah Kompetitor</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <Select value={newPlatform} onValueChange={(v) => setNewPlatform(v as "instagram" | "tiktok")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="instagram">Instagram</SelectItem>
+                      <SelectItem value="tiktok">TikTok</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input placeholder="@handle" value={newHandle} onChange={(e) => setNewHandle(e.target.value)} />
+                  <Input placeholder="Nama tampilan (opsional)" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} />
+                </div>
+                <DialogFooter>
+                  <Button disabled={submitting || !newHandle} onClick={handleAddCompetitor}>
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Simpan
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         )}
       </div>
 
       {!isLoading && items.length === 0 && (
-        <EmptyState icon={Instagram} title="Belum ada kompetitor" description="Tambahkan akun kompetitor Instagram/TikTok untuk dipantau timMarkom." />
+        <EmptyState
+          icon={Instagram}
+          title="Belum ada kompetitor"
+          description='AI mencari otomatis tiap minggu, atau klik "Cari Kompetitor Otomatis" untuk hasil sekarang.'
+        />
       )}
 
       {items.length > 0 && (
@@ -169,9 +210,13 @@ export function CompetitorTracker({ canManage }: { canManage: boolean }) {
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <p className="text-sm font-medium">@{c.handle}</p>
                     </div>
-                    <Badge variant="secondary">{c.platform}</Badge>
+                    <div className="flex gap-1">
+                      {c.source === "ai_discovered" && <Badge variant="outline">AI</Badge>}
+                      <Badge variant="secondary">{c.platform}</Badge>
+                    </div>
                   </div>
                   {c.display_name && <p className="text-xs text-muted-foreground">{c.display_name}</p>}
+                  {c.notes && <p className="text-xs text-muted-foreground">{c.notes}</p>}
                   {canManage && (
                     <div className="flex gap-2 pt-1">
                       <Button size="sm" variant="outline" onClick={() => setLogTarget(c.id)}>

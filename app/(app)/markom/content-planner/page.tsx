@@ -64,11 +64,12 @@ export default async function ContentPlannerPage() {
 
         <TabsContent value="leasehold_sales" className="space-y-6">
           <CompetitorComparisonCard canManage={canManage} />
-          <CompetitorTracker canManage={canManage} />
+          <CompetitorTracker focus="leasehold_sales" canManage={canManage} />
           <TeamChecklistSection focus="leasehold_sales" title="Checklist Konten Leasehold" />
         </TabsContent>
 
         <TabsContent value="occupancy" className="space-y-6">
+          <CompetitorTracker focus="occupancy" canManage={canManage} />
           <TeamChecklistSection focus="occupancy" title="Checklist Konten Occupancy" />
         </TabsContent>
 
@@ -76,6 +77,7 @@ export default async function ContentPlannerPage() {
           <TabsContent value="beauty" className="space-y-6">
             <ContentRatioSummary />
             <RetargetingAlerts />
+            <CompetitorTracker focus="beauty" canManage={canManageBeauty} />
             <ContentBoard canManage={canManageBeauty} />
             <p className="text-xs text-muted-foreground">
               Data order & performa detail Loonars Beauty ada di{" "}
