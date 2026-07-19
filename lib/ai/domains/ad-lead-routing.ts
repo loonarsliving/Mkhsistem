@@ -11,7 +11,9 @@ export type AdLeadRoutingOutcome =
   | "no_sales_available"
   | "insert_failed"
   | "new_prospect_routed"
-  | "existing_prospect_notified";
+  | "existing_prospect_notified"
+  | "freelance_new_lead_routed"
+  | "freelance_existing_lead_notified";
 
 export interface AdLeadRoutingResult {
   outcome: AdLeadRoutingOutcome;
@@ -56,6 +58,16 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
 
   const project = campaign.project as { name?: string; city?: string; project_type?: string } | null;
   const senderDigits = digitsOnly(sender);
+  const projectLabel = project?.name ? ` (${project.name})` : "";
+  const adSourceLabel = campaign.headline || campaign.name || "-";
+  // No explicit timeZone meant this rendered in the server's runtime zone
+  // (UTC on Vercel) instead of Indonesia local time -- a lead that came in
+  // at, say, 14:00 WITA showed up in the WhatsApp notification as "06:00",
+  // 7-8 hours off depending on region. WITA (Asia/Makassar, UTC+8) matches
+  // the reference zone the rest of the codebase already uses for
+  // company-wide scheduling (see app/api/crm/dispatch-promo-sends/route.ts's
+  // witaHour), not a per-branch WIB/WITA split.
+  const enteredAtLabel = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Makassar" });
 
   const { data: existing } = await supabase
     .from("prospects")
@@ -64,68 +76,110 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
     .is("deleted_at", null)
     .maybeSingle();
 
-  let prospectId: string;
-  let salesId: string;
-  let outcome: AdLeadRoutingOutcome;
-
   if (existing) {
-    prospectId = existing.id;
-    salesId = existing.sales_id;
-    outcome = "existing_prospect_notified";
-  } else {
-    const { data: pickedSalesId } = await supabase.rpc("crm_pick_round_robin_sales", { p_branch_id: campaign.branch_id });
-    if (!pickedSalesId) {
-      logger.info("routeAdDrivenLead: no active sales in branch", { branchId: campaign.branch_id });
-      return { outcome: "no_sales_available" };
+    const salesId = existing.sales_id;
+    const { data: salesEmployee } = await supabase.from("employees").select("phone").eq("id", salesId).maybeSingle();
+    if (salesEmployee?.phone) {
+      const notifyText = `Lead lama klik iklan lagi${projectLabel} -- tanda minat masih ada.\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera follow up.`;
+      const sendResult = await sendWhatsAppText(salesEmployee.phone, notifyText);
+      if (!sendResult.success) logger.error("routeAdDrivenLead: WA notify to sales failed", { salesId, error: sendResult.error });
+    } else {
+      logger.error("routeAdDrivenLead: assigned sales has no phone on file", { salesId });
     }
 
-    const { data: inserted, error } = await supabase
-      .from("prospects")
-      .insert({
-        customer_name: senderName || "Lead dari Iklan",
-        phone: sender,
-        project_id: campaign.project_id,
-        house_type: (project?.project_type && PROJECT_TYPE_HOUSE_TYPE_LABEL[project.project_type]) || "Belum diketahui",
-        city: project?.city || "-",
-        lead_source: "facebook_ads",
-        notes: `Lead otomatis dari klik iklan "${campaign.headline || campaign.name}".`,
-        sales_id: pickedSalesId as string,
-        branch_id: campaign.branch_id,
-      })
-      .select("id")
-      .single();
+    await supabase.from("mkc_notifications").insert({
+      user_id: salesId,
+      type: "crm",
+      category: "new_ad_lead",
+      title: "Lead lama klik iklan lagi",
+      body: `${senderName || "Lead"} (${sender}) klik iklan${project?.name ? ` ${project.name}` : ""} -- segera follow up.`,
+      link: `/crm/${existing.id}`,
+    });
 
-    if (error || !inserted) {
-      logger.error("routeAdDrivenLead: prospect insert failed", { error: error?.message, sender });
-      return { outcome: "insert_failed" };
-    }
-
-    prospectId = inserted.id;
-    salesId = pickedSalesId as string;
-    outcome = "new_prospect_routed";
+    return { outcome: "existing_prospect_notified", prospectId: existing.id };
   }
 
-  const { data: salesEmployee } = await supabase.from("employees").select("full_name, phone").eq("id", salesId).maybeSingle();
+  // A repeat click from a lead already delivered to a freelancer (0136) --
+  // re-notify the SAME freelancer instead of running the fairness pick
+  // again, mirroring the internal "existing prospect" branch above. No
+  // prospects row exists for these (freelancers never touch the CRM), so
+  // this can't be caught by the lookup above.
+  const { data: priorDelivery } = await supabase
+    .from("freelance_lead_deliveries")
+    .select("recipient_id, freelance_lead_recipients(full_name, phone)")
+    .eq("phone_normalized", senderDigits)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (salesEmployee?.phone) {
-    const projectLabel = project?.name ? ` (${project.name})` : "";
-    const adSourceLabel = campaign.headline || campaign.name || "-";
-    // No explicit timeZone meant this rendered in the server's runtime zone
-    // (UTC on Vercel) instead of Indonesia local time -- a lead that came in
-    // at, say, 14:00 WITA showed up in the WhatsApp notification as "06:00",
-    // 7-8 hours off depending on region. WITA (Asia/Makassar, UTC+8) matches
-    // the reference zone the rest of the codebase already uses for
-    // company-wide scheduling (see app/api/crm/dispatch-promo-sends/route.ts's
-    // witaHour), not a per-branch WIB/WITA split.
-    const enteredAtLabel = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Makassar" });
-    const notifyText =
-      outcome === "new_prospect_routed"
-        ? `Lead baru dari iklan${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera hubungi sebelum lead ini dingin.`
-        : `Lead lama klik iklan lagi${projectLabel} -- tanda minat masih ada.\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera follow up.`;
-    const sendResult = await sendWhatsAppText(salesEmployee.phone, notifyText);
-    if (!sendResult.success) {
-      logger.error("routeAdDrivenLead: WA notify to sales failed", { salesId, error: sendResult.error });
+  if (priorDelivery) {
+    const recipient = priorDelivery.freelance_lead_recipients as unknown as { full_name: string; phone: string } | null;
+    if (recipient?.phone) {
+      const notifyText = `Lead lama klik iklan lagi${projectLabel} -- tanda minat masih ada.\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera follow up.`;
+      const sendResult = await sendWhatsAppText(recipient.phone, notifyText);
+      if (!sendResult.success) logger.error("routeAdDrivenLead: WA notify to freelance failed", { recipientId: priorDelivery.recipient_id, error: sendResult.error });
     }
+    return { outcome: "freelance_existing_lead_notified" };
+  }
+
+  const { data: picked } = await supabase
+    .rpc("crm_pick_round_robin_sales_or_freelance", { p_branch_id: campaign.branch_id, p_project_id: campaign.project_id })
+    .maybeSingle();
+
+  if (!picked) {
+    logger.info("routeAdDrivenLead: no active sales or freelance recipient in branch", { branchId: campaign.branch_id });
+    return { outcome: "no_sales_available" };
+  }
+
+  if (picked.recipient_type === "freelance") {
+    if (picked.phone) {
+      const notifyText = `Lead baru${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera hubungi sebelum lead ini dingin.`;
+      const sendResult = await sendWhatsAppText(picked.phone, notifyText);
+      if (!sendResult.success) logger.error("routeAdDrivenLead: WA notify to freelance failed", { recipientId: picked.recipient_id, error: sendResult.error });
+    } else {
+      logger.error("routeAdDrivenLead: picked freelance recipient has no phone on file", { recipientId: picked.recipient_id });
+    }
+
+    await supabase.from("freelance_lead_deliveries").insert({
+      recipient_id: picked.recipient_id,
+      customer_name: senderName || "Lead dari Iklan",
+      phone: sender,
+      campaign_id: campaign.id,
+    });
+    await supabase.from("freelance_lead_recipients").update({ last_lead_sent_at: new Date().toISOString() }).eq("id", picked.recipient_id);
+
+    return { outcome: "freelance_new_lead_routed" };
+  }
+
+  const salesId = picked.recipient_id;
+
+  const { data: inserted, error } = await supabase
+    .from("prospects")
+    .insert({
+      customer_name: senderName || "Lead dari Iklan",
+      phone: sender,
+      project_id: campaign.project_id,
+      house_type: (project?.project_type && PROJECT_TYPE_HOUSE_TYPE_LABEL[project.project_type]) || "Belum diketahui",
+      city: project?.city || "-",
+      lead_source: "facebook_ads",
+      notes: `Lead otomatis dari klik iklan "${campaign.headline || campaign.name}".`,
+      sales_id: salesId,
+      branch_id: campaign.branch_id,
+    })
+    .select("id")
+    .single();
+
+  if (error || !inserted) {
+    logger.error("routeAdDrivenLead: prospect insert failed", { error: error?.message, sender });
+    return { outcome: "insert_failed" };
+  }
+
+  const prospectId = inserted.id;
+
+  if (picked.phone) {
+    const notifyText = `Lead baru dari iklan${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera hubungi sebelum lead ini dingin.`;
+    const sendResult = await sendWhatsAppText(picked.phone, notifyText);
+    if (!sendResult.success) logger.error("routeAdDrivenLead: WA notify to sales failed", { salesId, error: sendResult.error });
   } else {
     logger.error("routeAdDrivenLead: assigned sales has no phone on file", { salesId });
   }
@@ -134,12 +188,12 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
     user_id: salesId,
     type: "crm",
     category: "new_ad_lead",
-    title: outcome === "new_prospect_routed" ? "Lead baru dari iklan" : "Lead lama klik iklan lagi",
+    title: "Lead baru dari iklan",
     body: `${senderName || "Lead"} (${sender}) klik iklan${project?.name ? ` ${project.name}` : ""} -- segera follow up.`,
     link: `/crm/${prospectId}`,
   });
 
-  return { outcome, prospectId };
+  return { outcome: "new_prospect_routed", prospectId };
 }
 
 export type AdLeadFollowUpConfirmOutcome = "not_a_confirm_command" | "confirmed" | "not_found" | "ambiguous";

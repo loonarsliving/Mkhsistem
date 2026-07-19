@@ -1125,6 +1125,81 @@ export interface Database {
           },
         ];
       };
+      freelance_lead_recipients: {
+        Row: {
+          id: string;
+          full_name: string;
+          phone: string;
+          branch_id: string;
+          project_id: string | null;
+          active: boolean;
+          last_lead_sent_at: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          phone: string;
+          branch_id: string;
+          project_id?: string | null;
+          active?: boolean;
+          last_lead_sent_at?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["freelance_lead_recipients"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "freelance_lead_recipients_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "freelance_lead_recipients_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      freelance_lead_deliveries: {
+        Row: {
+          id: string;
+          recipient_id: string;
+          customer_name: string | null;
+          phone: string;
+          phone_normalized: string;
+          campaign_id: string | null;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipient_id: string;
+          customer_name?: string | null;
+          phone: string;
+          campaign_id?: string | null;
+          sent_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["freelance_lead_deliveries"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "freelance_lead_deliveries_recipient_id_fkey";
+            columns: ["recipient_id"];
+            referencedRelation: "freelance_lead_recipients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "freelance_lead_deliveries_campaign_id_fkey";
+            columns: ["campaign_id"];
+            referencedRelation: "meta_ad_campaigns";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       meta_ads_balance_state: {
         Row: {
           id: string;
@@ -2799,6 +2874,10 @@ export interface Database {
       crm_set_prospect_green: { Args: { p_prospect_id: string }; Returns: undefined };
       crm_pick_round_robin_sales: { Args: { p_branch_id: string }; Returns: string | null };
       crm_pick_round_robin_sales_excluding: { Args: { p_branch_id: string; p_exclude_sales_id: string }; Returns: string | null };
+      crm_pick_round_robin_sales_or_freelance: {
+        Args: { p_branch_id: string; p_project_id: string | null };
+        Returns: { recipient_type: string; recipient_id: string; full_name: string; phone: string | null }[];
+      };
       crm_record_payment: {
         Args: {
           p_prospect_id: string;
