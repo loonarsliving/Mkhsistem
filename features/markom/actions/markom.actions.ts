@@ -35,6 +35,7 @@ export async function assignChecklistAction(input: AssignChecklistInput): Promis
       title: item.title,
       description: item.description ?? null,
       due_date: item.dueDate || null,
+      content_focus: parsed.data.contentFocus,
     })),
   });
 

@@ -93,6 +93,7 @@ export type PaymentStatusDb = "pending" | "approved" | "rejected";
 export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
 export type CrmProjectStatusDb = "planning" | "selling" | "completed";
 export type KpiTaskStatusDb = "pending" | "completed" | "rejected";
+export type KpiTaskContentFocusDb = "leasehold_sales" | "occupancy" | "general";
 export type KpiRankingScopeDb = "weekly" | "monthly";
 
 export interface Database {
@@ -2326,6 +2327,7 @@ export interface Database {
           period_week: number;
           due_date: string | null;
           status: KpiTaskStatusDb;
+          content_focus: KpiTaskContentFocusDb;
           completed_at: string | null;
           verified_by: string | null;
           notes: string | null;
@@ -2350,6 +2352,7 @@ export interface Database {
           period_week: number;
           due_date?: string | null;
           status?: KpiTaskStatusDb;
+          content_focus?: KpiTaskContentFocusDb;
           completed_at?: string | null;
           verified_by?: string | null;
           notes?: string | null;

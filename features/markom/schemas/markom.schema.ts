@@ -6,11 +6,15 @@ const checklistItemSchema = z.object({
   dueDate: z.string().optional(),
 });
 
+/** "general" (default) = not tied to a specific Content Planner product tab -- most manually-assigned Markom tasks (e.g. "Rapat mingguan"). Pick leasehold_sales/occupancy only for a hand-written content task that should also surface on that Content Planner tab. */
+export const CONTENT_FOCUS_OPTIONS = ["general", "leasehold_sales", "occupancy"] as const;
+
 export const assignChecklistSchema = z.object({
   branchId: z.string().uuid("Cabang wajib dipilih"),
   periodYear: z.coerce.number().int().min(2020).max(2100),
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodWeek: z.coerce.number().int().min(1).max(5),
+  contentFocus: z.enum(CONTENT_FOCUS_OPTIONS).default("general"),
   items: z.array(checklistItemSchema).min(1, "Minimal 1 task diperlukan"),
 });
 export type AssignChecklistInput = z.infer<typeof assignChecklistSchema>;

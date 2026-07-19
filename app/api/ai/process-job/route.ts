@@ -255,6 +255,7 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
     branch_id: payload.branch_id,
     title: item.title,
     description: `${item.description}\n\n${CHECKLIST_AI_MARKER[focus]}`,
+    content_focus: focus,
     period_year: now.getFullYear(),
     period_month: now.getMonth() + 1,
     period_week: currentPeriodWeek(now),

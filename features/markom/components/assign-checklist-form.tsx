@@ -17,7 +17,13 @@ import { listBranchesAction } from "@/features/branches/actions/branch-query.act
 
 import { assignChecklistAction } from "../actions/markom.actions";
 import { listMarkomEmployeesAction } from "../actions/markom-query.actions";
-import { assignChecklistSchema, type AssignChecklistInput } from "../schemas/markom.schema";
+import { assignChecklistSchema, CONTENT_FOCUS_OPTIONS, type AssignChecklistInput } from "../schemas/markom.schema";
+
+const CONTENT_FOCUS_LABEL: Record<(typeof CONTENT_FOCUS_OPTIONS)[number], string> = {
+  general: "Umum (bukan konten IG/TikTok spesifik)",
+  leasehold_sales: "Leasehold -- konten Content Planner",
+  occupancy: "Occupancy -- konten Content Planner",
+};
 
 const MONTH_LABEL = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -58,6 +64,7 @@ export function AssignChecklistForm({ canPickBranch, defaultBranchId }: AssignCh
       periodYear: now.getFullYear(),
       periodMonth: now.getMonth() + 1,
       periodWeek: 1,
+      contentFocus: "general",
       items: [{ title: "", description: "", dueDate: "" }],
     },
   });
@@ -83,6 +90,7 @@ export function AssignChecklistForm({ canPickBranch, defaultBranchId }: AssignCh
       periodYear: values.periodYear,
       periodMonth: values.periodMonth,
       periodWeek: values.periodWeek,
+      contentFocus: values.contentFocus,
       items: [{ title: "", description: "", dueDate: "" }],
     });
     queryClient.invalidateQueries({ queryKey: ["markom-team-tasks"] });
@@ -185,6 +193,31 @@ export function AssignChecklistForm({ canPickBranch, defaultBranchId }: AssignCh
                 )}
               />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Fokus Konten (opsional)</Label>
+            <Controller
+              control={control}
+              name="contentFocus"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTENT_FOCUS_OPTIONS.map((focus) => (
+                      <SelectItem key={focus} value={focus}>
+                        {CONTENT_FOCUS_LABEL[focus]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Pilih Leasehold/Occupancy agar task ini juga muncul di tab terkait pada Content Planner.
+            </p>
           </div>
 
           <div className="space-y-3">

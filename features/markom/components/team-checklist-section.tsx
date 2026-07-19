@@ -40,6 +40,12 @@ interface KpiTaskRow {
   verifier: { full_name: string } | null;
 }
 
+interface TeamChecklistSectionProps {
+  /** Filters to one Content Planner product tab (leasehold_sales/occupancy) instead of every task -- omitted on /markom, which still shows the team's whole checklist undifferentiated. */
+  focus?: "leasehold_sales" | "occupancy";
+  title?: string;
+}
+
 /**
  * A team member's own view of their team's shared checklist. Any member of
  * the task's team can check off a still-pending task themselves
@@ -47,7 +53,7 @@ interface KpiTaskRow {
  * Revision review (TaskReviewBoard) is for a different concern (correcting
  * a wrongly-completed task) and is untouched by this.
  */
-export function TeamChecklistSection() {
+export function TeamChecklistSection({ focus, title }: TeamChecklistSectionProps = {}) {
   const now = new Date();
   const [month] = React.useState(now.getMonth() + 1);
   const [year] = React.useState(now.getFullYear());
@@ -64,12 +70,13 @@ export function TeamChecklistSection() {
   });
 
   const { data: tasks, isLoading } = useQuery({
-    queryKey: ["markom-team-tasks", month, year, week],
+    queryKey: ["markom-team-tasks", month, year, week, focus],
     queryFn: () =>
       listKpiTasksAction({
         periodYear: year,
         periodMonth: month,
         periodWeek: week === "all" ? undefined : week,
+        contentFocus: focus,
       }) as Promise<KpiTaskRow[]>,
   });
 
@@ -109,12 +116,24 @@ export function TeamChecklistSection() {
   const items = tasks ?? [];
   const currentWeek = stats?.current_week ?? 1;
   const teamMembers = (stats?.team_members as unknown as { employee_id: string; full_name: string }[] | null) ?? [];
-  const achievement = week === "all" ? stats?.monthly_achievement_percent ?? 0 : stats?.weekly_achievement_percent ?? 0;
+
+  // stats (kpi_team_stats) counts the whole team's checklist, not any one
+  // Content Planner tab -- when focus is set, the 4 numbers below must come
+  // from the already-focus-filtered items instead, or they'd overcount.
+  const focusedTotal = items.length;
+  const focusedCompleted = items.filter((t) => t.status === "completed").length;
+  const focusedRemaining = items.filter((t) => t.status === "pending").length;
+  const focusedAchievement = focusedTotal > 0 ? Math.round((focusedCompleted / focusedTotal) * 100) : 0;
+
+  const totalTasks = focus ? focusedTotal : week === "all" ? stats?.monthly_total ?? 0 : stats?.weekly_total ?? 0;
+  const completedTasks = focus ? focusedCompleted : week === "all" ? stats?.monthly_completed ?? 0 : stats?.weekly_completed ?? 0;
+  const remainingTasks = focus ? focusedRemaining : week === "all" ? stats?.monthly_remaining ?? 0 : stats?.weekly_remaining ?? 0;
+  const achievement = focus ? focusedAchievement : week === "all" ? stats?.monthly_achievement_percent ?? 0 : stats?.weekly_achievement_percent ?? 0;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">{stats ? `Tim Markom — ${stats.branch_name}` : "Checklist Tim Markom"}</CardTitle>
+        <CardTitle className="text-base">{title ?? (stats ? `Tim Markom — ${stats.branch_name}` : "Checklist Tim Markom")}</CardTitle>
         <Select value={String(week)} onValueChange={(v) => setWeek(v === "all" ? "all" : Number(v))}>
           <SelectTrigger className="w-40">
             <SelectValue />
@@ -137,18 +156,13 @@ export function TeamChecklistSection() {
               {teamMembers.length > 0 ? teamMembers.map((m) => m.full_name).join(", ") : "Belum ada anggota tim aktif."}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile icon={ClipboardList} label="Total Tasks" value={String(week === "all" ? stats.monthly_total : stats.weekly_total)} />
-              <StatTile
-                icon={CheckCircle2}
-                label="Completed Tasks"
-                value={String(week === "all" ? stats.monthly_completed : stats.weekly_completed)}
-                tone="success"
-              />
+              <StatTile icon={ClipboardList} label="Total Tasks" value={String(totalTasks)} />
+              <StatTile icon={CheckCircle2} label="Completed Tasks" value={String(completedTasks)} tone="success" />
               <StatTile
                 icon={AlarmClock}
                 label="Remaining Tasks"
-                value={String(week === "all" ? stats.monthly_remaining : stats.weekly_remaining)}
-                tone={(week === "all" ? stats.monthly_remaining : stats.weekly_remaining) > 0 ? "warning" : "default"}
+                value={String(remainingTasks)}
+                tone={remainingTasks > 0 ? "warning" : "default"}
               />
               <StatTile icon={Percent} label={week === "all" ? "Monthly Achievement" : "Weekly Achievement"} value={`${achievement}%`} tone="success" />
             </div>

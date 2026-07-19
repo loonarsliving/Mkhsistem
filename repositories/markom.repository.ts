@@ -26,6 +26,7 @@ export interface KpiTaskListFilters {
   periodMonth: number;
   periodWeek?: number;
   status?: "pending" | "completed" | "rejected";
+  contentFocus?: "leasehold_sales" | "occupancy" | "general";
 }
 
 /** Checklist rows for a given team/branch, newest first -- team-based, no per-assignee filter. RLS enforces who can see what. */
@@ -41,6 +42,7 @@ export async function listKpiTasks(supabase: TypedSupabaseClient, filters: KpiTa
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.periodWeek) query = query.eq("period_week", filters.periodWeek);
   if (filters.status) query = query.eq("status", filters.status);
+  if (filters.contentFocus) query = query.eq("content_focus", filters.contentFocus);
 
   const { data, error } = await query;
   if (error) throw error;
