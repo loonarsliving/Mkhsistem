@@ -311,3 +311,97 @@ export async function tryReassignAdLeadFollowUp(
     newSalesName: newSales?.full_name ?? undefined,
   };
 }
+
+export type AdLeadBulkReassignOutcome = "not_a_bulk_reassign_command" | "reassigned" | "sales_not_found" | "sales_ambiguous" | "no_leads_to_reassign" | "no_other_sales";
+
+export interface AdLeadBulkReassignResult {
+  outcome: AdLeadBulkReassignOutcome;
+  sourceSalesName?: string;
+  candidateNames?: string[];
+  reassignedCount?: number;
+}
+
+const BULK_REASSIGN_PATTERN = /\blempar\s+semua\s+(.+)/i;
+
+/**
+ * Lets a Kepala Cabang reassign EVERY currently-unfollowed ad lead belonging
+ * to one named sales rep in their branch at once, by replying "LEMPAR SEMUA
+ * <nama sales>" -- the exact instruction sent by
+ * crm_run_sales_conduct_monitoring (0120) when a sales rep has 5+ leads
+ * sitting completely unfollowed for 2+ hours. Deliberately leaves the
+ * decision with Kepala Cabang (owner's explicit instruction) -- the
+ * monitoring function only warns and informs, never reassigns on its own.
+ * Each new sales rep gets ONE consolidated WhatsApp message listing every
+ * lead (name + phone) handed to them, not one message per lead.
+ */
+export async function tryBulkReassignAdLeadFollowUp(kepalaCabangId: string, branchId: string, messageText: string): Promise<AdLeadBulkReassignResult> {
+  const match = messageText.match(BULK_REASSIGN_PATTERN);
+  if (!match) return { outcome: "not_a_bulk_reassign_command" };
+
+  const namedSales = match[1].trim();
+  if (!namedSales) return { outcome: "not_a_bulk_reassign_command" };
+
+  const supabase = createAdminClient();
+  const { data: branchSalesRaw } = await supabase
+    .from("employees")
+    .select("id, full_name, roles:role_id(key)")
+    .eq("branch_id", branchId)
+    .is("deleted_at", null)
+    .eq("employment_status", "active");
+
+  const salesEmployees = (branchSalesRaw ?? [])
+    .filter((e) => (e.roles as unknown as { key: string } | null)?.key === "sales")
+    .map((e) => ({ id: e.id, full_name: e.full_name }));
+
+  const needle = namedSales.toLowerCase();
+  const matches = salesEmployees.filter(
+    (e) => e.full_name.toLowerCase().includes(needle) || needle.split(/\s+/).some((word) => word.length >= 3 && e.full_name.toLowerCase().includes(word)),
+  );
+  if (matches.length === 0) return { outcome: "sales_not_found" };
+  if (matches.length > 1) return { outcome: "sales_ambiguous", candidateNames: matches.map((m) => m.full_name) };
+
+  const sourceSales = matches[0];
+
+  const { data: leads } = await supabase
+    .from("prospects")
+    .select("id, customer_name, phone")
+    .eq("sales_id", sourceSales.id)
+    .eq("branch_id", branchId)
+    .eq("lead_source", "facebook_ads")
+    .is("created_by", null)
+    .is("deleted_at", null)
+    .is("last_follow_up_at", null)
+    .not("status", "in", "(closing,inactive)");
+
+  if (!leads || leads.length === 0) return { outcome: "no_leads_to_reassign", sourceSalesName: sourceSales.full_name };
+
+  const assignments = new Map<string, { customerName: string | null; phone: string | null }[]>();
+
+  for (const lead of leads) {
+    const { data: targetSalesId } = await supabase.rpc("crm_pick_round_robin_sales_excluding", {
+      p_branch_id: branchId,
+      p_exclude_sales_id: sourceSales.id,
+    });
+    if (!targetSalesId) return { outcome: "no_other_sales", sourceSalesName: sourceSales.full_name };
+
+    await supabase.from("prospects").update({ sales_id: targetSalesId as string, updated_by: kepalaCabangId }).eq("id", lead.id);
+
+    const existing = assignments.get(targetSalesId as string) ?? [];
+    existing.push({ customerName: lead.customer_name, phone: lead.phone });
+    assignments.set(targetSalesId as string, existing);
+  }
+
+  for (const [targetSalesId, leadList] of assignments) {
+    const { data: targetSales } = await supabase.from("employees").select("full_name, phone").eq("id", targetSalesId).maybeSingle();
+    if (!targetSales?.phone) continue;
+
+    const leadLines = leadList.map((l) => `- ${l.customerName ?? "-"} (${l.phone ?? "-"})`).join("\n");
+    const notifyText = `${leadList.length} lead dialihkan ke Anda oleh Kepala Cabang dari sales lain yang tidak responsif. Segera follow up:\n${leadLines}`;
+    const sendResult = await sendWhatsAppText(targetSales.phone, notifyText);
+    if (!sendResult.success) {
+      logger.error("tryBulkReassignAdLeadFollowUp: WA notify to new sales failed", { targetSalesId, error: sendResult.error });
+    }
+  }
+
+  return { outcome: "reassigned", sourceSalesName: sourceSales.full_name, reassignedCount: leads.length };
+}

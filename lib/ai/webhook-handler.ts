@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
-import { routeAdDrivenLead, tryConfirmAdLeadFollowUp, tryReassignAdLeadFollowUp } from "./domains/ad-lead-routing";
+import { routeAdDrivenLead, tryBulkReassignAdLeadFollowUp, tryConfirmAdLeadFollowUp, tryReassignAdLeadFollowUp } from "./domains/ad-lead-routing";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -169,6 +169,33 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       const roleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${roleKey ?? "null"}`);
       if (roleKey === "kepala_cabang" && employee.branch_id) {
+        // "LEMPAR SEMUA <nama sales>" -- bulk-reassigns every unfollowed lead
+        // belonging to one sales rep at once (crm_run_sales_conduct_monitoring,
+        // 0120, sends this exact instruction when a sales rep has 5+ leads
+        // sitting untouched for 2+ hours). Must run before the single-lead
+        // "LEMPAR <digit>" check below since both share the "lempar" keyword.
+        trace.push("tryBulkReassignAdLeadFollowUp:calling");
+        const bulkReassignResult = await tryBulkReassignAdLeadFollowUp(employee.id, employee.branch_id, inbound.content.text);
+        trace.push(`tryBulkReassignAdLeadFollowUp:${bulkReassignResult.outcome}`);
+        if (bulkReassignResult.outcome !== "not_a_bulk_reassign_command") {
+          const replyText =
+            bulkReassignResult.outcome === "reassigned"
+              ? `✅ ${bulkReassignResult.reassignedCount} lead dari ${bulkReassignResult.sourceSalesName ?? "sales tersebut"} sudah dialihkan ke sales lain di cabang Anda.`
+              : bulkReassignResult.outcome === "sales_not_found"
+                ? "Nama sales itu tidak ditemukan di cabang Anda. Cek lagi ejaannya."
+                : bulkReassignResult.outcome === "sales_ambiguous"
+                  ? `Ada lebih dari satu sales yang cocok: ${bulkReassignResult.candidateNames?.join(", ")} -- sebutkan nama lengkap.`
+                  : bulkReassignResult.outcome === "no_leads_to_reassign"
+                    ? `${bulkReassignResult.sourceSalesName ?? "Sales itu"} tidak punya lead yang belum di-follow up saat ini.`
+                    : "Tidak ada Sales lain yang aktif di cabang Anda untuk menerima lead-lead ini.";
+          trace.push("sendWhatsAppText:calling(bulk-reassign)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         trace.push("tryReassignAdLeadFollowUp:calling");
         const reassignResult = await tryReassignAdLeadFollowUp(employee.id, employee.branch_id, inbound.content.text);
         trace.push(`tryReassignAdLeadFollowUp:${reassignResult.outcome}`);
