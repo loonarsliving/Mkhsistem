@@ -72,3 +72,15 @@ export async function listWeeklyEvaluations(supabase: TypedSupabaseClient, limit
   if (error) throw error;
   return data ?? [];
 }
+
+/** Phase 2 (0124): our content vs registered leasehold competitors, newest first. */
+export async function getLatestLeaseholdCompetitorComparison(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase
+    .from("social_leasehold_competitor_comparisons")
+    .select("*")
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

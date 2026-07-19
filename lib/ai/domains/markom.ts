@@ -78,9 +78,11 @@ export interface ContentPlannerContext {
   competitorNotes?: string[];
   /** Registered competitors (social_competitor_accounts) with no manual log yet, or that should be re-checked -- AI searches for their public activity itself instead of waiting on a manual log to exist. TikTok's official API is effectively unobtainable for a business this size, so "TikTok data" here always means Google-searched public information, never a direct API pull. */
   competitorHandles?: { platform: "instagram" | "tiktok"; handle: string }[];
+  /** Latest leasehold-vs-competitor comparison (0124) -- leasehold_sales-only, never surfaced for occupancy/beauty checklists (different competitors, different angle). See compareLeaseholdCompetitorContent below. */
+  competitorComparison?: { gaps: string[]; recommendations: string[] } | null;
 }
 
-function buildContentPlannerContextBlock(context?: ContentPlannerContext): string {
+function buildContentPlannerContextBlock(context: ContentPlannerContext | undefined, focus: ChecklistContentFocus): string {
   const lines: string[] = [];
   if (context?.instagram) {
     const ig = context.instagram;
@@ -108,6 +110,15 @@ function buildContentPlannerContextBlock(context?: ContentPlannerContext): strin
     const handleList = context.competitorHandles.map((c) => `@${c.handle} (${c.platform})`).join(", ");
     lines.push(
       `Kompetitor yang perlu dicari aktivitas publiknya lewat Google Search (TikTok tidak punya API publik yang bisa kami akses, jadi cari info publik yang ter-index Google -- video/postingan yang sedang ramai, hashtag yang dipakai, gaya konten): ${handleList}.`,
+    );
+  }
+  // leasehold_sales only -- occupancy/beauty compete against a different set of accounts entirely, this analysis would mislead them.
+  if (focus === "leasehold_sales" && (context?.competitorComparison?.gaps.length || context?.competitorComparison?.recommendations.length)) {
+    const cc = context.competitorComparison!;
+    lines.push(
+      `Hasil analisa perbandingan AI vs konten kompetitor leasehold minggu ini (WAJIB dipertimbangkan, bukan basa-basi):\n` +
+        (cc.gaps.length ? `Kesenjangan (hal yang kompetitor lakukan tapi kami belum): ${cc.gaps.join("; ")}\n` : "") +
+        (cc.recommendations.length ? `Rekomendasi dari analisa itu: ${cc.recommendations.join("; ")}` : ""),
     );
   }
   return lines.length > 0 ? `\n\nData performa & kompetitor kami saat ini:\n${lines.join("\n")}` : "";
@@ -149,7 +160,7 @@ export async function researchAndGenerateChecklist(
   focus: ChecklistContentFocus = "leasehold_sales",
 ): Promise<MarkomChecklistItem[]> {
   const systemPrompt = await getSystemPrompt("markom");
-  const contextBlock = buildContentPlannerContextBlock(context);
+  const contextBlock = buildContentPlannerContextBlock(context, focus);
   const topic = focusResearchTopic(focus);
   const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram, cari data publik yang ter-index Google karena tidak ada akses API resmi TikTok) yang cocok dijadikan ${topic}, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada) -- cari konten/postingan terbaru mereka yang bisa ditemukan lewat pencarian publik.${contextBlock}
 
@@ -332,6 +343,116 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
 
   const response = await generateAIText({ systemPrompt: await getSystemPrompt("markom"), userPrompt, maxOutputTokens: 2048 });
   return parseWeeklyContentAuditJson(response.text);
+}
+
+export interface CompetitorComparisonPost {
+  caption: string | null;
+  mediaType: string;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  permalink: string | null;
+}
+
+export interface CompetitorComparisonInput {
+  /** Recent posts on our own account (Zernio or Meta Graph API, see getRecentZernioMediaPerformance/getRecentInstagramMediaPerformance) -- this is the account's whole recent output, not filtered to leasehold-only, since neither platform lets us tag a post by content_focus after the fact. The prompt is told this explicitly so it reasons about relevance itself instead of assuming every post is a leasehold pitch. */
+  ourRecentPosts: CompetitorComparisonPost[];
+  ourFollowersCount: number;
+  /** Registered leasehold competitors (social_competitor_accounts) -- researched live via Google Search grounding, since neither platform exposes another account's engagement data through any API. */
+  competitorHandles: { platform: "instagram" | "tiktok"; handle: string }[];
+  /** Real human-observed competitor posts (social_competitor_content_logs), if any exist -- takes precedence over what AI finds via search. */
+  competitorNotes: string[];
+}
+
+export interface LeaseholdCompetitorComparisonResult {
+  narrative: string;
+  ourStrengths: string[];
+  competitorStrengths: string[];
+  /** Things competitors do that we currently don't -- this is what actually drives the next checklist (buildContentPlannerContextBlock). */
+  gaps: string[];
+  recommendations: string[];
+}
+
+function parseCompetitorComparisonJson(text: string): LeaseholdCompetitorComparisonResult {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Partial<LeaseholdCompetitorComparisonResult>;
+  if (typeof parsed.narrative !== "string" || parsed.narrative.trim().length === 0) {
+    throw new Error("AI competitor comparison response missing narrative text");
+  }
+  const toList = (v: unknown, max: number) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim().slice(0, 300)).slice(0, max) : [];
+  return {
+    narrative: parsed.narrative.trim().slice(0, 2000),
+    ourStrengths: toList(parsed.ourStrengths, 5),
+    competitorStrengths: toList(parsed.competitorStrengths, 5),
+    gaps: toList(parsed.gaps, 5),
+    recommendations: toList(parsed.recommendations, 5),
+  };
+}
+
+/**
+ * Phase 2 of the Content Planner roadmap: puts our own real recent
+ * leasehold-account content side by side with what registered leasehold
+ * competitors are actually posting, and asks the AI to reason like a
+ * competitive content strategist -- not just "who has more likes" but
+ * concrete pattern differences (hook style, content format mix, CTA
+ * approach, posting cadence, hashtag/caption style) that explain why. The
+ * gaps + recommendations this produces flow straight into the next
+ * leasehold_sales checklist (ContentPlannerContext.competitorComparison,
+ * buildContentPlannerContextBlock above) so checklist generation is
+ * actually informed by competitive analysis, not just generic trend
+ * research. Falls back to an ungrounded prompt (leaning on any real manual
+ * logs, explicit about not inventing specific competitor posts it can't
+ * verify) if grounded generation fails to parse, same resilience pattern as
+ * researchAndGenerateChecklist.
+ */
+export async function compareLeaseholdCompetitorContent(input: CompetitorComparisonInput): Promise<LeaseholdCompetitorComparisonResult> {
+  if (input.competitorHandles.length === 0 && input.competitorNotes.length === 0) {
+    throw new Error("No leasehold competitors registered -- register at least one in Content Planner before running a comparison");
+  }
+
+  const systemPrompt = await getSystemPrompt("markom");
+  const ourPostsBlock =
+    input.ourRecentPosts.length > 0
+      ? `Konten kami baru-baru ini (data nyata dari akun kami -- CATATAN: ini seluruh output akun, bukan hanya konten leasehold, nilai relevansinya sendiri):\n${input.ourRecentPosts
+          .map(
+            (p, i) =>
+              `${i + 1}. [${p.mediaType}] "${(p.caption ?? "(tanpa caption)").slice(0, 200)}" -- reach ${p.reach}, likes ${p.likes}, comments ${p.comments}, shares ${p.shares}, saves ${p.saves}${p.permalink ? `, url: ${p.permalink}` : ""}`,
+          )
+          .join("\n")}`
+      : "Belum ada data post individual kami saat ini -- bandingkan berdasarkan followers dan data akun saja, sebutkan keterbatasan ini di narrative.";
+  const competitorNotesBlock = input.competitorNotes.length > 0 ? `Observasi konten kompetitor yang dicatat tim Markom secara manual (data nyata, prioritaskan ini):\n${input.competitorNotes.join("\n")}` : "";
+  const handleList = input.competitorHandles.map((c) => `@${c.handle} (${c.platform})`).join(", ");
+
+  const researchPrompt = `Kamu content strategist yang membandingkan akun media sosial leasehold villa/properti kami dengan kompetitor leasehold yang terdaftar${handleList ? `: ${handleList}` : ""}. ${handleList ? "Riset lewat Google Search konten publik terbaru dari kompetitor-kompetitor itu (post yang bisa ditemukan lewat pencarian publik, TikTok tidak punya API publik jadi andalkan hasil ter-index Google)." : ""}
+
+Followers kami saat ini: ${input.ourFollowersCount}.
+
+${ourPostsBlock}
+
+${competitorNotesBlock}
+
+Bandingkan pola konkret (BUKAN cuma "siapa lebih banyak like"): gaya hook pembuka, format konten (reel/carousel/story dominan yang mana), pendekatan CTA, frekuensi/konsistensi posting, gaya hashtag & caption, dan sudut pandang pitch (investasi/ROI vs gaya hidup vs urgensi).
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{"narrative": "4-6 kalimat Bahasa Indonesia: pola utama yang membedakan kami vs kompetitor, dan kemungkinan dampaknya ke performa", "ourStrengths": ["1-5 hal konkret yang kami lakukan lebih baik"], "competitorStrengths": ["1-5 hal konkret yang kompetitor lakukan lebih baik"], "gaps": ["1-5 hal SPESIFIK yang kompetitor lakukan tapi kami belum -- ini akan langsung dipakai untuk brief checklist konten berikutnya, jadi harus actionable, bukan generik"], "recommendations": ["1-5 rekomendasi konkret untuk checklist konten leasehold minggu depan"]}`;
+
+  try {
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: handleList.length > 0, maxOutputTokens: 2048 });
+    return parseCompetitorComparisonJson(response.text);
+  } catch {
+    // fall through to the unresearched fallback below
+  }
+
+  const fallbackPrompt = `${researchPrompt}\n\n(Jawab TANPA riset internet -- kalau tidak ada catatan manual kompetitor di atas, JANGAN mengarang postingan spesifik kompetitor; fokus narrative dan rekomendasi pada apa yang bisa dinilai dari data kami sendiri dan pengetahuan umum tentang pola konten leasehold/properti, sebutkan keterbatasan ini secara eksplisit di narrative.)`;
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1536 });
+  return parseCompetitorComparisonJson(fallbackResponse.text);
 }
 
 export interface MarkomObstacleInput {

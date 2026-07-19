@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompetitorComparisonCard } from "@/features/markom/components/competitor-comparison-card";
 import { CompetitorTracker } from "@/features/markom/components/competitor-tracker";
 import { ContentPlannerOverview } from "@/features/markom/components/content-planner-overview";
 import { TeamChecklistSection } from "@/features/markom/components/team-checklist-section";
@@ -62,6 +63,7 @@ export default async function ContentPlannerPage() {
         </TabsList>
 
         <TabsContent value="leasehold_sales" className="space-y-6">
+          <CompetitorComparisonCard canManage={canManage} />
           <CompetitorTracker canManage={canManage} />
           <TeamChecklistSection focus="leasehold_sales" title="Checklist Konten Leasehold" />
         </TabsContent>

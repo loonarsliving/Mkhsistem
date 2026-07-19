@@ -8,6 +8,7 @@ import {
   createCompetitorAccount,
   createCompetitorContentLog,
   deactivateCompetitorAccount,
+  getLatestLeaseholdCompetitorComparison,
   getLatestWeeklyEvaluation,
   listCompetitorAccounts,
   listCompetitorContentLogs,
@@ -81,6 +82,21 @@ export async function deactivateCompetitorAccountAction(id: string): Promise<Act
     return actionError(err instanceof Error ? err.message : "Gagal menghapus kompetitor");
   }
   revalidatePath("/markom/content-planner");
+  return actionSuccess();
+}
+
+export async function getLatestCompetitorComparisonAction() {
+  await requirePermission("content_planner.view");
+  const supabase = await createClient();
+  return getLatestLeaseholdCompetitorComparison(supabase);
+}
+
+/** Enqueues an on-demand comparison run (ai_job_queue) via the SECURITY DEFINER RPC -- same manual-trigger pattern as markom_request_ads_research. The automatic Monday run still happens regardless. */
+export async function triggerCompetitorComparisonAction(): Promise<ActionResult> {
+  await requirePermission("content_planner.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("markom_request_leasehold_competitor_comparison");
+  if (error) return actionError(error.message);
   return actionSuccess();
 }
 

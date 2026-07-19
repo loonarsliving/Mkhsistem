@@ -6,7 +6,13 @@ import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
-import { auditWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
+import {
+  auditWeeklyContentPerformance,
+  compareLeaseholdCompetitorContent,
+  researchAndDraftAd,
+  researchAndGenerateChecklist,
+  type ContentPlannerContext,
+} from "@/lib/ai/domains/markom";
 import { getSystemPrompt } from "@/lib/ai/domains/prompts";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
@@ -197,9 +203,23 @@ function currentPeriodWeek(date: Date): number {
   return Math.min(5, Math.ceil(date.getDate() / 7));
 }
 
-/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations + all registered competitor handles (so AI searches their public activity itself even with zero manual logs yet) -- real data fed into the checklist prompt instead of relying on generic web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
+type CompetitorLogRow = { hook: string | null; caption: string | null; hashtags: string | null; engagement_notes: string | null; content_type: string | null; competitor: { handle?: string; platform?: string } | null };
+
+/** Shared by every AI call that reads social_competitor_content_logs (checklist context, weekly audit, competitor comparison) -- one formatted one-liner per manually-logged competitor post. */
+function formatCompetitorNotes(logs: CompetitorLogRow[]): string[] {
+  return logs.map((log) => {
+    const competitor = log.competitor;
+    const parts = [`@${competitor?.handle ?? "?"} (${competitor?.platform ?? "?"}, ${log.content_type ?? "konten"})`];
+    if (log.hook) parts.push(`hook: "${log.hook}"`);
+    if (log.hashtags) parts.push(`hashtag: ${log.hashtags}`);
+    if (log.engagement_notes) parts.push(`engagement: ${log.engagement_notes}`);
+    return `- ${parts.join(", ")}`;
+  });
+}
+
+/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations + all registered competitor handles (so AI searches their public activity itself even with zero manual logs yet) + the latest leasehold-vs-competitor comparison (0124) -- real data fed into the checklist prompt instead of relying on generic web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
 async function gatherContentPlannerContext(supabase: AdminClient): Promise<ContentPlannerContext> {
-  const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }, { data: competitorAccounts }] = await Promise.all([
+  const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }, { data: competitorAccounts }, { data: comparison }] = await Promise.all([
     supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
@@ -208,16 +228,10 @@ async function gatherContentPlannerContext(supabase: AdminClient): Promise<Conte
       .order("logged_at", { ascending: false })
       .limit(10),
     supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true),
+    supabase.from("social_leasehold_competitor_comparisons").select("comparison").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
-  const competitorNotes = (competitorLogs ?? []).map((log) => {
-    const competitor = log.competitor as { handle?: string; platform?: string } | null;
-    const parts = [`@${competitor?.handle ?? "?"} (${competitor?.platform ?? "?"}, ${log.content_type ?? "konten"})`];
-    if (log.hook) parts.push(`hook: "${log.hook}"`);
-    if (log.hashtags) parts.push(`hashtag: ${log.hashtags}`);
-    if (log.engagement_notes) parts.push(`engagement: ${log.engagement_notes}`);
-    return `- ${parts.join(", ")}`;
-  });
+  const comparisonData = comparison?.comparison as { gaps?: string[]; recommendations?: string[] } | null;
 
   return {
     instagram: igSnapshot
@@ -230,8 +244,9 @@ async function gatherContentPlannerContext(supabase: AdminClient): Promise<Conte
         }
       : null,
     tiktok: ttSnapshot ? { videoViews: ttSnapshot.impressions ?? 0, likes: ttSnapshot.likes ?? 0, followersCount: ttSnapshot.followers_count ?? 0 } : null,
-    competitorNotes,
+    competitorNotes: formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]),
     competitorHandles: (competitorAccounts ?? []).map((c) => ({ platform: c.platform, handle: c.handle })),
+    competitorComparison: comparisonData ? { gaps: comparisonData.gaps ?? [], recommendations: comparisonData.recommendations ?? [] } : null,
   };
 }
 
@@ -547,6 +562,36 @@ async function processSalesClosingTipsBroadcast(job: JobRow) {
   return { salesId: payload.sales_id, sent: true };
 }
 
+/**
+ * Recent own-account Instagram posts, Zernio-first then direct Meta Graph
+ * API fallback -- same precedence as capture-snapshots/route.ts. Shared by
+ * the weekly content audit and the leasehold competitor comparison, both of
+ * which need real per-post data instead of account-level aggregates. A
+ * transient failure on either path returns an empty array rather than
+ * throwing, since both callers already have their own "no post data"
+ * fallback behavior.
+ */
+async function getOwnRecentInstagramPosts(limit = 12): Promise<Awaited<ReturnType<typeof getRecentInstagramMediaPerformance>>> {
+  const zernioInstagramAccount = isZernioConfigured() ? (await listZernioAccounts("instagram").catch(() => []))[0] : undefined;
+  if (zernioInstagramAccount) {
+    try {
+      return await getRecentZernioMediaPerformance(zernioInstagramAccount.id, "instagram", limit);
+    } catch (err) {
+      logger.error("getOwnRecentInstagramPosts: Zernio fetch failed", { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
+  }
+  if (isInstagramConfigured()) {
+    try {
+      return await getRecentInstagramMediaPerformance(limit);
+    } catch (err) {
+      logger.error("getOwnRecentInstagramPosts: Meta Graph API fetch failed", { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
+  }
+  return [];
+}
+
 async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const now = new Date();
   const weekStart = getWeekStart(now);
@@ -574,42 +619,13 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
       .limit(15),
   ]);
 
-  const competitorNotes = (competitorLogs ?? []).map((log) => {
-    const competitor = log.competitor as { handle?: string; platform?: string } | null;
-    const parts = [`@${competitor?.handle ?? "?"} (${competitor?.platform ?? "?"}, ${log.content_type ?? "konten"})`];
-    if (log.hook) parts.push(`hook: "${log.hook}"`);
-    if (log.hashtags) parts.push(`hashtag: ${log.hashtags}`);
-    if (log.engagement_notes) parts.push(`engagement: ${log.engagement_notes}`);
-    return `- ${parts.join(", ")}`;
-  });
+  const competitorNotes = formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]);
 
   // Live per-post data (captions + real per-post engagement) -- the daily
   // snapshot only stores account-level aggregates, so a genuine
-  // hook/value/CTA audit needs a fresh read of actual recent posts. Best
-  // effort: a transient API failure here must not fail the whole weekly
-  // audit, just narrow it to account-level-only (same fallback
-  // auditWeeklyContentPerformance already handles for an empty post list).
-  // Zernio (lib/social/zernio.ts) is preferred over the direct Meta Graph
-  // API when configured AND an account is actually connected there, same
-  // precedence as capture-snapshots/route.ts -- Meta's own Business
-  // Verification requirement still blocks the direct path.
-  let instagramTopPosts: Awaited<ReturnType<typeof getRecentInstagramMediaPerformance>> = [];
-  const zernioInstagramAccount = isZernioConfigured() ? (await listZernioAccounts("instagram").catch(() => []))[0] : undefined;
-  if (zernioInstagramAccount) {
-    try {
-      const recentPosts = await getRecentZernioMediaPerformance(zernioInstagramAccount.id, "instagram", 12);
-      instagramTopPosts = recentPosts.filter((p) => p.timestamp >= weekStart);
-    } catch (err) {
-      logger.error("processSocialWeeklyEvaluation: failed to fetch recent Instagram posts via Zernio, auditing account-level only", { error: err instanceof Error ? err.message : String(err) });
-    }
-  } else if (isInstagramConfigured()) {
-    try {
-      const recentPosts = await getRecentInstagramMediaPerformance(12);
-      instagramTopPosts = recentPosts.filter((p) => p.timestamp >= weekStart);
-    } catch (err) {
-      logger.error("processSocialWeeklyEvaluation: failed to fetch recent Instagram posts, auditing account-level only", { error: err instanceof Error ? err.message : String(err) });
-    }
-  }
+  // hook/value/CTA audit needs a fresh read of actual recent posts (empty
+  // array falls back to account-level-only scoring, same as before).
+  const instagramTopPosts = (await getOwnRecentInstagramPosts(12)).filter((p) => p.timestamp >= weekStart);
 
   // impressions doubles as "profile views" for Instagram snapshots -- see the capture route's mapping comment.
   const audit = await auditWeeklyContentPerformance({
@@ -626,6 +642,52 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   if (upsertError) throw new Error(`Failed to save weekly evaluation: ${upsertError.message}`);
 
   return { weekStart };
+}
+
+/**
+ * Phase 2 (0124): our own recent content vs registered leasehold
+ * competitors' public content -- see compareLeaseholdCompetitorContent
+ * (lib/ai/domains/markom.ts) for the actual AI reasoning. Own posts come
+ * from the same Zernio-first/Meta-fallback source the weekly audit uses;
+ * competitor side is whatever's been manually logged (usually nothing yet)
+ * plus every registered active competitor handle for the AI to research
+ * itself via Google Search grounding.
+ */
+async function processLeaseholdCompetitorComparison(supabase: AdminClient) {
+  const [ourPosts, { data: igSnapshot }, { data: competitorLogs }, { data: competitorAccounts }] = await Promise.all([
+    getOwnRecentInstagramPosts(10),
+    supabase.from("social_account_snapshots").select("followers_count").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .order("logged_at", { ascending: false })
+      .limit(15),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true),
+  ]);
+
+  const result = await compareLeaseholdCompetitorContent({
+    ourRecentPosts: ourPosts.map((p) => ({
+      caption: p.caption,
+      mediaType: p.mediaType,
+      reach: p.reach,
+      likes: p.likes,
+      comments: p.comments,
+      shares: p.shares,
+      saves: p.saves,
+      permalink: p.permalink,
+    })),
+    ourFollowersCount: igSnapshot?.followers_count ?? 0,
+    competitorHandles: (competitorAccounts ?? []).map((c) => ({ platform: c.platform, handle: c.handle })),
+    competitorNotes: formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]),
+  });
+
+  const { error: insertError } = await supabase.from("social_leasehold_competitor_comparisons").insert({
+    narrative: result.narrative,
+    comparison: result as unknown as Json,
+  });
+  if (insertError) throw new Error(`Failed to save leasehold competitor comparison: ${insertError.message}`);
+
+  return { gapsFound: result.gaps.length };
 }
 
 const LOONARS_RATIO_TARGET = { problem_solution: 40, ugc: 30, edukasi: 20, promosi: 10 } as const;
@@ -809,7 +871,9 @@ export async function POST(request: Request) {
                     ? await processKnowledgeBankRefresh(job)
                     : job.job_type === "sales_closing_tips_broadcast"
                       ? await processSalesClosingTipsBroadcast(job)
-                      : await processSocialWeeklyEvaluation(supabase);
+                      : job.job_type === "leasehold_competitor_comparison"
+                        ? await processLeaseholdCompetitorComparison(supabase)
+                        : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
