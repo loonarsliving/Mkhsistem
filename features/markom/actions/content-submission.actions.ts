@@ -161,6 +161,7 @@ export async function scheduleAtBestHourAction(submissionId: string): Promise<Ac
     .from("social_account_snapshots")
     .select("best_upload_hour")
     .eq("platform", "instagram")
+    .eq("product_line", "property")
     .order("captured_at", { ascending: false })
     .limit(1)
     .maybeSingle();

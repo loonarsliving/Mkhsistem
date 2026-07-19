@@ -10,14 +10,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
-
-import { getLatestCompetitorComparisonAction, triggerCompetitorComparisonAction } from "../actions/social.actions";
+import type { ActionResult } from "@/types/domain";
 
 interface ComparisonPayload {
   ourStrengths: string[];
   competitorStrengths: string[];
   gaps: string[];
   recommendations: string[];
+}
+
+interface ComparisonRow {
+  generated_at: string;
+  narrative: string;
+  comparison: unknown;
 }
 
 function ListBlock({ icon: Icon, label, items }: { icon: React.ComponentType<{ className?: string }>; label: string; items: string[] }) {
@@ -36,31 +41,42 @@ function ListBlock({ icon: Icon, label, items }: { icon: React.ComponentType<{ c
   );
 }
 
+interface CompetitorComparisonCardProps {
+  title: string;
+  /** react-query cache key -- pass a stable per-product-line key so Leasehold and Beauty each cache/invalidate independently. */
+  queryKey: string;
+  canManage: boolean;
+  getComparisonAction: () => Promise<ComparisonRow | null>;
+  triggerComparisonAction: () => Promise<ActionResult>;
+}
+
 /**
- * Phase 2 of the Content Planner roadmap: our recent leasehold-account
- * content vs registered leasehold competitors (0124). AI-generated,
- * refreshed automatically every Monday -- the "Jalankan Analisa Sekarang"
- * button lets Markom get a fresh read on demand instead of waiting a week.
+ * AI comparison of our own real content vs registered competitors --
+ * originally built for Leasehold (Phase 2 of the Content Planner roadmap,
+ * 0124), generalized so Loonars Beauty reuses the same UI against its own
+ * comparison table (0126). AI-generated, refreshed automatically every
+ * Monday -- the trigger button lets the team get a fresh read on demand
+ * instead of waiting a week.
  */
-export function CompetitorComparisonCard({ canManage }: { canManage: boolean }) {
+export function CompetitorComparisonCard({ title, queryKey, canManage, getComparisonAction, triggerComparisonAction }: CompetitorComparisonCardProps) {
   const queryClient = useQueryClient();
   const [triggering, setTriggering] = React.useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["leasehold-competitor-comparison"],
-    queryFn: getLatestCompetitorComparisonAction,
+    queryKey: [queryKey],
+    queryFn: getComparisonAction,
   });
 
   async function handleTrigger() {
     setTriggering(true);
-    const result = await triggerCompetitorComparisonAction();
+    const result = await triggerComparisonAction();
     setTriggering(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal menjalankan analisa");
       return;
     }
     toast.success("Analisa perbandingan sedang diproses AI, hasil akan muncul di sini dalam beberapa saat");
-    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["leasehold-competitor-comparison"] }), 8000);
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: [queryKey] }), 8000);
   }
 
   const comparison = data?.comparison as unknown as ComparisonPayload | undefined;
@@ -68,7 +84,7 @@ export function CompetitorComparisonCard({ canManage }: { canManage: boolean }) 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Analisa Perbandingan vs Kompetitor Leasehold</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         {canManage && (
           <Button size="sm" variant="outline" disabled={triggering} onClick={handleTrigger}>
             {triggering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
@@ -94,7 +110,7 @@ export function CompetitorComparisonCard({ canManage }: { canManage: boolean }) 
               <ListBlock icon={TrendingUp} label="Kekuatan Kami" items={comparison.ourStrengths} />
               <ListBlock icon={TrendingDown} label="Kekuatan Kompetitor" items={comparison.competitorStrengths} />
             </div>
-            <ListBlock icon={Target} label="Kesenjangan (dipakai untuk checklist berikutnya)" items={comparison.gaps} />
+            <ListBlock icon={Target} label="Kesenjangan (dipakai untuk konten berikutnya)" items={comparison.gaps} />
             <ListBlock icon={Sparkles} label="Rekomendasi" items={comparison.recommendations} />
           </>
         )}

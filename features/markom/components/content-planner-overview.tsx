@@ -6,10 +6,34 @@ import { CalendarClock, Eye, Heart, Instagram, Music2, Sparkles, Users } from "l
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTile } from "@/components/shared/stat-tile";
 
-import { getContentPlannerOverviewAction } from "../actions/social.actions";
+interface AccountSnapshot {
+  followers_count: number | null;
+  reach: number | null;
+  impressions: number | null;
+  likes: number | null;
+  best_upload_hour: number | null;
+  top_content_type: string | null;
+}
 
-export function ContentPlannerOverview() {
-  const { data, isLoading } = useQuery({ queryKey: ["content-planner-overview"], queryFn: getContentPlannerOverviewAction });
+interface OverviewData {
+  instagram: AccountSnapshot | null;
+  tiktok: AccountSnapshot | null;
+  weeklyEvaluation: { week_start: string; evaluation: string } | null;
+}
+
+interface ContentPlannerOverviewProps {
+  /** react-query cache key -- pass a stable per-product-line key so property and beauty each cache independently. */
+  queryKey: string;
+  overviewAction: () => Promise<OverviewData>;
+}
+
+/**
+ * Own-account performance (Instagram/TikTok, via Zernio) + latest weekly AI
+ * evaluation -- originally property-only, generalized (0126) so Loonars
+ * Beauty reuses the same UI against its own Zernio account/evaluation.
+ */
+export function ContentPlannerOverview({ queryKey, overviewAction }: ContentPlannerOverviewProps) {
+  const { data, isLoading } = useQuery({ queryKey: [queryKey], queryFn: overviewAction });
 
   if (isLoading || !data) return null;
 

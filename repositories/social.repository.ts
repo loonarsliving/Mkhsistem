@@ -87,11 +87,17 @@ export async function createCompetitorContentLog(supabase: TypedSupabaseClient, 
   if (error) throw error;
 }
 
-export async function listRecentAccountSnapshots(supabase: TypedSupabaseClient, platform: "instagram" | "tiktok", limit = 1) {
+export async function listRecentAccountSnapshots(
+  supabase: TypedSupabaseClient,
+  platform: "instagram" | "tiktok",
+  limit = 1,
+  productLine: "property" | "beauty" = "property",
+) {
   const { data, error } = await supabase
     .from("social_account_snapshots")
     .select("*")
     .eq("platform", platform)
+    .eq("product_line", productLine)
     .order("captured_at", { ascending: false })
     .limit(limit);
   if (error) throw error;

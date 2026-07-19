@@ -12,7 +12,7 @@ import {
 } from "@/lib/social/instagram";
 import { getTikTokAccountSnapshot } from "@/lib/social/tiktok";
 import { isTikTokConfigured } from "@/lib/social/tiktok-config";
-import { isZernioConfigured, listZernioAccounts, getZernioAccountSnapshot, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
+import { isZernioConfigured, listZernioAccounts, getZernioAccountSnapshot, getRecentZernioMediaPerformance, type ZernioProduct } from "@/lib/social/zernio";
 import type { Json } from "@/types/database.types";
 
 export const runtime = "nodejs";
@@ -21,7 +21,13 @@ export const dynamic = "force-dynamic";
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 /** Shared by both the Zernio and direct-Graph-API Instagram paths -- same insert shape either way, only where account/media came from differs. */
-async function insertInstagramSnapshot(supabase: AdminClient, account: InstagramAccountSnapshot, media: InstagramMediaPerformance[], source: string) {
+async function insertInstagramSnapshot(
+  supabase: AdminClient,
+  productLine: ZernioProduct,
+  account: InstagramAccountSnapshot,
+  media: InstagramMediaPerformance[],
+  source: string,
+) {
   const { bestHour, topContentType } = summarizeBestPostingPattern(media);
   const totals = media.reduce(
     (acc, m) => ({ likes: acc.likes + m.likes, comments: acc.comments + m.comments, shares: acc.shares + m.shares, saves: acc.saves + m.saves }),
@@ -30,6 +36,7 @@ async function insertInstagramSnapshot(supabase: AdminClient, account: Instagram
 
   await supabase.from("social_account_snapshots").insert({
     platform: "instagram",
+    product_line: productLine,
     followers_count: account.followersCount,
     reach: account.reach,
     impressions: account.profileViews,
@@ -44,44 +51,32 @@ async function insertInstagramSnapshot(supabase: AdminClient, account: Instagram
 }
 
 /**
- * Daily own-account performance capture -- triggered by pg_cron via
- * net.http_post (social_run_daily_snapshot_capture, migration 0086), same
- * pattern as /api/ai/whatsapp-relay. Each platform is captured
- * independently and a failure on one never blocks the other. impressions
- * doubles as "profile views" for Instagram rows and "video views" for
- * TikTok rows -- see lib/ai/domains/markom.ts's
- * gatherContentPlannerContext/processSocialWeeklyEvaluation, which read it
- * back the same way.
- *
- * Zernio (lib/social/zernio.ts) is preferred over the direct Meta/TikTok
- * Graph API when configured AND an account is actually connected there --
- * Meta's own Business Verification requirement blocked the direct path
- * (see lib/social/instagram.ts's module doc). Falls back to the direct
- * API path if Zernio isn't connected for that platform yet, so nothing
- * regresses for whichever path happens to be working.
+ * Captures both platforms for ONE product line. Property tries Zernio
+ * first, then falls back to the direct Meta/TikTok API (its original
+ * pre-Zernio integration) -- Beauty is Zernio-only, it never had a direct
+ * API integration to fall back to (0126).
  */
-export async function POST() {
-  const supabase = createAdminClient();
+async function captureForProduct(supabase: AdminClient, product: ZernioProduct): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
-  const zernioReady = isZernioConfigured();
+  const zernioReady = isZernioConfigured(product);
 
-  const zernioInstagramAccount = zernioReady ? (await listZernioAccounts("instagram").catch(() => []))[0] : undefined;
+  const zernioInstagramAccount = zernioReady ? (await listZernioAccounts("instagram", product).catch(() => []))[0] : undefined;
   if (zernioInstagramAccount) {
     try {
       const [account, media] = await Promise.all([
-        getZernioAccountSnapshot(zernioInstagramAccount.id, "instagram"),
-        getRecentZernioMediaPerformance(zernioInstagramAccount.id, "instagram", 12),
+        getZernioAccountSnapshot(zernioInstagramAccount.id, "instagram", product),
+        getRecentZernioMediaPerformance(zernioInstagramAccount.id, "instagram", 12, product),
       ]);
-      await insertInstagramSnapshot(supabase, account, media, "zernio");
+      await insertInstagramSnapshot(supabase, product, account, media, "zernio");
       results.instagram = "captured_via_zernio";
     } catch (err) {
-      logger.error("instagram snapshot capture failed (zernio)", { error: err instanceof Error ? err.message : String(err) });
+      logger.error("instagram snapshot capture failed (zernio)", { product, error: err instanceof Error ? err.message : String(err) });
       results.instagram = "failed";
     }
-  } else if (isInstagramConfigured()) {
+  } else if (product === "property" && isInstagramConfigured()) {
     try {
       const [account, media] = await Promise.all([getInstagramAccountSnapshot(), getRecentInstagramMediaPerformance(12)]);
-      await insertInstagramSnapshot(supabase, account, media, "meta_graph_api");
+      await insertInstagramSnapshot(supabase, product, account, media, "meta_graph_api");
       results.instagram = "captured";
     } catch (err) {
       logger.error("instagram snapshot capture failed", { error: err instanceof Error ? err.message : String(err) });
@@ -91,26 +86,28 @@ export async function POST() {
     results.instagram = "not_configured";
   }
 
-  const zernioTikTokAccount = zernioReady ? (await listZernioAccounts("tiktok").catch(() => []))[0] : undefined;
+  const zernioTikTokAccount = zernioReady ? (await listZernioAccounts("tiktok", product).catch(() => []))[0] : undefined;
   if (zernioTikTokAccount) {
     try {
-      const account = await getZernioAccountSnapshot(zernioTikTokAccount.id, "tiktok");
+      const account = await getZernioAccountSnapshot(zernioTikTokAccount.id, "tiktok", product);
       await supabase.from("social_account_snapshots").insert({
         platform: "tiktok",
+        product_line: product,
         followers_count: account.followersCount,
         impressions: account.profileViews,
         raw_data: { account, source: "zernio" } as unknown as Json,
       });
       results.tiktok = "captured_via_zernio";
     } catch (err) {
-      logger.error("tiktok snapshot capture failed (zernio)", { error: err instanceof Error ? err.message : String(err) });
+      logger.error("tiktok snapshot capture failed (zernio)", { product, error: err instanceof Error ? err.message : String(err) });
       results.tiktok = "failed";
     }
-  } else if (isTikTokConfigured()) {
+  } else if (product === "property" && isTikTokConfigured()) {
     try {
       const account = await getTikTokAccountSnapshot();
       await supabase.from("social_account_snapshots").insert({
         platform: "tiktok",
+        product_line: product,
         followers_count: account.followersCount,
         impressions: account.videoViews,
         likes: account.likes,
@@ -127,5 +124,21 @@ export async function POST() {
     results.tiktok = "not_configured";
   }
 
-  return NextResponse.json({ status: "done", results });
+  return results;
+}
+
+/**
+ * Daily own-account performance capture -- triggered by pg_cron via
+ * net.http_post (social_run_daily_snapshot_capture, migration 0086), same
+ * pattern as /api/ai/whatsapp-relay. Runs for both product lines (property,
+ * beauty -- 0126), each fully independent so a failure on one never blocks
+ * the other. impressions doubles as "profile views" for Instagram rows and
+ * "video views" for TikTok rows -- see lib/ai/domains/markom.ts's
+ * gatherContentPlannerContext/processSocialWeeklyEvaluation, which read it
+ * back the same way.
+ */
+export async function POST() {
+  const supabase = createAdminClient();
+  const [property, beauty] = await Promise.all([captureForProduct(supabase, "property"), captureForProduct(supabase, "beauty")]);
+  return NextResponse.json({ status: "done", results: { property, beauty } });
 }

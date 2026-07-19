@@ -132,3 +132,15 @@ export async function getLatestWeeklyEvaluation(supabase: TypedSupabaseClient) {
   if (error) throw error;
   return data;
 }
+
+/** Our content vs registered beauty competitors, newest first (0126). */
+export async function getLatestCompetitorComparison(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase
+    .from("loonars_beauty_competitor_comparisons")
+    .select("*")
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

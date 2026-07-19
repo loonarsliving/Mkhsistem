@@ -10,9 +10,16 @@ import { CompetitorComparisonCard } from "@/features/markom/components/competito
 import { CompetitorTracker } from "@/features/markom/components/competitor-tracker";
 import { ContentPlannerOverview } from "@/features/markom/components/content-planner-overview";
 import { TeamChecklistSection } from "@/features/markom/components/team-checklist-section";
+import { getContentPlannerOverviewAction, getLatestCompetitorComparisonAction, triggerCompetitorComparisonAction } from "@/features/markom/actions/social.actions";
 import { ContentBoard } from "@/features/loonars-beauty/components/content-board";
 import { ContentRatioSummary } from "@/features/loonars-beauty/components/content-ratio-summary";
 import { RetargetingAlerts } from "@/features/loonars-beauty/components/retargeting-alerts";
+import { BeautyContentIdeasTrigger } from "@/features/loonars-beauty/components/beauty-content-ideas-trigger";
+import {
+  getBeautyContentOverviewAction,
+  getLatestCompetitorComparisonAction as getLatestBeautyCompetitorComparisonAction,
+  triggerCompetitorComparisonAction as triggerBeautyCompetitorComparisonAction,
+} from "@/features/loonars-beauty/actions/loonars-beauty.actions";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 
 export const metadata: Metadata = { title: "Content Planner" };
@@ -21,14 +28,15 @@ export const metadata: Metadata = { title: "Content Planner" };
  * Content Planner as the single hub for all three of the company's content
  * lines, each its own tab: Leasehold (villa/rumah investor-pitch content),
  * Occupancy (villa-as-a-stay booking content, see migration 0121), and
- * Beauty (Loonars Beauty skincare, its own loonars_content_items system --
- * see repositories/loonars-beauty.repository.ts). Leasehold/Occupancy share
- * one Instagram/TikTok account (ContentPlannerOverview) but reliably split
- * by kpi_tasks.content_focus (migration 0123) rather than the old
- * description-marker-string convention. Beauty is a structurally separate
- * product (own account, own content table) with its own permission
- * (loonars_beauty.view/manage) -- gated as its own tab rather than forced
- * into the kpi_tasks checklist shape it doesn't use.
+ * Beauty (Loonars Beauty skincare -- its own Zernio account, competitor
+ * comparison table, and content-idea pipeline, migration 0126, mirroring
+ * property's exact competitor-determination-to-checklist logic but never
+ * sharing the data/reasoning). Leasehold/Occupancy share one Instagram/
+ * TikTok account (ContentPlannerOverview) but reliably split by
+ * kpi_tasks.content_focus (migration 0123). Beauty is a structurally
+ * separate product (own account, own content table) with its own
+ * permission (loonars_beauty.view/manage) -- gated as its own tab rather
+ * than forced into the kpi_tasks checklist shape it doesn't use.
  */
 export default async function ContentPlannerPage() {
   const session = await requireSession();
@@ -53,8 +61,6 @@ export default async function ContentPlannerPage() {
         </Button>
       </div>
 
-      <ContentPlannerOverview />
-
       <Tabs defaultValue="leasehold_sales">
         <TabsList>
           <TabsTrigger value="leasehold_sales">Leasehold</TabsTrigger>
@@ -63,7 +69,14 @@ export default async function ContentPlannerPage() {
         </TabsList>
 
         <TabsContent value="leasehold_sales" className="space-y-6">
-          <CompetitorComparisonCard canManage={canManage} />
+          <ContentPlannerOverview queryKey="content-planner-overview-property" overviewAction={getContentPlannerOverviewAction} />
+          <CompetitorComparisonCard
+            title="Analisa Perbandingan vs Kompetitor Leasehold"
+            queryKey="leasehold-competitor-comparison"
+            canManage={canManage}
+            getComparisonAction={getLatestCompetitorComparisonAction}
+            triggerComparisonAction={triggerCompetitorComparisonAction}
+          />
           <CompetitorTracker focus="leasehold_sales" canManage={canManage} />
           <TeamChecklistSection focus="leasehold_sales" title="Checklist Konten Leasehold" />
         </TabsContent>
@@ -75,9 +88,18 @@ export default async function ContentPlannerPage() {
 
         {canViewBeauty && (
           <TabsContent value="beauty" className="space-y-6">
+            <ContentPlannerOverview queryKey="content-planner-overview-beauty" overviewAction={getBeautyContentOverviewAction} />
+            <CompetitorComparisonCard
+              title="Analisa Perbandingan vs Kompetitor Beauty"
+              queryKey="beauty-competitor-comparison"
+              canManage={canManageBeauty}
+              getComparisonAction={getLatestBeautyCompetitorComparisonAction}
+              triggerComparisonAction={triggerBeautyCompetitorComparisonAction}
+            />
+            <CompetitorTracker focus="beauty" canManage={canManageBeauty} />
             <ContentRatioSummary />
             <RetargetingAlerts />
-            <CompetitorTracker focus="beauty" canManage={canManageBeauty} />
+            {canManageBeauty && <BeautyContentIdeasTrigger />}
             <ContentBoard canManage={canManageBeauty} />
             <p className="text-xs text-muted-foreground">
               Data order & performa detail Loonars Beauty ada di{" "}

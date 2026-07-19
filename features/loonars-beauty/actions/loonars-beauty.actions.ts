@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createContentItem,
   createOrder,
+  getLatestCompetitorComparison,
   getLatestWeeklyEvaluation,
   getOrderStats,
   listContentItems,
@@ -19,6 +20,7 @@ import {
   updateOrderStatus,
   upsertContentMetric,
 } from "@/repositories/loonars-beauty.repository";
+import { listRecentAccountSnapshots } from "@/repositories/social.repository";
 import type { Tables } from "@/types/database.types";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
@@ -197,6 +199,47 @@ export async function triggerWeeklyEvaluationAction(): Promise<ActionResult> {
   await requirePermission("loonars_beauty.manage");
   const supabase = await createClient();
   const { error } = await supabase.rpc("loonars_beauty_request_weekly_evaluation");
+  if (error) return actionError(error.message);
+  return actionSuccess();
+}
+
+/** Beauty's own account performance (Zernio, product='beauty', 0126) + latest weekly evaluation -- same shape as markom's getContentPlannerOverviewAction so ContentPlannerOverview can render either. */
+export async function getBeautyContentOverviewAction() {
+  await requirePermission("loonars_beauty.view");
+  const supabase = await createClient();
+  const [instagramSnapshots, tiktokSnapshots, weeklyEvaluation] = await Promise.all([
+    listRecentAccountSnapshots(supabase, "instagram", 1, "beauty"),
+    listRecentAccountSnapshots(supabase, "tiktok", 1, "beauty"),
+    getLatestWeeklyEvaluation(supabase),
+  ]);
+  return {
+    instagram: instagramSnapshots[0] ?? null,
+    tiktok: tiktokSnapshots[0] ?? null,
+    weeklyEvaluation,
+  };
+}
+
+/** Our content vs registered beauty competitors (0126) -- same pattern as markom's leasehold comparison, own Zernio account. */
+export async function getLatestCompetitorComparisonAction() {
+  await requirePermission("loonars_beauty.view");
+  const supabase = await createClient();
+  return getLatestCompetitorComparison(supabase);
+}
+
+/** Enqueues an on-demand comparison run -- the automatic Monday run still happens regardless. */
+export async function triggerCompetitorComparisonAction(): Promise<ActionResult> {
+  await requirePermission("loonars_beauty.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("loonars_beauty_request_competitor_comparison");
+  if (error) return actionError(error.message);
+  return actionSuccess();
+}
+
+/** Enqueues an on-demand content-idea generation run (real Zernio performance + latest competitor comparison -> 3 ideas inserted into loonars_content_items) -- the automatic Monday run still happens regardless. */
+export async function triggerContentIdeasAction(): Promise<ActionResult> {
+  await requirePermission("loonars_beauty.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("loonars_beauty_request_content_ideas");
   if (error) return actionError(error.message);
   return actionSuccess();
 }

@@ -13,30 +13,43 @@ type AnalyticsPost = NonNullable<AnalyticsListResponse["posts"]>[number];
  * a plain OAuth login (getZernioConnectUrl), no Business Verification
  * paperwork on our side.
  *
+ * Two separate Zernio ACCOUNTS/API keys, one per product line (0126) --
+ * Zernio's free tier caps at 2 connected accounts, and property already
+ * uses both (Instagram + TikTok) for its own account. Loonars Beauty gets
+ * its own Zernio account (ZERNIO_BEAUTY_API_KEY) so it stays on the free
+ * tier too, instead of competing for property's 2-account allowance. Every
+ * exported function takes an optional `product` param (default
+ * "property") that picks which client/API key to use -- existing property
+ * call sites are unaffected, beauty call sites pass "beauty" explicitly.
+ *
  * Return shapes deliberately mirror lib/social/instagram.ts's
  * InstagramAccountSnapshot/InstagramMediaPerformance so
  * app/api/social/capture-snapshots/route.ts can swap data sources with a
  * minimal diff. Built from the official @zernio/node SDK's real shipped
  * TypeScript types (node_modules/@zernio/node/dist/index.d.ts) -- not
- * guessed -- but never yet exercised against a live account (no
- * ZERNIO_API_KEY configured at the time this was written). If a field
- * comes back differently than expected once real data flows, fix the
- * mapping based on the actual response the same way every other
- * first-connection issue in this codebase has been fixed, not by
- * re-guessing.
+ * guessed.
  */
 
-let cachedClient: Zernio | null = null;
+export type ZernioProduct = "property" | "beauty";
 
-function getClient(): Zernio {
-  if (!cachedClient) {
-    cachedClient = new Zernio({ apiKey: process.env.ZERNIO_API_KEY });
+const ZERNIO_ENV_VAR: Record<ZernioProduct, string> = {
+  property: "ZERNIO_API_KEY",
+  beauty: "ZERNIO_BEAUTY_API_KEY",
+};
+
+const cachedClients = new Map<ZernioProduct, Zernio>();
+
+function getClient(product: ZernioProduct): Zernio {
+  let client = cachedClients.get(product);
+  if (!client) {
+    client = new Zernio({ apiKey: process.env[ZERNIO_ENV_VAR[product]] });
+    cachedClients.set(product, client);
   }
-  return cachedClient;
+  return client;
 }
 
-export function isZernioConfigured(): boolean {
-  return (process.env.ZERNIO_API_KEY ?? "").length > 0;
+export function isZernioConfigured(product: ZernioProduct = "property"): boolean {
+  return (process.env[ZERNIO_ENV_VAR[product]] ?? "").length > 0;
 }
 
 export type ZernioPlatform = "instagram" | "tiktok";
@@ -48,21 +61,21 @@ export interface ZernioAccountRef {
 }
 
 /** Accounts actually connected (completed OAuth) on this Zernio profile -- empty for a platform nobody has connected yet via getZernioConnectUrl. */
-export async function listZernioAccounts(platform?: ZernioPlatform): Promise<ZernioAccountRef[]> {
-  const client = getClient();
+export async function listZernioAccounts(platform?: ZernioPlatform, product: ZernioProduct = "property"): Promise<ZernioAccountRef[]> {
+  const client = getClient(product);
   const result = await client.accounts.listAccounts({ query: { platform, status: "connected" } });
   const accounts: SocialAccount[] = result.data?.accounts ?? [];
   return accounts.map((a) => ({ id: a._id, platform: a.platform, username: a.username ?? a.displayName ?? null }));
 }
 
 /** Ensures a Zernio "profile" (their term for a workspace accounts are grouped under) exists -- creates one on first use. Required before getZernioConnectUrl can be called. */
-export async function ensureDefaultZernioProfile(): Promise<string> {
-  const client = getClient();
+export async function ensureDefaultZernioProfile(product: ZernioProduct = "property"): Promise<string> {
+  const client = getClient(product);
   const list = await client.profiles.listProfiles();
   const existing = list.data?.profiles?.[0]?._id;
   if (existing) return existing;
 
-  const created = await client.profiles.createProfile({ body: { name: "PT Maha Karya Haluoleo" } });
+  const created = await client.profiles.createProfile({ body: { name: product === "beauty" ? "Loonars Beauty" : "PT Maha Karya Haluoleo" } });
   const id = created.data?.profile?._id;
   if (!id) throw new Error("Zernio did not return a profile id when creating the default profile");
   return id;
@@ -75,9 +88,9 @@ export async function ensureDefaultZernioProfile(): Promise<string> {
  * Call once per platform; the resulting connection persists on Zernio's
  * side until revoked.
  */
-export async function getZernioConnectUrl(platform: ZernioPlatform, redirectUrl?: string): Promise<string> {
-  const profileId = await ensureDefaultZernioProfile();
-  const client = getClient();
+export async function getZernioConnectUrl(platform: ZernioPlatform, redirectUrl?: string, product: ZernioProduct = "property"): Promise<string> {
+  const profileId = await ensureDefaultZernioProfile(product);
+  const client = getClient(product);
   const result = await client.connect.getConnectUrl({ path: { platform }, query: { profileId, redirect_url: redirectUrl } });
   const authUrl = result.data?.authUrl;
   if (!authUrl) throw new Error(`Zernio did not return a connect URL for ${platform}`);
@@ -98,8 +111,8 @@ export interface ZernioAccountSnapshot {
  * "profile views" aggregate) -- profileViews here is really summed post
  * impressions, an approximation, not a literal profile-view count.
  */
-export async function getZernioAccountSnapshot(accountId: string, platform: ZernioPlatform): Promise<ZernioAccountSnapshot> {
-  const client = getClient();
+export async function getZernioAccountSnapshot(accountId: string, platform: ZernioPlatform, product: ZernioProduct = "property"): Promise<ZernioAccountSnapshot> {
+  const client = getClient(product);
   const [followerStats, analytics] = await Promise.all([
     client.accounts.getFollowerStats({ query: { accountIds: accountId } }),
     client.analytics.getAnalytics({ query: { accountId, platform, source: "all", sortBy: "date", order: "desc", limit: 30 } }),
@@ -138,8 +151,13 @@ export interface ZernioMediaPerformance {
  * practice every result here is an "external" post, which is exactly what
  * we need real performance data for.
  */
-export async function getRecentZernioMediaPerformance(accountId: string, platform: ZernioPlatform, limit = 12): Promise<ZernioMediaPerformance[]> {
-  const client = getClient();
+export async function getRecentZernioMediaPerformance(
+  accountId: string,
+  platform: ZernioPlatform,
+  limit = 12,
+  product: ZernioProduct = "property",
+): Promise<ZernioMediaPerformance[]> {
+  const client = getClient(product);
   const result = await client.analytics.getAnalytics({ query: { accountId, platform, source: "all", sortBy: "date", order: "desc", limit } });
   const posts: AnalyticsPost[] = (result.data && "posts" in result.data ? result.data.posts : []) ?? [];
 

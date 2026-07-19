@@ -4,7 +4,12 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
-import { discoverBeautyCompetitors, evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
+import {
+  compareBeautyCompetitorContent,
+  discoverBeautyCompetitors,
+  evaluateLoonarsWeeklyPerformance,
+  researchAndGenerateBeautyContentIdeas,
+} from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
 import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor-intelligence";
 import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
@@ -29,7 +34,7 @@ import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
-import { getRecentInstagramMediaPerformance, isInstagramConfigured } from "@/lib/social/instagram";
+import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
   LEASEHOLD_TARGET_CITIES,
@@ -244,17 +249,18 @@ function formatCompetitorNotes(logs: CompetitorLogRow[]): string[] {
   });
 }
 
-/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations + all registered competitor handles (so AI searches their public activity itself even with zero manual logs yet) + the latest leasehold-vs-competitor comparison (0124) -- real data fed into the checklist prompt instead of relying on generic web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. */
-async function gatherContentPlannerContext(supabase: AdminClient): Promise<ContentPlannerContext> {
+/** Latest own-account snapshot (if any capture has run yet) + recent human-logged competitor observations + all registered competitor handles for THIS focus (so AI searches their public activity itself even with zero manual logs yet) + the latest leasehold-vs-competitor comparison (0124) -- real data fed into the checklist prompt instead of relying on generic web search alone. Missing platforms (not configured, or no capture has run yet) are simply omitted, not an error. Competitor queries are scoped to `focus` (0125 made social_competitor_accounts span all 3 product lines) so a leasehold checklist never sees occupancy/beauty competitors mixed in, and vice versa. */
+async function gatherContentPlannerContext(supabase: AdminClient, focus: ChecklistContentFocus): Promise<ContentPlannerContext> {
   const [{ data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }, { data: competitorAccounts }, { data: comparison }] = await Promise.all([
-    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").eq("product_line", "property").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").eq("product_line", "property").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
       .from("social_competitor_content_logs")
-      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", focus)
       .order("logged_at", { ascending: false })
       .limit(10),
-    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true).eq("content_focus", focus),
     supabase.from("social_leasehold_competitor_comparisons").select("comparison").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
@@ -287,7 +293,7 @@ const CHECKLIST_AI_MARKER: Record<"leasehold_sales" | "occupancy", string> = {
 async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
   const payload = job.payload as unknown as MarkomChecklistDraftJobPayload;
   const focus = payload.focus ?? "leasehold_sales";
-  const context = await gatherContentPlannerContext(supabase);
+  const context = await gatherContentPlannerContext(supabase, focus);
   const items = await researchAndGenerateChecklist(payload.branch_name, context, focus);
 
   const now = new Date();
@@ -773,6 +779,19 @@ async function getOwnRecentInstagramPosts(limit = 12): Promise<Awaited<ReturnTyp
   return [];
 }
 
+/** Loonars Beauty's own Zernio account (0126) -- Zernio-only, no legacy direct-API fallback since beauty never had one. */
+async function getBeautyRecentInstagramPosts(limit = 12): Promise<Awaited<ReturnType<typeof getRecentZernioMediaPerformance>>> {
+  if (!isZernioConfigured("beauty")) return [];
+  const account = (await listZernioAccounts("instagram", "beauty").catch(() => []))[0];
+  if (!account) return [];
+  try {
+    return await getRecentZernioMediaPerformance(account.id, "instagram", limit, "beauty");
+  } catch (err) {
+    logger.error("getBeautyRecentInstagramPosts: Zernio fetch failed", { error: err instanceof Error ? err.message : String(err) });
+    return [];
+  }
+}
+
 async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const now = new Date();
   const weekStart = getWeekStart(now);
@@ -781,20 +800,22 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const lastWeekStart = lastWeekStartDate.toISOString().slice(0, 10);
 
   const [{ data: igThisWeek }, { data: igLastWeek }, { data: ttThisWeek }, { data: competitorLogs }] = await Promise.all([
-    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").eq("product_line", "property").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
       .from("social_account_snapshots")
       .select("*")
       .eq("platform", "instagram")
+      .eq("product_line", "property")
       .gte("captured_at", lastWeekStart)
       .lt("captured_at", weekStart)
       .order("captured_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").eq("product_line", "property").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
       .from("social_competitor_content_logs")
-      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", "leasehold_sales")
       .gte("logged_at", weekStart)
       .order("logged_at", { ascending: false })
       .limit(15),
@@ -837,13 +858,14 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
 async function processLeaseholdCompetitorComparison(supabase: AdminClient) {
   const [ourPosts, { data: igSnapshot }, { data: competitorLogs }, { data: competitorAccounts }] = await Promise.all([
     getOwnRecentInstagramPosts(10),
-    supabase.from("social_account_snapshots").select("followers_count").eq("platform", "instagram").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("followers_count").eq("platform", "instagram").eq("product_line", "property").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
     supabase
       .from("social_competitor_content_logs")
-      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id(handle, platform)")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", "leasehold_sales")
       .order("logged_at", { ascending: false })
       .limit(15),
-    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true).eq("content_focus", "leasehold_sales"),
   ]);
 
   const result = await compareLeaseholdCompetitorContent({
@@ -907,6 +929,108 @@ async function processCompetitorDiscovery(supabase: AdminClient, job: JobRow) {
   );
 
   return { focus, discovered: inserted };
+}
+
+/**
+ * Beauty's own version of processLeaseholdCompetitorComparison -- our real
+ * recent content from Beauty's own Zernio account (0126) vs registered
+ * beauty competitors (content_focus='beauty', 0125).
+ */
+async function processLoonarsBeautyCompetitorComparison(supabase: AdminClient) {
+  const [ourPosts, { data: igSnapshot }, { data: competitorLogs }, { data: competitorAccounts }] = await Promise.all([
+    getBeautyRecentInstagramPosts(10),
+    supabase.from("social_account_snapshots").select("followers_count").eq("platform", "instagram").eq("product_line", "beauty").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", "beauty")
+      .order("logged_at", { ascending: false })
+      .limit(15),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true).eq("content_focus", "beauty"),
+  ]);
+
+  const result = await compareBeautyCompetitorContent({
+    ourRecentPosts: ourPosts.map((p) => ({
+      caption: p.caption,
+      mediaType: p.mediaType,
+      reach: p.reach,
+      likes: p.likes,
+      comments: p.comments,
+      shares: p.shares,
+      saves: p.saves,
+      permalink: p.permalink,
+    })),
+    ourFollowersCount: igSnapshot?.followers_count ?? 0,
+    competitorHandles: (competitorAccounts ?? []).map((c) => ({ platform: c.platform, handle: c.handle })),
+    competitorNotes: formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]),
+  });
+
+  const { error: insertError } = await supabase.from("loonars_beauty_competitor_comparisons").insert({
+    narrative: result.narrative,
+    comparison: result as unknown as Json,
+  });
+  if (insertError) throw new Error(`Failed to save beauty competitor comparison: ${insertError.message}`);
+
+  return { gapsFound: result.gaps.length };
+}
+
+/**
+ * Beauty's own version of processMarkomChecklistDraft -- real Zernio
+ * performance + the latest competitor comparison's gaps/recommendations
+ * feed into 3 concrete content ideas, inserted directly into
+ * loonars_content_items (status='idea') for the team to pick up. Closes
+ * the same loop property has (competitor determination -> comparison ->
+ * checklist), just for beauty.
+ */
+async function processLoonarsBeautyContentIdeasDraft(supabase: AdminClient) {
+  const [ourPosts, { data: igSnapshot }, { data: ttSnapshot }, { data: competitorLogs }, { data: competitorAccounts }, { data: comparison }] = await Promise.all([
+    getBeautyRecentInstagramPosts(12),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").eq("product_line", "beauty").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").eq("product_line", "beauty").order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", "beauty")
+      .order("logged_at", { ascending: false })
+      .limit(10),
+    supabase.from("social_competitor_accounts").select("platform, handle").eq("is_active", true).eq("content_focus", "beauty"),
+    supabase.from("loonars_beauty_competitor_comparisons").select("comparison").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const comparisonData = comparison?.comparison as { gaps?: string[]; recommendations?: string[] } | null;
+  const { bestHour, topContentType } = summarizeBestPostingPattern(ourPosts as unknown as InstagramMediaPerformance[]);
+
+  const items = await researchAndGenerateBeautyContentIdeas({
+    instagram: igSnapshot
+      ? {
+          reach: igSnapshot.reach ?? 0,
+          profileViews: igSnapshot.impressions ?? 0,
+          followersCount: igSnapshot.followers_count ?? 0,
+          bestHour: igSnapshot.best_upload_hour ?? bestHour,
+          topContentType: igSnapshot.top_content_type ?? topContentType,
+        }
+      : null,
+    tiktok: ttSnapshot ? { videoViews: ttSnapshot.impressions ?? 0, likes: ttSnapshot.likes ?? 0, followersCount: ttSnapshot.followers_count ?? 0 } : null,
+    competitorNotes: formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]),
+    competitorHandles: (competitorAccounts ?? []).map((c) => ({ platform: c.platform, handle: c.handle })),
+    competitorComparison: comparisonData ? { gaps: comparisonData.gaps ?? [], recommendations: comparisonData.recommendations ?? [] } : null,
+  });
+
+  const { error: insertError } = await supabase.from("loonars_content_items").insert(
+    items.map((item) => ({
+      title: item.title,
+      category: item.category,
+      platform: item.platform,
+      hook: item.hook || null,
+      caption: item.caption || null,
+      script_notes: item.scriptNotes || null,
+      cta: item.cta || null,
+      status: "idea" as const,
+    })),
+  );
+  if (insertError) throw new Error(`Failed to save beauty content ideas: ${insertError.message}`);
+
+  return { ideasCreated: items.length };
 }
 
 const LOONARS_RATIO_TARGET = { problem_solution: 40, ugc: 30, edukasi: 20, promosi: 10 } as const;
@@ -1094,15 +1218,19 @@ export async function POST(request: Request) {
                         ? await processLeaseholdCompetitorComparison(supabase)
                         : job.job_type === "competitor_discovery"
                           ? await processCompetitorDiscovery(supabase, job)
-                          : job.job_type === "investor_intelligence_refresh"
-                            ? await processInvestorIntelligenceRefresh(job)
-                            : job.job_type === "cashflow_intelligence_refresh"
-                              ? await processCashflowIntelligenceRefresh(job)
-                              : job.job_type === "sales_teaching_weekly"
-                                ? await processSalesTeachingWeekly(supabase, job)
-                                : job.job_type === "cashflow_action_plan"
-                                  ? await processCashflowActionPlan(supabase, job)
-                                  : await processSocialWeeklyEvaluation(supabase);
+                          : job.job_type === "loonars_beauty_competitor_comparison"
+                            ? await processLoonarsBeautyCompetitorComparison(supabase)
+                            : job.job_type === "loonars_beauty_content_ideas_draft"
+                              ? await processLoonarsBeautyContentIdeasDraft(supabase)
+                              : job.job_type === "investor_intelligence_refresh"
+                                ? await processInvestorIntelligenceRefresh(job)
+                                : job.job_type === "cashflow_intelligence_refresh"
+                                  ? await processCashflowIntelligenceRefresh(job)
+                                  : job.job_type === "sales_teaching_weekly"
+                                    ? await processSalesTeachingWeekly(supabase, job)
+                                    : job.job_type === "cashflow_action_plan"
+                                      ? await processCashflowActionPlan(supabase, job)
+                                      : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
