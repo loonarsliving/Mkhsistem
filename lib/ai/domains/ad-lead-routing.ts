@@ -110,7 +110,14 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
   if (salesEmployee?.phone) {
     const projectLabel = project?.name ? ` (${project.name})` : "";
     const adSourceLabel = campaign.headline || campaign.name || "-";
-    const enteredAtLabel = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+    // No explicit timeZone meant this rendered in the server's runtime zone
+    // (UTC on Vercel) instead of Indonesia local time -- a lead that came in
+    // at, say, 14:00 WITA showed up in the WhatsApp notification as "06:00",
+    // 7-8 hours off depending on region. WITA (Asia/Makassar, UTC+8) matches
+    // the reference zone the rest of the codebase already uses for
+    // company-wide scheduling (see app/api/crm/dispatch-promo-sends/route.ts's
+    // witaHour), not a per-branch WIB/WITA split.
+    const enteredAtLabel = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Makassar" });
     const notifyText =
       outcome === "new_prospect_routed"
         ? `Lead baru dari iklan${projectLabel}!\nNama: ${senderName || "Tidak diketahui"}\nWA: ${sender}\nSumber iklan: ${adSourceLabel}\nWaktu masuk: ${enteredAtLabel}\nSegera hubungi sebelum lead ini dingin.`
