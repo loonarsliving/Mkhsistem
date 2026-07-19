@@ -82,7 +82,8 @@ export type NotificationCategoryDb =
   | "finance_expense_alert"
   | "finance_expense_pending_verification"
   | "branch_balance_alert"
-  | "sales_coaching_tip";
+  | "sales_coaching_tip"
+  | "meta_ads_balance_low";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -1123,6 +1124,22 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      meta_ads_balance_state: {
+        Row: {
+          id: string;
+          last_balance_idr: number | null;
+          alert_active: boolean;
+          checked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          last_balance_idr?: number | null;
+          alert_active?: boolean;
+          checked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ads_balance_state"]["Insert"]>;
+        Relationships: [];
       };
       meta_ad_campaigns: {
         Row: {
