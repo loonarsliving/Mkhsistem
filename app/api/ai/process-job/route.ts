@@ -6,6 +6,10 @@ import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { discoverBeautyCompetitors, evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
+import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor-intelligence";
+import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
+import { generateWeeklySalesTeaching } from "@/lib/ai/domains/sales-teaching";
+import { generateCashflowActionPlan } from "@/lib/ai/domains/cashflow-teaching";
 import {
   auditWeeklyContentPerformance,
   compareLeaseholdCompetitorContent,
@@ -72,6 +76,26 @@ interface SalesClosingTipsJobPayload {
   sales_phone: string;
   branch_name: string;
   product_type: "villa" | "subsidized" | "commercial" | "unknown";
+}
+
+interface InvestorIntelligenceRefreshJobPayload {
+  topic: string;
+}
+
+interface CashflowIntelligenceRefreshJobPayload {
+  topic: string;
+}
+
+interface SalesTeachingWeeklyJobPayload {
+  branch_id: string;
+  branch_name: string;
+}
+
+interface CashflowActionPlanJobPayload {
+  branch_id: string;
+  branch_name: string;
+  saldo: number;
+  threshold: number;
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -565,6 +589,160 @@ async function processSalesClosingTipsBroadcast(job: JobRow) {
   return { salesId: payload.sales_id, sent: true };
 }
 
+async function processInvestorIntelligenceRefresh(job: JobRow) {
+  const payload = job.payload as unknown as InvestorIntelligenceRefreshJobPayload;
+  return processInvestorIntelligenceRefreshJob(payload.topic);
+}
+
+async function processCashflowIntelligenceRefresh(job: JobRow) {
+  const payload = job.payload as unknown as CashflowIntelligenceRefreshJobPayload;
+  return processCashflowIntelligenceRefreshJob(payload.topic);
+}
+
+/** Every active employees.phone with role kepala_cabang in a branch -- shared by the Sales Teaching Engine and the Cashflow Teaching Engine, both WhatsApp-only (no mkc_notifications row, no UI trace, per the owner's explicit ask). */
+async function getKepalaCabangPhones(supabase: AdminClient, branchId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from("employees")
+    .select("phone, roles!inner(key)")
+    .eq("branch_id", branchId)
+    .eq("roles.key", "kepala_cabang")
+    .eq("employment_status", "active")
+    .is("deleted_at", null);
+  return (data ?? []).map((row) => row.phone).filter((phone): phone is string => Boolean(phone));
+}
+
+/**
+ * Weekly branch-wide Weekly Coaching for Kepala Cabang (0128, Sales
+ * Teaching Engine) -- gathers real villa-leasehold prospect activity for
+ * the branch (today, only Jogja -- crm_run_sales_teaching_weekly only
+ * dispatches branches with an active villa project), generates the 8-
+ * section briefing, and sends it directly via WhatsApp. No
+ * mkc_notifications row -- this module must never appear in any menu.
+ */
+async function processSalesTeachingWeekly(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as SalesTeachingWeeklyJobPayload;
+
+  const phones = await getKepalaCabangPhones(supabase, payload.branch_id);
+  if (!phones.length) throw new Error(`No active Kepala Cabang phone found for branch ${payload.branch_name}`);
+
+  // Scoped to villa-leasehold prospects only (crm_projects.project_type = 'villa'), per the owner's explicit ask that this module is villa-leasehold-only.
+  const [{ data: activeProspects }, { count: newProspectCount7d }, { count: followUpCount7d }, { count: closings7d }, { count: closings30d }] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select("id, last_follow_up_at, created_at, crm_projects!inner(project_type)")
+      .eq("branch_id", payload.branch_id)
+      .eq("crm_projects.project_type", "villa")
+      .is("deleted_at", null)
+      .not("status", "in", "(closing,inactive)"),
+    supabase
+      .from("prospects")
+      .select("id, crm_projects!inner(project_type)", { count: "exact", head: true })
+      .eq("branch_id", payload.branch_id)
+      .eq("crm_projects.project_type", "villa")
+      .is("deleted_at", null)
+      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase
+      .from("prospect_follow_ups")
+      .select("id, prospects!inner(branch_id, crm_projects!inner(project_type))", { count: "exact", head: true })
+      .eq("prospects.branch_id", payload.branch_id)
+      .eq("prospects.crm_projects.project_type", "villa")
+      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase
+      .from("prospects")
+      .select("id, crm_projects!inner(project_type)", { count: "exact", head: true })
+      .eq("branch_id", payload.branch_id)
+      .eq("crm_projects.project_type", "villa")
+      .eq("status", "closing")
+      .not("closed_at", "is", null)
+      .gte("closed_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase
+      .from("prospects")
+      .select("id, crm_projects!inner(project_type)", { count: "exact", head: true })
+      .eq("branch_id", payload.branch_id)
+      .eq("crm_projects.project_type", "villa")
+      .eq("status", "closing")
+      .not("closed_at", "is", null)
+      .gte("closed_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
+
+  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const stuckCount = (activeProspects ?? []).filter((p) => new Date(p.last_follow_up_at ?? p.created_at).getTime() < cutoff).length;
+
+  const now = new Date();
+  const message = await generateWeeklySalesTeaching({
+    branchName: payload.branch_name,
+    periodLabel: `Minggu ${Math.ceil(now.getDate() / 7)}, ${now.getMonth() + 1}/${now.getFullYear()}`,
+    activeProspectCount: (activeProspects ?? []).length,
+    newProspectCount7d: newProspectCount7d ?? 0,
+    stuckProspectCount: stuckCount,
+    followUpCount7d: followUpCount7d ?? 0,
+    closings7d: closings7d ?? 0,
+    closings30d: closings30d ?? 0,
+  });
+
+  const fullMessage = `📊 Weekly Coaching — Cabang ${payload.branch_name}\n\n${message}`;
+  for (const phone of phones) {
+    const sendResult = await sendWhatsAppText(phone, fullMessage);
+    if (!sendResult.success) throw new Error(`Failed to send weekly sales teaching to ${phone}: ${sendResult.error ?? "unknown"}`);
+  }
+
+  return { branchId: payload.branch_id, sentTo: phones.length };
+}
+
+/**
+ * Low-balance Action Plan for Kepala Cabang (0129, Cashflow Teaching
+ * Engine) -- root cause, risk level, and a concrete Action Plan, sent
+ * directly via WhatsApp. No mkc_notifications row -- this module must
+ * never appear in any menu.
+ */
+async function processCashflowActionPlan(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as CashflowActionPlanJobPayload;
+
+  const phones = await getKepalaCabangPhones(supabase, payload.branch_id);
+  if (!phones.length) throw new Error(`No active Kepala Cabang phone found for branch ${payload.branch_name}`);
+
+  const [{ count: activeVillaProspectCount }, { count: closings30d }, { count: recentBalanceAlertCount14d }] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select("id, crm_projects!inner(project_type)", { count: "exact", head: true })
+      .eq("branch_id", payload.branch_id)
+      .eq("crm_projects.project_type", "villa")
+      .is("deleted_at", null)
+      .not("status", "in", "(closing,inactive)"),
+    supabase
+      .from("prospects")
+      .select("id", { count: "exact", head: true })
+      .eq("branch_id", payload.branch_id)
+      .eq("status", "closing")
+      .not("closed_at", "is", null)
+      .gte("closed_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase
+      .from("mkc_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("category", "branch_balance_alert")
+      .contains("metadata", { branch_id: payload.branch_id })
+      .gte("created_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
+
+  const message = await generateCashflowActionPlan({
+    branchName: payload.branch_name,
+    saldo: payload.saldo,
+    thresholdAmount: payload.threshold,
+    dayOfMonth: new Date().getDate(),
+    activeVillaProspectCount: activeVillaProspectCount ?? 0,
+    closings30d: closings30d ?? 0,
+    recentBalanceAlertCount14d: recentBalanceAlertCount14d ?? 0,
+  });
+
+  const fullMessage = `🚨 Cashflow Action Plan — Cabang ${payload.branch_name}\n\n${message}`;
+  for (const phone of phones) {
+    const sendResult = await sendWhatsAppText(phone, fullMessage);
+    if (!sendResult.success) throw new Error(`Failed to send cashflow action plan to ${phone}: ${sendResult.error ?? "unknown"}`);
+  }
+
+  return { branchId: payload.branch_id, sentTo: phones.length };
+}
+
 /**
  * Recent own-account Instagram posts, Zernio-first then direct Meta Graph
  * API fallback -- same precedence as capture-snapshots/route.ts. Shared by
@@ -916,7 +1094,15 @@ export async function POST(request: Request) {
                         ? await processLeaseholdCompetitorComparison(supabase)
                         : job.job_type === "competitor_discovery"
                           ? await processCompetitorDiscovery(supabase, job)
-                          : await processSocialWeeklyEvaluation(supabase);
+                          : job.job_type === "investor_intelligence_refresh"
+                            ? await processInvestorIntelligenceRefresh(job)
+                            : job.job_type === "cashflow_intelligence_refresh"
+                              ? await processCashflowIntelligenceRefresh(job)
+                              : job.job_type === "sales_teaching_weekly"
+                                ? await processSalesTeachingWeekly(supabase, job)
+                                : job.job_type === "cashflow_action_plan"
+                                  ? await processCashflowActionPlan(supabase, job)
+                                  : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
