@@ -136,9 +136,14 @@ async function captureForProduct(supabase: AdminClient, product: ZernioProduct):
  * "video views" for TikTok rows -- see lib/ai/domains/markom.ts's
  * gatherContentPlannerContext/processSocialWeeklyEvaluation, which read it
  * back the same way.
+ *
+ * property and beauty MUST run sequentially, not via Promise.all -- see
+ * lib/social/zernio.ts's module doc for why running two products'
+ * Zernio calls concurrently corrupts both with cross-authenticated data.
  */
 export async function POST() {
   const supabase = createAdminClient();
-  const [property, beauty] = await Promise.all([captureForProduct(supabase, "property"), captureForProduct(supabase, "beauty")]);
+  const property = await captureForProduct(supabase, "property");
+  const beauty = await captureForProduct(supabase, "beauty");
   return NextResponse.json({ status: "done", results: { property, beauty } });
 }

@@ -28,6 +28,25 @@ type AnalyticsPost = NonNullable<AnalyticsListResponse["posts"]>[number];
  * minimal diff. Built from the official @zernio/node SDK's real shipped
  * TypeScript types (node_modules/@zernio/node/dist/index.d.ts) -- not
  * guessed.
+ *
+ * IMPORTANT -- never cache/reuse a Zernio client across products, and never
+ * run a property call and a beauty call concurrently. The SDK's `new
+ * Zernio()` constructor doesn't build an isolated client: it calls
+ * `client.setConfig(...)` and `client.interceptors.request.use(...)` on a
+ * single module-level singleton shared by every generated SDK function
+ * (confirmed in node_modules/@zernio/node/src/client.ts and
+ * generated/sdk.gen.ts's `export const client = createClient(createConfig())`).
+ * Interceptors accumulate and never get removed, so the most recently
+ * constructed Zernio instance's Authorization header wins for ALL in-flight
+ * requests from ANY instance, including ones made by an earlier, still-cached
+ * client object. Constructing two products' clients concurrently (as
+ * capture-snapshots/route.ts's Promise.all originally did) silently
+ * cross-authenticated requests -- e.g. property's Instagram accountId got
+ * queried under beauty's API key, returning empty/zero data for an account
+ * that key doesn't own, while property's TikTok request got beauty's real
+ * numbers back. Constructing fresh right before each call, and keeping
+ * callers strictly sequential per product, keeps each call's own interceptor
+ * the most-recently-registered one when its request actually fires.
  */
 
 export type ZernioProduct = "property" | "beauty";
@@ -37,15 +56,8 @@ const ZERNIO_ENV_VAR: Record<ZernioProduct, string> = {
   beauty: "ZERNIO_BEAUTY_API_KEY",
 };
 
-const cachedClients = new Map<ZernioProduct, Zernio>();
-
 function getClient(product: ZernioProduct): Zernio {
-  let client = cachedClients.get(product);
-  if (!client) {
-    client = new Zernio({ apiKey: process.env[ZERNIO_ENV_VAR[product]] });
-    cachedClients.set(product, client);
-  }
-  return client;
+  return new Zernio({ apiKey: process.env[ZERNIO_ENV_VAR[product]] });
 }
 
 export function isZernioConfigured(product: ZernioProduct = "property"): boolean {
