@@ -85,8 +85,8 @@ export async function exportAttendanceHistoryCsvAction(filters: AttendanceHistor
       employee?.full_name ?? "",
       employee?.employee_code ?? "",
       row.status as AttendanceStatus,
-      row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString("id-ID") : "",
-      row.check_out_time ? new Date(row.check_out_time).toLocaleTimeString("id-ID") : "",
+      row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }) : "",
+      row.check_out_time ? new Date(row.check_out_time).toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }) : "",
       row.check_in_note ?? "",
       row.check_out_note ?? "",
     ];

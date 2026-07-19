@@ -148,7 +148,7 @@ export async function getKnowledgeBankContext(productLine: ProductLine): Promise
   if (error || !data || data.length === 0) return "";
 
   const text = data
-    .map((row) => `### ${row.title} (riset terakhir: ${new Date(row.researched_at).toLocaleDateString("id-ID")})\n${row.content}`)
+    .map((row) => `### ${row.title} (riset terakhir: ${new Date(row.researched_at).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar" })})\n${row.content}`)
     .join("\n\n");
 
   contextCache.set(productLine, { text, cachedAt: Date.now() });

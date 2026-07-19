@@ -109,7 +109,10 @@ async function runBranchBalance(supabase: AdminClient, branchName: string | null
   if (error) return `(Gagal mengambil data saldo cabang: ${error.message})`;
   if (!data || data.length === 0) return "[Saldo Cabang] Data tidak ditemukan.";
 
-  const lines = data.map((b) => `${b.branch_name}: ${formatIdr(Number(b.saldo))} (update terakhir ${new Date(b.synced_at).toLocaleString("id-ID")})`);
+  const lines = data.map(
+    (b) =>
+      `${b.branch_name}: ${formatIdr(Number(b.saldo))} (update terakhir ${new Date(b.synced_at).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })})`,
+  );
   return `[Saldo Kas per Cabang]\n${lines.join("\n")}`;
 }
 
