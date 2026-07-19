@@ -283,6 +283,7 @@ export interface Database {
           rejected_by: string | null;
           rejected_at: string | null;
           rejection_reason: string | null;
+          ads_lead_routing_paused: boolean;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -313,6 +314,7 @@ export interface Database {
           rejected_by?: string | null;
           rejected_at?: string | null;
           rejection_reason?: string | null;
+          ads_lead_routing_paused?: boolean;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;

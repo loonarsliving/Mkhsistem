@@ -247,7 +247,7 @@ export async function tryReassignAdLeadFollowUp(
   const supabase = createAdminClient();
   const { data: candidates } = await supabase
     .from("prospects")
-    .select("id, customer_name, phone_normalized, sales_id, status")
+    .select("id, customer_name, phone, phone_normalized, sales_id, status")
     .eq("branch_id", branchId)
     .eq("lead_source", "facebook_ads")
     .is("created_by", null)
@@ -281,7 +281,7 @@ export async function tryReassignAdLeadFollowUp(
     .eq("id", prospect.id);
 
   if (newSales?.phone) {
-    const notifyText = `Lead dialihkan dari Sales lain oleh Kepala Cabang.\nNama: ${prospect.customer_name ?? "Tidak diketahui"}\nSegera follow up.`;
+    const notifyText = `Lead dialihkan dari Sales lain oleh Kepala Cabang.\nNama: ${prospect.customer_name ?? "Tidak diketahui"}\nWA: ${prospect.phone ?? "-"}\nSegera follow up.`;
     const sendResult = await sendWhatsAppText(newSales.phone, notifyText);
     if (!sendResult.success) {
       logger.error("tryReassignAdLeadFollowUp: WA notify to new sales failed", { newSalesId, error: sendResult.error });
