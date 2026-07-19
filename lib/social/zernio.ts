@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Zernio } from "@zernio/node";
-import type { AnalyticsListResponse, SocialAccount } from "@zernio/node";
+import type { AccountWithFollowerStats, AnalyticsListResponse, SocialAccount } from "@zernio/node";
 
 type AnalyticsPost = NonNullable<AnalyticsListResponse["posts"]>[number];
 
@@ -110,6 +110,15 @@ export interface ZernioAccountSnapshot {
  * (Zernio's follower-stats endpoint doesn't separately expose a Meta-style
  * "profile views" aggregate) -- profileViews here is really summed post
  * impressions, an approximation, not a literal profile-view count.
+ *
+ * Two field-mapping bugs fixed here, found by dumping the raw Zernio
+ * response (both were silently returning 0, no error thrown):
+ * 1. getFollowerStats' accounts[] carries the real count under
+ *    `currentFollowers`, not `followersCount` -- that field only exists on
+ *    the analytics endpoint's accounts[] (a different, unrelated array).
+ * 2. TikTok's platform API doesn't report impressions/reach at all (Zernio
+ *    always returns 0 for both there) -- `views` is the only real volume
+ *    metric it exposes, so use that for TikTok's profile-views figure.
  */
 export async function getZernioAccountSnapshot(accountId: string, platform: ZernioPlatform, product: ZernioProduct = "property"): Promise<ZernioAccountSnapshot> {
   const client = getClient(product);
@@ -118,13 +127,16 @@ export async function getZernioAccountSnapshot(accountId: string, platform: Zern
     client.analytics.getAnalytics({ query: { accountId, platform, source: "all", sortBy: "date", order: "desc", limit: 30 } }),
   ]);
 
-  const account = followerStats.data?.accounts?.find((a: SocialAccount) => a._id === accountId);
+  const account = followerStats.data?.accounts?.find((a: AccountWithFollowerStats) => a._id === accountId);
   const posts: AnalyticsPost[] = (analytics.data && "posts" in analytics.data ? analytics.data.posts : []) ?? [];
   const reach = posts.reduce((sum: number, p: AnalyticsPost) => sum + (p.analytics?.reach ?? 0), 0);
-  const profileViews = posts.reduce((sum: number, p: AnalyticsPost) => sum + (p.analytics?.impressions ?? 0), 0);
+  const profileViews = posts.reduce(
+    (sum: number, p: AnalyticsPost) => sum + (platform === "tiktok" ? (p.analytics?.views ?? 0) : (p.analytics?.impressions ?? 0)),
+    0,
+  );
 
   return {
-    followersCount: account?.followersCount ?? 0,
+    followersCount: account?.currentFollowers ?? 0,
     reach,
     profileViews,
   };
@@ -167,7 +179,9 @@ export async function getRecentZernioMediaPerformance(
     caption: post.content ?? null,
     mediaType: post.mediaType ?? "unknown",
     timestamp: post.publishedAt ?? post.scheduledFor ?? new Date().toISOString(),
-    reach: post.analytics?.reach ?? 0,
+    // TikTok never populates reach (see getZernioAccountSnapshot's doc) -- views is
+    // the real volume metric there, used as the reach proxy.
+    reach: platform === "tiktok" ? (post.analytics?.views ?? 0) : (post.analytics?.reach ?? 0),
     likes: post.analytics?.likes ?? 0,
     comments: post.analytics?.comments ?? 0,
     shares: post.analytics?.shares ?? 0,
