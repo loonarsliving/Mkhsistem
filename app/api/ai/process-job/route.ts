@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import {
+  auditWeeklyBeautyContentPerformance,
   compareBeautyCompetitorContent,
   discoverBeautyCompetitors,
   evaluateLoonarsWeeklyPerformance,
@@ -932,6 +933,63 @@ async function processCompetitorDiscovery(supabase: AdminClient, job: JobRow) {
 }
 
 /**
+ * Beauty's own version of processSocialWeeklyEvaluation (0111/0123) -- the
+ * scored hook/value/CTA/niche-fit/engagement/platform-optimization audit
+ * Content Audit shows, computed from Beauty's own real Zernio per-post data
+ * instead of property's. This was the missing piece that made Content
+ * Audit look leasehold-only: loonars_weekly_evaluations (processLoonars
+ * BeautyWeeklyEvaluation below) is a different, narrower thing entirely
+ * (content-ratio-vs-target + orders), never a per-post score.
+ */
+async function processLoonarsBeautyWeeklyContentAudit(supabase: AdminClient) {
+  const now = new Date();
+  const weekStart = getWeekStart(now);
+  const lastWeekStartDate = new Date(weekStart);
+  lastWeekStartDate.setDate(lastWeekStartDate.getDate() - 7);
+  const lastWeekStart = lastWeekStartDate.toISOString().slice(0, 10);
+
+  const [{ data: igThisWeek }, { data: igLastWeek }, { data: ttThisWeek }, { data: competitorLogs }] = await Promise.all([
+    supabase.from("social_account_snapshots").select("*").eq("platform", "instagram").eq("product_line", "beauty").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_account_snapshots")
+      .select("*")
+      .eq("platform", "instagram")
+      .eq("product_line", "beauty")
+      .gte("captured_at", lastWeekStart)
+      .lt("captured_at", weekStart)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("social_account_snapshots").select("*").eq("platform", "tiktok").eq("product_line", "beauty").gte("captured_at", weekStart).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase
+      .from("social_competitor_content_logs")
+      .select("hook, caption, hashtags, engagement_notes, content_type, competitor:competitor_account_id!inner(handle, platform, content_focus)")
+      .eq("competitor.content_focus", "beauty")
+      .gte("logged_at", weekStart)
+      .order("logged_at", { ascending: false })
+      .limit(15),
+  ]);
+
+  const competitorNotes = formatCompetitorNotes((competitorLogs ?? []) as CompetitorLogRow[]);
+  const instagramTopPosts = (await getBeautyRecentInstagramPosts(12)).filter((p) => p.timestamp >= weekStart);
+
+  const audit = await auditWeeklyBeautyContentPerformance({
+    instagramThisWeek: igThisWeek ? { reach: igThisWeek.reach ?? 0, profileViews: igThisWeek.impressions ?? 0, followersCount: igThisWeek.followers_count ?? 0 } : null,
+    instagramLastWeek: igLastWeek ? { reach: igLastWeek.reach ?? 0, profileViews: igLastWeek.impressions ?? 0, followersCount: igLastWeek.followers_count ?? 0 } : null,
+    instagramTopPosts,
+    tiktokThisWeek: ttThisWeek ? { videoViews: ttThisWeek.impressions ?? 0, likes: ttThisWeek.likes ?? 0, followersCount: ttThisWeek.followers_count ?? 0 } : null,
+    competitorNotes,
+  });
+
+  const { error: upsertError } = await supabase
+    .from("loonars_beauty_weekly_content_audits")
+    .upsert({ week_start: weekStart, evaluation: audit.narrative, audit: audit as unknown as Json }, { onConflict: "week_start" });
+  if (upsertError) throw new Error(`Failed to save beauty weekly content audit: ${upsertError.message}`);
+
+  return { weekStart };
+}
+
+/**
  * Beauty's own version of processLeaseholdCompetitorComparison -- our real
  * recent content from Beauty's own Zernio account (0126) vs registered
  * beauty competitors (content_focus='beauty', 0125).
@@ -1222,7 +1280,9 @@ export async function POST(request: Request) {
                             ? await processLoonarsBeautyCompetitorComparison(supabase)
                             : job.job_type === "loonars_beauty_content_ideas_draft"
                               ? await processLoonarsBeautyContentIdeasDraft(supabase)
-                              : job.job_type === "investor_intelligence_refresh"
+                              : job.job_type === "loonars_beauty_weekly_content_audit"
+                                ? await processLoonarsBeautyWeeklyContentAudit(supabase)
+                                : job.job_type === "investor_intelligence_refresh"
                                 ? await processInvestorIntelligenceRefresh(job)
                                 : job.job_type === "cashflow_intelligence_refresh"
                                   ? await processCashflowIntelligenceRefresh(job)

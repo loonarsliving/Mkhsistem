@@ -144,3 +144,10 @@ export async function getLatestCompetitorComparison(supabase: TypedSupabaseClien
   if (error) throw error;
   return data;
 }
+
+/** Content Audit module for Beauty (0133) -- past weekly scored audits, newest first, same shape as social.repository's listWeeklyEvaluations. */
+export async function listContentAudits(supabase: TypedSupabaseClient, limit = 12) {
+  const { data, error } = await supabase.from("loonars_beauty_weekly_content_audits").select("*").order("week_start", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}

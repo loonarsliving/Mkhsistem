@@ -11,6 +11,7 @@ import {
   getLatestCompetitorComparison,
   getLatestWeeklyEvaluation,
   getOrderStats,
+  listContentAudits,
   listContentItems,
   listContentMetrics,
   listOrders,
@@ -240,6 +241,22 @@ export async function triggerContentIdeasAction(): Promise<ActionResult> {
   await requirePermission("loonars_beauty.manage");
   const supabase = await createClient();
   const { error } = await supabase.rpc("loonars_beauty_request_content_ideas");
+  if (error) return actionError(error.message);
+  return actionSuccess();
+}
+
+/** Content Audit for Beauty (0133) -- same shape/rubric as markom's listWeeklyContentAuditsAction, own Zernio account. */
+export async function listWeeklyContentAuditsAction() {
+  await requirePermission("loonars_beauty.view");
+  const supabase = await createClient();
+  return listContentAudits(supabase, 12);
+}
+
+/** Enqueues an on-demand content audit run -- the automatic Monday run still happens regardless. */
+export async function triggerWeeklyContentAuditAction(): Promise<ActionResult> {
+  await requirePermission("loonars_beauty.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("loonars_beauty_request_weekly_content_audit");
   if (error) return actionError(error.message);
   return actionSuccess();
 }

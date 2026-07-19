@@ -337,3 +337,151 @@ Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "category
   if (fallbackItems.length === 0) throw new Error("AI did not return parseable content ideas");
   return fallbackItems.slice(0, 3);
 }
+
+export interface BeautyWeeklyContentAuditPost {
+  permalink: string | null;
+  caption: string | null;
+  mediaType: string;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+}
+
+export interface BeautyWeeklyContentAuditInput {
+  instagramThisWeek?: { reach: number; profileViews: number; followersCount: number } | null;
+  instagramLastWeek?: { reach: number; profileViews: number; followersCount: number } | null;
+  /** Real recent posts from Loonars Beauty's own Zernio account (0126). */
+  instagramTopPosts?: BeautyWeeklyContentAuditPost[];
+  tiktokThisWeek?: { videoViews: number; likes: number; followersCount: number } | null;
+  competitorNotes: string[];
+}
+
+export interface BeautyWeeklyContentAuditScores {
+  hook: number;
+  value: number;
+  cta: number;
+  nicheFit: number;
+  engagementPotential: number;
+  platformOptimization: number;
+  overall: number;
+}
+
+export interface BeautyWeeklyContentAuditHighlight {
+  permalink: string | null;
+  reasoning: string;
+}
+
+export type BeautyWeeklyContentGrowthSignal = "excellent" | "on_track" | "below_benchmark";
+
+export interface BeautyWeeklyContentAuditResult {
+  narrative: string;
+  scores: BeautyWeeklyContentAuditScores;
+  growthSignal: BeautyWeeklyContentGrowthSignal;
+  bestPost: BeautyWeeklyContentAuditHighlight | null;
+  worstPost: BeautyWeeklyContentAuditHighlight | null;
+  recommendations: string[];
+}
+
+function clampAuditScore(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 5;
+  return Math.max(1, Math.min(10, Math.round(n * 10) / 10));
+}
+
+function parseBeautyWeeklyContentAuditJson(text: string): BeautyWeeklyContentAuditResult {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Omit<Partial<BeautyWeeklyContentAuditResult>, "scores"> & { scores?: Partial<BeautyWeeklyContentAuditScores> };
+
+  if (typeof parsed.narrative !== "string" || parsed.narrative.trim().length === 0) {
+    throw new Error("AI beauty weekly content audit response missing narrative text");
+  }
+  const rawScores = parsed.scores ?? {};
+  const scores: BeautyWeeklyContentAuditScores = {
+    hook: clampAuditScore(rawScores.hook),
+    value: clampAuditScore(rawScores.value),
+    cta: clampAuditScore(rawScores.cta),
+    nicheFit: clampAuditScore(rawScores.nicheFit),
+    engagementPotential: clampAuditScore(rawScores.engagementPotential),
+    platformOptimization: clampAuditScore(rawScores.platformOptimization),
+    overall: 5,
+  };
+  scores.overall = Math.round(((scores.hook + scores.value + scores.cta + scores.nicheFit + scores.engagementPotential + scores.platformOptimization) / 6) * 10) / 10;
+
+  const growthSignal: BeautyWeeklyContentGrowthSignal =
+    parsed.growthSignal === "excellent" || parsed.growthSignal === "below_benchmark" ? parsed.growthSignal : "on_track";
+
+  return {
+    narrative: parsed.narrative.trim().slice(0, 2000),
+    scores,
+    growthSignal,
+    bestPost:
+      parsed.bestPost && typeof parsed.bestPost.reasoning === "string"
+        ? { permalink: typeof parsed.bestPost.permalink === "string" ? parsed.bestPost.permalink : null, reasoning: parsed.bestPost.reasoning.slice(0, 500) }
+        : null,
+    worstPost:
+      parsed.worstPost && typeof parsed.worstPost.reasoning === "string"
+        ? { permalink: typeof parsed.worstPost.permalink === "string" ? parsed.worstPost.permalink : null, reasoning: parsed.worstPost.reasoning.slice(0, 500) }
+        : null,
+    recommendations: Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.filter((r): r is string => typeof r === "string" && r.trim().length > 0).map((r) => r.trim().slice(0, 300)).slice(0, 5)
+      : [],
+  };
+}
+
+/**
+ * Loonars Beauty's own version of auditWeeklyContentPerformance (markom.ts,
+ * 0111) -- same hook/value/CTA/niche-fit/engagement-potential/platform-
+ * optimization rubric (1-10 each, overall = average), scored against
+ * Beauty's own real posts (Zernio, 0126) rather than property's. Was
+ * missing entirely before this -- Content Audit only ever covered
+ * property because this function didn't exist yet; loonars_weekly_
+ * evaluations (evaluateLoonarsWeeklyPerformance above) is a different,
+ * narrower thing (content-ratio-vs-target + orders), not a per-post score.
+ */
+export async function auditWeeklyBeautyContentPerformance(input: BeautyWeeklyContentAuditInput): Promise<BeautyWeeklyContentAuditResult> {
+  const igLine = input.instagramThisWeek
+    ? `Instagram Loonars Beauty minggu ini: reach ${input.instagramThisWeek.reach}, profile views ${input.instagramThisWeek.profileViews}, followers ${input.instagramThisWeek.followersCount}.` +
+      (input.instagramLastWeek ? ` Minggu lalu: reach ${input.instagramLastWeek.reach}, profile views ${input.instagramLastWeek.profileViews}.` : "")
+    : "Data akun Instagram Loonars Beauty tidak tersedia.";
+  const ttLine = input.tiktokThisWeek
+    ? `TikTok Loonars Beauty minggu ini: ${input.tiktokThisWeek.videoViews} video views, ${input.tiktokThisWeek.likes} likes, ${input.tiktokThisWeek.followersCount} followers.`
+    : "TikTok belum terhubung ke sistem -- audit minggu ini hanya mencakup Instagram.";
+  const competitorBlock = input.competitorNotes.length > 0 ? `Observasi konten kompetitor minggu ini:\n${input.competitorNotes.join("\n")}` : "Tidak ada catatan kompetitor minggu ini.";
+  const postsBlock =
+    input.instagramTopPosts && input.instagramTopPosts.length > 0
+      ? `Post Instagram nyata minggu ini (data asli dari akun Loonars Beauty, nilai satu per satu -- JANGAN menilai rata-rata saja):\n${input.instagramTopPosts
+          .map(
+            (p, i) =>
+              `${i + 1}. [${p.mediaType}] "${(p.caption ?? "(tanpa caption)").slice(0, 200)}" -- reach ${p.reach}, likes ${p.likes}, comments ${p.comments}, shares ${p.shares}, saves ${p.saves}${p.permalink ? `, url: ${p.permalink}` : ""}`,
+          )
+          .join("\n")}`
+      : "Tidak ada data post individual minggu ini (mungkin belum ada post baru, atau akun baru terhubung) -- audit skor di bawah berdasarkan data akun secara umum saja, sebutkan keterbatasan ini di narrative.";
+
+  const userPrompt = `Audit performa konten media sosial HydraGlow Advanced Brightening Lotion (Loonars Beauty) minggu ini, sebagai content auditor yang objektif (skor jujur, bukan basa-basi).
+
+${igLine}
+${ttLine}
+
+${postsBlock}
+
+${competitorBlock}
+
+Tugas kamu:
+1. Beri skor 1-10 (boleh desimal) untuk 6 dimensi berikut, berdasarkan pola dari post-post nyata di atas (kalau tidak ada data post, nilai berdasarkan data akun + observasi kompetitor, dan jelaskan keterbatasan ini di narrative): hook (apakah 3 kata/detik pertama menghentikan scroll?), value (insight/informasi konkret soal skincare, bukan tips umum?), cta (ajakan bertindak spesifik, bukan generik "like & follow"?), nicheFit (relevan & terasa khusus untuk audiens target skincare brightening?), engagementPotential (ada alasan orang mau save/share/comment bermakna?), platformOptimization (format, panjang caption, hashtag sesuai platform?).
+2. Tentukan growthSignal: "excellent" (reach/followers naik jelas dibanding minggu lalu, tidak ada tanda stagnan), "on_track" (stabil/naik tipis, tidak ada masalah mendesak), atau "below_benchmark" (reach/followers turun atau stagnan berkepanjangan -- untuk akun baru dengan 0 followers, ini WAJAR bukan otomatis below_benchmark, nilai dari tren postingan bukan angka absolut).
+3. Identifikasi SATU post terbaik dan SATU post terlemah minggu ini dari data di atas (permalink + alasan konkret merujuk ke isi post-nya, bukan cuma angka) -- null kalau tidak ada data post untuk dibandingkan.
+4. Tulis narrative (4-6 kalimat Bahasa Indonesia): apa yang berhasil dan kemungkinan sebabnya, apa yang kurang berhasil dan kemungkinan sebabnya, perubahan strategi kompetitor yang terlihat (jika ada catatan).
+5. Berikan 2-4 rekomendasi konkret dan actionable untuk minggu depan (bukan saran generik "posting lebih sering").
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{"narrative": "...", "scores": {"hook": angka, "value": angka, "cta": angka, "nicheFit": angka, "engagementPotential": angka, "platformOptimization": angka}, "growthSignal": "excellent atau on_track atau below_benchmark", "bestPost": {"permalink": "url atau null", "reasoning": "..."} atau null, "worstPost": {"permalink": "url atau null", "reasoning": "..."} atau null, "recommendations": ["...", "..."]}`;
+
+  const response = await generateAIText({ systemPrompt: await getSystemPrompt("loonars_beauty"), userPrompt, maxOutputTokens: 2048 });
+  return parseBeautyWeeklyContentAuditJson(response.text);
+}

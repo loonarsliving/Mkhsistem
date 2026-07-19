@@ -7,8 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
-import { listWeeklyContentAuditsAction } from "../actions/social.actions";
-
 interface AuditScores {
   hook: number;
   value: number;
@@ -67,8 +65,26 @@ function ScoreBar({ label, score }: { label: string; score: number }) {
   );
 }
 
-export function ContentAuditBoard() {
-  const { data, isLoading } = useQuery({ queryKey: ["content-audit-weekly"], queryFn: listWeeklyContentAuditsAction });
+interface ContentAuditRow {
+  id: string;
+  week_start: string;
+  evaluation: string;
+  audit: unknown;
+}
+
+interface ContentAuditBoardProps {
+  /** react-query cache key -- pass a stable per-product-line key so Leasehold and Beauty each cache independently. */
+  queryKey: string;
+  listAction: () => Promise<ContentAuditRow[]>;
+}
+
+/**
+ * Weekly scored content audit -- originally property/leasehold-only
+ * (0111), generalized (0133) so Loonars Beauty reuses the same UI against
+ * its own audit table (auditWeeklyBeautyContentPerformance).
+ */
+export function ContentAuditBoard({ queryKey, listAction }: ContentAuditBoardProps) {
+  const { data, isLoading } = useQuery({ queryKey: [queryKey], queryFn: listAction });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Memuat riwayat audit...</p>;
   if (!data || data.length === 0) {

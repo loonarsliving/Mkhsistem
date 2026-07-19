@@ -68,10 +68,17 @@ export function ContentPlannerOverview({ queryKey, overviewAction }: ContentPlan
           </CardHeader>
           <CardContent>
             {data.tiktok ? (
-              <div className="grid grid-cols-2 gap-2">
-                <StatTile icon={Users} label="Followers" value={(data.tiktok.followers_count ?? 0).toLocaleString("id-ID")} />
-                <StatTile icon={Eye} label="Video Views" value={(data.tiktok.impressions ?? 0).toLocaleString("id-ID")} />
-                <StatTile icon={Heart} label="Likes" value={(data.tiktok.likes ?? 0).toLocaleString("id-ID")} />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <StatTile icon={Users} label="Followers" value={(data.tiktok.followers_count ?? 0).toLocaleString("id-ID")} />
+                  <StatTile icon={Eye} label="Video Views" value={(data.tiktok.impressions ?? 0).toLocaleString("id-ID")} />
+                  <StatTile icon={Heart} label="Likes" value={(data.tiktok.likes ?? 0).toLocaleString("id-ID")} />
+                </div>
+                {(data.tiktok.followers_count ?? 0) === 0 && (data.tiktok.impressions ?? 0) === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Akun sudah terhubung -- angka masih 0 karena ini akun baru, belum ada followers/postingan untuk diukur.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">TikTok belum terhubung -- cek status koneksi di halaman Monitoring.</p>
