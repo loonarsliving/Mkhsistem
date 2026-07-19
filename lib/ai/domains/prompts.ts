@@ -82,31 +82,36 @@ async function loadPrompts(): Promise<Record<PromptKey, string>> {
 }
 
 /**
- * Domains whose expertise benefits from the weekly-refreshed knowledge bank
- * (villa leasehold / rumah subsidi market, property sales closing
- * technique, Meta/Instagram/TikTok strategy for property) -- see
- * knowledge-bank.ts. Deliberately excludes loonars_beauty: the bank is
- * scoped to PT Maha Karya Haluoleo's property products (rumah subsidi,
- * villa leasehold), and injecting it into a skincare-product prompt would
- * only produce off-topic answers there.
+ * Which product-line knowledge bank (see knowledge-bank.ts) feeds which
+ * domain prompt -- markom/crm get the property bank (villa leasehold /
+ * rumah subsidi market, closing technique, Meta/IG/TikTok strategy for
+ * property), loonars_beauty gets its own, entirely separate skincare bank.
+ * The two are never mixed -- each product's knowledge would only be
+ * off-topic noise in the other's prompt.
  */
-const KNOWLEDGE_BANK_DOMAINS: readonly PromptKey[] = ["markom", "crm"];
+const KNOWLEDGE_BANK_DOMAIN_PRODUCT_LINE: Partial<Record<PromptKey, "property" | "beauty">> = {
+  markom: "property",
+  crm: "property",
+  loonars_beauty: "beauty",
+};
 
 /**
  * Admin-editable system prompt for a domain (Modul AI) -- always resolves to
  * *something*, falling back to the original hardcoded copy on any read
- * failure or missing row. For markom/crm, appends the cached knowledge bank
- * (weekly-researched property market + sales/marketing strategy) as extra
- * context -- grounds answers in recent, product-specific knowledge without
- * a live Google Search call on every single question. Silently omitted if
- * the bank is empty (first weekly refresh hasn't run yet) or unreadable.
+ * failure or missing row. For markom/crm/loonars_beauty, appends that
+ * domain's product-line knowledge bank (weekly-researched market + sales/
+ * marketing strategy) as extra context -- grounds answers in recent,
+ * product-specific knowledge without a live Google Search call on every
+ * single question. Silently omitted if that product line's bank is empty
+ * (first weekly refresh hasn't run yet) or unreadable.
  */
 export async function getSystemPrompt(key: PromptKey): Promise<string> {
   const prompts = await loadPrompts();
   const base = prompts[key];
 
-  if (KNOWLEDGE_BANK_DOMAINS.includes(key)) {
-    const knowledge = await getKnowledgeBankContext();
+  const productLine = KNOWLEDGE_BANK_DOMAIN_PRODUCT_LINE[key];
+  if (productLine) {
+    const knowledge = await getKnowledgeBankContext(productLine);
     if (knowledge) {
       return `${base}\n\n---\nPENGETAHUAN TERKINI (hasil riset berkala, dipakai sebagai referensi tambahan -- evaluasi dulu relevansinya terhadap pertanyaan, jangan asal tempel):\n${knowledge}`;
     }

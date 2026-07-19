@@ -7,8 +7,10 @@ import { draftSp1Warning, generateSalesCoaching } from "@/lib/ai/domains/crm";
 import { evaluateLoonarsWeeklyPerformance } from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
 import { auditWeeklyContentPerformance, researchAndDraftAd, researchAndGenerateChecklist, type ContentPlannerContext } from "@/lib/ai/domains/markom";
+import { getSystemPrompt } from "@/lib/ai/domains/prompts";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
+import { askAI } from "@/lib/ai/service";
 import { AIProviderError } from "@/lib/ai/provider/errors";
 import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
@@ -50,6 +52,14 @@ interface MetaAdsLaunchJobPayload {
 
 interface KnowledgeBankRefreshJobPayload {
   topic: string;
+}
+
+interface SalesClosingTipsJobPayload {
+  sales_id: string;
+  sales_name: string;
+  sales_phone: string;
+  branch_name: string;
+  product_type: "villa" | "subsidized" | "commercial" | "unknown";
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -501,6 +511,30 @@ async function processKnowledgeBankRefresh(job: JobRow) {
   return processKnowledgeBankRefreshJob(payload.topic);
 }
 
+/** One-off (0117), one job per active sales employee -- personalized closing tip grounded in getSystemPrompt("crm")'s property knowledge bank (villa/subsidized-specific where the sales rep's own product is known). */
+async function processSalesClosingTipsBroadcast(job: JobRow) {
+  const payload = job.payload as unknown as SalesClosingTipsJobPayload;
+  const productLabel =
+    payload.product_type === "villa"
+      ? "villa leasehold (investasi)"
+      : payload.product_type === "subsidized"
+        ? "rumah subsidi"
+        : payload.product_type === "commercial"
+          ? "rumah komersial"
+          : "properti (produk spesifik belum tercatat di sistem untuk sales ini)";
+
+  const tip = await askAI(
+    await getSystemPrompt("crm"),
+    `Buatkan SATU tips closing singkat, konkret, dan langsung bisa dipakai untuk sales berikut, khusus untuk produk yang dia jual -- gaya menyemangati untuk hari Minggu (santai tapi tetap actionable), maksimal 5-6 kalimat, dalam Bahasa Indonesia. Langsung ke isi, tanpa basa-basi pembuka panjang.\n\nNama sales: ${payload.sales_name}\nCabang: ${payload.branch_name}\nProduk yang dijual: ${productLabel}`,
+    { temperature: 0.8, maxAttempts: 1 },
+  );
+
+  const message = `☀️ Tips Closing Hari Minggu untuk ${payload.sales_name}\n\n${tip}`;
+  const sendResult = await sendWhatsAppText(payload.sales_phone, message);
+  if (!sendResult.success) throw new Error(`Failed to send closing tip to ${payload.sales_name}: ${sendResult.error ?? "unknown"}`);
+  return { salesId: payload.sales_id, sent: true };
+}
+
 async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const now = new Date();
   const weekStart = getWeekStart(now);
@@ -749,7 +783,9 @@ export async function POST(request: Request) {
                   ? await processLoonarsBeautyWeeklyEvaluation(supabase)
                   : job.job_type === "knowledge_bank_refresh"
                     ? await processKnowledgeBankRefresh(job)
-                    : await processSocialWeeklyEvaluation(supabase);
+                    : job.job_type === "sales_closing_tips_broadcast"
+                      ? await processSalesClosingTipsBroadcast(job)
+                      : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
