@@ -35,6 +35,10 @@ const PUBLIC_PATHS = [
   "/api/integrations/whatsapp/webhook",
   "/api/debug/whatsapp-config",
   "/api/debug/meta-ads-config",
+  // TEMPORARY -- Zernio Instagram/TikTok connect setup + status check, see
+  // app/api/debug/zernio-connect/route.ts. Remove once both platforms are
+  // connected and confirmed flowing real data.
+  "/api/debug/zernio-connect",
   // pg_cron-triggered worker routes (net.http_post carries no session
   // cookie) -- found missing here while building 0096: every tick of
   // crm-promo-sends-worker and the daily social-snapshot capture cron has
