@@ -1,14 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getZernioConnectUrl, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
-import { Zernio } from "@zernio/node";
 
 export const dynamic = "force-dynamic";
-
-const ZERNIO_ENV_VAR: Record<ZernioProduct, string> = {
-  property: "ZERNIO_API_KEY",
-  beauty: "ZERNIO_BEAUTY_API_KEY",
-};
 
 /**
  * TEMPORARY setup helper -- one-time step to connect Instagram/TikTok via
@@ -49,33 +43,6 @@ export async function GET(request: NextRequest) {
     result.tiktokConnectUrl = await getZernioConnectUrl("tiktok", undefined, product);
   } catch (err) {
     result.tiktokConnectUrlError = err instanceof Error ? err.message : String(err);
-  }
-
-  if (request.nextUrl.searchParams.get("raw") === "1") {
-    const client = new Zernio({ apiKey: process.env[ZERNIO_ENV_VAR[product]] });
-    const raw: Record<string, unknown> = {};
-    const igAccount = (result.connectedInstagram as { id: string }[] | undefined)?.[0];
-    const ttAccount = (result.connectedTikTok as { id: string }[] | undefined)?.[0];
-
-    for (const [label, account, platform] of [
-      ["instagram", igAccount, "instagram"],
-      ["tiktok", ttAccount, "tiktok"],
-    ] as const) {
-      if (!account) continue;
-      try {
-        raw[`${label}_followerStats`] = (await client.accounts.getFollowerStats({ query: { accountIds: account.id } })).data;
-      } catch (err) {
-        raw[`${label}_followerStats_error`] = err instanceof Error ? err.message : String(err);
-      }
-      try {
-        raw[`${label}_analytics`] = (
-          await client.analytics.getAnalytics({ query: { accountId: account.id, platform, source: "all", sortBy: "date", order: "desc", limit: 5 } })
-        ).data;
-      } catch (err) {
-        raw[`${label}_analytics_error`] = err instanceof Error ? err.message : String(err);
-      }
-    }
-    result.raw = raw;
   }
 
   return NextResponse.json(result);
