@@ -17,6 +17,7 @@ import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured } from "@/lib/social/instagram";
+import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
   LEASEHOLD_TARGET_CITIES,
   getLeaseholdTargetGeoLocations,
@@ -584,11 +585,23 @@ async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   // Live per-post data (captions + real per-post engagement) -- the daily
   // snapshot only stores account-level aggregates, so a genuine
   // hook/value/CTA audit needs a fresh read of actual recent posts. Best
-  // effort: a transient Instagram API failure here must not fail the whole
-  // weekly audit, just narrow it to account-level-only (same fallback
+  // effort: a transient API failure here must not fail the whole weekly
+  // audit, just narrow it to account-level-only (same fallback
   // auditWeeklyContentPerformance already handles for an empty post list).
+  // Zernio (lib/social/zernio.ts) is preferred over the direct Meta Graph
+  // API when configured AND an account is actually connected there, same
+  // precedence as capture-snapshots/route.ts -- Meta's own Business
+  // Verification requirement still blocks the direct path.
   let instagramTopPosts: Awaited<ReturnType<typeof getRecentInstagramMediaPerformance>> = [];
-  if (isInstagramConfigured()) {
+  const zernioInstagramAccount = isZernioConfigured() ? (await listZernioAccounts("instagram").catch(() => []))[0] : undefined;
+  if (zernioInstagramAccount) {
+    try {
+      const recentPosts = await getRecentZernioMediaPerformance(zernioInstagramAccount.id, "instagram", 12);
+      instagramTopPosts = recentPosts.filter((p) => p.timestamp >= weekStart);
+    } catch (err) {
+      logger.error("processSocialWeeklyEvaluation: failed to fetch recent Instagram posts via Zernio, auditing account-level only", { error: err instanceof Error ? err.message : String(err) });
+    }
+  } else if (isInstagramConfigured()) {
     try {
       const recentPosts = await getRecentInstagramMediaPerformance(12);
       instagramTopPosts = recentPosts.filter((p) => p.timestamp >= weekStart);
