@@ -43,6 +43,8 @@ interface MarkomChecklistDraftJobPayload {
   branch_id: string;
   branch_name: string;
   division_id: string;
+  /** Defaults to "leasehold_sales" (investor pitch) when absent -- "occupancy" (guest/renter angle) only ever set explicitly by markom_run_ai_checklist_dispatch for branches with an active villa project. */
+  focus?: "leasehold_sales" | "occupancy";
 }
 
 interface MetaAdsLaunchJobPayload {
@@ -233,10 +235,17 @@ async function gatherContentPlannerContext(supabase: AdminClient): Promise<Conte
 }
 
 /** One Gemini attempt to research + draft exactly 3 Markom checklist items, then inserts them directly (no human approval gate -- matches kpi_assign_tasks' existing behavior when a Branch Manager creates a checklist by hand) and notifies the team, same category/notification shape kpi_assign_tasks already uses. */
+/** Distinct marker per focus so markom_run_ai_checklist_dispatch's zero-pending gate counts each track independently -- a branch with 0 pending occupancy items but 3 pending leasehold-sales items should still get a fresh occupancy batch, and vice versa. */
+const CHECKLIST_AI_MARKER: Record<"leasehold_sales" | "occupancy", string> = {
+  leasehold_sales: "(Dibuat otomatis oleh AI berdasarkan riset tren viral & iklan kompetitor -- fokus PENJUALAN LEASEHOLD.)",
+  occupancy: "(Dibuat otomatis oleh AI berdasarkan riset tren viral & iklan kompetitor -- fokus OCCUPANCY/booking tamu.)",
+};
+
 async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
   const payload = job.payload as unknown as MarkomChecklistDraftJobPayload;
+  const focus = payload.focus ?? "leasehold_sales";
   const context = await gatherContentPlannerContext(supabase);
-  const items = await researchAndGenerateChecklist(payload.branch_name, context);
+  const items = await researchAndGenerateChecklist(payload.branch_name, context, focus);
 
   const now = new Date();
   const dueDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -244,7 +253,7 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
     division_id: payload.division_id,
     branch_id: payload.branch_id,
     title: item.title,
-    description: `${item.description}\n\n(Dibuat otomatis oleh AI berdasarkan riset tren viral & iklan kompetitor.)`,
+    description: `${item.description}\n\n${CHECKLIST_AI_MARKER[focus]}`,
     period_year: now.getFullYear(),
     period_month: now.getMonth() + 1,
     period_week: currentPeriodWeek(now),
@@ -261,18 +270,19 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
     .eq("division_id", payload.division_id)
     .is("deleted_at", null);
 
+  const focusLabel = focus === "occupancy" ? "occupancy/booking" : "penjualan leasehold";
   for (const member of team ?? []) {
     await supabase.from("mkc_notifications").insert({
       user_id: member.id,
       type: "kpi_task",
       category: "markom_new_task",
-      title: "Checklist Markom baru dari AI",
-      body: `AI membuat ${taskRows.length} task baru berdasarkan riset tren & kompetitor. Selesaikan sebelum ${dueDate.toLocaleDateString("id-ID")}.`,
+      title: `Checklist Markom baru dari AI (${focusLabel})`,
+      body: `AI membuat ${taskRows.length} task baru (fokus ${focusLabel}) berdasarkan riset tren & kompetitor. Selesaikan sebelum ${dueDate.toLocaleDateString("id-ID")}.`,
       link: "/markom",
     });
   }
 
-  return { branchId: payload.branch_id, taskCount: taskRows.length };
+  return { branchId: payload.branch_id, focus, taskCount: taskRows.length };
 }
 
 /** Shared by processMetaAdsLaunch and processMetaAdsResearch -- both need the same project + photo lookup, with the same "no photos yet" guard. */

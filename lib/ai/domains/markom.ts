@@ -120,10 +120,32 @@ function buildContentPlannerContextBlock(context?: ContentPlannerContext): strin
  * prompt if grounded generation fails to parse, rather than losing the
  * whole cycle over one bad response.
  */
-export async function researchAndGenerateChecklist(branchName: string, context?: ContentPlannerContext): Promise<MarkomChecklistItem[]> {
+export type ChecklistContentFocus = "leasehold_sales" | "occupancy";
+
+/**
+ * "leasehold_sales" (default) targets investors -- the sales/investment
+ * pitch for the leasehold itself. "occupancy" targets travelers/renters --
+ * showcasing the villa as a place to actually stay (tour, amenities,
+ * guest experience, local attractions, booking CTA), completely different
+ * audience and angle even though it's the same property. Owner's explicit
+ * instruction: never blend the two into one checklist, since the
+ * viewer/goal is different (buy an investment vs. book a stay).
+ */
+function focusResearchTopic(focus: ChecklistContentFocus): string {
+  return focus === "occupancy"
+    ? 'konten yang menonjolkan pengalaman MENGINAP di villa (tur properti, fasilitas, suasana, aktivitas lokal sekitar, testimoni tamu) untuk menarik calon PENYEWA/wisatawan agar booking -- BUKAN konten jual-beli leasehold, jangan sebut skema investasi/ROI/harga jual sama sekali di sini'
+    : "konten penjualan villa leasehold untuk calon INVESTOR (nilai investasi, ROI/yield, legalitas leasehold, urgensi unit terbatas)";
+}
+
+export async function researchAndGenerateChecklist(
+  branchName: string,
+  context?: ContentPlannerContext,
+  focus: ChecklistContentFocus = "leasehold_sales",
+): Promise<MarkomChecklistItem[]> {
   const systemPrompt = await getSystemPrompt("markom");
   const contextBlock = buildContentPlannerContextBlock(context);
-  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram, cari data publik yang ter-index Google karena tidak ada akses API resmi TikTok) yang cocok dijadikan konten untuk villa leasehold, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada) -- cari konten/postingan terbaru mereka yang bisa ditemukan lewat pencarian publik.${contextBlock}
+  const topic = focusResearchTopic(focus);
+  const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram, cari data publik yang ter-index Google karena tidak ada akses API resmi TikTok) yang cocok dijadikan ${topic}, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada) -- cari konten/postingan terbaru mereka yang bisa ditemukan lewat pencarian publik.${contextBlock}
 
 Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik.
 
@@ -143,7 +165,7 @@ platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang palin
     // fall through to the unresearched fallback below
   }
 
-  const fallbackPrompt = `Buatkan TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar konten villa leasehold dan strategi marketing properti umum, tanpa riset internet.${contextBlock}
+  const fallbackPrompt = `Buatkan TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar ${topic}, tanpa riset internet.${contextBlock}
 
 description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
 platform: WAJIB pilih "Instagram" atau "TikTok" per checklist, boleh beda-beda.
