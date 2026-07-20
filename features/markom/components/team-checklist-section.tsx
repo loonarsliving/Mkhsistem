@@ -4,7 +4,7 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { AlarmClock, CheckCircle2, Circle, ClipboardList, Percent, Users, XCircle } from "lucide-react";
+import { AlarmClock, CheckCircle2, Circle, ClipboardList, Clock, Percent, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { StatTile } from "@/components/shared/stat-tile";
@@ -23,6 +23,7 @@ import { listKpiTasksAction, teamStatsAction } from "../actions/markom-query.act
 
 const STATUS_ICON: Record<KpiTaskStatusDb, React.ReactNode> = {
   pending: <Circle className="h-5 w-5 text-muted-foreground" />,
+  awaiting_verification: <Clock className="h-5 w-5 text-warning" />,
   completed: <CheckCircle2 className="h-5 w-5 text-success" />,
   rejected: <XCircle className="h-5 w-5 text-destructive" />,
 };
@@ -204,6 +205,9 @@ export function TeamChecklistSection({ focus, title }: TeamChecklistSectionProps
                     {task.due_date && <span>Tenggat {format(new Date(task.due_date), "d MMM yyyy", { locale: idLocale })}</span>}
                     {task.verifier && <span>Direview {task.verifier.full_name}</span>}
                   </div>
+                  {task.status === "awaiting_verification" && (
+                    <p className="text-xs text-warning">Menunggu persetujuan Kepala Cabang.</p>
+                  )}
                   {task.notes && task.status === "rejected" && <p className="text-xs text-destructive">Catatan: {task.notes}</p>}
 
                   {task.assignee_response && (

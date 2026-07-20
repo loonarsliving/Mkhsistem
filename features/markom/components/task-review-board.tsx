@@ -44,7 +44,7 @@ export function TaskReviewBoard() {
 
   const { data: pendingTasks, isLoading } = useQuery({
     queryKey: ["markom-pending-tasks", month, year],
-    queryFn: () => listKpiTasksAction({ periodYear: year, periodMonth: month, status: "pending" }) as Promise<KpiTaskRow[]>,
+    queryFn: () => listKpiTasksAction({ periodYear: year, periodMonth: month, status: "awaiting_verification" }) as Promise<KpiTaskRow[]>,
   });
 
   function invalidate() {
@@ -113,7 +113,7 @@ export function TaskReviewBoard() {
         </CardHeader>
         <CardContent className="p-4 pt-0">
           {!isLoading && tasks.length === 0 ? (
-            <EmptyState icon={CheckCircle2} title="Tidak ada task menunggu" description="Semua task tim Markom sudah direview." />
+            <EmptyState icon={CheckCircle2} title="Tidak ada task menunggu" description="Belum ada task yang ditandai selesai oleh tim yang menunggu persetujuan Anda." />
           ) : (
             <div className="overflow-x-auto">
               <Table>

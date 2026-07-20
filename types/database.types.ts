@@ -93,7 +93,7 @@ export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disburs
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
 export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
 export type CrmProjectStatusDb = "planning" | "selling" | "completed";
-export type KpiTaskStatusDb = "pending" | "completed" | "rejected";
+export type KpiTaskStatusDb = "pending" | "awaiting_verification" | "completed" | "rejected";
 export type KpiTaskContentFocusDb = "leasehold_sales" | "occupancy" | "general";
 export type KpiRankingScopeDb = "weekly" | "monthly";
 
