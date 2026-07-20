@@ -210,7 +210,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     )}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
 
-                    {c.analyzed_at && (c.status === "active" || c.status === "paused") && (
+                    {(c.status === "active" || c.status === "paused") && (
                       <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           <StatTile icon={Wallet} label="Spend" value={`Rp ${(c.spend_idr ?? 0).toLocaleString("id-ID")}`} className="p-2" />
@@ -220,7 +220,9 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                         </div>
                         {c.ai_analysis && <p className="text-xs text-muted-foreground">{c.ai_analysis}</p>}
                         <p className="text-[11px] text-muted-foreground/70">
-                          Dianalisis {new Date(c.analyzed_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                          {c.analyzed_at
+                            ? `${c.ai_analysis ? "Dianalisis AI" : "Data diperbarui"} ${new Date(c.analyzed_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} -- disinkron otomatis tiap 2 jam dari Meta.`
+                            : "Menunggu sinkronisasi data pertama dari Meta (berjalan otomatis tiap 2 jam)."}
                         </p>
                       </div>
                     )}

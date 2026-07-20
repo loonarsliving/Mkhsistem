@@ -48,6 +48,7 @@ const PUBLIC_PATHS = [
   "/api/social/capture-snapshots",
   "/api/social/publish-content",
   "/api/markom/check-ads-balance",
+  "/api/markom/refresh-ad-campaign-spend",
 ];
 
 function isPublicPath(pathname: string) {
