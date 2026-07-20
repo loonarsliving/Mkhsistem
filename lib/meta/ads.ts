@@ -340,6 +340,11 @@ export async function setAdStatus(adId: string, status: "ACTIVE" | "PAUSED"): Pr
   return metaGraphRequest(`/${adId}`, { status }, "POST");
 }
 
+/** Human override from the Ads Specialist page -- tighten/loosen an already-launched ad set's daily budget. Budget lives on the ad set (see createAdSet), not the campaign or ad. IDR is zero-decimal -- pass whole Rupiah. */
+export async function updateAdSetDailyBudget(adSetId: string, dailyBudgetIdr: number): Promise<{ success: boolean }> {
+  return metaGraphRequest(`/${adSetId}`, { daily_budget: Math.round(dailyBudgetIdr) }, "POST");
+}
+
 /**
  * Hard safety gate: fails closed (throws) if no operator has set
  * META_ADS_DAILY_BUDGET_CAP_IDR, or if today's spend already reached that

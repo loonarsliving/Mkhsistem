@@ -12,6 +12,7 @@ import {
   launchWhatsAppLeadCampaign,
   resolveGeoLocationsFromNames,
   setAdStatus,
+  updateAdSetDailyBudget,
 } from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +24,7 @@ import {
   markAdCampaignLaunched,
   requestAdsResearch,
   saveAdCampaignAnalysis,
+  updateAdCampaignBudget,
   updateAdCampaignStatus,
 } from "@/repositories/meta-ads.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
@@ -191,6 +193,23 @@ export async function setAdCampaignStatusAction(id: string, metaAdId: string | n
     await updateAdCampaignStatus(supabase, id, status);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal mengubah status iklan");
+  }
+  revalidatePath("/markom/ads");
+  return actionSuccess();
+}
+
+/** Human override -- tighten/loosen an already-launched ad's daily budget. Budget lives on the ad set (updateAdSetDailyBudget), not the ad itself, so this needs meta_adset_id, not meta_ad_id. */
+export async function setAdCampaignBudgetAction(id: string, metaAdSetId: string | null, dailyBudgetIdr: number): Promise<ActionResult> {
+  await requirePermission("ad_campaign.manage");
+  if (!metaAdSetId) return actionError("Iklan ini belum berhasil dibuat di Meta, tidak ada budget yang bisa diubah");
+  if (!Number.isFinite(dailyBudgetIdr) || dailyBudgetIdr < 10_000) return actionError("Budget harian minimal Rp10.000");
+
+  const supabase = await createClient();
+  try {
+    await updateAdSetDailyBudget(metaAdSetId, dailyBudgetIdr);
+    await updateAdCampaignBudget(supabase, id, dailyBudgetIdr);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengubah budget iklan");
   }
   revalidatePath("/markom/ads");
   return actionSuccess();

@@ -39,6 +39,14 @@ export async function updateAdCampaignStatus(supabase: TypedSupabaseClient, id: 
   if (error) throw error;
 }
 
+export async function updateAdCampaignBudget(supabase: TypedSupabaseClient, id: string, dailyBudgetIdr: number) {
+  const { error } = await supabase
+    .from("meta_ad_campaigns")
+    .update({ daily_budget_idr: dailyBudgetIdr, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export interface LaunchedCampaignIds {
   campaignId: string;
   adSetId: string;

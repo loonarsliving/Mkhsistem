@@ -3,12 +3,13 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Eye, Loader2, MessageCircle, MousePointerClick, Pause, Play, Rocket, Search, Send, Trash2, Wallet } from "lucide-react";
+import { BarChart3, Check, Eye, Loader2, MessageCircle, MousePointerClick, Pause, Pencil, Play, Rocket, Search, Send, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -20,6 +21,7 @@ import {
   launchDraftCampaignAction,
   listAdCampaignsAction,
   requestAdsResearchAction,
+  setAdCampaignBudgetAction,
   setAdCampaignStatusAction,
 } from "../actions/ads.actions";
 
@@ -38,6 +40,9 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [budgetEditId, setBudgetEditId] = React.useState<string | null>(null);
+  const [budgetValue, setBudgetValue] = React.useState("");
+  const [savingBudget, setSavingBudget] = React.useState(false);
 
   const { data: projects } = useQuery({ queryKey: ["markom-projects-for-photos"], queryFn: listProjectsForPhotoUploadAction, enabled: canManage });
   const { data: campaigns, isLoading } = useQuery({ queryKey: ["markom-ad-campaigns"], queryFn: listAdCampaignsAction });
@@ -120,6 +125,34 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
     }
   }
 
+  function startEditBudget(id: string, currentBudget: number) {
+    setBudgetEditId(id);
+    setBudgetValue(String(currentBudget));
+  }
+
+  async function handleSaveBudget(id: string, metaAdSetId: string | null) {
+    const parsed = Number(budgetValue);
+    if (!Number.isFinite(parsed) || parsed < 10_000) {
+      toast.error("Budget harian minimal Rp10.000");
+      return;
+    }
+    setSavingBudget(true);
+    try {
+      const result = await setAdCampaignBudgetAction(id, metaAdSetId, parsed);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal mengubah budget iklan");
+        return;
+      }
+      toast.success(`Budget harian diubah ke Rp ${parsed.toLocaleString("id-ID")}`);
+      setBudgetEditId(null);
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal mengubah budget iklan");
+    } finally {
+      setSavingBudget(false);
+    }
+  }
+
   async function handleToggleStatus(id: string, metaAdId: string | null, currentStatus: string) {
     setBusyId(id);
     const nextStatus = currentStatus === "active" ? "paused" : "active";
@@ -194,9 +227,45 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-medium">{project?.name ?? "-"}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {project?.city} &middot; Rp {c.daily_budget_idr.toLocaleString("id-ID")}/hari &middot; {c.launched_by === "ai" ? "Diluncurkan AI" : "Diluncurkan manual"}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                          <span>{project?.city} &middot;</span>
+                          {budgetEditId === c.id ? (
+                            <span className="flex items-center gap-1">
+                              Rp
+                              <Input
+                                type="number"
+                                min={10000}
+                                step={5000}
+                                value={budgetValue}
+                                onChange={(e) => setBudgetValue(e.target.value)}
+                                disabled={savingBudget}
+                                className="h-6 w-24 px-1.5 py-0 text-sm"
+                              />
+                              /hari
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" disabled={savingBudget} onClick={() => handleSaveBudget(c.id, c.meta_adset_id)}>
+                                {savingBudget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" disabled={savingBudget} onClick={() => setBudgetEditId(null)}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              Rp {c.daily_budget_idr.toLocaleString("id-ID")}/hari
+                              {canManage && (c.status === "active" || c.status === "paused") && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0"
+                                  onClick={() => startEditBudget(c.id, c.daily_budget_idr)}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </span>
+                          )}
+                          <span>&middot; {c.launched_by === "ai" ? "Diluncurkan AI" : "Diluncurkan manual"}</span>
+                        </div>
                       </div>
                       <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                     </div>
