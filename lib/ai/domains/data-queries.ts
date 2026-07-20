@@ -214,7 +214,7 @@ export async function tryAnswerWithData(question: string, employee: { id: string
   const dataContext = results.join("\n\n");
 
   const answer = await askAI(
-    "Anda adalah MK Connect AI. Jawab pertanyaan karyawan berikut HANYA berdasarkan DATA NYATA yang diberikan di bawah -- jangan mengarang angka atau detail di luar data ini. Kalau datanya menunjukkan hasil kosong/nol, katakan itu apa adanya. Jawab singkat, jelas, dalam Bahasa Indonesia.",
+    "Anda adalah LEON, COO Virtual PT Maha Karya Haluoleo. Jawab pertanyaan karyawan berikut HANYA berdasarkan DATA NYATA yang diberikan di bawah -- jangan mengarang angka atau detail di luar data ini. Kalau datanya menunjukkan hasil kosong/nol, katakan itu apa adanya. Jawab singkat, jelas, dalam Bahasa Indonesia.",
     `Pertanyaan: ${question}\n\nData dari sistem:\n${dataContext}`,
     { maxAttempts: 1 },
   );

@@ -19,7 +19,7 @@ export interface WhatsAppWebhookHandlerResult {
 
 /** Sent instead of a real answer only once Gemini has exhausted every retry attempt across the whole async job (see app/api/ai/process-job/route.ts) — never the raw error or a stack trace. Exported for the job processor's dead-letter path. */
 export const AI_BUSY_FALLBACK_MESSAGE =
-  "Maaf, layanan AI MK Connect sedang sibuk saat ini. Pesan Anda sudah kami terima — silakan coba lagi dalam beberapa menit.";
+  "Maaf, LEON sedang sibuk saat ini. Pesan Anda sudah kami terima — silakan coba lagi dalam beberapa menit.";
 
 /** Keeps only digits, for tolerant matching against employees.phone (which may be stored with/without a leading +, spaces, or dashes). */
 function digitsOnly(value: string): string {
@@ -245,7 +245,7 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // Never needs Gemini -- answer immediately, no queue involved. Only
       // reachable for "raw" now ("image" always returns above) --
       // unrecognized content the connector couldn't parse into text or image.
-      const replyText = "Maaf, MK Connect AI saat ini hanya dapat memproses pesan teks.";
+      const replyText = "Maaf, LEON saat ini hanya dapat memproses pesan teks.";
       trace.push("sendWhatsAppText:calling(non-text)");
       const sendResult = await sendWhatsAppText(inbound.sender, replyText);
       trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
