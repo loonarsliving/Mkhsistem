@@ -25,7 +25,7 @@ export interface KpiTaskListFilters {
   periodYear: number;
   periodMonth: number;
   periodWeek?: number;
-  status?: "pending" | "completed" | "rejected";
+  status?: "pending" | "awaiting_verification" | "completed" | "rejected";
   contentFocus?: "leasehold_sales" | "occupancy" | "general";
 }
 
