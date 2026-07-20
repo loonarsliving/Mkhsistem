@@ -693,7 +693,8 @@ export interface AdDraftInput {
 
 export interface AdDraft {
   targetSummary: string;
-  photoId: string;
+  /** 1-10 real photo ids, in the order they should appear -- 1 makes a plain single-image ad, 2+ makes a swipeable Meta carousel (see lib/meta/ads.ts createAdCreative). */
+  photoIds: string[];
   headline: string;
   primaryText: string;
   description: string;
@@ -719,17 +720,15 @@ function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: st
     .replace(/```\s*$/, "")
     .trim();
   const parsed = JSON.parse(cleaned) as Partial<AdDraft>;
-  if (
-    typeof parsed.photoId !== "string" ||
-    !validPhotoIds.includes(parsed.photoId) ||
-    typeof parsed.headline !== "string" ||
-    typeof parsed.primaryText !== "string"
-  ) {
-    throw new Error("AI ad draft response missing required fields or picked a photo that doesn't exist");
+  const photoIds = Array.isArray(parsed.photoIds)
+    ? [...new Set(parsed.photoIds.filter((id): id is string => typeof id === "string" && validPhotoIds.includes(id)))].slice(0, 10)
+    : [];
+  if (photoIds.length === 0 || typeof parsed.headline !== "string" || typeof parsed.primaryText !== "string") {
+    throw new Error("AI ad draft response missing required fields or picked photos that don't exist");
   }
   return {
     targetSummary: (parsed.targetSummary ?? "-").slice(0, 1000),
-    photoId: parsed.photoId,
+    photoIds,
     headline: parsed.headline.slice(0, 40),
     primaryText: parsed.primaryText.slice(0, 300),
     description: (parsed.description ?? "").slice(0, 200) || "Hubungi kami sekarang via WhatsApp.",
@@ -744,11 +743,12 @@ function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: st
 /**
  * Researches (Google Search grounding) current viral angles + competitor
  * property ads for ONE specific project, then drafts a complete
- * Click-to-WhatsApp ad from it: which real Markom-uploaded photo fits best,
- * headline/primary text/description/WhatsApp greeting, and a suggested
- * daily budget. Never invents a photo -- must pick photoId from
- * input.availablePhotos, which the caller sources from crm_project_photos
- * (real photos only, see migration 0078).
+ * Click-to-WhatsApp ad from it: which real Markom-uploaded photos fit best
+ * (picks several for a swipeable carousel when enough good ones exist, see
+ * migration 0141), headline/primary text/description/WhatsApp greeting, and
+ * a suggested daily budget. Never invents a photo -- every id in photoIds
+ * must come from input.availablePhotos, which the caller sources from
+ * crm_project_photos (real photos only, see migration 0078).
  */
 export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> {
   if (input.availablePhotos.length === 0) {
@@ -803,11 +803,13 @@ ${productLine}
 
 ${indicatorsBlock}
 
-Foto asli yang tersedia (WAJIB pilih salah satu id ini, jangan mengarang foto lain):
+Foto asli yang tersedia (WAJIB pilih dari id-id ini, jangan mengarang foto lain):
 ${photoList}
 
+PEMILIHAN FOTO: iklan ini bisa tampil sebagai carousel (beberapa foto yang bisa di-swipe lead) kalau kamu pilih 2-10 foto -- lebih menarik dan biasanya lebih tinggi engagement-nya daripada 1 foto saja. Pilih SEMUA foto yang benar-benar relevan dan berkualitas baik untuk project ini (maks 10, urutkan dari yang paling menarik/representatif duluan) -- jangan asal menyertakan foto yang tidak relevan/buram hanya demi jumlah. Kalau cuma ada 1 foto yang layak, itu juga sah, iklan akan tampil sebagai foto tunggal.
+
 Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
-{"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoId": "salah satu id foto di atas", "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian, "targetAreas": ["kota/kabupaten hasil riset area target di atas, array kosong jika tidak relevan/tidak diminta"]}`;
+{"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoIds": ["id foto di atas, urutan sesuai tampilan", "id foto lain jika carousel"], "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian, "targetAreas": ["kota/kabupaten hasil riset area target di atas, array kosong jika tidak relevan/tidak diminta"]}`;
 
   const photoIds = input.availablePhotos.map((p) => p.id);
 
@@ -827,10 +829,10 @@ ${productLine}
 
 ${indicatorsBlock}
 
-Foto asli yang tersedia (WAJIB pilih salah satu id ini):
+Foto asli yang tersedia (WAJIB pilih dari id-id ini, pilih 2-10 foto relevan untuk carousel kalau ada beberapa yang layak, atau 1 saja kalau cuma itu yang bagus):
 ${photoList}
 
-Balas HANYA dengan JSON object: {"targetSummary": "...", "photoId": "...", "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
+Balas HANYA dengan JSON object: {"targetSummary": "...", "photoIds": ["..."], "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
   const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
   return parseAdDraftJson(fallbackResponse.text, photoIds, input.projectName);
 }

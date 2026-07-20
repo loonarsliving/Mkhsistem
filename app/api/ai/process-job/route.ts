@@ -36,6 +36,7 @@ import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
+import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
@@ -395,8 +396,9 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
     targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
   });
-  const photo = photos.find((p) => p.id === draft.photoId);
-  if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+  const photoById = new Map(photos.map((p) => [p.id, p]));
+  const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
+  if (selectedPhotos.length === 0) throw new Error(`AI picked photos ${draft.photoIds.join(", ")} which are not in the available set`);
 
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
   const targeting =
@@ -405,7 +407,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   try {
     const result = await launchWhatsAppLeadCampaign({
       projectName: project.name,
-      photoUrl: photo.public_url,
+      photoUrls: selectedPhotos.map((p) => p.public_url),
       headline: draft.headline,
       primaryText: draft.primaryText,
       description: draft.description,
@@ -414,25 +416,30 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       targeting,
     });
 
-    await supabase.from("meta_ad_campaigns").insert({
-      project_id: project.id,
-      branch_id: project.branch_id,
-      photo_id: photo.id,
-      meta_campaign_id: result.campaignId,
-      meta_adset_id: result.adSetId,
-      meta_creative_id: result.creativeId,
-      meta_ad_id: result.adId,
-      name: `${project.name} - Leads WA (AI)`,
-      headline: draft.headline,
-      primary_text: draft.primaryText,
-      description: draft.description,
-      welcome_message: draft.welcomeMessage,
-      daily_budget_idr: dailyBudgetIdr,
-      status: "active",
-      launched_by: "ai",
-      research_summary: draft.targetSummary,
-      target_areas: draft.targetAreas,
-    });
+    const { data: inserted } = await supabase
+      .from("meta_ad_campaigns")
+      .insert({
+        project_id: project.id,
+        branch_id: project.branch_id,
+        photo_id: selectedPhotos[0].id,
+        meta_campaign_id: result.campaignId,
+        meta_adset_id: result.adSetId,
+        meta_creative_id: result.creativeId,
+        meta_ad_id: result.adId,
+        name: `${project.name} - Leads WA (AI)`,
+        headline: draft.headline,
+        primary_text: draft.primaryText,
+        description: draft.description,
+        welcome_message: draft.welcomeMessage,
+        daily_budget_idr: dailyBudgetIdr,
+        status: "active",
+        launched_by: "ai",
+        research_summary: draft.targetSummary,
+        target_areas: draft.targetAreas,
+      })
+      .select("id")
+      .single();
+    if (inserted) await insertAdCampaignPhotos(supabase, inserted.id, selectedPhotos.map((p) => p.id));
 
     const { data: managers } = await supabase
       .from("v_employee_directory")
@@ -457,7 +464,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     await supabase.from("meta_ad_campaigns").insert({
       project_id: project.id,
       branch_id: project.branch_id,
-      photo_id: photo.id,
+      photo_id: selectedPhotos[0].id,
       meta_campaign_id: null,
       meta_adset_id: null,
       meta_creative_id: null,
@@ -507,15 +514,16 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
       targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
     });
-    const photo = photos.find((p) => p.id === draft.photoId);
-    if (!photo) throw new Error(`AI picked photo ${draft.photoId} which is not in the available set`);
+    const photoById = new Map(photos.map((p) => [p.id, p]));
+    const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
+    if (selectedPhotos.length === 0) throw new Error(`AI picked photos ${draft.photoIds.join(", ")} which are not in the available set`);
 
     const { data: inserted, error: insertError } = await supabase
       .from("meta_ad_campaigns")
       .insert({
         project_id: project.id,
         branch_id: project.branch_id,
-        photo_id: photo.id,
+        photo_id: selectedPhotos[0].id,
         name: `${project.name} - Leads WA (Draft)`,
         headline: draft.headline,
         primary_text: draft.primaryText,
@@ -530,6 +538,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       .select("id")
       .single();
     if (insertError || !inserted) throw new Error(`Failed to save ad draft: ${insertError?.message}`);
+    await insertAdCampaignPhotos(supabase, inserted.id, selectedPhotos.map((p) => p.id));
 
     return { projectId: project.id, draftId: inserted.id };
   } catch (err) {

@@ -199,7 +199,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
               Riset
             </Button>
             <p className="w-full text-xs text-muted-foreground">
-              AI meriset tren &amp; kompetitor, memilih foto dari galeri project, dan menulis materi iklan -- hasilnya muncul di bawah sebagai <strong>Draft</strong> untuk Anda tinjau. Iklan baru benar-benar tayang (dan mulai menghabiskan budget) setelah Anda menekan tombol <strong>Luncurkan</strong> pada draft tersebut. Project ini juga otomatis dijadwalkan ulang tiap minggu untuk diluncurkan otomatis oleh AI jika sudah punya foto.
+              AI meriset tren &amp; kompetitor, memilih 1-10 foto dari galeri project (jadi carousel yang bisa di-swipe kalau ada beberapa foto relevan), dan menulis materi iklan -- hasilnya muncul di bawah sebagai <strong>Draft</strong> untuk Anda tinjau. Iklan baru benar-benar tayang (dan mulai menghabiskan budget) setelah Anda menekan tombol <strong>Luncurkan</strong> pada draft tersebut. Project ini juga otomatis dijadwalkan ulang tiap minggu untuk diluncurkan otomatis oleh AI jika sudah punya foto.
             </p>
           </CardContent>
         </Card>
@@ -215,12 +215,30 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
             const statusInfo = STATUS_LABEL[c.status] ?? { label: c.status, variant: "secondary" as const };
             const project = c.project as { name?: string; city?: string } | null;
             const photo = c.photo as { public_url?: string; caption?: string } | null;
+            // campaign_photos (0141) is the real ordered set -- falls back to
+            // the single legacy `photo` for anything created before that
+            // migration existed.
+            const campaignPhotos = (c.campaign_photos as { display_order: number; photo: { public_url?: string } | null }[] | null) ?? [];
+            const photoUrls = campaignPhotos
+              .slice()
+              .sort((a, b) => a.display_order - b.display_order)
+              .map((cp) => cp.photo?.public_url)
+              .filter((url): url is string => Boolean(url));
+            if (photoUrls.length === 0 && photo?.public_url) photoUrls.push(photo.public_url);
+            const isCarousel = photoUrls.length > 1;
             return (
               <Card key={c.id}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
-                  {photo?.public_url && (
-                    <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-md bg-muted sm:w-32">
-                      <Image src={photo.public_url} alt={c.headline} fill sizes="128px" className="object-cover" unoptimized />
+                  {photoUrls.length > 0 && (
+                    <div className="flex shrink-0 gap-1.5 overflow-x-auto sm:w-32 sm:flex-col">
+                      {photoUrls.map((url, i) => (
+                        <div key={url + i} className="relative h-32 w-32 shrink-0 overflow-hidden rounded-md bg-muted sm:h-[60px] sm:w-full">
+                          <Image src={url} alt={`${c.headline} ${i + 1}`} fill sizes="128px" className="object-cover" unoptimized />
+                          {isCarousel && (
+                            <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] leading-tight text-white">{i + 1}/{photoUrls.length}</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                   <div className="flex-1 space-y-2">
@@ -267,7 +285,10 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                           <span>&middot; {c.launched_by === "ai" ? "Diluncurkan AI" : "Diluncurkan manual"}</span>
                         </div>
                       </div>
-                      <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                      <div className="flex items-center gap-1.5">
+                        {isCarousel && <Badge variant="outline">Carousel &middot; {photoUrls.length} foto</Badge>}
+                        <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                      </div>
                     </div>
                     <p className="text-sm font-medium">{c.headline}</p>
                     <p className="text-sm text-muted-foreground">{c.primary_text}</p>

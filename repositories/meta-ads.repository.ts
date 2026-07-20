@@ -1,9 +1,12 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
+/** Ordered full photo set (0141) -- 1 row is a plain single-image ad, 2+ is a carousel. Nested under photo:photo_id so callers get the real public_url/caption, not just the crm_project_photos id. */
+const CAMPAIGN_PHOTOS_SELECT = "campaign_photos:meta_ad_campaign_photos(display_order, photo:photo_id(public_url, caption))";
+
 export async function listAdCampaigns(supabase: TypedSupabaseClient, branchId?: string) {
   let query = supabase
     .from("meta_ad_campaigns")
-    .select("*, project:project_id(name, city), branch:branch_id(name), photo:photo_id(public_url, caption)")
+    .select(`*, project:project_id(name, city), branch:branch_id(name), photo:photo_id(public_url, caption), ${CAMPAIGN_PHOTOS_SELECT}`)
     .order("created_at", { ascending: false });
   if (branchId) query = query.eq("branch_id", branchId);
   const { data, error } = await query;
@@ -14,11 +17,17 @@ export async function listAdCampaigns(supabase: TypedSupabaseClient, branchId?: 
 export async function getAdCampaign(supabase: TypedSupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("meta_ad_campaigns")
-    .select("*, project:project_id(name, project_type), photo:photo_id(public_url)")
+    .select(`*, project:project_id(name, project_type), photo:photo_id(public_url), ${CAMPAIGN_PHOTOS_SELECT}`)
     .eq("id", id)
     .single();
   if (error) throw error;
   return data;
+}
+
+/** Written right after a draft/launched campaign row is inserted (process-job/route.ts's processMetaAdsResearch/processMetaAdsLaunch) -- one row per photo, in the order the ad should show them. */
+export async function insertAdCampaignPhotos(supabase: TypedSupabaseClient, campaignId: string, photoIds: string[]) {
+  const { error } = await supabase.from("meta_ad_campaign_photos").insert(photoIds.map((photoId, index) => ({ campaign_id: campaignId, photo_id: photoId, display_order: index })));
+  if (error) throw error;
 }
 
 /**

@@ -203,8 +203,8 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
 
 export interface CreateAdCreativeInput {
   name: string;
-  /** From uploadAdImageFromUrl -- always a real Markom-uploaded photo. */
-  imageHash: string;
+  /** From uploadAdImageFromUrl -- always real Markom-uploaded photo(s). 1 hash makes a plain single-image ad; 2-10 makes a swipeable carousel (Meta's own card range) -- see createAdCreative. */
+  imageHashes: string[];
   headline: string;
   primaryText: string;
   description?: string;
@@ -212,11 +212,44 @@ export interface CreateAdCreativeInput {
   welcomeMessage?: string;
 }
 
-/** object_story_spec.link_data + call_to_action WHATSAPP_MESSAGE is what makes tapping the ad open a WhatsApp chat instead of a normal landing page. */
+/**
+ * object_story_spec.link_data + call_to_action WHATSAPP_MESSAGE is what
+ * makes tapping the ad open a WhatsApp chat instead of a normal landing
+ * page. 2+ image hashes switches link_data from a flat single image to
+ * child_attachments (Meta's carousel format, max 10 cards) -- every card
+ * shares the same headline/description/CTA since the AI draft (and the
+ * manual launch flow) only ever produces one set of copy for the whole ad,
+ * not per-slide copy.
+ */
 export async function createAdCreative(input: CreateAdCreativeInput): Promise<{ id: string }> {
+  if (input.imageHashes.length === 0) throw new Error("createAdCreative requires at least one image hash");
+
   const waLink = META_CONFIG.whatsappPhoneNumber
     ? `https://api.whatsapp.com/send?phone=${META_CONFIG.whatsappPhoneNumber}`
     : "https://api.whatsapp.com/send";
+  const callToAction = { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
+
+  const linkData =
+    input.imageHashes.length === 1
+      ? {
+          image_hash: input.imageHashes[0],
+          link: waLink,
+          message: input.primaryText,
+          name: input.headline,
+          description: input.description,
+          call_to_action: callToAction,
+        }
+      : {
+          link: waLink,
+          message: input.primaryText,
+          child_attachments: input.imageHashes.slice(0, 10).map((hash) => ({
+            link: waLink,
+            image_hash: hash,
+            name: input.headline,
+            description: input.description,
+            call_to_action: callToAction,
+          })),
+        };
 
   return metaGraphRequest(
     `/${META_CONFIG.adAccountId}/adcreatives`,
@@ -224,14 +257,7 @@ export async function createAdCreative(input: CreateAdCreativeInput): Promise<{ 
       name: input.name,
       object_story_spec: {
         page_id: META_CONFIG.pageId,
-        link_data: {
-          image_hash: input.imageHash,
-          link: waLink,
-          message: input.primaryText,
-          name: input.headline,
-          description: input.description,
-          call_to_action: { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } },
-        },
+        link_data: linkData,
         ...(input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
       },
     },
@@ -277,7 +303,8 @@ export async function createAd(input: CreateAdInput): Promise<{ id: string }> {
 
 export interface LaunchCampaignInput {
   projectName: string;
-  photoUrl: string;
+  /** 1 URL makes a single-image ad; 2-10 makes a swipeable carousel (see createAdCreative). */
+  photoUrls: string[];
   headline: string;
   primaryText: string;
   description?: string;
@@ -304,7 +331,8 @@ export interface LaunchCampaignResult {
  * around the call.
  */
 export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Promise<LaunchCampaignResult> {
-  const imageHash = await uploadAdImageFromUrl(input.photoUrl);
+  if (input.photoUrls.length === 0) throw new Error("launchWhatsAppLeadCampaign requires at least one photo");
+  const imageHashes = await Promise.all(input.photoUrls.map((url) => uploadAdImageFromUrl(url)));
   const campaign = await createAdCampaign({ name: `${input.projectName} - Leads WA (AI)`, status: "ACTIVE" });
 
   // Once the campaign exists, every following step that throws must delete it
@@ -321,7 +349,7 @@ export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Pr
     });
     const creative = await createAdCreative({
       name: `${input.projectName} - Creative`,
-      imageHash,
+      imageHashes,
       headline: input.headline,
       primaryText: input.primaryText,
       description: input.description,

@@ -1299,6 +1299,37 @@ export interface Database {
           },
         ];
       };
+      meta_ad_campaign_photos: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          photo_id: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          photo_id: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ad_campaign_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_campaign_photos_campaign_id_fkey";
+            columns: ["campaign_id"];
+            referencedRelation: "meta_ad_campaigns";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaign_photos_photo_id_fkey";
+            columns: ["photo_id"];
+            referencedRelation: "crm_project_photos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       social_competitor_accounts: {
         Row: {
           id: string;

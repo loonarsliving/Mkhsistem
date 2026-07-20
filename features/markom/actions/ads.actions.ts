@@ -85,7 +85,17 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
 
   const photo = draft.photo as { public_url?: string } | null;
   const project = draft.project as { name?: string; project_type?: string } | null;
-  if (!photo?.public_url) return actionError("Foto untuk draft ini tidak ditemukan");
+  // campaign_photos (0141) is the real ordered set for a carousel -- falls
+  // back to the single legacy `photo` for any draft created before that
+  // migration existed, so an old still-pending draft doesn't break.
+  const campaignPhotos = (draft.campaign_photos as { display_order: number; photo: { public_url?: string } | null }[] | null) ?? [];
+  const photoUrls = campaignPhotos
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((cp) => cp.photo?.public_url)
+    .filter((url): url is string => Boolean(url));
+  if (photoUrls.length === 0 && photo?.public_url) photoUrls.push(photo.public_url);
+  if (photoUrls.length === 0) return actionError("Foto untuk draft ini tidak ditemukan");
 
   let dailyBudgetIdr: number;
   try {
@@ -98,7 +108,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   try {
     const result = await launchWhatsAppLeadCampaign({
       projectName: project?.name ?? draft.name,
-      photoUrl: photo.public_url,
+      photoUrls,
       headline: draft.headline,
       primaryText: draft.primary_text,
       description: draft.description ?? undefined,
