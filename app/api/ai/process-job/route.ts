@@ -24,6 +24,7 @@ import {
   researchAndGenerateChecklist,
   type ChecklistContentFocus,
   type ContentPlannerContext,
+  type WeeklyContentAuditResult,
 } from "@/lib/ai/domains/markom";
 import { getSystemPrompt } from "@/lib/ai/domains/prompts";
 import { routeAndAnswer } from "@/lib/ai/domains/router";
@@ -793,6 +794,68 @@ async function getBeautyRecentInstagramPosts(limit = 12): Promise<Awaited<Return
   }
 }
 
+/**
+ * Twice-weekly reminder to the Markom team of their own Instagram/TikTok
+ * content score -- reuses the already-computed social_weekly_evaluations
+ * row (property's weekly content audit, auditWeeklyContentPerformance) so
+ * this never fires its own extra Gemini/Google Search call. The Monday
+ * firing reports the fresh audit that week's cron just generated; the
+ * Thursday firing re-sends the SAME (still-current) week's score as a
+ * mid-week reminder -- deliberately not a fresh analysis, since the
+ * underlying account data only meaningfully changes week to week.
+ * growthSignal === 'below_benchmark' (the AI's own relative-benchmark
+ * verdict, not a hardcoded number here) switches the message to an
+ * explicit teguran (reprimand) instead of a neutral report.
+ */
+async function processMarkomContentPerformanceBroadcast(supabase: AdminClient) {
+  const { data: latest, error: fetchError } = await supabase
+    .from("social_weekly_evaluations")
+    .select("week_start, audit")
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (fetchError) throw new Error(`Failed to load latest weekly evaluation: ${fetchError.message}`);
+  if (!latest?.audit) return { sent: 0, reason: "no evaluation yet" };
+
+  const audit = latest.audit as unknown as WeeklyContentAuditResult;
+  const s = audit.scores;
+  const isLow = audit.growthSignal === "below_benchmark";
+
+  const weekLabel = new Date(latest.week_start).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Makassar" });
+  const scoreLines = [
+    `Hook: ${s.hook}/10`,
+    `Value: ${s.value}/10`,
+    `CTA: ${s.cta}/10`,
+    `Kesesuaian Niche: ${s.nicheFit}/10`,
+    `Potensi Engagement: ${s.engagementPotential}/10`,
+    `Optimasi Platform: ${s.platformOptimization}/10`,
+    `Rata-rata: ${s.overall}/10`,
+  ].join("\n");
+  const recommendationLines = audit.recommendations.map((r) => `- ${r}`).join("\n");
+
+  const message = isLow
+    ? `⚠️ TEGURAN — Performa Konten Instagram & TikTok Minggu ${weekLabel}\n\nSkor performa konten masih DI BAWAH TARGET (growth signal: below benchmark):\n${scoreLines}\n\n${audit.narrative}\n\nSegera perbaiki minggu ini:\n${recommendationLines}`
+    : `📊 Evaluasi Konten Instagram & TikTok — Minggu ${weekLabel}\n\n${scoreLines}\n\n${audit.narrative}${recommendationLines ? `\n\nRekomendasi:\n${recommendationLines}` : ""}`;
+
+  const { data: markomEmployees, error: employeesError } = await supabase
+    .from("employees")
+    .select("phone, divisions!inner(name)")
+    .eq("divisions.name", "Marketing & Komunikasi")
+    .eq("employment_status", "active")
+    .is("deleted_at", null);
+  if (employeesError) throw new Error(`Failed to load Markom employees: ${employeesError.message}`);
+
+  const phones = (markomEmployees ?? []).map((e) => e.phone).filter((phone): phone is string => Boolean(phone));
+
+  let sent = 0;
+  for (const phone of phones) {
+    const result = await sendWhatsAppText(phone, message);
+    if (result.success) sent += 1;
+  }
+
+  return { weekStart: latest.week_start, growthSignal: audit.growthSignal, sent, total: phones.length };
+}
+
 async function processSocialWeeklyEvaluation(supabase: AdminClient) {
   const now = new Date();
   const weekStart = getWeekStart(now);
@@ -1290,7 +1353,9 @@ export async function POST(request: Request) {
                                     ? await processSalesTeachingWeekly(supabase, job)
                                     : job.job_type === "cashflow_action_plan"
                                       ? await processCashflowActionPlan(supabase, job)
-                                      : await processSocialWeeklyEvaluation(supabase);
+                                      : job.job_type === "markom_content_performance_broadcast"
+                                        ? await processMarkomContentPerformanceBroadcast(supabase)
+                                        : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
