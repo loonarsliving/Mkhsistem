@@ -39,9 +39,6 @@ const PUBLIC_PATHS = [
   // app/api/debug/zernio-connect/route.ts. Remove once both platforms are
   // connected and confirmed flowing real data.
   "/api/debug/zernio-connect",
-  // TEMPORARY -- one-off ad budget change (2026-07-20), see
-  // app/api/debug/set-ad-budgets-once/route.ts. Remove once confirmed applied.
-  "/api/debug/set-ad-budgets-once",
   // pg_cron-triggered worker routes (net.http_post carries no session
   // cookie) -- found missing here while building 0096: every tick of
   // crm-promo-sends-worker and the daily social-snapshot capture cron has
