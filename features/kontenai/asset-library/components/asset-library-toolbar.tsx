@@ -1,11 +1,11 @@
 "use client";
 
-import { LayoutGrid, List, Search, Upload } from "lucide-react";
+import type { ReactNode } from "react";
+import { LayoutGrid, List, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AssetType } from "@/features/kontenai/types";
 import type { AssetLibraryViewMode, AssetTypeFilter, AssetVisionFilter } from "@/features/kontenai/asset-library/types";
 
@@ -22,6 +22,7 @@ interface AssetLibraryToolbarProps {
   onVisionFilterChange: (value: AssetVisionFilter) => void;
   viewMode: AssetLibraryViewMode;
   onViewModeChange: (value: AssetLibraryViewMode) => void;
+  uploadSlot: ReactNode;
 }
 
 export function AssetLibraryToolbar({
@@ -33,6 +34,7 @@ export function AssetLibraryToolbar({
   onVisionFilterChange,
   viewMode,
   onViewModeChange,
+  uploadSlot,
 }: AssetLibraryToolbarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -100,18 +102,7 @@ export function AssetLibraryToolbar({
           </Button>
         </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Real upload needs a storage backend, intentionally out of scope for this sprint. */}
-            <span tabIndex={0}>
-              <Button type="button" disabled className="pointer-events-none">
-                <Upload className="h-4 w-4" />
-                Upload Assets
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Tersedia setelah storage backend terhubung</TooltipContent>
-        </Tooltip>
+        {uploadSlot}
       </div>
     </div>
   );

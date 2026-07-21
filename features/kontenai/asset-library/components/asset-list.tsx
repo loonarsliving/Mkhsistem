@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AssetRecord } from "@/features/kontenai/types";
 
+import { AssetDeleteButton } from "./asset-delete-button";
+import { AssetTagEditor } from "./asset-tag-editor";
 import { AssetThumbnail } from "./asset-thumbnail";
 import { formatBytes, formatDuration, formatUploadedAt } from "./asset-format";
 import { ASSET_TYPE_LABEL } from "./asset-type-icon";
@@ -9,9 +11,12 @@ import { VisionStatusBadge } from "./vision-status-badge";
 
 interface AssetListProps {
   assets: AssetRecord[];
+  onUpdateTags: (assetId: string, tags: string[]) => Promise<boolean>;
+  onDelete: (assetId: string) => void;
+  mutatingAssetId: string | null;
 }
 
-export function AssetList({ assets }: AssetListProps) {
+export function AssetList({ assets, onUpdateTags, onDelete, mutatingAssetId }: AssetListProps) {
   return (
     <Table>
       <TableHeader>
@@ -22,11 +27,13 @@ export function AssetList({ assets }: AssetListProps) {
           <TableHead>Tag</TableHead>
           <TableHead>Gemini Vision</TableHead>
           <TableHead>Diunggah</TableHead>
+          <TableHead className="text-right">Aksi</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {assets.map((asset) => {
           const duration = formatDuration(asset.durationSeconds);
+          const isMutating = mutatingAssetId === asset.id;
           return (
             <TableRow key={asset.id}>
               <TableCell>
@@ -60,6 +67,12 @@ export function AssetList({ assets }: AssetListProps) {
                 {formatUploadedAt(asset.uploadedAt)}
                 <br />
                 {asset.uploadedBy}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center justify-end gap-0.5">
+                  <AssetTagEditor asset={asset} onSave={onUpdateTags} isSubmitting={isMutating} />
+                  <AssetDeleteButton asset={asset} onConfirm={onDelete} isSubmitting={isMutating} />
+                </div>
               </TableCell>
             </TableRow>
           );
