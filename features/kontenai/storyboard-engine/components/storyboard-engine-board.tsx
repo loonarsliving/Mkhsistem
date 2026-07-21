@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Loader2, Sparkles, Send } from "lucide-react";
+import { Clock, Loader2, Sparkles, Send, Save, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,7 +12,11 @@ import type { ProductionDirective, Storyboard } from "@/features/kontenai/types"
 import type { EditableScene } from "@/features/kontenai/storyboard-engine/types";
 import { DirectivePicker } from "@/features/kontenai/storyboard-engine/components/directive-picker";
 import { SceneCard } from "@/features/kontenai/storyboard-engine/components/scene-card";
-import { generateStoryboardAction, listDirectivesAction } from "@/features/kontenai/storyboard-engine/actions/storyboard-engine.actions";
+import {
+  generateStoryboardAction,
+  listDirectivesAction,
+  updateStoryboardScenesAction,
+} from "@/features/kontenai/storyboard-engine/actions/storyboard-engine.actions";
 
 function toEditableScenes(storyboard: Storyboard): EditableScene[] {
   return storyboard.scenes
@@ -46,7 +50,11 @@ export function StoryboardEngineBoard() {
   const [selectedDirective, setSelectedDirective] = useState<ProductionDirective | null>(null);
   const [scenes, setScenes] = useState<EditableScene[] | null>(null);
   const [directiveIdOfScenes, setDirectiveIdOfScenes] = useState<string | null>(null);
+  const [storyboardId, setStoryboardId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [savedJustNow, setSavedJustNow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalDurationSeconds = useMemo(
@@ -62,6 +70,9 @@ export function StoryboardEngineBoard() {
       const storyboard = await generateStoryboardAction(selectedDirective.id);
       setScenes(toEditableScenes(storyboard));
       setDirectiveIdOfScenes(selectedDirective.id);
+      setStoryboardId(storyboard.id);
+      setIsDirty(false);
+      setSavedJustNow(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membuat storyboard. Coba lagi.");
     } finally {
@@ -76,6 +87,8 @@ export function StoryboardEngineBoard() {
       copy[index] = next;
       return copy;
     });
+    setIsDirty(true);
+    setSavedJustNow(false);
   }
 
   function moveScene(index: number, direction: -1 | 1) {
@@ -87,6 +100,8 @@ export function StoryboardEngineBoard() {
       [copy[index], copy[target]] = [copy[target], copy[index]];
       return copy.map((scene, i) => ({ ...scene, order: i }));
     });
+    setIsDirty(true);
+    setSavedJustNow(false);
   }
 
   function removeScene(index: number) {
@@ -94,6 +109,39 @@ export function StoryboardEngineBoard() {
       if (!prev || prev.length <= 1) return prev;
       return prev.filter((_, i) => i !== index).map((scene, i) => ({ ...scene, order: i }));
     });
+    setIsDirty(true);
+    setSavedJustNow(false);
+  }
+
+  async function handleSaveScenes() {
+    if (!scenes || !storyboardId) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const result = await updateStoryboardScenesAction(
+        storyboardId,
+        scenes.map((scene) => ({
+          id: scene.id,
+          order: scene.order,
+          description: scene.description,
+          durationSeconds: scene.durationSeconds,
+          transition: scene.transition,
+          textOverlay: scene.textOverlay.trim() === "" ? null : scene.textOverlay,
+          requiredAssetTags: scene.requiredAssetTags,
+          selectedAssetId: scene.selectedAssetId,
+        })),
+      );
+      if (!result.success) {
+        setError(result.error ?? "Gagal menyimpan perubahan storyboard.");
+        return;
+      }
+      setIsDirty(false);
+      setSavedJustNow(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan perubahan storyboard.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   const hasStoryboardForSelection = scenes !== null && directiveIdOfScenes === selectedDirective?.id;
@@ -157,7 +205,25 @@ export function StoryboardEngineBoard() {
                   <p className="text-xl font-semibold tabular-nums">{formatDuration(totalDurationSeconds)}</p>
                 </div>
               </div>
-              <Badge variant="secondary">{scenes.length} scene</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{scenes.length} scene</Badge>
+                <Button
+                  type="button"
+                  variant={isDirty ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleSaveScenes}
+                  disabled={isSaving || !isDirty}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : savedJustNow && !isDirty ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  {isSaving ? "Menyimpan..." : savedJustNow && !isDirty ? "Tersimpan" : "Simpan Perubahan"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
