@@ -93,6 +93,7 @@ export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "su
 export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
 export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
+export type CrmProjectOfferingTypeDb = "sale" | "rental_stay" | "management_service";
 export type CrmProjectStatusDb = "planning" | "selling" | "completed";
 export type KpiTaskStatusDb = "pending" | "awaiting_verification" | "completed" | "rejected";
 export type KpiTaskContentFocusDb = "leasehold_sales" | "occupancy" | "general";
@@ -963,6 +964,7 @@ export interface Database {
           city: string | null;
           branch_id: string;
           project_type: CrmProjectTypeDb;
+          offering_type: CrmProjectOfferingTypeDb;
           status: CrmProjectStatusDb;
           start_date: string | null;
           target_launch_date: string | null;
@@ -980,6 +982,7 @@ export interface Database {
           city?: string | null;
           branch_id: string;
           project_type?: CrmProjectTypeDb;
+          offering_type?: CrmProjectOfferingTypeDb;
           status?: CrmProjectStatusDb;
           start_date?: string | null;
           target_launch_date?: string | null;

@@ -84,7 +84,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   if (draft.status !== "draft") return actionError("Iklan ini sudah diluncurkan atau bukan draft");
 
   const photo = draft.photo as { public_url?: string } | null;
-  const project = draft.project as { name?: string; project_type?: string } | null;
+  const project = draft.project as { name?: string; project_type?: string; offering_type?: string } | null;
   // campaign_photos (0141) is the real ordered set for a carousel -- falls
   // back to the single legacy `photo` for any draft created before that
   // migration existed, so an old still-pending draft doesn't break.
@@ -115,7 +115,9 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
       welcomeMessage: draft.welcome_message ?? undefined,
       dailyBudgetIdr,
       targeting:
-        project?.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : await resolveGeoLocationsFromNames(draft.target_areas ?? [], 25),
+        project?.project_type === "villa" && project?.offering_type === "sale"
+          ? await getLeaseholdTargetGeoLocations()
+          : await resolveGeoLocationsFromNames(draft.target_areas ?? [], 25),
     });
     await markAdCampaignLaunched(supabase, campaignId, {
       campaignId: result.campaignId,

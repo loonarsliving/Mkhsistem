@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/constants/app";
+import { OFFERING_TYPE_LABEL, PROJECT_STATUS_LABEL, PROJECT_TYPE_LABEL } from "@/constants/app";
 import { listBranchesAction } from "@/features/branches/actions/branch-query.actions";
 
 import { saveCrmProjectAction } from "../actions/crm-project.actions";
@@ -41,6 +41,7 @@ export function ProjectFormDialog({ trigger, initialValues }: ProjectFormDialogP
       city: "",
       branchId: "",
       projectType: undefined,
+      offeringType: "sale",
       status: undefined,
       startDate: "",
       targetLaunchDate: "",
@@ -124,6 +125,31 @@ export function ProjectFormDialog({ trigger, initialValues }: ProjectFormDialogP
               />
               {errors.projectType && <p className="text-sm text-destructive">{errors.projectType.message}</p>}
             </div>
+            <div className="space-y-2">
+              <Label>Jenis Penawaran</Label>
+              <Controller
+                control={control}
+                name="offeringType"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih jenis penawaran" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(OFFERING_TYPE_LABEL).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.offeringType && <p className="text-sm text-destructive">{errors.offeringType.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Status</Label>
               <Controller

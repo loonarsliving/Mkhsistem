@@ -345,7 +345,7 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
 async function loadProjectWithPhotos(supabase: AdminClient, projectId: string) {
   const { data: project, error: projectError } = await supabase
     .from("crm_projects")
-    .select("id, name, city, project_type, branch_id, product_description")
+    .select("id, name, city, project_type, offering_type, branch_id, product_description")
     .eq("id", projectId)
     .single();
   if (projectError || !project) throw new NonRetryableJobError(`Project ${projectId} not found: ${projectError?.message}`);
@@ -395,9 +395,10 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     projectName: project.name,
     projectCity: project.city,
     projectType: project.project_type,
+    offeringType: project.offering_type,
     productDescription: project.product_description,
     availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
-    targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
+    targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
   });
   const photoById = new Map(photos.map((p) => [p.id, p]));
   const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
@@ -405,7 +406,9 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
 
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
   const targeting =
-    project.project_type === "villa" ? await getLeaseholdTargetGeoLocations() : await resolveGeoLocationsFromNames(draft.targetAreas, 25);
+    project.project_type === "villa" && project.offering_type === "sale"
+      ? await getLeaseholdTargetGeoLocations()
+      : await resolveGeoLocationsFromNames(draft.targetAreas, 25);
 
   try {
     const result = await launchWhatsAppLeadCampaign({
@@ -513,9 +516,10 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       projectName: project.name,
       projectCity: project.city,
       projectType: project.project_type,
+      offeringType: project.offering_type,
       productDescription: project.product_description,
       availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
-      targetCities: project.project_type === "villa" ? LEASEHOLD_TARGET_CITIES : undefined,
+      targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
     });
     const photoById = new Map(photos.map((p) => [p.id, p]));
     const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));

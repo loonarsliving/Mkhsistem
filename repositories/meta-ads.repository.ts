@@ -17,7 +17,7 @@ export async function listAdCampaigns(supabase: TypedSupabaseClient, branchId?: 
 export async function getAdCampaign(supabase: TypedSupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("meta_ad_campaigns")
-    .select(`*, project:project_id(name, project_type), photo:photo_id(public_url), ${CAMPAIGN_PHOTOS_SELECT}`)
+    .select(`*, project:project_id(name, project_type, offering_type), photo:photo_id(public_url), ${CAMPAIGN_PHOTOS_SELECT}`)
     .eq("id", id)
     .single();
   if (error) throw error;

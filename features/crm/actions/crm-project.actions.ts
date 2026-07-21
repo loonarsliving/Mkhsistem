@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { createCrmProject, setCrmProjectActive, updateCrmProject } from "@/repositories/crm.repository";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
-import type { CrmProjectStatusDb, CrmProjectTypeDb } from "@/types/database.types";
+import type { CrmProjectOfferingTypeDb, CrmProjectStatusDb, CrmProjectTypeDb } from "@/types/database.types";
 
 import { crmProjectSchema, type CrmProjectInput } from "../schemas/crm-project.schema";
 
@@ -21,6 +21,7 @@ export async function saveCrmProjectAction(input: CrmProjectInput): Promise<Acti
     city: parsed.data.city || null,
     branch_id: parsed.data.branchId,
     project_type: parsed.data.projectType as CrmProjectTypeDb,
+    offering_type: parsed.data.offeringType as CrmProjectOfferingTypeDb,
     status: parsed.data.status as CrmProjectStatusDb,
     start_date: parsed.data.startDate || null,
     target_launch_date: parsed.data.targetLaunchDate || null,

@@ -700,12 +700,25 @@ export interface AdPhotoOption {
   caption: string | null;
 }
 
+/**
+ * What this project actually sells -- 'sale' (buy a villa/unit, the
+ * original/default assumption), 'rental_stay' (book a stay, guest/traveler
+ * audience), or 'management_service' (B2B: we manage your villa for you,
+ * pitched to property OWNERS, not buyers or guests). Found via a real bug:
+ * a project literally named "Property management" had no way to signal
+ * this and got drafted as a villa-investment-sale ad ("Investasi Villa
+ * Produktif", "Miliki villa...") purely because projectType happened to be
+ * "villa" -- see crm_projects.offering_type, migration 0145.
+ */
+export type AdOfferingType = "sale" | "rental_stay" | "management_service";
+
 export interface AdDraftInput {
   projectName: string;
   projectCity: string | null;
   projectType: string;
+  offeringType: AdOfferingType;
   availablePhotos: AdPhotoOption[];
-  /** Real buyer-origin cities this ad set will actually be geo-targeted to (see LEASEHOLD_TARGET_CITIES, lib/meta/ads.ts) -- passed so the copy's angle matches who will actually see it, instead of writing generically for "all of Indonesia." */
+  /** Real buyer-origin cities this ad set will actually be geo-targeted to (see LEASEHOLD_TARGET_CITIES, lib/meta/ads.ts) -- only meaningful for offeringType "sale". Passed so the copy's angle matches who will actually see it, instead of writing generically for "all of Indonesia." */
   targetCities?: string[];
   /** Markom-authored specs/price/USP/target-buyer for this specific project (crm_projects.product_description) -- without this the AI only had name+city+type to work with, which produced generic property copy instead of copy grounded in what's actually being sold. */
   productDescription?: string | null;
@@ -777,9 +790,29 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
 
   const systemPrompt = await getSystemPrompt("markom");
   const photoList = input.availablePhotos.map((p) => `- id: ${p.id}, keterangan: ${p.caption ?? "(tanpa keterangan)"}`).join("\n");
-  const audienceLine = input.targetCities?.length
-    ? `Audiens: iklan ini akan ditargetkan khusus ke kota-kota ${input.targetCities.join(", ")} (kota-kota asal pembeli villa leasehold berdasarkan data pasar riil kami) -- tulis materi iklan yang relevan untuk audiens dari kota-kota tersebut, bukan generik untuk seluruh Indonesia.`
-    : "";
+
+  /**
+   * Stated FIRST and in the most forceful terms available, before any other
+   * framing (audience/area lines) -- a real incident showed a
+   * management_service project (offeringType), tagged projectType "villa",
+   * got drafted as "Investasi Villa Produktif...Miliki villa..." purely
+   * because the audience/targetCities lines below assume every villa
+   * project is a leasehold sale. Those lines are now gated to offeringType
+   * "sale" only, but this line exists so the model's actual instruction to
+   * pitch a SERVICE (not a sale or a stay) can't be quietly overridden even
+   * if the audience-line logic is wrong somewhere else.
+   */
+  const offeringLine =
+    input.offeringType === "management_service"
+      ? `TUJUAN IKLAN INI (WAJIB DIPATUHI, PALING PENTING): ini adalah JASA MANAJEMEN PROPERTI -- kami mengelola villa/properti ATAS NAMA PEMILIKNYA (marketing, perawatan, tamu/penyewa, dsb), BUKAN menjual unit villa dan BUKAN memesan tempat menginap. Audiensnya adalah PEMILIK villa/properti yang ingin propertinya dikelola secara profesional supaya menghasilkan tanpa mereka harus repot mengurus sendiri. JANGAN sekali-kali menulis materi seolah mengajak orang MEMBELI villa (dilarang: "investasi villa", "miliki villa", "proyeksi ROI beli unit") atau MEMESAN menginap -- itu SALAH TOTAL untuk jasa ini.`
+      : input.offeringType === "rental_stay"
+        ? `TUJUAN IKLAN INI: mengajak wisatawan/tamu MEMESAN MENGINAP di properti ini (booking jangka pendek), BUKAN menjual unit villa untuk investasi.`
+        : "";
+
+  const audienceLine =
+    input.offeringType === "sale" && input.targetCities?.length
+      ? `Audiens: iklan ini akan ditargetkan khusus ke kota-kota ${input.targetCities.join(", ")} (kota-kota asal pembeli villa leasehold berdasarkan data pasar riil kami) -- tulis materi iklan yang relevan untuk audiens dari kota-kota tersebut, bukan generik untuk seluruh Indonesia.`
+      : "";
   /**
    * Villa already has a curated, fixed buyer-origin list (LEASEHOLD_TARGET_CITIES)
    * passed in via targetCities -- investor/leasehold buyers can come from any
@@ -791,9 +824,12 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
    * home buyers typically come from (commuter corridors, toll/train access,
    * property portal listings, local news/forum discussion of the area).
    */
-  const areaResearchLine = input.targetCities?.length
-    ? ""
-    : `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal rata-rata pembeli rumah di lokasi "${input.projectCity ?? input.projectName}" -- pertimbangkan akses tol/kereta, kota-kota komuter terdekat, dan pola pembeli perumahan sejenis di area itu berdasarkan artikel/listing properti/diskusi yang benar-benar kamu temukan.
+  const areaResearchLine =
+    input.offeringType === "sale" && input.targetCities?.length
+      ? ""
+      : input.offeringType === "management_service"
+        ? `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal PEMILIK villa/properti di area "${input.projectCity ?? input.projectName}" biasanya berasal (mis. investor luar kota yang punya unit di sana tapi tidak tinggal di situ) -- bukan pembeli baru, bukan wisatawan, tapi PEMILIK yang butuh jasa kelola. Sebutkan 3-6 kota/kabupaten NYATA di Indonesia di field "targetAreas" dengan alasan konkret di targetSummary. Kalau riset tidak cukup meyakinkan, kembalikan array kosong.`
+        : `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal rata-rata pembeli rumah di lokasi "${input.projectCity ?? input.projectName}" -- pertimbangkan akses tol/kereta, kota-kota komuter terdekat, dan pola pembeli perumahan sejenis di area itu berdasarkan artikel/listing properti/diskusi yang benar-benar kamu temukan.
 BATASAN WAJIB, jangan dilanggar: properti ini (apalagi rumah subsidi/komersial dengan pembeli yang akan menempati dan komuter harian, beda dengan villa investasi) hanya masuk akal untuk pembeli yang jarak tempuh hariannya wajar (kira-kira di bawah 1-1.5 jam berkendara dalam kondisi normal, bukan sekadar "searah ke Jakarta"). JANGAN memasukkan kota/kabupaten besar (terutama wilayah DKI Jakarta) hanya karena sering disebut sebagai daya tarik properti pinggiran -- itu klise pemasaran, bukan data pembeli riil. Setiap kota/kabupaten yang kamu masukkan ke targetAreas HARUS punya alasan konkret dari risetmu (misalnya: berbatasan langsung, akses tol/jalan yang benar-benar dipakai komuter ke lokasi ini, atau ada bukti pembeli riil dari kota itu di listing/diskusi yang kamu temukan) -- sebutkan alasannya di targetSummary, bukan cuma nama kotanya.
 Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/perumahan yang terlalu spesifik, karena harus bisa dikenali sistem targeting iklan) di field "targetAreas". Kalau riset tidak menemukan data yang cukup meyakinkan dan sesuai batasan jarak tempuh di atas, kembalikan array kosong -- jangan menebak atau memaksakan kota yang terlalu jauh.`;
   const productLine = input.productDescription?.trim()
@@ -806,12 +842,14 @@ Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/peruma
   const indicatorsBlock = `Tulis materi iklan dengan menimbang indikator riset berikut (ini yang membedakan iklan yang ramai diklik vs yang tenggelam):
 1. HOOK: 3-5 kata pertama primaryText harus menghentikan scroll -- gunakan format hook yang sedang tren di riset Google Search-mu, bukan kalimat pembuka generik ("Dijual villa...", "Kami menawarkan...").
 2. FAKTA PRODUK: angka konkret (harga, luas, fasilitas) dari detail produk di atas jauh lebih meyakinkan daripada kata sifat umum ("mewah", "strategis") -- pakai fakta, bukan hanya klaim.
-3. SATU CTA JELAS: ajakan tunggal yang mendorong klik chat WhatsApp (hard sell) -- jangan pecah perhatian dengan banyak ajakan sekaligus.
-4. RELEVANSI AUDIENS: sesuaikan sudut pandang/bahasa dengan audiens kota target di atas (kalau ada), bukan nada generik nasional.
-5. GAYA KOMPETITOR: pakai pola iklan Click-to-WhatsApp properti yang sedang efektif dari riset kompetitor -- jangan meniru persis, tapi pelajari pola yang berhasil (hook, panjang teks, penempatan CTA).
+3. SATU CTA JELAS: ajakan tunggal yang mendorong klik chat WhatsApp (hard sell) -- jangan pecah perhatian dengan banyak ajakan sekaligus, dan CTA-nya harus sesuai TUJUAN IKLAN di atas (jangan ajak "beli" kalau tujuannya jasa kelola atau booking menginap).
+4. RELEVANSI AUDIENS: sesuaikan sudut pandang/bahasa dengan audiens yang benar-benar dituju (lihat TUJUAN IKLAN dan audiens kota target di atas, kalau ada) -- bukan nada generik nasional dan bukan audiens yang salah.
+5. GAYA KOMPETITOR: pakai pola iklan Click-to-WhatsApp yang sedang efektif dari riset kompetitor untuk penawaran SEJENIS (lihat TUJUAN IKLAN) -- jangan meniru persis, tapi pelajari pola yang berhasil (hook, panjang teks, penempatan CTA).
 6. KEJUJURAN: jangan mengarang urgensi/diskon/stok terbatas yang tidak ada di detail produk -- urgensi palsu merusak kepercayaan dan performa jangka panjang.`;
 
-  const researchPrompt = `Riset dulu lewat Google Search: (1) hal yang sedang viral/tren di media sosial Indonesia yang relevan untuk audiens pembeli properti/villa, dan (2) gaya iklan Click-to-WhatsApp kompetitor properti yang sedang berjalan di Meta Ads.
+  const researchPrompt = `${offeringLine}
+
+Riset dulu lewat Google Search: (1) hal yang sedang viral/tren di media sosial Indonesia yang relevan untuk audiens iklan ini (lihat TUJUAN IKLAN di atas), dan (2) gaya iklan Click-to-WhatsApp kompetitor yang sedang berjalan di Meta Ads untuk penawaran sejenis.
 
 Gunakan riset itu untuk membuat draft iklan Click-to-WhatsApp untuk project berikut:
 Nama Project: ${input.projectName}
@@ -840,7 +878,9 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
     // fall through to the unresearched fallback below -- still picks a real photo, just without grounded research backing the copy.
   }
 
-  const fallbackPrompt = `Buatkan draft iklan Click-to-WhatsApp untuk project properti berikut, tanpa riset internet:
+  const fallbackPrompt = `${offeringLine}
+
+Buatkan draft iklan Click-to-WhatsApp untuk project properti berikut, tanpa riset internet:
 Nama Project: ${input.projectName}
 Kota: ${input.projectCity ?? "-"}
 Tipe: ${input.projectType}

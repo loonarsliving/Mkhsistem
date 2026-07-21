@@ -55,7 +55,7 @@ export async function setCrmProjectActive(supabase: TypedSupabaseClient, id: str
 
 /** Every active project (for the photo-upload / ad-creative project picker), branch-scoped for Kepala Cabang-level Markom. */
 export async function listActiveCrmProjects(supabase: TypedSupabaseClient, branchId?: string) {
-  let query = supabase.from("crm_projects").select("id, name, city, branch_id, product_description").eq("is_active", true).order("name");
+  let query = supabase.from("crm_projects").select("id, name, city, branch_id, product_description, project_type, offering_type").eq("is_active", true).order("name");
   if (branchId) query = query.eq("branch_id", branchId);
   const { data, error } = await query;
   if (error) throw error;

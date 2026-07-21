@@ -13,8 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ProjectStatusBadge } from "@/components/shared/status-badge";
-import { PROJECT_TYPE_LABEL } from "@/constants/app";
-import type { CrmProjectStatusDb, CrmProjectTypeDb } from "@/types/database.types";
+import { OFFERING_TYPE_LABEL, PROJECT_TYPE_LABEL } from "@/constants/app";
+import type { CrmProjectOfferingTypeDb, CrmProjectStatusDb, CrmProjectTypeDb } from "@/types/database.types";
 
 import { setCrmProjectActiveAction } from "../actions/crm-project.actions";
 import type { CrmProjectInput } from "../schemas/crm-project.schema";
@@ -26,6 +26,7 @@ interface ProjectRow {
   city: string | null;
   branch_id: string;
   project_type: CrmProjectTypeDb;
+  offering_type: CrmProjectOfferingTypeDb;
   status: CrmProjectStatusDb;
   start_date: string | null;
   target_launch_date: string | null;
@@ -74,6 +75,7 @@ export function ProjectTable({ projects }: { projects: ProjectRow[] }) {
                 <TableHead>Project</TableHead>
                 <TableHead>Cabang</TableHead>
                 <TableHead>Tipe</TableHead>
+                <TableHead>Penawaran</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Target Launching</TableHead>
                 <TableHead>Aktif</TableHead>
@@ -88,6 +90,7 @@ export function ProjectTable({ projects }: { projects: ProjectRow[] }) {
                   city: project.city ?? "",
                   branchId: project.branch_id,
                   projectType: project.project_type,
+                  offeringType: project.offering_type,
                   status: project.status,
                   startDate: project.start_date ?? "",
                   targetLaunchDate: project.target_launch_date ?? "",
@@ -100,6 +103,7 @@ export function ProjectTable({ projects }: { projects: ProjectRow[] }) {
                     </TableCell>
                     <TableCell>{project.branch?.name ?? "-"}</TableCell>
                     <TableCell>{PROJECT_TYPE_LABEL[project.project_type as keyof typeof PROJECT_TYPE_LABEL]}</TableCell>
+                    <TableCell>{OFFERING_TYPE_LABEL[project.offering_type as keyof typeof OFFERING_TYPE_LABEL]}</TableCell>
                     <TableCell>
                       <ProjectStatusBadge status={project.status} />
                     </TableCell>

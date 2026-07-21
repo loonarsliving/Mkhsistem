@@ -255,6 +255,28 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   completed: "Selesai",
 };
 
+/**
+ * What a project actually sells -- independent from PROJECT_TYPE (asset
+ * category). Added after a real incident: a project literally named
+ * "Property management" had no way to signal it wasn't a villa-for-sale
+ * listing, so the AI ads pipeline drafted "Investasi Villa Produktif...
+ * Miliki villa..." for it purely because projectType happened to be
+ * "villa" (see lib/ai/domains/markom.ts's researchAndDraftAd, migration
+ * 0145). Drives both ad copy framing and Meta geo-targeting.
+ */
+export const OFFERING_TYPE = {
+  SALE: "sale",
+  RENTAL_STAY: "rental_stay",
+  MANAGEMENT_SERVICE: "management_service",
+} as const;
+export type OfferingType = (typeof OFFERING_TYPE)[keyof typeof OFFERING_TYPE];
+
+export const OFFERING_TYPE_LABEL: Record<OfferingType, string> = {
+  sale: "Jual unit/villa",
+  rental_stay: "Sewa menginap (booking tamu)",
+  management_service: "Jasa manajemen properti (untuk pemilik)",
+};
+
 export const STORAGE_BUCKETS = {
   AVATARS: "avatars",
   ATTENDANCE_SELFIES: "attendance-selfies",
