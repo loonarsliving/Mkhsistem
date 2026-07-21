@@ -3,13 +3,16 @@
 /**
  * Sprint 3 - AI Director actions.
  *
- * PLACEHOLDER IMPLEMENTATION: these actions are fully mocked / in-memory.
- * There is no real Supabase read of Content Planner (kpi_tasks) or
- * Content Audit tables here, and no real LLM call -- per the explicit
- * project-owner decision for this build phase. `listContentBriefsAction`
- * returns a fixed, seeded `ContentBrief[]` and `generateDirectiveAction`
- * simulates "AI thinking" with a delay before returning a
- * template-assembled `ProductionDirective`.
+ * Reads Content Planner briefs (enriched with the latest Content Audit
+ * insight) from the shared `getMockDb()` store and turns them into a
+ * `ProductionDirective`. There is still no real Supabase read of
+ * Content Planner (kpi_tasks) / Content Audit tables and no real LLM
+ * call here -- per the explicit project-owner decision for this build
+ * phase -- but the logic now genuinely varies per brand
+ * (`ContentFocus`) and per audit insight instead of being generic
+ * boilerplate, and the generated directive is persisted into the
+ * shared mock database so downstream sprints (Storyboard Engine,
+ * Production Pipeline) see the same object.
  *
  * A later phase should replace the body of `generateDirectiveAction`
  * with a real call to an LLM (e.g. Gemini) fed the matching
@@ -19,154 +22,18 @@
  */
 
 import type { ContentBrief, ContentFocus, ProductionDirective, TargetPlatform } from "@/features/kontenai/types";
+import { getMockDb } from "@/features/kontenai/lib/mock-db";
+import { BRAND_TONE_GUIDANCE } from "@/features/kontenai/lib/brands";
+import { generateId } from "@/features/kontenai/lib/ids";
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const CONTENT_BRIEFS: ContentBrief[] = [
-  {
-    id: "brief-001",
-    kpiTaskId: "kpi-task-4821",
-    title: "Promo Akhir Pekan: Unit Studio Ready Stock",
-    description: "Highlight 3 unit studio yang baru kosong di tower B, dorong booking survey lokasi sebelum akhir bulan.",
-    contentFocus: "leasehold_sales",
-    targetPlatform: "instagram",
-    branchId: "branch-jogja-01",
-    divisionId: "division-markom",
-    dueDate: "2026-07-25",
-    auditInsight: {
-      narrative: "Konten leasehold minggu lalu kuat di hook tapi CTA masih lemah -- banyak like, sedikit klik ke WA.",
-      scores: { hook: 8.2, value: 7.4, cta: 5.1, nicheFit: 7.8, engagementPotential: 7.6, platformOptimization: 6.9, overall: 7.2 },
-      growthSignal: "on_track",
-      recommendations: [
-        "Perjelas CTA dengan satu langkah konkret (mis. \"chat WA sekarang\")",
-        "Tambahkan urgensi -- stok terbatas / harga naik minggu depan",
-      ],
-    },
-  },
-  {
-    id: "brief-002",
-    kpiTaskId: "kpi-task-4822",
-    title: "Testimoni Penghuni: Kenyamanan Kos Putri",
-    description: "Kumpulkan kutipan penghuni tentang keamanan dan kebersihan untuk membangun kepercayaan calon penyewa baru.",
-    contentFocus: "occupancy",
-    targetPlatform: "tiktok",
-    branchId: "branch-jogja-02",
-    divisionId: "division-markom",
-    dueDate: "2026-07-27",
-    auditInsight: {
-      narrative: "Konten occupancy bulan ini stagnan di engagement -- audiens menonton tapi jarang komentar atau share.",
-      scores: { hook: 6.0, value: 6.8, cta: 4.5, nicheFit: 7.0, engagementPotential: 5.2, platformOptimization: 5.8, overall: 5.9 },
-      growthSignal: "below_benchmark",
-      recommendations: [
-        "Gunakan wajah dan suara asli penghuni, bukan voice over generik",
-        "Buka dengan pertanyaan yang memancing komentar di 3 detik pertama",
-      ],
-    },
-  },
-  {
-    id: "brief-003",
-    kpiTaskId: "kpi-task-4823",
-    title: "Edukasi Rutin Perawatan Kulit Sebelum Tidur",
-    description: "Konten edukasi ringan seputar skincare routine malam menggunakan produk andalan Loonars Beauty.",
-    contentFocus: "beauty",
-    targetPlatform: "instagram",
-    branchId: "branch-jogja-01",
-    divisionId: "division-loonars-beauty",
-    dueDate: "2026-07-24",
-    auditInsight: {
-      narrative: "Seri edukasi skincare konsisten jadi performer terbaik bulan ini -- hook kuat dan share rate tinggi.",
-      scores: { hook: 9.0, value: 8.6, cta: 7.2, nicheFit: 9.1, engagementPotential: 8.8, platformOptimization: 8.0, overall: 8.5 },
-      growthSignal: "excellent",
-      recommendations: [
-        "Pertahankan format edukasi 3-langkah yang sudah terbukti",
-        "Coba selipkan soft-sell produk di langkah terakhir",
-      ],
-    },
-  },
-  {
-    id: "brief-004",
-    kpiTaskId: "kpi-task-4824",
-    title: "Pengumuman Jam Operasional Libur Nasional",
-    description: "Informasikan perubahan jam operasional kantor cabang selama libur nasional mendatang.",
-    contentFocus: "general",
-    targetPlatform: "instagram",
-    branchId: "branch-jogja-01",
-    divisionId: "division-markom",
-    dueDate: "2026-07-23",
-    auditInsight: null,
-  },
-  {
-    id: "brief-005",
-    kpiTaskId: "kpi-task-4825",
-    title: "Behind The Scenes: Renovasi Area Bersama Kos Putra",
-    description: "Tunjukkan progres renovasi ruang bersama untuk membangun antisipasi calon penyewa dan penghuni lama.",
-    contentFocus: "occupancy",
-    targetPlatform: "instagram",
-    branchId: "branch-jogja-03",
-    divisionId: "division-markom",
-    dueDate: "2026-07-29",
-    auditInsight: null,
-  },
-  {
-    id: "brief-006",
-    kpiTaskId: "kpi-task-4826",
-    title: "Flash Sale Sewa Tahunan -- Diskon DP",
-    description: "Dorong konversi penyewa baru dengan promo diskon DP untuk kontrak sewa tahunan, berlaku 1 minggu.",
-    contentFocus: "leasehold_sales",
-    targetPlatform: "tiktok",
-    branchId: "branch-jogja-02",
-    divisionId: "division-markom",
-    dueDate: "2026-07-22",
-    auditInsight: {
-      narrative: "Format promo diskon di TikTok minggu lalu unggul di value tapi platform optimization masih rendah (durasi kepanjangan).",
-      scores: { hook: 7.5, value: 8.0, cta: 7.8, nicheFit: 7.2, engagementPotential: 7.0, platformOptimization: 4.8, overall: 6.9 },
-      growthSignal: "on_track",
-      recommendations: [
-        "Pangkas durasi ke bawah 20 detik agar tidak drop-off",
-        "Gunakan trending audio yang sesuai niche properti",
-      ],
-    },
-  },
-  {
-    id: "brief-007",
-    kpiTaskId: "kpi-task-4827",
-    title: "Review Jujur: Produk Serum Vitamin C Loonars",
-    description: "Format review jujur (pros/cons) untuk produk serum best seller guna menjawab keraguan calon pembeli.",
-    contentFocus: "beauty",
-    targetPlatform: "tiktok",
-    branchId: "branch-jogja-01",
-    divisionId: "division-loonars-beauty",
-    dueDate: "2026-07-26",
-    auditInsight: {
-      narrative: "Format review jujur baru dicoba dua kali, hasilnya campur -- niche fit tinggi tapi CTA ke checkout masih bocor.",
-      scores: { hook: 7.0, value: 7.5, cta: 5.5, nicheFit: 8.4, engagementPotential: 7.1, platformOptimization: 6.5, overall: 6.9 },
-      growthSignal: "on_track",
-      recommendations: [
-        "Sematkan link/keranjang produk di bio dan sebutkan eksplisit di akhir video",
-        "Tambahkan before/after singkat untuk memperkuat klaim",
-      ],
-    },
-  },
-  {
-    id: "brief-008",
-    kpiTaskId: "kpi-task-4828",
-    title: "Ucapan Terima Kasih 100 Penyewa Aktif",
-    description: "Momen pencapaian internal -- ucapan terima kasih ke komunitas penyewa sekaligus soft promo referral.",
-    contentFocus: "general",
-    targetPlatform: "tiktok",
-    branchId: "branch-jogja-03",
-    divisionId: "division-markom",
-    dueDate: "2026-07-30",
-    auditInsight: null,
-  },
-];
-
 /** Sprint 3 input: Content Planner brief + latest Content Audit insight, combined. */
 export async function listContentBriefsAction(): Promise<ContentBrief[]> {
   await delay(300);
-  return CONTENT_BRIEFS;
+  return getMockDb().contentBriefs;
 }
 
 interface DirectiveTemplate {
@@ -288,18 +155,61 @@ function hashSeed(input: string): number {
   return hash;
 }
 
+/** Words too generic to be useful as content-specific asset tags. */
+const KEYWORD_STOPWORDS = new Set([
+  "yang", "dengan", "untuk", "dari", "dan", "atau", "ke", "di", "para", "akan",
+  "agar", "adalah", "sebagai", "pada", "ini", "itu", "the", "and", "for", "with",
+  "dorong", "tunjukkan", "informasikan", "ajak", "kumpulkan", "gunakan",
+]);
+
+/**
+ * Very lightweight keyword extraction (no real NLP): pulls the most
+ * "distinctive" words out of the brief's title/description so different
+ * briefs -- even within the same contentFocus -- surface different
+ * content-specific asset tags instead of only the generic brand tag.
+ */
+function extractKeywordTags(brief: ContentBrief, count: number): string[] {
+  const text = `${brief.title} ${brief.description ?? ""}`.toLowerCase();
+  const words = text
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3 && !KEYWORD_STOPWORDS.has(word));
+
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const word of words) {
+    if (seen.has(word)) continue;
+    seen.add(word);
+    tags.push(word);
+    if (tags.length >= count) break;
+  }
+  return tags;
+}
+
+/** Maps a ContentFocus to the implied brand tag used across the asset library. */
+function brandTagFor(contentFocus: ContentFocus): string {
+  return contentFocus;
+}
+
 /**
  * Sprint 3 core action: turns a ContentBrief into a ProductionDirective.
  *
  * PLACEHOLDER: this assembles a plausible directive from templates keyed
- * by contentFocus and nudged by the brief's auditInsight (when present),
- * rather than calling a real LLM. Replace this body with a Gemini/LLM
- * call once that integration is wired up -- the function signature and
- * return shape (ProductionDirective) should stay the same so downstream
- * Sprint 4 (Storyboard Engine) is unaffected.
+ * by contentFocus, shaped by the brand's tone guidance, and nudged by
+ * the brief's auditInsight (when present), rather than calling a real
+ * LLM. Replace this body with a Gemini/LLM call once that integration
+ * is wired up -- the function signature and return shape
+ * (ProductionDirective) should stay the same so downstream Sprint 4
+ * (Storyboard Engine) and Sprint 7 (Production Pipeline) are unaffected.
+ *
+ * Contract: throws a plain `Error` with a clear message when
+ * `contentBriefId` does not resolve to a brief in the shared mock
+ * database -- callers (e.g. Production Pipeline) should treat this
+ * action as capable of rejecting and handle it accordingly.
  */
 export async function generateDirectiveAction(contentBriefId: string): Promise<ProductionDirective> {
-  const brief = CONTENT_BRIEFS.find((b) => b.id === contentBriefId);
+  const db = getMockDb();
+  const brief = db.contentBriefs.find((b) => b.id === contentBriefId);
   if (!brief) {
     throw new Error(`Content brief ${contentBriefId} tidak ditemukan`);
   }
@@ -308,10 +218,11 @@ export async function generateDirectiveAction(contentBriefId: string): Promise<P
   await delay(800 + Math.floor(Math.random() * 700));
 
   const template = FOCUS_TEMPLATES[brief.contentFocus];
+  const toneGuidance = BRAND_TONE_GUIDANCE[brief.contentFocus];
   const seed = hashSeed(brief.id + brief.title);
 
-  const narrativeAngle = pick(template.angleOptions, seed);
-  const visualStyle = pick(template.visualStyleOptions, seed + 1);
+  const narrativeAngle = `${pick(template.angleOptions, seed)} (${toneGuidance})`;
+  const visualStyle = `${pick(template.visualStyleOptions, seed + 1)} -- ${toneGuidance}`;
   let callToAction = pick(template.ctaOptions, seed + 2);
 
   const keyMessages = [
@@ -320,10 +231,15 @@ export async function generateDirectiveAction(contentBriefId: string): Promise<P
     template.messageOptions[(seed + 2) % template.messageOptions.length],
   ];
 
+  // Brand tag first, then 2-3 content-specific keyword tags pulled from
+  // the brief's own title/description, plus a couple of template-driven
+  // tags so the storyboard/asset-selection stages still have familiar
+  // categories to match against.
   const assetTags = [
+    brandTagFor(brief.contentFocus),
+    ...extractKeywordTags(brief, 3),
     template.assetTagOptions[seed % template.assetTagOptions.length],
     template.assetTagOptions[(seed + 1) % template.assetTagOptions.length],
-    template.assetTagOptions[(seed + 2) % template.assetTagOptions.length],
   ];
 
   // Nudge the directive using the Content Audit insight when available,
@@ -334,16 +250,20 @@ export async function generateDirectiveAction(contentBriefId: string): Promise<P
 
     if (growthSignal === "below_benchmark") {
       keyMessages.unshift("Perbaiki titik lemah minggu lalu: " + (recommendations[0] ?? "tingkatkan engagement di 3 detik pertama"));
-      callToAction = "Buka dengan pertanyaan yang mengundang komentar, lalu tutup: " + callToAction;
+      callToAction = "Buka dengan pertanyaan yang mengundang komentar, lalu tutup dengan tegas: " + callToAction;
     } else if (growthSignal === "excellent") {
-      keyMessages.unshift("Pertahankan formula pemenang minggu lalu (skor keseluruhan " + scores.overall.toFixed(1) + "/10)");
-    } else if (scores.cta < 6) {
-      callToAction = callToAction + " (perjelas -- CTA minggu lalu lemah, skor " + scores.cta.toFixed(1) + "/10)";
+      keyMessages.unshift("Pertahankan formula pemenang minggu lalu (skor keseluruhan " + scores.overall.toFixed(1) + "/10) -- " + (recommendations[0] ?? "jangan ubah format yang sudah terbukti"));
+    } else if (growthSignal === "on_track") {
+      keyMessages.unshift((recommendations[0] ?? "Tingkatkan konsistensi format yang sudah on track") + " (skor keseluruhan " + scores.overall.toFixed(1) + "/10)");
+    }
+
+    if (scores.cta < 6) {
+      callToAction = callToAction + " (perjelas -- CTA minggu lalu lemah, skor " + scores.cta.toFixed(1) + "/10: " + (recommendations.find((r) => /cta|checkout|link|klik/i.test(r)) ?? recommendations[0] ?? "buat CTA lebih eksplisit") + ")";
     }
   }
 
   const directive: ProductionDirective = {
-    id: `directive-${brief.id}-${Date.now()}`,
+    id: generateId("directive"),
     contentBriefId: brief.id,
     narrativeAngle,
     keyMessages: Array.from(new Set(keyMessages)),
@@ -353,6 +273,8 @@ export async function generateDirectiveAction(contentBriefId: string): Promise<P
     targetPlatform: brief.targetPlatform as TargetPlatform,
     createdAt: new Date().toISOString(),
   };
+
+  db.directives.push(directive);
 
   return directive;
 }
