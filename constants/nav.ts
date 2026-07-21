@@ -118,6 +118,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Content Studio", href: "/markom/content-studio", icon: Clapperboard, permission: PERMISSIONS.CONTENT_SUBMISSION_MANAGE },
       { label: "Ads Specialist", href: "/markom/ads", icon: Rocket, permission: PERMISSIONS.AD_CAMPAIGN_VIEW },
       { label: "Content Planner", href: "/markom/content-planner", icon: Sparkles, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
+      { label: "KontenAI", href: "/kontenai", icon: BrainCircuit, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
       { label: "Content Audit", href: "/markom/content-audit", icon: BarChart3, permission: PERMISSIONS.CONTENT_PLANNER_VIEW },
       { label: "Promo Broadcast", href: "/markom/promo-broadcast", icon: Megaphone, permission: PERMISSIONS.PROMO_TEMPLATE_VIEW },
     ],
