@@ -242,7 +242,11 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
-    PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    // kos_occupancy.view is deliberately NOT granted here -- every branch
+    // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the
+    // Management Property branch specifically. That branch's Kepala Cabang
+    // gets it via a branch-based check in getCurrentSession(), not this role
+    // grant, so other branches' heads don't see it.
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
