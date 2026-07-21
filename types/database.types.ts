@@ -1541,6 +1541,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["ai_investor_intelligence_bank"]["Insert"]>;
         Relationships: [];
       };
+      ai_occupancy_intelligence_bank: {
+        Row: {
+          id: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_occupancy_intelligence_bank"]["Insert"]>;
+        Relationships: [];
+      };
       ai_cashflow_intelligence_bank: {
         Row: {
           id: string;
@@ -2049,7 +2071,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -2061,7 +2083,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -2837,6 +2859,10 @@ export interface Database {
       app_has_permission: { Args: { p_permission_key: string }; Returns: boolean };
       app_is_super_admin: { Args: Record<string, never>; Returns: boolean };
       get_kos_occupancy: {
+        Args: Record<string, never>;
+        Returns: { property_id: string; property_name: string; total: number; terisi: number; kosong: number }[];
+      };
+      get_kos_occupancy_internal: {
         Args: Record<string, never>;
         Returns: { property_id: string; property_name: string; total: number; terisi: number; kosong: number }[];
       };

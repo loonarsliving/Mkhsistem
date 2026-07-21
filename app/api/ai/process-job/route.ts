@@ -14,8 +14,10 @@ import {
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
 import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor-intelligence";
 import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
+import { processOccupancyIntelligenceRefreshJob } from "@/lib/ai/domains/occupancy-intelligence";
 import { generateWeeklySalesTeaching } from "@/lib/ai/domains/sales-teaching";
 import { generateCashflowActionPlan } from "@/lib/ai/domains/cashflow-teaching";
+import { generateOccupancyTeaching, type OccupancyPropertySnapshot } from "@/lib/ai/domains/occupancy-teaching";
 import {
   auditWeeklyContentPerformance,
   compareLeaseholdCompetitorContent,
@@ -104,6 +106,15 @@ interface CashflowActionPlanJobPayload {
   branch_name: string;
   saldo: number;
   threshold: number;
+}
+
+interface OccupancyIntelligenceRefreshJobPayload {
+  topic: string;
+}
+
+interface OccupancyTeachingBiweeklyJobPayload {
+  branch_id: string;
+  branch_name: string;
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -782,6 +793,61 @@ async function processCashflowActionPlan(supabase: AdminClient, job: JobRow) {
   return { branchId: payload.branch_id, sentTo: phones.length };
 }
 
+async function processOccupancyIntelligenceRefresh(job: JobRow) {
+  const payload = job.payload as unknown as OccupancyIntelligenceRefreshJobPayload;
+  return processOccupancyIntelligenceRefreshJob(payload.topic);
+}
+
+/**
+ * Real per-property room counts from Kos (kos_remote, 0146 postgres_fdw
+ * integration) for the background job -- NOT the user-facing
+ * get_kos_occupancy() RPC (0147), which requires a real authenticated
+ * session (auth.uid()) to pass its permission check and would reject a
+ * service-role call with no user. get_kos_occupancy_internal() is the
+ * same query with no permission gate, granted to service_role only (see
+ * migration adding the Occupancy Teaching Engine).
+ */
+async function getOccupancySnapshot(supabase: AdminClient): Promise<OccupancyPropertySnapshot[]> {
+  const { data, error } = await supabase.rpc("get_kos_occupancy_internal");
+  if (error) throw new Error(`Failed to load occupancy snapshot: ${error.message}`);
+  return (data ?? []).map((row: { property_name: string; total: number; terisi: number; kosong: number }) => ({
+    propertyName: row.property_name,
+    totalRooms: row.total,
+    filledRooms: row.terisi,
+    emptyRooms: row.kosong,
+  }));
+}
+
+/**
+ * Wed/Fri briefing for Management Property's Kepala Cabang (Occupancy
+ * Teaching Engine) -- real per-property occupancy numbers from Kos, the
+ * 7-section briefing, sent directly via WhatsApp. No mkc_notifications
+ * row -- this module must never appear in any menu.
+ */
+async function processOccupancyTeachingBiweekly(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as OccupancyTeachingBiweeklyJobPayload;
+
+  const phones = await getKepalaCabangPhones(supabase, payload.branch_id);
+  if (!phones.length) throw new Error(`No active Kepala Cabang phone found for branch ${payload.branch_name}`);
+
+  const properties = await getOccupancySnapshot(supabase);
+
+  const now = new Date();
+  const message = await generateOccupancyTeaching({
+    branchName: payload.branch_name,
+    periodLabel: now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Makassar" }),
+    properties,
+  });
+
+  const fullMessage = `🏘️ Briefing Okupansi — Cabang ${payload.branch_name}\n\n${message}`;
+  for (const phone of phones) {
+    const sendResult = await sendWhatsAppText(phone, fullMessage);
+    if (!sendResult.success) throw new Error(`Failed to send occupancy teaching to ${phone}: ${sendResult.error ?? "unknown"}`);
+  }
+
+  return { branchId: payload.branch_id, sentTo: phones.length, propertyCount: properties.length };
+}
+
 /**
  * Recent own-account Instagram posts, Zernio-first then direct Meta Graph
  * API fallback -- same precedence as capture-snapshots/route.ts. Shared by
@@ -1386,7 +1452,11 @@ export async function POST(request: Request) {
                                       ? await processCashflowActionPlan(supabase, job)
                                       : job.job_type === "markom_content_performance_broadcast"
                                         ? await processMarkomContentPerformanceBroadcast(supabase)
-                                        : await processSocialWeeklyEvaluation(supabase);
+                                        : job.job_type === "occupancy_intelligence_refresh"
+                                          ? await processOccupancyIntelligenceRefresh(job)
+                                          : job.job_type === "occupancy_teaching_biweekly"
+                                            ? await processOccupancyTeachingBiweekly(supabase, job)
+                                            : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
