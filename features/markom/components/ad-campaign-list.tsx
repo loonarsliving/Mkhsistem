@@ -270,7 +270,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                           ) : (
                             <span className="flex items-center gap-1">
                               Rp {c.daily_budget_idr.toLocaleString("id-ID")}/hari
-                              {canManage && (c.status === "active" || c.status === "paused") && (
+                              {canManage && (c.status === "active" || c.status === "paused" || c.status === "draft") && (
                                 <Button
                                   size="sm"
                                   variant="ghost"

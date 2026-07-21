@@ -210,15 +210,41 @@ export async function setAdCampaignStatusAction(id: string, metaAdId: string | n
   return actionSuccess();
 }
 
-/** Human override -- tighten/loosen an already-launched ad's daily budget. Budget lives on the ad set (updateAdSetDailyBudget), not the ad itself, so this needs meta_adset_id, not meta_ad_id. */
+/**
+ * Human override for daily budget. Two cases:
+ * - Still 'draft' (not launched to Meta yet, metaAdSetId is null): a
+ *   plain DB update to AI's suggested daily_budget_idr before Markom
+ *   decides to launch -- no Meta call needed since nothing exists there
+ *   yet. Previously there was no way to adjust this before launch at
+ *   all, only after.
+ * - 'active'/'paused' (already launched, real metaAdSetId): budget lives
+ *   on the ad set (updateAdSetDailyBudget), not the ad itself, so this
+ *   calls the real Meta API too.
+ * Re-fetches the campaign server-side (not just trusting the caller's
+ * metaAdSetId/status) so a stale client can't edit a campaign that's
+ * since moved to 'failed'/'ended'.
+ */
 export async function setAdCampaignBudgetAction(id: string, metaAdSetId: string | null, dailyBudgetIdr: number): Promise<ActionResult> {
   await requirePermission("ad_campaign.manage");
-  if (!metaAdSetId) return actionError("Iklan ini belum berhasil dibuat di Meta, tidak ada budget yang bisa diubah");
   if (!Number.isFinite(dailyBudgetIdr) || dailyBudgetIdr < 10_000) return actionError("Budget harian minimal Rp10.000");
 
   const supabase = await createClient();
+
+  let campaign: Awaited<ReturnType<typeof getAdCampaign>>;
   try {
-    await updateAdSetDailyBudget(metaAdSetId, dailyBudgetIdr);
+    campaign = await getAdCampaign(supabase, id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Iklan tidak ditemukan");
+  }
+  if (campaign.status !== "draft" && campaign.status !== "active" && campaign.status !== "paused") {
+    return actionError("Budget hanya bisa diubah untuk iklan draft atau yang sedang tayang/dijeda");
+  }
+
+  try {
+    if (campaign.status !== "draft") {
+      if (!metaAdSetId) return actionError("Iklan ini belum berhasil dibuat di Meta, tidak ada budget yang bisa diubah");
+      await updateAdSetDailyBudget(metaAdSetId, dailyBudgetIdr);
+    }
     await updateAdCampaignBudget(supabase, id, dailyBudgetIdr);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal mengubah budget iklan");
