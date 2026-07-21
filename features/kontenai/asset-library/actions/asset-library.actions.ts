@@ -1,238 +1,190 @@
 "use server";
 
-import type { AssetRecord } from "@/features/kontenai/types";
+import type { AssetRecord, AssetType, ContentFocus } from "@/features/kontenai/types";
+import { CONTENT_FOCUS_VALUES } from "@/features/kontenai/lib/brands";
+import { generateId } from "@/features/kontenai/lib/ids";
+import { getMockDb } from "@/features/kontenai/lib/mock-db";
+import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 /**
- * Sprint 1 - Asset Library. This is a UI-only scaffold: there is no
- * Supabase table or storage bucket wired up yet (explicit project-owner
- * decision for this build phase), so these "server actions" just serve an
- * in-memory seeded array with an artificial delay to emulate network
- * latency. Later sprints (Gemini Vision, Asset Selector, Storyboard
- * Engine, Render Engine) will consume the same AssetRecord shape once a
- * real backend lands.
+ * Sprint 1 - Asset Library. Reads/writes go through the shared
+ * `getMockDb().assets` array (features/kontenai/lib/mock-db.ts) so every
+ * other sprint (Gemini Vision, Asset Selector, Render Engine, ...) sees
+ * the same assets this module manages. There is still no Supabase table
+ * or storage bucket wired up (explicit project-owner decision for this
+ * build phase), so uploads/deletes/tag edits only mutate the in-memory
+ * store with an artificial delay to emulate network latency.
  */
 
-const SEED_ASSETS: AssetRecord[] = [
-  {
-    id: "asset-001",
-    type: "image",
-    filename: "villa-cariu-facade-golden-hour.jpg",
-    url: "https://storage.example.com/assets/villa-cariu-facade-golden-hour.jpg",
-    thumbnailUrl: null,
-    sizeBytes: 4_812_224,
-    durationSeconds: null,
-    tags: ["villa", "cariu", "eksterior", "golden-hour"],
-    uploadedAt: "2026-07-01T02:15:00.000Z",
-    uploadedBy: "Dinda (Markom)",
-    metadata: {
-      assetId: "asset-001",
-      description: "Fasad villa dua lantai dengan pencahayaan golden hour, kolam renang di foreground.",
-      detectedObjects: ["villa", "kolam renang", "taman", "langit senja"],
-      dominantColors: ["#E8A33D", "#2F3B4C", "#F4E9D8"],
-      qualityScore: 9.1,
-      suggestedUseCases: ["Instagram feed hero", "Thumbnail iklan leasehold"],
-      analyzedAt: "2026-07-01T04:00:00.000Z",
-    },
-  },
-  {
-    id: "asset-002",
-    type: "video",
-    filename: "walkthrough-kamar-utama-4k.mp4",
-    url: "https://storage.example.com/assets/walkthrough-kamar-utama-4k.mp4",
-    thumbnailUrl: null,
-    sizeBytes: 128_450_560,
-    durationSeconds: 42,
-    tags: ["walkthrough", "kamar-utama", "interior"],
-    uploadedAt: "2026-07-02T06:40:00.000Z",
-    uploadedBy: "Reza (Videografer)",
-    metadata: null,
-  },
-  {
-    id: "asset-003",
-    type: "audio",
-    filename: "vo-narasi-promo-agustus.mp3",
-    url: "https://storage.example.com/assets/vo-narasi-promo-agustus.mp3",
-    thumbnailUrl: null,
-    sizeBytes: 3_145_728,
-    durationSeconds: 58,
-    tags: ["voice-over", "promo", "agustus"],
-    uploadedAt: "2026-07-03T09:00:00.000Z",
-    uploadedBy: "Studio Suara Partner",
-    metadata: null,
-  },
-  {
-    id: "asset-004",
-    type: "logo",
-    filename: "loonars-living-logo-primary.png",
-    url: "https://storage.example.com/assets/loonars-living-logo-primary.png",
-    thumbnailUrl: null,
-    sizeBytes: 245_760,
-    durationSeconds: null,
-    tags: ["logo", "brand", "primary"],
-    uploadedAt: "2026-06-15T01:00:00.000Z",
-    uploadedBy: "Brand Team",
-    metadata: {
-      assetId: "asset-004",
-      description: "Logo utama Loonars Living, latar transparan, format PNG resolusi tinggi.",
-      detectedObjects: ["logotype", "ikon rumah"],
-      dominantColors: ["#1F2A44", "#FFFFFF"],
-      qualityScore: 9.8,
-      suggestedUseCases: ["Watermark video", "Header template"],
-      analyzedAt: "2026-06-15T01:30:00.000Z",
-    },
-  },
-  {
-    id: "asset-005",
-    type: "template",
-    filename: "template-carousel-3-slide-listing.psd",
-    url: "https://storage.example.com/assets/template-carousel-3-slide-listing.psd",
-    thumbnailUrl: null,
-    sizeBytes: 18_874_368,
-    durationSeconds: null,
-    tags: ["template", "carousel", "listing"],
-    uploadedAt: "2026-06-20T03:20:00.000Z",
-    uploadedBy: "Desainer Grafis",
-    metadata: null,
-  },
-  {
-    id: "asset-006",
-    type: "image",
-    filename: "dapur-modern-minimalis-siang.jpg",
-    url: "https://storage.example.com/assets/dapur-modern-minimalis-siang.jpg",
-    thumbnailUrl: null,
-    sizeBytes: 3_670_016,
-    durationSeconds: null,
-    tags: ["dapur", "interior", "minimalis"],
-    uploadedAt: "2026-07-04T05:10:00.000Z",
-    uploadedBy: "Reza (Videografer)",
-    metadata: {
-      assetId: "asset-006",
-      description: "Dapur bergaya minimalis dengan pencahayaan alami siang hari, island counter marmer.",
-      detectedObjects: ["dapur", "island counter", "kursi bar", "jendela besar"],
-      dominantColors: ["#FFFFFF", "#C7B299", "#403A34"],
-      qualityScore: 8.7,
-      suggestedUseCases: ["Reels interior tour", "Feed post fitur dapur"],
-      analyzedAt: "2026-07-04T06:00:00.000Z",
-    },
-  },
-  {
-    id: "asset-007",
-    type: "video",
-    filename: "drone-aerial-cluster-sore.mp4",
-    url: "https://storage.example.com/assets/drone-aerial-cluster-sore.mp4",
-    thumbnailUrl: null,
-    sizeBytes: 214_748_364,
-    durationSeconds: 75,
-    tags: ["drone", "aerial", "cluster", "sore"],
-    uploadedAt: "2026-07-05T08:00:00.000Z",
-    uploadedBy: "Reza (Videografer)",
-    metadata: null,
-  },
-  {
-    id: "asset-008",
-    type: "audio",
-    filename: "backsound-upbeat-corporate.wav",
-    url: "https://storage.example.com/assets/backsound-upbeat-corporate.wav",
-    thumbnailUrl: null,
-    sizeBytes: 8_388_608,
-    durationSeconds: 120,
-    tags: ["backsound", "royalty-free", "corporate"],
-    uploadedAt: "2026-06-10T01:00:00.000Z",
-    uploadedBy: "Stock Library",
-    metadata: {
-      assetId: "asset-008",
-      description: "Trek instrumental upbeat cocok untuk video korporat dan promosi produk.",
-      detectedObjects: [],
-      dominantColors: [],
-      qualityScore: 8.0,
-      suggestedUseCases: ["Backsound video promo", "Reels transisi cepat"],
-      analyzedAt: "2026-06-10T01:20:00.000Z",
-    },
-  },
-  {
-    id: "asset-009",
-    type: "logo",
-    filename: "loonars-beauty-logo-secondary.svg",
-    url: "https://storage.example.com/assets/loonars-beauty-logo-secondary.svg",
-    thumbnailUrl: null,
-    sizeBytes: 51_200,
-    durationSeconds: null,
-    tags: ["logo", "loonars-beauty", "secondary"],
-    uploadedAt: "2026-06-18T02:00:00.000Z",
-    uploadedBy: "Brand Team",
-    metadata: null,
-  },
-  {
-    id: "asset-010",
-    type: "template",
-    filename: "template-story-highlight-cover-set.ai",
-    url: "https://storage.example.com/assets/template-story-highlight-cover-set.ai",
-    thumbnailUrl: null,
-    sizeBytes: 12_582_912,
-    durationSeconds: null,
-    tags: ["template", "story-highlight", "cover"],
-    uploadedAt: "2026-06-25T04:30:00.000Z",
-    uploadedBy: "Desainer Grafis",
-    metadata: {
-      assetId: "asset-010",
-      description: "Set 6 cover highlight Instagram bertema properti, format vektor mudah diedit.",
-      detectedObjects: ["ikon rumah", "ikon kunci", "ikon kalender"],
-      dominantColors: ["#1F2A44", "#E8A33D", "#F4E9D8"],
-      qualityScore: 9.0,
-      suggestedUseCases: ["Highlight cover Instagram", "Template konsisten multi-cabang"],
-      analyzedAt: "2026-06-25T05:00:00.000Z",
-    },
-  },
-  {
-    id: "asset-011",
-    type: "image",
-    filename: "before-after-renovasi-kamar-mandi.jpg",
-    url: "https://storage.example.com/assets/before-after-renovasi-kamar-mandi.jpg",
-    thumbnailUrl: null,
-    sizeBytes: 5_242_880,
-    durationSeconds: null,
-    tags: ["before-after", "renovasi", "kamar-mandi"],
-    uploadedAt: "2026-07-06T03:00:00.000Z",
-    uploadedBy: "Dinda (Markom)",
-    metadata: null,
-  },
-  {
-    id: "asset-012",
-    type: "video",
-    filename: "testimoni-penghuni-cluster-b.mp4",
-    url: "https://storage.example.com/assets/testimoni-penghuni-cluster-b.mp4",
-    thumbnailUrl: null,
-    sizeBytes: 96_468_992,
-    durationSeconds: 35,
-    tags: ["testimoni", "penghuni", "cluster-b"],
-    uploadedAt: "2026-07-07T07:00:00.000Z",
-    uploadedBy: "Reza (Videografer)",
-    metadata: {
-      assetId: "asset-012",
-      description: "Wawancara testimoni penghuni membahas kenyamanan tinggal di Cluster B.",
-      detectedObjects: ["orang", "ruang tamu", "sofa"],
-      dominantColors: ["#8A6F4E", "#F4E9D8", "#2F3B4C"],
-      qualityScore: 8.4,
-      suggestedUseCases: ["Reels testimoni", "Highlight kepercayaan pelanggan"],
-      analyzedAt: "2026-07-07T08:00:00.000Z",
-    },
-  },
-  {
-    id: "asset-013",
-    type: "image",
-    filename: "beauty-treatment-room-ambient.jpg",
-    url: "https://storage.example.com/assets/beauty-treatment-room-ambient.jpg",
-    thumbnailUrl: null,
-    sizeBytes: 2_936_012,
-    durationSeconds: null,
-    tags: ["loonars-beauty", "treatment-room", "ambient"],
-    uploadedAt: "2026-07-08T02:00:00.000Z",
-    uploadedBy: "Tim Loonars Beauty",
-    metadata: null,
-  },
-];
+const ASSET_TYPES: AssetType[] = ["image", "video", "audio", "logo", "template"];
 
-export async function listAssetsAction(): Promise<AssetRecord[]> {
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  return SEED_ASSETS;
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of tags) {
+    const tag = raw.trim();
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    normalized.push(tag);
+  }
+  return normalized;
+}
+
+export interface ListAssetsParams {
+  type?: AssetType;
+  tag?: string;
+  brand?: ContentFocus;
+  query?: string;
+}
+
+/**
+ * Existing cross-sprint signature (see integration-contract.ts): callers
+ * invoke this with no arguments today, so `params` stays optional and
+ * defaulted -- passing a params object additionally filters server-side.
+ */
+export async function listAssetsAction(params?: ListAssetsParams): Promise<AssetRecord[]> {
+  await delay(150);
+  const assets = getMockDb().assets;
+  if (!params) return assets;
+
+  const query = params.query?.trim().toLowerCase();
+
+  return assets.filter((asset) => {
+    if (params.type && asset.type !== params.type) return false;
+    if (params.tag && !asset.tags.includes(params.tag)) return false;
+    if (params.brand && !asset.tags.includes(params.brand)) return false;
+    if (query) {
+      const haystack = [
+        asset.filename,
+        ...asset.tags,
+        asset.metadata?.description ?? "",
+        ...(asset.metadata?.suggestedUseCases ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
+}
+
+export interface UploadAssetInput {
+  filename: string;
+  type: AssetType;
+  tags: string[];
+  sizeBytes: number;
+  durationSeconds: number | null;
+}
+
+/** Mock upload: validates input, builds a full AssetRecord (unanalyzed) and pushes it into the shared store. */
+export async function uploadAssetAction(input: UploadAssetInput): Promise<ActionResult<AssetRecord>> {
+  await delay(200);
+
+  const filename = input.filename?.trim() ?? "";
+  if (!filename) {
+    return actionError("Nama file tidak boleh kosong");
+  }
+  if (!ASSET_TYPES.includes(input.type)) {
+    return actionError("Tipe aset tidak valid");
+  }
+  if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) {
+    return actionError("Ukuran file harus lebih besar dari 0");
+  }
+
+  const id = generateId("asset");
+  const asset: AssetRecord = {
+    id,
+    type: input.type,
+    filename,
+    url: `https://assets.mock.kontenai.local/${filename}`,
+    thumbnailUrl: input.type === "video" || input.type === "image" ? `https://assets.mock.kontenai.local/thumbs/${filename}.jpg` : null,
+    sizeBytes: input.sizeBytes,
+    durationSeconds: input.durationSeconds,
+    tags: normalizeTags(input.tags),
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: "Anda",
+    metadata: null,
+  };
+
+  getMockDb().assets.push(asset);
+  return actionSuccess(asset);
+}
+
+/** Updates an asset's tags in place in the shared store. */
+export async function updateAssetTagsAction(assetId: string, tags: string[]): Promise<ActionResult<AssetRecord>> {
+  await delay(120);
+
+  const asset = getMockDb().assets.find((a) => a.id === assetId);
+  if (!asset) {
+    return actionError("Asset not found");
+  }
+
+  asset.tags = normalizeTags(tags);
+  return actionSuccess(asset);
+}
+
+/** Removes an asset from the shared store. */
+export async function deleteAssetAction(assetId: string): Promise<ActionResult<undefined>> {
+  await delay(120);
+
+  const db = getMockDb();
+  const index = db.assets.findIndex((a) => a.id === assetId);
+  if (index === -1) {
+    return actionError("Asset not found");
+  }
+
+  db.assets.splice(index, 1);
+  return actionSuccess(undefined);
+}
+
+export interface AssetLibraryStats {
+  totalAssets: number;
+  byType: Record<AssetType, number>;
+  byBrand: Record<ContentFocus, number>;
+}
+
+/**
+ * Category/brand breakdown for the stat tiles above the asset grid.
+ * Brand is inferred by checking whether one of the literal ContentFocus
+ * tag values ("general" | "leasehold_sales" | "occupancy" | "beauty")
+ * is present among an asset's tags -- this matches how the shared
+ * mock-db seed data actually tags its assets. Assets with none of those
+ * literal tags are not counted in `byBrand` (only in `byType`).
+ */
+export async function getAssetLibraryStatsAction(): Promise<AssetLibraryStats> {
+  await delay(100);
+
+  const assets = getMockDb().assets;
+
+  const byType = ASSET_TYPES.reduce(
+    (acc, type) => {
+      acc[type] = 0;
+      return acc;
+    },
+    {} as Record<AssetType, number>,
+  );
+
+  const byBrand = CONTENT_FOCUS_VALUES.reduce(
+    (acc, brand) => {
+      acc[brand] = 0;
+      return acc;
+    },
+    {} as Record<ContentFocus, number>,
+  );
+
+  const brandTagValues: readonly string[] = CONTENT_FOCUS_VALUES;
+
+  for (const asset of assets) {
+    byType[asset.type] += 1;
+    const brandTag = asset.tags.find((tag) => brandTagValues.includes(tag)) as ContentFocus | undefined;
+    if (brandTag) {
+      byBrand[brandTag] += 1;
+    }
+  }
+
+  return { totalAssets: assets.length, byType, byBrand };
 }
