@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ReadyToRenderList } from "@/features/kontenai/render-engine/components/ready-to-render-list";
 import { RenderQueueTable } from "@/features/kontenai/render-engine/components/render-queue-table";
-import { submitRenderJobAction } from "@/features/kontenai/render-engine/actions/render-engine.actions";
+import {
+  advanceRenderJobAction,
+  submitRenderJobAction,
+} from "@/features/kontenai/render-engine/actions/render-engine.actions";
 import type { StoryboardSummary } from "@/features/kontenai/render-engine/types";
 import type { RenderJob } from "@/features/kontenai/types";
 
@@ -16,46 +19,46 @@ interface RenderEngineBoardProps {
 /**
  * There is no ffmpeg (or any real encoder) in this environment and real
  * rendering is out of scope for this build, so the queued -> rendering
- * -> completed/failed lifecycle is simulated entirely client-side: a
- * 1s ticker advances `progress` on in-flight jobs in local state. This
- * intentionally does not survive a page refresh -- it's a placeholder
- * for the real render worker a later phase would wire up.
+ * -> completed/failed lifecycle is still driven by a 1s client-side
+ * ticker -- but each tick now calls `advanceRenderJobAction` (a server
+ * action) for every in-flight job instead of mutating progress purely in
+ * local state. That keeps the shared mock-db store as the source of
+ * truth for each job's status, so Production Pipeline (Sprint 7) sees
+ * the same terminal `completed`/`failed` state this board renders,
+ * rather than a client-only illusion of progress.
  */
 export function RenderEngineBoard({ initialStoryboards, initialJobs }: RenderEngineBoardProps) {
   const [jobs, setJobs] = useState<RenderJob[]>(initialJobs);
 
   useEffect(() => {
+    let cancelled = false;
+
     const interval = setInterval(() => {
-      setJobs((prev) =>
-        prev.map((job) => {
-          if (job.status === "queued") {
-            // Simulate the worker picking the job up off the queue.
-            if (Math.random() < 0.6) {
-              return { ...job, status: "rendering", startedAt: new Date().toISOString() };
-            }
-            return job;
-          }
+      setJobs((currentJobs) => {
+        const inFlightIds = currentJobs
+          .filter((job) => job.status === "queued" || job.status === "rendering")
+          .map((job) => job.id);
 
-          if (job.status === "rendering") {
-            const nextProgress = Math.min(100, job.progress + 8 + Math.floor(Math.random() * 13));
-            if (nextProgress >= 100) {
-              return {
-                ...job,
-                status: "completed",
-                progress: 100,
-                completedAt: new Date().toISOString(),
-                outputUrl: `https://cdn.mock.kontenai.local/renders/${job.id}.mp4`,
-              };
-            }
-            return { ...job, progress: nextProgress };
-          }
+        if (inFlightIds.length === 0) {
+          return currentJobs;
+        }
 
-          return job;
-        }),
-      );
+        void Promise.all(inFlightIds.map((id) => advanceRenderJobAction(id))).then((updatedJobs) => {
+          if (cancelled) return;
+          setJobs((prev) => {
+            const byId = new Map(updatedJobs.map((job) => [job.id, job]));
+            return prev.map((job) => byId.get(job.id) ?? job);
+          });
+        });
+
+        return currentJobs;
+      });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const queuedStoryboardIds = useMemo(
