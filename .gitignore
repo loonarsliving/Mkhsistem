@@ -46,3 +46,6 @@ supabase/.branches
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Claude Code agent worktrees (local tooling state, not project files)
+.claude/
