@@ -42,6 +42,66 @@ export async function uploadAdImageFromUrl(imageUrl: string): Promise<string> {
   return entry.hash;
 }
 
+export interface UploadedAdVideo {
+  videoId: string;
+  thumbnailUrl: string;
+}
+
+/**
+ * Registers a video (by its public Supabase Storage URL) with the ad
+ * account's video library via Meta's advideos endpoint, then polls until
+ * Meta finishes processing it (encoding + thumbnail generation) -- unlike
+ * a photo (uploadAdImageFromUrl, synchronous), video processing on Meta's
+ * side is asynchronous, so it can't be used in a creative immediately
+ * after the upload call returns.
+ *
+ * Polls for up to ~90s (5s intervals) -- short Click-to-WhatsApp property
+ * videos are usually ready well within that. If it's still processing
+ * after that, throws so the caller can retry the launch shortly after;
+ * NOTE this re-uploads the video on retry (Meta's video_id from the first
+ * attempt isn't persisted anywhere across a failed launch attempt) --
+ * wasteful but not harmful, since Meta doesn't charge for video library
+ * storage. A cleaner retry-without-re-upload flow would need the video_id
+ * persisted in the draft row between attempts; not built yet since a
+ * property-tour video finishing processing within 90s is the common case.
+ *
+ * This is the first video-ad implementation in this codebase -- verify
+ * with one real manual launch (a human reviews the draft anyway, see
+ * processMetaAdsResearch) before relying on it for judgement-free
+ * autonomous launches.
+ */
+export async function uploadAdVideoFromUrl(videoUrl: string): Promise<UploadedAdVideo> {
+  const created = await metaGraphRequest<{ id: string }>(`/${META_CONFIG.adAccountId}/advideos`, { file_url: videoUrl }, "POST");
+  if (!created.id) throw new Error("Meta did not return a video id for the uploaded video");
+  const videoId = created.id;
+
+  const maxAttempts = 18;
+  const pollIntervalMs = 5000;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await metaGraphRequest<{ status?: { video_status?: string } }>(`/${videoId}`, { fields: "status" });
+    const videoStatus = status.status?.video_status;
+    if (videoStatus === "ready") {
+      const thumbnailUrl = await getVideoThumbnailUrl(videoId);
+      return { videoId, thumbnailUrl };
+    }
+    if (videoStatus === "error") {
+      throw new Error("Meta gagal memproses video yang diunggah (video_status: error) -- coba unggah ulang videonya dengan format/encoding lain (mp4 H.264 direkomendasikan)");
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error(
+    `Video masih diproses Meta setelah ${Math.round((maxAttempts * pollIntervalMs) / 1000)} detik -- coba luncurkan lagi dalam beberapa menit (video sudah berhasil diunggah ke Meta, prosesnya cuma butuh waktu lebih lama dari biasanya)`,
+  );
+}
+
+/** Meta generates candidate thumbnails once a video finishes processing -- picks the one marked is_preferred, or the first available, since video_data (the creative payload) requires an explicit thumbnail image_url. */
+async function getVideoThumbnailUrl(videoId: string): Promise<string> {
+  const result = await metaGraphRequest<{ data: { uri: string; is_preferred?: boolean }[] }>(`/${videoId}/thumbnails`, {});
+  const preferred = result.data?.find((t) => t.is_preferred) ?? result.data?.[0];
+  if (!preferred?.uri) throw new Error("Meta did not return a thumbnail for the uploaded video");
+  return preferred.uri;
+}
+
 export interface ResolvedGeoLocation {
   key: string;
   name: string;
@@ -203,8 +263,10 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
 
 export interface CreateAdCreativeInput {
   name: string;
-  /** From uploadAdImageFromUrl -- always real Markom-uploaded photo(s). 1 hash makes a plain single-image ad; 2-10 makes a swipeable carousel (Meta's own card range) -- see createAdCreative. */
+  /** From uploadAdImageFromUrl -- always real Markom-uploaded photo(s). 1 hash makes a plain single-image ad; 2-10 makes a swipeable carousel (Meta's own card range) -- see createAdCreative. Empty when `video` is set instead -- an ad is either a video or image(s)/carousel, never both. */
   imageHashes: string[];
+  /** From uploadAdVideoFromUrl -- mutually exclusive with imageHashes. */
+  video?: UploadedAdVideo;
   headline: string;
   primaryText: string;
   description?: string;
@@ -220,49 +282,61 @@ export interface CreateAdCreativeInput {
  * shares the same headline/description/CTA since the AI draft (and the
  * manual launch flow) only ever produces one set of copy for the whole ad,
  * not per-slide copy.
+ *
+ * A video ad uses object_story_spec.video_data instead of link_data (Meta's
+ * schema for video link ads) -- the WhatsApp destination link lives inside
+ * call_to_action.value.link there, not as a sibling field like link_data's
+ * flat `link`. video_data has no carousel equivalent -- always exactly one
+ * video, never combined with imageHashes.
  */
 export async function createAdCreative(input: CreateAdCreativeInput): Promise<{ id: string }> {
-  if (input.imageHashes.length === 0) throw new Error("createAdCreative requires at least one image hash");
+  if (!input.video && input.imageHashes.length === 0) throw new Error("createAdCreative requires at least one image hash or a video");
 
   const waLink = META_CONFIG.whatsappPhoneNumber
     ? `https://api.whatsapp.com/send?phone=${META_CONFIG.whatsappPhoneNumber}`
     : "https://api.whatsapp.com/send";
   const callToAction = { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
 
-  const linkData =
-    input.imageHashes.length === 1
-      ? {
-          image_hash: input.imageHashes[0],
-          link: waLink,
-          message: input.primaryText,
-          name: input.headline,
-          description: input.description,
-          call_to_action: callToAction,
-        }
-      : {
-          link: waLink,
-          message: input.primaryText,
-          child_attachments: input.imageHashes.slice(0, 10).map((hash) => ({
-            link: waLink,
-            image_hash: hash,
-            name: input.headline,
-            description: input.description,
-            call_to_action: callToAction,
-          })),
-        };
-
-  return metaGraphRequest(
-    `/${META_CONFIG.adAccountId}/adcreatives`,
-    {
-      name: input.name,
-      object_story_spec: {
+  const objectStorySpec = input.video
+    ? {
         page_id: META_CONFIG.pageId,
-        link_data: linkData,
+        video_data: {
+          video_id: input.video.videoId,
+          image_url: input.video.thumbnailUrl,
+          title: input.headline,
+          message: input.primaryText,
+          link_description: input.description,
+          call_to_action: { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP", link: waLink } },
+        },
         ...(input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
-      },
-    },
-    "POST",
-  );
+      }
+    : {
+        page_id: META_CONFIG.pageId,
+        link_data:
+          input.imageHashes.length === 1
+            ? {
+                image_hash: input.imageHashes[0],
+                link: waLink,
+                message: input.primaryText,
+                name: input.headline,
+                description: input.description,
+                call_to_action: callToAction,
+              }
+            : {
+                link: waLink,
+                message: input.primaryText,
+                child_attachments: input.imageHashes.slice(0, 10).map((hash) => ({
+                  link: waLink,
+                  image_hash: hash,
+                  name: input.headline,
+                  description: input.description,
+                  call_to_action: callToAction,
+                })),
+              },
+        ...(input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
+      };
+
+  return metaGraphRequest(`/${META_CONFIG.adAccountId}/adcreatives`, { name: input.name, object_story_spec: objectStorySpec }, "POST");
 }
 
 /**
@@ -303,8 +377,10 @@ export async function createAd(input: CreateAdInput): Promise<{ id: string }> {
 
 export interface LaunchCampaignInput {
   projectName: string;
-  /** 1 URL makes a single-image ad; 2-10 makes a swipeable carousel (see createAdCreative). */
+  /** 1 URL makes a single-image ad; 2-10 makes a swipeable carousel (see createAdCreative). Ignored when videoUrl is set. */
   photoUrls: string[];
+  /** Mutually exclusive with photoUrls -- a public URL to a real Markom-uploaded video (crm_project_photos, media_type='video'). */
+  videoUrl?: string;
   headline: string;
   primaryText: string;
   description?: string;
@@ -331,8 +407,12 @@ export interface LaunchCampaignResult {
  * around the call.
  */
 export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Promise<LaunchCampaignResult> {
-  if (input.photoUrls.length === 0) throw new Error("launchWhatsAppLeadCampaign requires at least one photo");
-  const imageHashes = await Promise.all(input.photoUrls.map((url) => uploadAdImageFromUrl(url)));
+  if (!input.videoUrl && input.photoUrls.length === 0) throw new Error("launchWhatsAppLeadCampaign requires at least one photo or a video");
+
+  const [imageHashes, video] = await Promise.all([
+    input.videoUrl ? Promise.resolve([]) : Promise.all(input.photoUrls.map((url) => uploadAdImageFromUrl(url))),
+    input.videoUrl ? uploadAdVideoFromUrl(input.videoUrl) : Promise.resolve(undefined),
+  ]);
   const campaign = await createAdCampaign({ name: `${input.projectName} - Leads WA (AI)`, status: "ACTIVE" });
 
   // Once the campaign exists, every following step that throws must delete it
@@ -350,6 +430,7 @@ export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Pr
     const creative = await createAdCreative({
       name: `${input.projectName} - Creative`,
       imageHashes,
+      video,
       headline: input.headline,
       primaryText: input.primaryText,
       description: input.description,

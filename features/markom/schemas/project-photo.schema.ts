@@ -5,5 +5,6 @@ export const createProjectPhotoSchema = z.object({
   storagePath: z.string().min(1),
   publicUrl: z.string().url(),
   caption: z.string().max(300).optional(),
+  mediaType: z.enum(["image", "video"]).default("image"),
 });
 export type CreateProjectPhotoInput = z.infer<typeof createProjectPhotoSchema>;

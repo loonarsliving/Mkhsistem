@@ -1,12 +1,12 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
 /** Ordered full photo set (0141) -- 1 row is a plain single-image ad, 2+ is a carousel. Nested under photo:photo_id so callers get the real public_url/caption, not just the crm_project_photos id. */
-const CAMPAIGN_PHOTOS_SELECT = "campaign_photos:meta_ad_campaign_photos(display_order, photo:photo_id(public_url, caption))";
+const CAMPAIGN_PHOTOS_SELECT = "campaign_photos:meta_ad_campaign_photos(display_order, photo:photo_id(public_url, caption, media_type))";
 
 export async function listAdCampaigns(supabase: TypedSupabaseClient, branchId?: string) {
   let query = supabase
     .from("meta_ad_campaigns")
-    .select(`*, project:project_id(name, city), branch:branch_id(name), photo:photo_id(public_url, caption), ${CAMPAIGN_PHOTOS_SELECT}`)
+    .select(`*, project:project_id(name, city), branch:branch_id(name), photo:photo_id(public_url, caption, media_type), ${CAMPAIGN_PHOTOS_SELECT}`)
     .order("created_at", { ascending: false });
   if (branchId) query = query.eq("branch_id", branchId);
   const { data, error } = await query;
@@ -17,7 +17,7 @@ export async function listAdCampaigns(supabase: TypedSupabaseClient, branchId?: 
 export async function getAdCampaign(supabase: TypedSupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("meta_ad_campaigns")
-    .select(`*, project:project_id(name, project_type, offering_type), photo:photo_id(public_url), ${CAMPAIGN_PHOTOS_SELECT}`)
+    .select(`*, project:project_id(name, project_type, offering_type), photo:photo_id(public_url, media_type), ${CAMPAIGN_PHOTOS_SELECT}`)
     .eq("id", id)
     .single();
   if (error) throw error;

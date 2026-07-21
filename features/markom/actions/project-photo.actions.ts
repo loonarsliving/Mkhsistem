@@ -41,6 +41,7 @@ export async function createProjectPhotoAction(input: CreateProjectPhotoInput): 
       storage_path: parsed.data.storagePath,
       public_url: parsed.data.publicUrl,
       caption: parsed.data.caption || null,
+      media_type: parsed.data.mediaType,
       uploaded_by: session.userId,
     });
   } catch (err) {

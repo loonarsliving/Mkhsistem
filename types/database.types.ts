@@ -1011,6 +1011,7 @@ export interface Database {
           storage_path: string;
           public_url: string;
           caption: string | null;
+          media_type: "image" | "video";
           uploaded_by: string;
           created_at: string;
           deleted_at: string | null;
@@ -1021,6 +1022,7 @@ export interface Database {
           storage_path: string;
           public_url: string;
           caption?: string | null;
+          media_type?: "image" | "video";
           uploaded_by: string;
           created_at?: string;
           deleted_at?: string | null;

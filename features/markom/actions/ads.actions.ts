@@ -83,19 +83,26 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   }
   if (draft.status !== "draft") return actionError("Iklan ini sudah diluncurkan atau bukan draft");
 
-  const photo = draft.photo as { public_url?: string } | null;
+  const photo = draft.photo as { public_url?: string; media_type?: "image" | "video" } | null;
   const project = draft.project as { name?: string; project_type?: string; offering_type?: string } | null;
   // campaign_photos (0141) is the real ordered set for a carousel -- falls
   // back to the single legacy `photo` for any draft created before that
   // migration existed, so an old still-pending draft doesn't break.
-  const campaignPhotos = (draft.campaign_photos as { display_order: number; photo: { public_url?: string } | null }[] | null) ?? [];
-  const photoUrls = campaignPhotos
+  const campaignPhotos =
+    (draft.campaign_photos as { display_order: number; photo: { public_url?: string; media_type?: "image" | "video" } | null }[] | null) ?? [];
+  const orderedMedia = campaignPhotos
     .slice()
     .sort((a, b) => a.display_order - b.display_order)
-    .map((cp) => cp.photo?.public_url)
-    .filter((url): url is string => Boolean(url));
-  if (photoUrls.length === 0 && photo?.public_url) photoUrls.push(photo.public_url);
-  if (photoUrls.length === 0) return actionError("Foto untuk draft ini tidak ditemukan");
+    .map((cp) => cp.photo)
+    .filter((p): p is { public_url?: string; media_type?: "image" | "video" } => Boolean(p?.public_url));
+  const media = orderedMedia.length > 0 ? orderedMedia : photo?.public_url ? [photo] : [];
+  if (media.length === 0) return actionError("Foto/video untuk draft ini tidak ditemukan");
+
+  // A video ad is always exactly one video (see lib/ai/domains/markom.ts's
+  // parseAdDraftJson) -- the first entry's media type decides the whole ad.
+  const isVideoAd = media[0].media_type === "video";
+  const photoUrls = isVideoAd ? [] : media.map((p) => p.public_url).filter((url): url is string => Boolean(url));
+  const videoUrl = isVideoAd ? media[0].public_url : undefined;
 
   let dailyBudgetIdr: number;
   try {
@@ -109,6 +116,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
     const result = await launchWhatsAppLeadCampaign({
       projectName: project?.name ?? draft.name,
       photoUrls,
+      videoUrl,
       headline: draft.headline,
       primaryText: draft.primary_text,
       description: draft.description ?? undefined,

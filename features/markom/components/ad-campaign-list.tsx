@@ -214,28 +214,34 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
           {items.map((c) => {
             const statusInfo = STATUS_LABEL[c.status] ?? { label: c.status, variant: "secondary" as const };
             const project = c.project as { name?: string; city?: string } | null;
-            const photo = c.photo as { public_url?: string; caption?: string } | null;
+            const photo = c.photo as { public_url?: string; caption?: string; media_type?: "image" | "video" } | null;
             // campaign_photos (0141) is the real ordered set -- falls back to
             // the single legacy `photo` for anything created before that
             // migration existed.
-            const campaignPhotos = (c.campaign_photos as { display_order: number; photo: { public_url?: string } | null }[] | null) ?? [];
-            const photoUrls = campaignPhotos
+            const campaignPhotos =
+              (c.campaign_photos as { display_order: number; photo: { public_url?: string; media_type?: "image" | "video" } | null }[] | null) ?? [];
+            const media = campaignPhotos
               .slice()
               .sort((a, b) => a.display_order - b.display_order)
-              .map((cp) => cp.photo?.public_url)
-              .filter((url): url is string => Boolean(url));
-            if (photoUrls.length === 0 && photo?.public_url) photoUrls.push(photo.public_url);
-            const isCarousel = photoUrls.length > 1;
+              .map((cp) => cp.photo)
+              .filter((p): p is { public_url: string; media_type?: "image" | "video" } => Boolean(p?.public_url));
+            if (media.length === 0 && photo?.public_url) media.push({ public_url: photo.public_url, media_type: photo.media_type });
+            const isCarousel = media.length > 1;
+            const isVideoAd = media[0]?.media_type === "video";
             return (
               <Card key={c.id}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
-                  {photoUrls.length > 0 && (
+                  {media.length > 0 && (
                     <div className="flex shrink-0 gap-1.5 overflow-x-auto sm:w-32 sm:flex-col">
-                      {photoUrls.map((url, i) => (
-                        <div key={url + i} className="relative h-32 w-32 shrink-0 overflow-hidden rounded-md bg-muted sm:h-[60px] sm:w-full">
-                          <Image src={url} alt={`${c.headline} ${i + 1}`} fill sizes="128px" className="object-cover" unoptimized />
+                      {media.map((m, i) => (
+                        <div key={m.public_url + i} className="relative h-32 w-32 shrink-0 overflow-hidden rounded-md bg-muted sm:h-[60px] sm:w-full">
+                          {m.media_type === "video" ? (
+                            <video src={m.public_url} className="h-full w-full object-cover" muted controls />
+                          ) : (
+                            <Image src={m.public_url} alt={`${c.headline} ${i + 1}`} fill sizes="128px" className="object-cover" unoptimized />
+                          )}
                           {isCarousel && (
-                            <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] leading-tight text-white">{i + 1}/{photoUrls.length}</span>
+                            <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] leading-tight text-white">{i + 1}/{media.length}</span>
                           )}
                         </div>
                       ))}
@@ -286,7 +292,8 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {isCarousel && <Badge variant="outline">Carousel &middot; {photoUrls.length} foto</Badge>}
+                        {isVideoAd && <Badge variant="outline">Video</Badge>}
+                        {isCarousel && <Badge variant="outline">Carousel &middot; {media.length} foto</Badge>}
                         <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                       </div>
                     </div>

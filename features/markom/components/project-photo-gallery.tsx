@@ -23,10 +23,14 @@ import {
   updateProjectProductDescriptionAction,
 } from "../actions/project-photo.actions";
 
+/** Matches the project-photos storage bucket's file_size_limit (0154) -- videos are much bigger than photos, so this is well above the plain-image default. */
+const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
+
 /**
- * Real-photo source for the Ads Specialist AI pipeline: Markom uploads real
- * property photos here, AI only ever picks and places one of these -- it
- * never generates creative images itself.
+ * Real-media source for the Ads Specialist AI pipeline: Markom uploads real
+ * property photos AND videos here, AI only ever picks and places one of
+ * these (photos as a carousel, or a single video) -- it never generates
+ * creative media itself.
  */
 export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
@@ -74,16 +78,17 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        const { path, publicUrl } = await uploadEntityFile("project-photos", projectId, file);
-        if (!publicUrl) throw new Error("Gagal mendapatkan URL foto");
-        const result = await createProjectPhotoAction({ projectId, storagePath: path, publicUrl, caption: caption || undefined });
-        if (!result.success) throw new Error(result.error ?? "Gagal menyimpan foto");
+        const mediaType: "image" | "video" = file.type.startsWith("video/") ? "video" : "image";
+        const { path, publicUrl } = await uploadEntityFile("project-photos", projectId, file, MAX_UPLOAD_SIZE_BYTES);
+        if (!publicUrl) throw new Error("Gagal mendapatkan URL foto/video");
+        const result = await createProjectPhotoAction({ projectId, storagePath: path, publicUrl, caption: caption || undefined, mediaType });
+        if (!result.success) throw new Error(result.error ?? "Gagal menyimpan foto/video");
       }
-      toast.success("Foto berhasil diunggah");
+      toast.success("Berhasil diunggah");
       setCaption("");
       queryClient.invalidateQueries({ queryKey: ["markom-project-photos"] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal mengunggah foto");
+      toast.error(err instanceof Error ? err.message : "Gagal mengunggah");
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -131,10 +136,17 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
               <p className="text-xs font-medium text-muted-foreground">Keterangan (opsional)</p>
               <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="mis. Tampak depan, kolam renang, dapur..." />
             </div>
-            <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => handleUpload(e.target.files)} />
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+              multiple
+              hidden
+              onChange={(e) => handleUpload(e.target.files)}
+            />
             <Button type="button" onClick={() => inputRef.current?.click()} disabled={uploading || !projectId}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-              Unggah Foto
+              Unggah Foto/Video
             </Button>
           </CardContent>
         </Card>
@@ -165,7 +177,7 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
       )}
 
       {!isLoading && items.length === 0 && (
-        <EmptyState icon={ImagePlus} title="Belum ada foto" description="Unggah foto asli project (villa/rumah) untuk jadi sumber materi iklan AI." />
+        <EmptyState icon={ImagePlus} title="Belum ada foto/video" description="Unggah foto/video asli project (villa/rumah) untuk jadi sumber materi iklan AI." />
       )}
 
       {items.length > 0 && (
@@ -173,7 +185,11 @@ export function ProjectPhotoGallery({ canManage }: { canManage: boolean }) {
           {items.map((photo) => (
             <Card key={photo.id} className="overflow-hidden">
               <div className="relative aspect-square bg-muted">
-                <Image src={photo.public_url} alt={photo.caption ?? "Foto project"} fill sizes="240px" className="object-cover" unoptimized />
+                {photo.media_type === "video" ? (
+                  <video src={photo.public_url} className="h-full w-full object-cover" muted controls />
+                ) : (
+                  <Image src={photo.public_url} alt={photo.caption ?? "Foto project"} fill sizes="240px" className="object-cover" unoptimized />
+                )}
               </div>
               <CardContent className="space-y-1 p-3">
                 <p className="truncate text-sm font-medium">{(photo.project as { name?: string } | null)?.name ?? "-"}</p>

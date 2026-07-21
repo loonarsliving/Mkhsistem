@@ -75,7 +75,7 @@ export async function updateProjectProductDescription(supabase: TypedSupabaseCli
 export async function listProjectPhotos(supabase: TypedSupabaseClient, projectId?: string) {
   let query = supabase
     .from("crm_project_photos")
-    .select("id, project_id, storage_path, public_url, caption, uploaded_by, created_at, project:project_id(name)")
+    .select("id, project_id, storage_path, public_url, caption, media_type, uploaded_by, created_at, project:project_id(name)")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (projectId) query = query.eq("project_id", projectId);

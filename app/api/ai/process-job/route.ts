@@ -52,6 +52,9 @@ import type { Json } from "@/types/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Video ad launches poll Meta for up to ~90s waiting for video processing
+// (uploadAdVideoFromUrl, lib/meta/ads.ts) -- default duration isn't enough headroom for that plus the rest of a launch job's steps.
+export const maxDuration = 120;
 
 interface CrmSp1DraftJobPayload {
   sp1_warning_id: string;
@@ -363,7 +366,7 @@ async function loadProjectWithPhotos(supabase: AdminClient, projectId: string) {
 
   const { data: photos } = await supabase
     .from("crm_project_photos")
-    .select("id, public_url, caption")
+    .select("id, public_url, caption, media_type")
     .eq("project_id", project.id)
     .is("deleted_at", null);
   if (!photos || photos.length === 0) {
@@ -408,12 +411,13 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     projectType: project.project_type,
     offeringType: project.offering_type,
     productDescription: project.product_description,
-    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
     targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
   });
   const photoById = new Map(photos.map((p) => [p.id, p]));
   const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
   if (selectedPhotos.length === 0) throw new Error(`AI picked photos ${draft.photoIds.join(", ")} which are not in the available set`);
+  const isVideoAd = selectedPhotos[0].media_type === "video";
 
   const isLeaseholdSale = project.project_type === "villa" && project.offering_type === "sale";
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
@@ -431,7 +435,8 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   try {
     const result = await launchWhatsAppLeadCampaign({
       projectName: project.name,
-      photoUrls: selectedPhotos.map((p) => p.public_url),
+      photoUrls: isVideoAd ? [] : selectedPhotos.map((p) => p.public_url),
+      videoUrl: isVideoAd ? selectedPhotos[0].public_url : undefined,
       headline: draft.headline,
       primaryText: draft.primaryText,
       description: draft.description,
@@ -536,7 +541,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       projectType: project.project_type,
       offeringType: project.offering_type,
       productDescription: project.product_description,
-      availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption })),
+      availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
       targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
     });
     const photoById = new Map(photos.map((p) => [p.id, p]));

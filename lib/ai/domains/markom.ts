@@ -698,6 +698,8 @@ Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat, 
 export interface AdPhotoOption {
   id: string;
   caption: string | null;
+  /** crm_project_photos.media_type -- a video ad is always exactly one video (Meta has no video carousel), never mixed with images. */
+  mediaType: "image" | "video";
 }
 
 /**
@@ -726,7 +728,7 @@ export interface AdDraftInput {
 
 export interface AdDraft {
   targetSummary: string;
-  /** 1-10 real photo ids, in the order they should appear -- 1 makes a plain single-image ad, 2+ makes a swipeable Meta carousel (see lib/meta/ads.ts createAdCreative). */
+  /** 1-10 real media ids, in the order they should appear -- 1 image makes a plain single-image ad, 2-10 images make a swipeable Meta carousel, exactly 1 video makes a video ad (see lib/meta/ads.ts createAdCreative). Never a mix of image(s) and video. */
   photoIds: string[];
   headline: string;
   primaryText: string;
@@ -746,18 +748,24 @@ export interface AdDraft {
   targetAreas: string[];
 }
 
-function parseAdDraftJson(text: string, validPhotoIds: string[], projectName: string): AdDraft {
+function parseAdDraftJson(text: string, availableMedia: AdPhotoOption[], projectName: string): AdDraft {
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/```\s*$/, "")
     .trim();
   const parsed = JSON.parse(cleaned) as Partial<AdDraft>;
-  const photoIds = Array.isArray(parsed.photoIds)
-    ? [...new Set(parsed.photoIds.filter((id): id is string => typeof id === "string" && validPhotoIds.includes(id)))].slice(0, 10)
+  const mediaById = new Map(availableMedia.map((m) => [m.id, m]));
+  let photoIds = Array.isArray(parsed.photoIds)
+    ? [...new Set(parsed.photoIds.filter((id): id is string => typeof id === "string" && mediaById.has(id)))].slice(0, 10)
     : [];
+  // A video ad is always exactly one video -- Meta has no video carousel.
+  // If the model picked a video alongside anything else (or more than one
+  // video), keep only the first video id and drop the rest.
+  const firstVideoId = photoIds.find((id) => mediaById.get(id)?.mediaType === "video");
+  if (firstVideoId) photoIds = [firstVideoId];
   if (photoIds.length === 0 || typeof parsed.headline !== "string" || typeof parsed.primaryText !== "string") {
-    throw new Error("AI ad draft response missing required fields or picked photos that don't exist");
+    throw new Error("AI ad draft response missing required fields or picked media that don't exist");
   }
   return {
     targetSummary: (parsed.targetSummary ?? "-").slice(0, 1000),
@@ -789,7 +797,10 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
   }
 
   const systemPrompt = await getSystemPrompt("markom");
-  const photoList = input.availablePhotos.map((p) => `- id: ${p.id}, keterangan: ${p.caption ?? "(tanpa keterangan)"}`).join("\n");
+  const photoList = input.availablePhotos
+    .map((p) => `- id: ${p.id}, tipe: ${p.mediaType === "video" ? "VIDEO" : "foto"}, keterangan: ${p.caption ?? "(tanpa keterangan)"}`)
+    .join("\n");
+  const hasVideoOption = input.availablePhotos.some((p) => p.mediaType === "video");
 
   /**
    * Stated FIRST and in the most forceful terms available, before any other
@@ -861,19 +872,19 @@ ${productLine}
 
 ${indicatorsBlock}
 
-Foto asli yang tersedia (WAJIB pilih dari id-id ini, jangan mengarang foto lain):
+Materi asli yang tersedia (WAJIB pilih dari id-id ini, jangan mengarang materi lain):
 ${photoList}
 
-PEMILIHAN FOTO: iklan ini bisa tampil sebagai carousel (beberapa foto yang bisa di-swipe lead) kalau kamu pilih 2-10 foto -- lebih menarik dan biasanya lebih tinggi engagement-nya daripada 1 foto saja. Pilih SEMUA foto yang benar-benar relevan dan berkualitas baik untuk project ini (maks 10, urutkan dari yang paling menarik/representatif duluan) -- jangan asal menyertakan foto yang tidak relevan/buram hanya demi jumlah. Kalau cuma ada 1 foto yang layak, itu juga sah, iklan akan tampil sebagai foto tunggal.
+PEMILIHAN MATERI: setiap item di atas bertipe "foto" atau "VIDEO". Iklan ini bisa berupa (a) SATU video (kalau ada video yang bagus dan relevan tersedia -- video biasanya lebih tinggi engagement-nya untuk tur properti/testimoni), (b) carousel 2-10 foto yang bisa di-swipe lead, atau (c) 1 foto tunggal. JANGAN PERNAH mencampur video dengan foto dalam satu pilihan -- kalau kamu pilih video, photoIds HANYA berisi id video itu saja (satu id, tidak ada foto lain). Pilih SEMUA foto yang benar-benar relevan dan berkualitas baik untuk carousel (maks 10, urutkan dari yang paling menarik/representatif duluan) -- jangan asal menyertakan yang tidak relevan/buram hanya demi jumlah.${
+    hasVideoOption ? " Prioritaskan video kalau ada yang relevan dan berkualitas baik untuk brief/produk ini." : ""
+  }
 
 Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
 {"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoIds": ["id foto di atas, urutan sesuai tampilan", "id foto lain jika carousel"], "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian, "targetAreas": ["kota/kabupaten hasil riset area target di atas, array kosong jika tidak relevan/tidak diminta"]}`;
 
-  const photoIds = input.availablePhotos.map((p) => p.id);
-
   try {
     const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2048 });
-    return parseAdDraftJson(response.text, photoIds, input.projectName);
+    return parseAdDraftJson(response.text, input.availablePhotos, input.projectName);
   } catch {
     // fall through to the unresearched fallback below -- still picks a real photo, just without grounded research backing the copy.
   }
@@ -889,12 +900,12 @@ ${productLine}
 
 ${indicatorsBlock}
 
-Foto asli yang tersedia (WAJIB pilih dari id-id ini, pilih 2-10 foto relevan untuk carousel kalau ada beberapa yang layak, atau 1 saja kalau cuma itu yang bagus):
+Materi asli yang tersedia (WAJIB pilih dari id-id ini; tipe "VIDEO" berarti video -- kalau memilih video, photoIds HANYA berisi id video itu, jangan dicampur foto; pilih 2-10 foto relevan untuk carousel kalau ada beberapa yang layak, atau 1 saja kalau cuma itu yang bagus):
 ${photoList}
 
 Balas HANYA dengan JSON object: {"targetSummary": "...", "photoIds": ["..."], "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
   const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
-  return parseAdDraftJson(fallbackResponse.text, photoIds, input.projectName);
+  return parseAdDraftJson(fallbackResponse.text, input.availablePhotos, input.projectName);
 }
 
 export interface AdPerformanceInput {
