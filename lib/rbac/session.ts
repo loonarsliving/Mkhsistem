@@ -2,8 +2,8 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
-import { PERMISSIONS, type PermissionKey, type RoleKey } from "@/constants/rbac";
+import { JOGJA_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
+import { MARKOM_KEPALA_CABANG_PERMISSIONS, PERMISSIONS, ROLE_KEYS, type PermissionKey, type RoleKey } from "@/constants/rbac";
 import type { CurrentSession } from "@/types/domain";
 
 /**
@@ -37,7 +37,7 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     .select("permissions(key)")
     .eq("role_id", employee.role_id);
 
-  const permissions = (rolePermissions ?? [])
+  let permissions = (rolePermissions ?? [])
     .map((row) => (row.permissions as { key: string } | null)?.key)
     .filter((key): key is string => Boolean(key)) as PermissionKey[];
 
@@ -46,6 +46,16 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
   // that role) -- see constants/app.ts.
   if (employee.branch_id === MANAGEMENT_PROPERTY_BRANCH_ID && !permissions.includes(PERMISSIONS.KOS_OCCUPANCY_VIEW)) {
     permissions.push(PERMISSIONS.KOS_OCCUPANCY_VIEW);
+  }
+
+  // Markom pages are scoped to Jogja's own Kepala Cabang -- every branch
+  // shares the role, so any OTHER branch's head has these permissions
+  // stripped back out here (see MARKOM_KEPALA_CABANG_PERMISSIONS). The
+  // role_permissions grant itself stays untouched -- RLS already scopes
+  // each Kepala Cabang to their own branch_id, so leaving it in place for
+  // Jogja's head doesn't affect anyone else's data.
+  if (employee.role_key === ROLE_KEYS.KEPALA_CABANG && employee.branch_id !== JOGJA_BRANCH_ID) {
+    permissions = permissions.filter((key) => !(MARKOM_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 
   return {
