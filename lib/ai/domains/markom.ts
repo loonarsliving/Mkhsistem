@@ -600,10 +600,14 @@ export interface ContentReviewInput {
   imageMimeType?: string;
 }
 
+/** Score is 0-10 (one decimal); verdict is derived in code from the 8.5 auto-publish threshold, never trusted from the model's own words -- see CONTENT_AUTO_PUBLISH_SCORE_THRESHOLD. */
 export interface ContentReviewResult {
+  score: number;
   verdict: "approved" | "needs_revision";
   feedback: string;
 }
+
+export const CONTENT_AUTO_PUBLISH_SCORE_THRESHOLD = 8.5;
 
 function parseContentReviewJson(text: string): ContentReviewResult {
   const cleaned = text
@@ -611,14 +615,20 @@ function parseContentReviewJson(text: string): ContentReviewResult {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/```\s*$/, "")
     .trim();
-  const parsed = JSON.parse(cleaned) as Partial<ContentReviewResult>;
-  if (parsed.verdict !== "approved" && parsed.verdict !== "needs_revision") {
-    throw new Error("AI content review response missing a valid verdict");
+  const parsed = JSON.parse(cleaned) as Partial<{ score: unknown; feedback: unknown }>;
+  const score = typeof parsed.score === "number" ? parsed.score : Number(parsed.score);
+  if (!Number.isFinite(score) || score < 0 || score > 10) {
+    throw new Error("AI content review response missing a valid numeric score (0-10)");
   }
   if (typeof parsed.feedback !== "string" || parsed.feedback.trim().length === 0) {
     throw new Error("AI content review response missing feedback text");
   }
-  return { verdict: parsed.verdict, feedback: parsed.feedback.slice(0, 1500) };
+  const rounded = Math.round(score * 10) / 10;
+  return {
+    score: rounded,
+    verdict: rounded >= CONTENT_AUTO_PUBLISH_SCORE_THRESHOLD ? "approved" : "needs_revision",
+    feedback: parsed.feedback.slice(0, 1500),
+  };
 }
 
 /**
@@ -646,9 +656,9 @@ Deskripsi: ${input.taskDescription ?? "-"}
 
 ${captionLine}
 
-Putuskan "approved" (foto sudah cukup baik dan sesuai brief untuk ditayangkan) atau "needs_revision" (jelaskan persis apa yang kurang -- framing, kualitas, tidak sesuai brief, caption perlu diperbaiki, dll).
+Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak foto ini langsung tayang: 10 = sempurna, sesuai brief dan kualitas visual sangat baik; di bawah 8.5 = butuh revisi (framing, kualitas, tidak sesuai brief, caption perlu diperbaiki, dll -- jelaskan persis apa yang kurang).
 
-Balas HANYA dengan JSON object: {"verdict": "approved atau needs_revision", "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat di foto"}`;
+Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat di foto dan alasan skornya"}`;
 
     const response = await generateAIText({
       systemPrompt,
@@ -667,9 +677,9 @@ Deskripsi: ${input.taskDescription ?? "-"}
 
 ${captionLine}
 
-Putuskan "approved" (caption & konteks sudah sesuai brief, layak lanjut dengan catatan Markom tetap cek kualitas video sendiri) atau "needs_revision" (caption/konteks tidak sesuai brief).
+Beri skor 0-10 (boleh satu desimal) seberapa layak caption & konteks ini, dengan asumsi kualitas video sendiri nanti dicek manual oleh Markom: 10 = caption & konteks sudah pas dengan brief; di bawah 8.5 = caption/konteks belum sesuai brief, jelaskan apa yang kurang.
 
-Balas HANYA dengan JSON object: {"verdict": "approved atau needs_revision", "feedback": "penjelasan singkat, Bahasa Indonesia, termasuk pengingat bahwa AI tidak menonton videonya"}`;
+Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat, Bahasa Indonesia, alasan skornya, termasuk pengingat bahwa AI tidak menonton videonya"}`;
 
   const response = await generateAIText({ systemPrompt, userPrompt, maxOutputTokens: 1024 });
   return parseContentReviewJson(response.text);

@@ -200,3 +200,43 @@ export async function getRecentZernioMediaPerformance(
     saves: post.analytics?.saves ?? 0,
   }));
 }
+
+export interface ZernioCreatePostInput {
+  accountId: string;
+  platform: ZernioPlatform;
+  mediaUrl: string;
+  mediaType: "image" | "video";
+  caption: string | null;
+}
+
+export interface ZernioPublishResult {
+  postId: string;
+  status: string | null;
+  permalink: string | null;
+}
+
+/** Publishes immediately (publishNow: true) -- Content Studio only calls this once a submission's scheduled_publish_at has already arrived, so there's no need to ask Zernio to hold and publish later itself. mediaItems.url accepts our Supabase Storage public_url directly, no separate upload-to-Zernio step. */
+export async function createZernioPost(input: ZernioCreatePostInput, product: ZernioProduct = "property"): Promise<ZernioPublishResult> {
+  const client = getClient(product);
+  const result = await client.posts.createPost({
+    body: {
+      content: input.caption ?? "",
+      mediaItems: [{ type: input.mediaType, url: input.mediaUrl }],
+      platforms: [{ platform: input.platform, accountId: input.accountId }],
+      publishNow: true,
+    },
+  });
+  const post = result.data?.post;
+  if (!post?._id) throw new Error("Zernio did not return a post id when creating the post");
+  const target = post.platforms?.[0];
+  return { postId: post._id, status: target?.status ?? null, permalink: target?.platformPostUrl ?? null };
+}
+
+/** Polls a previously-created post -- platformPostUrl is only reliably populated some time after publishNow, not necessarily in createPost's own response. */
+export async function getZernioPostStatus(postId: string, product: ZernioProduct = "property"): Promise<ZernioPublishResult> {
+  const client = getClient(product);
+  const result = await client.posts.getPost({ path: { postId } });
+  const post = result.data?.post;
+  const target = post?.platforms?.[0];
+  return { postId, status: target?.status ?? null, permalink: target?.platformPostUrl ?? null };
+}

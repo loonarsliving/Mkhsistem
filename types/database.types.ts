@@ -79,6 +79,7 @@ export type NotificationCategoryDb =
   | "ad_campaign_failed"
   | "content_published"
   | "content_publish_reminder"
+  | "content_publish_failed"
   | "finance_expense_alert"
   | "finance_expense_pending_verification"
   | "branch_balance_alert"
@@ -2618,15 +2619,18 @@ export interface Database {
       markom_content_submissions: {
         Row: {
           id: string;
-          task_id: string;
+          task_id: string | null;
           branch_id: string;
           division_id: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform: "instagram" | "tiktok";
           submitted_by: string;
           media_type: "image" | "video";
           storage_path: string;
           public_url: string;
           caption: string | null;
           status: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_score: number | null;
           ai_verdict: string | null;
           ai_reviewed_at: string | null;
           scheduled_publish_at: string | null;
@@ -2634,6 +2638,10 @@ export interface Database {
           ig_media_id: string | null;
           published_at: string | null;
           reminder_sent_at: string | null;
+          zernio_account_id: string | null;
+          zernio_post_id: string | null;
+          zernio_publish_status: string | null;
+          zernio_permalink: string | null;
           failure_reason: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -2643,15 +2651,18 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          task_id: string;
+          task_id?: string | null;
           branch_id: string;
           division_id: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform?: "instagram" | "tiktok";
           submitted_by: string;
           media_type: "image" | "video";
           storage_path: string;
           public_url: string;
           caption?: string | null;
           status?: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_score?: number | null;
           ai_verdict?: string | null;
           ai_reviewed_at?: string | null;
           scheduled_publish_at?: string | null;
@@ -2659,6 +2670,10 @@ export interface Database {
           ig_media_id?: string | null;
           published_at?: string | null;
           reminder_sent_at?: string | null;
+          zernio_account_id?: string | null;
+          zernio_post_id?: string | null;
+          zernio_publish_status?: string | null;
+          zernio_permalink?: string | null;
           failure_reason?: string | null;
           deleted_at?: string | null;
           created_at?: string;
