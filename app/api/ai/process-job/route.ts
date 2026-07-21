@@ -300,7 +300,10 @@ async function processMarkomChecklistDraft(supabase: AdminClient, job: JobRow) {
   const items = await researchAndGenerateChecklist(payload.branch_name, context, focus);
 
   const now = new Date();
-  const dueDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  // 1 day, not 3 -- checklist generation is now capped at 1 item/day per
+  // focus (0144), so the due date matches that daily cadence instead of
+  // the old 3-day batch window.
+  const dueDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const taskRows = items.map((item) => ({
     division_id: payload.division_id,
     branch_id: payload.branch_id,

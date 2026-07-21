@@ -292,17 +292,23 @@ function parseBeautyContentIdeasJson(text: string): BeautyContentIdea[] {
       scriptNotes: typeof item.scriptNotes === "string" ? item.scriptNotes.slice(0, 1000) : "",
       cta: typeof item.cta === "string" ? item.cta.slice(0, 300) : "",
     }))
-    .slice(0, 3);
+    .slice(0, 1);
 }
 
 /**
  * Loonars Beauty's equivalent of researchAndGenerateChecklist (markom.ts) --
  * real Zernio account performance + registered/discovered beauty
  * competitors + the latest AI competitor comparison (gaps/recommendations)
- * all feed into exactly 3 concrete content ideas, inserted directly into
- * loonars_content_items (status='idea') by the job processor. Closes the
- * same loop property has: competitor determination -> comparison ->
- * checklist, just for the beauty product line and its own Zernio account.
+ * all feed into exactly 1 concrete content idea per day (was 3/week
+ * before 0144), inserted directly into loonars_content_items
+ * (status='idea') by the job processor. Closes the same loop property
+ * has: competitor determination -> comparison -> checklist, just for the
+ * beauty product line and its own Zernio account.
+ *
+ * Platform choice is delegated to the model per idea, same reasoning as
+ * researchAndGenerateChecklist -- native-fit content per platform beats a
+ * forced identical repost to both, so this picks whichever platform suits
+ * that day's concept instead of alternating on a fixed schedule.
  */
 export async function researchAndGenerateBeautyContentIdeas(context?: BeautyContentPlannerContext): Promise<BeautyContentIdea[]> {
   const systemPrompt = await getSystemPrompt("loonars_beauty");
@@ -310,32 +316,33 @@ export async function researchAndGenerateBeautyContentIdeas(context?: BeautyCont
 
   const researchPrompt = `Riset dulu lewat Google Search: (1) tren skincare/brightening yang sedang viral di media sosial Indonesia saat ini, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada).${contextBlock}
 
-Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 ide konten untuk HydraGlow Advanced Brightening Lotion (Loonars Beauty) untuk siklus kerja 3 hari ke depan -- harus konkret dan berdasar temuan riset/data nyata, bukan ide generik. Usahakan variasi kategori (problem_solution/ugc/edukasi/promosi) sesuai rasio target 40/30/20/10, bukan 3 ide dari kategori yang sama.
+Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 1 ide konten untuk HydraGlow Advanced Brightening Lotion (Loonars Beauty) untuk hari ini -- harus konkret dan berdasar temuan riset/data nyata, bukan ide generik. Ini satu-satunya ide baru hari ini, jadi pilih kategori (problem_solution/ugc/edukasi/promosi) yang paling relevan dari riset di atas -- pertimbangkan rasio target mingguan 40/30/20/10 antar kategori saat memilih.
 
-Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi tepat 3 object:
+Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi TEPAT 1 object:
 [{"title": "...", "category": "problem_solution atau ugc atau edukasi atau promosi", "platform": "instagram atau tiktok", "hook": "...", "caption": "...", "scriptNotes": "...", "cta": "..."}]
 
 title: singkat (maks 80 karakter), nama tema kontennya.
+platform: WAJIB pilih "instagram" atau "tiktok" -- yang paling pas untuk KONSEP INI SPESIFIK. Instagram lebih cocok untuk konten polished/aesthetic (carousel, reels rapi); TikTok lebih cocok untuk konten native/trend-jacking dengan hook cepat. Jangan asal posting konten yang sama ke kedua platform.
 hook: hook pembuka 3 detik pertama.
 caption: draft caption lengkap.
 scriptNotes: format konten, gaya editing/visual, beat/alur singkat.
 cta: ajakan bertindak spesifik.`;
 
   try {
-    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2560 });
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 1536 });
     const items = parseBeautyContentIdeasJson(response.text);
-    if (items.length > 0) return items.slice(0, 3);
+    if (items.length > 0) return items.slice(0, 1);
   } catch {
     // fall through to the unresearched fallback below
   }
 
-  const fallbackPrompt = `Buatkan TEPAT 3 ide konten untuk HydraGlow Advanced Brightening Lotion (Loonars Beauty) untuk siklus kerja 3 hari ke depan, tanpa riset internet, variasi kategori (problem_solution/ugc/edukasi/promosi).${contextBlock}
+  const fallbackPrompt = `Buatkan TEPAT 1 ide konten untuk HydraGlow Advanced Brightening Lotion (Loonars Beauty) untuk hari ini, tanpa riset internet, pilih kategori (problem_solution/ugc/edukasi/promosi) yang paling relevan.${contextBlock}
 
-Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "category": "...", "platform": "...", "hook": "...", "caption": "...", "scriptNotes": "...", "cta": "..."}]`;
-  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1536 });
+Balas HANYA dengan JSON array berisi TEPAT 1 object: [{"title": "...", "category": "...", "platform": "...", "hook": "...", "caption": "...", "scriptNotes": "...", "cta": "..."}]`;
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
   const fallbackItems = parseBeautyContentIdeasJson(fallbackResponse.text);
   if (fallbackItems.length === 0) throw new Error("AI did not return parseable content ideas");
-  return fallbackItems.slice(0, 3);
+  return fallbackItems.slice(0, 1);
 }
 
 export interface BeautyWeeklyContentAuditPost {

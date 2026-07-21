@@ -210,6 +210,16 @@ Jangan mengarang username -- kalau hasil pencarianmu tidak yakin akun itu benar-
   return parseDiscoveredCompetitorsJson(response.text);
 }
 
+/**
+ * One checklist item per dispatch (not 3, as before) -- Markom asked to cap
+ * each product line's daily checklist at exactly 1 item/day rather than a
+ * batch whenever the queue empties (see markom_run_ai_checklist_dispatch's
+ * date-based gate, 0144). Platform choice is still delegated to the model
+ * per item, same as before, rather than forced to alternate or always
+ * cross-post -- native-fit content per platform beats identical reposts
+ * for engagement, and this lets that judgment happen once/day instead of
+ * needing an explicit alternation rule.
+ */
 export async function researchAndGenerateChecklist(
   branchName: string,
   context?: ContentPlannerContext,
@@ -220,35 +230,35 @@ export async function researchAndGenerateChecklist(
   const topic = focusResearchTopic(focus);
   const researchPrompt = `Riset dulu lewat Google Search: (1) hal-hal yang sedang viral/tren saat ini di media sosial Indonesia (khususnya TikTok dan Instagram, cari data publik yang ter-index Google karena tidak ada akses API resmi TikTok) yang cocok dijadikan ${topic}, dan (2) aktivitas publik kompetitor yang terdaftar di bawah (jika ada) -- cari konten/postingan terbaru mereka yang bisa ditemukan lewat pencarian publik.${contextBlock}
 
-Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik.
+Gunakan riset dan data di atas sebagai dasar untuk membuat TEPAT 1 checklist konten untuk tim Markom cabang "${branchName}" untuk hari ini -- task harus konkret dan berdasar temuan riset/data nyata, bukan ide generik. Ini satu-satunya checklist baru untuk lini ini hari ini, jadi pilih konsep yang paling berdampak.
 
-Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi tepat 3 object:
+Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan) berisi TEPAT 1 object:
 [{"title": "...", "description": "...", "platform": "Instagram atau TikTok", "platformReason": "..."}]
 
 title: singkat (maks 80 karakter), actionable -- nama tema kontennya.
 description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.
-platform: WAJIB pilih salah satu, "Instagram" atau "TikTok" -- platform mana yang paling cocok untuk konten spesifik ini (boleh beda-beda per checklist, tidak harus semua platform yang sama).
+platform: WAJIB pilih salah satu, "Instagram" atau "TikTok" -- platform mana yang paling cocok untuk KONSEP INI SPESIFIK, bukan sekadar bergantian. Instagram lebih cocok untuk konten yang lebih polished/aesthetic (carousel, reels rapi); TikTok lebih cocok untuk konten native/trend-jacking dengan hook cepat. Jangan asal posting konten yang sama ke kedua platform -- pilih yang benar-benar paling pas untuk memaksimalkan engagement konsep ini.
 platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang paling pas untuk konten ini (mis. gaya audiens, format yang lebih works di platform itu, atau data performa kami di platform itu).`;
 
   try {
-    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2560 });
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 1536 });
     const items = parseChecklistJson(response.text);
-    if (items.length > 0) return items.slice(0, 3);
+    if (items.length > 0) return items.slice(0, 1);
   } catch {
     // fall through to the unresearched fallback below
   }
 
-  const fallbackPrompt = `Buatkan TEPAT 3 checklist konten untuk tim Markom cabang "${branchName}" pada siklus kerja 3 hari ke depan, seputar ${topic}, tanpa riset internet.${contextBlock}
+  const fallbackPrompt = `Buatkan TEPAT 1 checklist konten untuk tim Markom cabang "${branchName}" untuk hari ini, seputar ${topic}, tanpa riset internet.${contextBlock}
 
 description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
-platform: WAJIB pilih "Instagram" atau "TikTok" per checklist, boleh beda-beda.
+platform: WAJIB pilih "Instagram" atau "TikTok" -- yang paling pas untuk konsep ini, bukan asal-asalan.
 platformReason: 1 kalimat kenapa platform itu yang dipilih.
 
-Balas HANYA dengan JSON array berisi tepat 3 object: [{"title": "...", "description": "...", "platform": "...", "platformReason": "..."}]`;
-  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1536 });
+Balas HANYA dengan JSON array berisi TEPAT 1 object: [{"title": "...", "description": "...", "platform": "...", "platformReason": "..."}]`;
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
   const fallbackItems = parseChecklistJson(fallbackResponse.text);
   if (fallbackItems.length === 0) throw new Error("AI did not return a parseable checklist");
-  return fallbackItems.slice(0, 3);
+  return fallbackItems.slice(0, 1);
 }
 
 export interface WeeklyContentAuditPost {
