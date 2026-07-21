@@ -15,8 +15,9 @@ export const metadata: Metadata = { title: "Content Studio" };
  * no further manual step (0142). Below 8.5 it comes back as
  * 'needs_revision' with concrete feedback instead. 3 submenus mirror the
  * same content_focus split Content Planner already uses: Leasehold and
- * Villa (occupancy) share kpi_tasks briefs, Beauty has no checklist to
- * attach to so it's caption-only, standalone submissions.
+ * Villa (occupancy) share kpi_tasks briefs, Beauty picks its brief from
+ * loonars_content_items instead -- its own "Rencana Konten" plan, since
+ * Beauty has no branch-scoped checklist (0143).
  */
 export default async function ContentStudioPage() {
   const session = await requireSession();
@@ -38,13 +39,13 @@ export default async function ContentStudioPage() {
         </TabsList>
 
         <TabsContent value="leasehold_sales" className="space-y-4">
-          <ContentStudioBoard focus="leasehold_sales" hasTaskBrief />
+          <ContentStudioBoard focus="leasehold_sales" />
         </TabsContent>
         <TabsContent value="occupancy" className="space-y-4">
-          <ContentStudioBoard focus="occupancy" hasTaskBrief />
+          <ContentStudioBoard focus="occupancy" />
         </TabsContent>
         <TabsContent value="beauty" className="space-y-4">
-          <ContentStudioBoard focus="beauty" hasTaskBrief={false} />
+          <ContentStudioBoard focus="beauty" />
         </TabsContent>
       </Tabs>
     </div>

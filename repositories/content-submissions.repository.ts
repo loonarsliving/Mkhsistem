@@ -9,12 +9,11 @@ export interface ContentSubmissionListFilters {
 }
 
 /** Newest first, joined with the brief it was made for and who uploaded it -- RLS/open-read (see migration 0096), branch scoping is an app-layer filter here same as listKpiTasks. */
+const SUBMISSION_BRIEF_SELECT =
+  "*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta), submitter:submitted_by(full_name)";
+
 export async function listContentSubmissions(supabase: TypedSupabaseClient, filters: ContentSubmissionListFilters = {}) {
-  let query = supabase
-    .from("markom_content_submissions")
-    .select("*, task:task_id(title, description), submitter:submitted_by(full_name)")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  let query = supabase.from("markom_content_submissions").select(SUBMISSION_BRIEF_SELECT).is("deleted_at", null).order("created_at", { ascending: false });
 
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.taskId) query = query.eq("task_id", filters.taskId);
@@ -26,13 +25,18 @@ export async function listContentSubmissions(supabase: TypedSupabaseClient, filt
 }
 
 export async function getContentSubmission(supabase: TypedSupabaseClient, id: string) {
-  const { data, error } = await supabase.from("markom_content_submissions").select("*, task:task_id(title, description)").eq("id", id).single();
+  const { data, error } = await supabase
+    .from("markom_content_submissions")
+    .select("*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta)")
+    .eq("id", id)
+    .single();
   if (error) throw error;
   return data;
 }
 
 export interface CreateContentSubmissionInput {
   task_id: string | null;
+  beauty_content_item_id: string | null;
   branch_id: string;
   division_id: string;
   content_focus: ContentStudioFocus;

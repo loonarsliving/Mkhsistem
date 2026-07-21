@@ -16,6 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { uploadEntityFile } from "@/lib/supabase/storage";
 import type { ContentStudioFocus } from "@/repositories/content-submissions.repository";
 
+import { listContentItemsAction } from "@/features/loonars-beauty/actions/loonars-beauty.actions";
+
 import { listKpiTasksAction } from "../actions/markom-query.actions";
 import {
   createContentSubmissionAction,
@@ -38,13 +40,15 @@ const STATUS_LABEL: Record<string, { label: string; variant: "secondary" | "defa
   failed: { label: "Gagal Publish", variant: "destructive" },
 };
 
-/** Content Studio -- one board per submenu (Leasehold/Villa/Beauty), see app/(app)/markom/content-studio/[focus]/page.tsx. Beauty has no kpi_tasks brief to attach to, so the task picker only shows for the other two focuses. */
-export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStudioFocus; hasTaskBrief: boolean }) {
+/** Content Studio -- one board per submenu (Leasehold/Villa/Beauty), see app/(app)/markom/content-studio/page.tsx. Leasehold/Villa pick a brief from kpi_tasks; Beauty has no branch-scoped checklist so it picks from loonars_content_items (its own "Rencana Konten" plan, 0143) instead. */
+export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
   const queryClient = useQueryClient();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const now = new Date();
+  const usesKpiTaskBrief = focus !== "beauty";
 
   const [taskId, setTaskId] = React.useState<string>("");
+  const [beautyItemId, setBeautyItemId] = React.useState<string>("");
   const [platform, setPlatform] = React.useState<"instagram" | "tiktok">("instagram");
   const [caption, setCaption] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
@@ -55,7 +59,13 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
   const { data: tasks } = useQuery({
     queryKey: ["markom-team-tasks-for-submission", focus, now.getMonth(), now.getFullYear()],
     queryFn: () => listKpiTasksAction({ periodYear: now.getFullYear(), periodMonth: now.getMonth() + 1, contentFocus: focus === "beauty" ? undefined : focus }),
-    enabled: hasTaskBrief,
+    enabled: usesKpiTaskBrief,
+  });
+  const { data: beautyItems } = useQuery({
+    queryKey: ["loonars-content-items-for-submission"],
+    queryFn: () => listContentItemsAction(),
+    enabled: !usesKpiTaskBrief,
+    select: (data) => data.filter((i) => i.status !== "published" && i.status !== "archived"),
   });
   const { data: submissions, isLoading } = useQuery({
     queryKey: ["markom-content-submissions", focus],
@@ -63,8 +73,12 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
   });
 
   React.useEffect(() => {
-    if (hasTaskBrief && !taskId && tasks && tasks.length > 0) setTaskId(tasks[0].id);
-  }, [tasks, taskId, hasTaskBrief]);
+    if (usesKpiTaskBrief && !taskId && tasks && tasks.length > 0) setTaskId(tasks[0].id);
+  }, [tasks, taskId, usesKpiTaskBrief]);
+
+  React.useEffect(() => {
+    if (!usesKpiTaskBrief && !beautyItemId && beautyItems && beautyItems.length > 0) setBeautyItemId(beautyItems[0].id);
+  }, [beautyItems, beautyItemId, usesKpiTaskBrief]);
 
   function invalidateSubmissions() {
     queryClient.invalidateQueries({ queryKey: ["markom-content-submissions", focus] });
@@ -73,19 +87,21 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (hasTaskBrief && !taskId) {
-      toast.error("Pilih task/brief terlebih dahulu");
+    const briefId = usesKpiTaskBrief ? taskId : beautyItemId;
+    if (!briefId) {
+      toast.error("Pilih brief konten terlebih dahulu");
       return;
     }
     const mediaType: "image" | "video" = file.type.startsWith("video/") ? "video" : "image";
 
     setUploading(true);
     try {
-      const { path, publicUrl } = await uploadEntityFile("markom-content-submissions", taskId || focus, file, MAX_CONTENT_SIZE_BYTES);
+      const { path, publicUrl } = await uploadEntityFile("markom-content-submissions", briefId, file, MAX_CONTENT_SIZE_BYTES);
       if (!publicUrl) throw new Error("Gagal mendapatkan URL konten");
 
       const result = await createContentSubmissionAction({
-        taskId: hasTaskBrief ? taskId : undefined,
+        taskId: usesKpiTaskBrief ? taskId : undefined,
+        beautyContentItemId: usesKpiTaskBrief ? undefined : beautyItemId,
         contentFocus: focus,
         platform,
         storagePath: path,
@@ -178,7 +194,7 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
     <div className="space-y-4">
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
-          {hasTaskBrief && (
+          {usesKpiTaskBrief ? (
             <div className="min-w-56 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Brief/Task</p>
               <Select value={taskId} onValueChange={setTaskId}>
@@ -189,6 +205,22 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
                   {(tasks ?? []).map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="min-w-56 space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Brief/Rencana Konten</p>
+              <Select value={beautyItemId} onValueChange={setBeautyItemId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih rencana konten" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(beautyItems ?? []).map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -212,7 +244,7 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
             <Textarea value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption yang akan dipakai saat konten tayang..." rows={1} />
           </div>
           <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime" hidden onChange={(e) => handleUpload(e.target.files)} />
-          <Button type="button" onClick={() => inputRef.current?.click()} disabled={uploading || (hasTaskBrief && !taskId)}>
+          <Button type="button" onClick={() => inputRef.current?.click()} disabled={uploading || (usesKpiTaskBrief ? !taskId : !beautyItemId)}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             Upload Konten
           </Button>
@@ -233,6 +265,8 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
           {items.map((s) => {
             const statusInfo = STATUS_LABEL[s.status] ?? { label: s.status, variant: "secondary" as const };
             const task = s.task as { title?: string; description?: string } | null;
+            const beautyItem = s.beauty_content_item as { title?: string } | null;
+            const briefTitle = task?.title ?? beautyItem?.title ?? "Konten mandiri";
             return (
               <Card key={s.id}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
@@ -240,13 +274,13 @@ export function ContentStudioBoard({ focus, hasTaskBrief }: { focus: ContentStud
                     {s.media_type === "video" ? (
                       <video src={s.public_url} className="h-full w-full object-cover" muted />
                     ) : (
-                      <Image src={s.public_url} alt={task?.title ?? "Konten"} fill sizes="128px" className="object-cover" unoptimized />
+                      <Image src={s.public_url} alt={briefTitle} fill sizes="128px" className="object-cover" unoptimized />
                     )}
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="font-medium">{task?.title ?? "Konten mandiri"}</p>
+                        <p className="font-medium">{briefTitle}</p>
                         <p className="text-xs text-muted-foreground">
                           {s.media_type === "video" ? "Video" : "Foto"} &middot; {s.platform === "instagram" ? "Instagram" : "TikTok"}
                         </p>

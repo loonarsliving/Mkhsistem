@@ -27,6 +27,12 @@ function productForFocus(focus: ContentStudioFocus): ZernioProduct {
   return focus === "beauty" ? "beauty" : "property";
 }
 
+/** Beauty's brief lives in loonars_content_items (hook/script/CTA), not a plain title+description like kpi_tasks -- folded into one description string so reviewContentSubmission's prompt shape stays the same for every focus. */
+function beautyBriefDescription(item: { hook: string | null; script_notes: string | null; cta: string | null }): string | null {
+  const parts = [item.hook && `Hook: ${item.hook}`, item.script_notes && `Catatan naskah: ${item.script_notes}`, item.cta && `CTA: ${item.cta}`].filter(Boolean);
+  return parts.length > 0 ? parts.join(" | ") : null;
+}
+
 export async function listContentSubmissionsAction(contentFocus?: ContentStudioFocus) {
   await requireSession();
   const supabase = await createClient();
@@ -35,6 +41,7 @@ export async function listContentSubmissionsAction(contentFocus?: ContentStudioF
 
 interface CreateContentSubmissionInput {
   taskId?: string;
+  beautyContentItemId?: string;
   contentFocus: ContentStudioFocus;
   platform: "instagram" | "tiktok";
   storagePath: string;
@@ -53,9 +60,11 @@ interface CreateContentSubmissionInput {
  * fails, the row is left in 'pending_review' rather than losing the upload,
  * and retryContentReviewAction can be called to try again.
  *
- * taskId is optional -- Beauty content has no kpi_tasks checklist item to
- * attach to (0142), so branch_id/division_id come from the submitter's own
- * employee record in that case instead of a linked task.
+ * taskId is optional -- only Leasehold/Villa use kpi_tasks. Beauty's brief
+ * comes from beautyContentItemId (loonars_content_items, 0143) instead,
+ * since Beauty has no branch/division-scoped checklist. branch_id/
+ * division_id always come from the submitter's own employee record for
+ * Beauty (loonars_content_items isn't branch-scoped either).
  */
 export async function createContentSubmissionAction(input: CreateContentSubmissionInput): Promise<ActionResult<{ submissionId: string; aiReviewed: boolean }>> {
   const session = await requirePermission("content_submission.manage");
@@ -77,6 +86,15 @@ export async function createContentSubmissionAction(input: CreateContentSubmissi
     taskDescription = task.description;
     branchId = task.branch_id;
     divisionId = task.division_id;
+  } else if (input.beautyContentItemId) {
+    const { data: item, error: itemError } = await supabase
+      .from("loonars_content_items")
+      .select("title, hook, script_notes, cta")
+      .eq("id", input.beautyContentItemId)
+      .single();
+    if (itemError || !item) return actionError("Brief konten tidak ditemukan");
+    taskTitle = item.title;
+    taskDescription = beautyBriefDescription(item);
   }
   if (!divisionId) return actionError("Akun Anda belum terhubung ke divisi manapun -- hubungi admin");
 
@@ -84,6 +102,7 @@ export async function createContentSubmissionAction(input: CreateContentSubmissi
   try {
     const inserted = await createContentSubmission(supabase, {
       task_id: input.taskId ?? null,
+      beauty_content_item_id: input.beautyContentItemId ?? null,
       branch_id: branchId,
       division_id: divisionId,
       content_focus: input.contentFocus,
@@ -123,10 +142,11 @@ export async function retryContentReviewAction(submissionId: string): Promise<Ac
 
   const submission = await getContentSubmission(supabase, submissionId);
   const task = submission.task as { title?: string; description?: string | null } | null;
+  const beautyItem = submission.beauty_content_item as { title?: string; hook: string | null; script_notes: string | null; cta: string | null } | null;
 
   const aiReviewed = await runReviewAndSave(supabase, submissionId, {
-    taskTitle: task?.title ?? "Konten mandiri (tanpa checklist)",
-    taskDescription: task?.description ?? null,
+    taskTitle: task?.title ?? beautyItem?.title ?? "Konten mandiri (tanpa checklist)",
+    taskDescription: task?.description ?? (beautyItem ? beautyBriefDescription(beautyItem) : null),
     caption: submission.caption,
     mediaType: submission.media_type,
     mediaUrl: submission.public_url,

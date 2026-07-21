@@ -2620,6 +2620,7 @@ export interface Database {
         Row: {
           id: string;
           task_id: string | null;
+          beauty_content_item_id: string | null;
           branch_id: string;
           division_id: string;
           content_focus: "leasehold_sales" | "occupancy" | "beauty";
@@ -2652,6 +2653,7 @@ export interface Database {
         Insert: {
           id?: string;
           task_id?: string | null;
+          beauty_content_item_id?: string | null;
           branch_id: string;
           division_id: string;
           content_focus: "leasehold_sales" | "occupancy" | "beauty";
@@ -2687,6 +2689,12 @@ export interface Database {
             foreignKeyName: "markom_content_submissions_task_id_fkey";
             columns: ["task_id"];
             referencedRelation: "kpi_tasks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_beauty_content_item_id_fkey";
+            columns: ["beauty_content_item_id"];
+            referencedRelation: "loonars_content_items";
             referencedColumns: ["id"];
           },
           {
