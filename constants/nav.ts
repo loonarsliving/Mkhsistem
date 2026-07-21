@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BarChart3,
+  BedDouble,
   BrainCircuit,
   Building2,
   CalendarCheck,
@@ -169,6 +170,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         permission: [PERMISSIONS.PAYROLL_MANAGE, PERMISSIONS.HR_EXPENSE_CREATE, PERMISSIONS.HR_EXPENSE_APPROVE],
       },
+      { label: "Okupansi Kos", href: "/kos-occupancy", icon: BedDouble, permission: PERMISSIONS.KOS_OCCUPANCY_VIEW },
     ],
   },
   {

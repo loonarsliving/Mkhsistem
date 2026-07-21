@@ -111,6 +111,8 @@ export const PERMISSIONS = {
 
   LOONARS_BEAUTY_VIEW: "loonars_beauty.view",
   LOONARS_BEAUTY_MANAGE: "loonars_beauty.manage",
+
+  KOS_OCCUPANCY_VIEW: "kos_occupancy.view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -151,6 +153,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.KPI_TASK_VIEW_ALL,
     PERMISSIONS.KPI_TASK_ASSIGN,
     PERMISSIONS.KPI_TASK_VERIFY,
+    PERMISSIONS.KOS_OCCUPANCY_VIEW,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -190,6 +193,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.HR_EXPENSE_APPROVE,
     PERMISSIONS.SP1_WARNING_MANAGE,
     PERMISSIONS.SP1_WARNING_VIEW_ALL,
+    PERMISSIONS.KOS_OCCUPANCY_VIEW,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -238,6 +242,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
+    PERMISSIONS.KOS_OCCUPANCY_VIEW,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
