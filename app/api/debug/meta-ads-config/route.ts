@@ -90,6 +90,21 @@ export async function GET() {
     } catch (err) {
       result.cibarusahAdsetTargetingError = err instanceof Error ? err.message : String(err);
     }
+
+    // Investigating "why isn't Yogyakarta in the ad's target areas" -- the
+    // Loonars Living (villa leasehold sale) ad set's real geo_locations
+    // straight from Meta, to confirm whether "Yogyakarta" actually resolved
+    // via resolveGeoLocationsFromNames/Meta's adgeolocation search (which
+    // silently drops any name that fails to match, with zero logging) or
+    // got dropped despite being in LEASEHOLD_TARGET_CITIES.
+    const loonarsLivingAdsetId = "120249875423060642";
+    try {
+      result.loonarsLivingAdsetTargeting = await metaGraphRequest<Record<string, unknown>>(`/${loonarsLivingAdsetId}`, {
+        fields: "id,name,targeting",
+      });
+    } catch (err) {
+      result.loonarsLivingAdsetTargetingError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   return NextResponse.json(result);
