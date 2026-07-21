@@ -2833,6 +2833,10 @@ export interface Database {
       app_current_branch_id: { Args: Record<string, never>; Returns: string };
       app_has_permission: { Args: { p_permission_key: string }; Returns: boolean };
       app_is_super_admin: { Args: Record<string, never>; Returns: boolean };
+      get_kos_occupancy: {
+        Args: Record<string, never>;
+        Returns: { property_id: string; property_name: string; total: number; terisi: number; kosong: number }[];
+      };
       attendance_check_in: {
         Args: { p_latitude: number; p_longitude: number; p_photo_url: string; p_note?: string | null };
         Returns: Database["public"]["Tables"]["attendance"]["Row"];

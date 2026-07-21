@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePermission } from "@/lib/rbac/session";
+import { createClient } from "@/lib/supabase/server";
 import { getKosOccupancy } from "@/repositories/kos-occupancy.repository";
 
 export const metadata: Metadata = { title: "Okupansi Kos" };
@@ -13,10 +14,11 @@ export const metadata: Metadata = { title: "Okupansi Kos" };
 export default async function KosOccupancyPage() {
   await requirePermission("kos_occupancy.view");
 
+  const supabase = await createClient();
   let properties: Awaited<ReturnType<typeof getKosOccupancy>> = [];
   let loadError: string | null = null;
   try {
-    properties = await getKosOccupancy();
+    properties = await getKosOccupancy(supabase);
   } catch (err) {
     loadError = err instanceof Error ? err.message : "Gagal memuat data Kos";
   }

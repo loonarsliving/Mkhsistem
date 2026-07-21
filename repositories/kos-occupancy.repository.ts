@@ -1,11 +1,13 @@
-/**
- * Read-only integration with the Kos app's `kos-api` Edge Function (a
- * separate Supabase project -- gluoioiimapyhchdasfl, shared with MKH
- * Property). This module only needs "how many rooms are filled vs empty",
- * so it calls the existing `/summary` endpoint per property instead of
- * standing up cross-project sync infrastructure for a read-only counter.
- */
+import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
+/**
+ * Kos is integrated at the database level, not through an API call: a
+ * postgres_fdw foreign server (`kos_server`) connects this project directly
+ * to the Kos app's Supabase Postgres instance (gluoioiimapyhchdasfl), with
+ * its operational tables imported into the `kos_remote` schema (see
+ * migration 0145). `get_kos_occupancy()` reads those foreign tables and is
+ * permission-gated the same way every other RPC in this app is.
+ */
 export interface KosPropertyOccupancy {
   propertyId: string;
   propertyName: string;
@@ -14,44 +16,14 @@ export interface KosPropertyOccupancy {
   kosong: number;
 }
 
-const KOS_PROPERTIES = [
-  { id: "20c0c9b0-f047-42bf-9e5e-6a49bc00b167", name: "Kos Gito Gati Premium" },
-  { id: "c3519642-863c-4390-a158-504439bcf2dc", name: "Loonars Private Living" },
-] as const;
-
-interface KosSummaryResponse {
-  available: number;
-  occupied: number;
-  dirty: number;
-  total: number;
-}
-
-async function fetchPropertySummary(propertyId: string): Promise<KosSummaryResponse> {
-  const apiUrl = process.env.KOS_API_URL;
-  const apiToken = process.env.KOS_API_TOKEN;
-  if (!apiUrl || !apiToken) {
-    throw new Error("KOS_API_URL / KOS_API_TOKEN belum diset -- lihat .env.example");
-  }
-
-  const res = await fetch(`${apiUrl}/summary?property_id=${propertyId}`, {
-    headers: { "x-kos-token": apiToken },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Gagal memuat data Kos (${res.status})`);
-  return res.json();
-}
-
-export async function getKosOccupancy(): Promise<KosPropertyOccupancy[]> {
-  return Promise.all(
-    KOS_PROPERTIES.map(async (property) => {
-      const summary = await fetchPropertySummary(property.id);
-      return {
-        propertyId: property.id,
-        propertyName: property.name,
-        total: summary.total,
-        kosong: summary.available,
-        terisi: summary.total - summary.available,
-      };
-    }),
-  );
+export async function getKosOccupancy(supabase: TypedSupabaseClient): Promise<KosPropertyOccupancy[]> {
+  const { data, error } = await supabase.rpc("get_kos_occupancy");
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    propertyId: row.property_id,
+    propertyName: row.property_name,
+    total: row.total,
+    terisi: row.terisi,
+    kosong: row.kosong,
+  }));
 }
