@@ -17,14 +17,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { StudioVerdict } from "@/features/kontenai/types";
+import { CONTENT_STUDIO_AUTO_APPROVE_THRESHOLD, deriveStudioVerdict } from "@/features/kontenai/lib/scoring";
 
 import { advanceRunAction, submitStudioVerdictAction } from "../actions/production-pipeline.actions";
 import { STAGE_LABELS, type PipelineRunView } from "../types";
 import { RunStatusBadge } from "./run-status-badge";
 import { StageStepper } from "./stage-stepper";
 
-const AUTO_PUBLISH_THRESHOLD = 8.5;
+const AUTO_PUBLISH_THRESHOLD = CONTENT_STUDIO_AUTO_APPROVE_THRESHOLD;
 
 function formatTimestamp(iso: string) {
   return new Date(iso).toLocaleString("id-ID", {
@@ -70,7 +70,13 @@ export function RunDetailDialog({ run, onOpenChange }: RunDetailDialogProps) {
       toast.error(result.error ?? "Gagal memajukan tahap");
       return;
     }
-    toast.success(`Run maju ke tahap ${STAGE_LABELS[result.data!.currentStage]}`);
+    if (result.error) {
+      // Success, but the stage didn't move (e.g. render still in progress)
+      // -- surface the reason instead of a misleading "advanced" toast.
+      toast.info(result.error);
+    } else {
+      toast.success(`Run maju ke tahap ${STAGE_LABELS[result.data!.currentStage]}`);
+    }
     await refresh();
   }
 
@@ -81,7 +87,7 @@ export function RunDetailDialog({ run, onOpenChange }: RunDetailDialogProps) {
       toast.error("Masukkan skor antara 0 dan 10");
       return;
     }
-    const verdict: StudioVerdict = score >= AUTO_PUBLISH_THRESHOLD ? "approved" : "needs_revision";
+    const verdict = deriveStudioVerdict(score);
     setIsSubmittingVerdict(true);
     const result = await submitStudioVerdictAction(run.id, score, verdict);
     setIsSubmittingVerdict(false);

@@ -15,6 +15,7 @@ import { RunDetailDialog } from "./run-detail-dialog";
 import { RunStatusBadge } from "./run-status-badge";
 import { StageDistribution } from "./stage-distribution";
 import { StageStepper } from "./stage-stepper";
+import { StartRunDialog } from "./start-run-dialog";
 
 export function PipelineBoard() {
   const [selectedRunId, setSelectedRunId] = React.useState<string | null>(null);
@@ -51,6 +52,9 @@ export function PipelineBoard() {
           <p className="text-sm text-muted-foreground">
             Run akan muncul di sini setelah Content Planner mengirim brief ke KontenAI.
           </p>
+          <div className="mt-2">
+            <StartRunDialog />
+          </div>
         </CardContent>
       </Card>
     );
@@ -58,6 +62,10 @@ export function PipelineBoard() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        <StartRunDialog />
+      </div>
+
       <StageDistribution runs={runs} />
 
       <Table>
