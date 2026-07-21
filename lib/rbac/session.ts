@@ -2,7 +2,8 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import type { PermissionKey, RoleKey } from "@/constants/rbac";
+import { MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
+import { PERMISSIONS, type PermissionKey, type RoleKey } from "@/constants/rbac";
 import type { CurrentSession } from "@/types/domain";
 
 /**
@@ -39,6 +40,13 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
   const permissions = (rolePermissions ?? [])
     .map((row) => (row.permissions as { key: string } | null)?.key)
     .filter((key): key is string => Boolean(key)) as PermissionKey[];
+
+  // Kos occupancy is scoped to the Management Property branch's own Kepala
+  // Cabang, not the Kepala Cabang role in general (every branch head shares
+  // that role) -- see constants/app.ts.
+  if (employee.branch_id === MANAGEMENT_PROPERTY_BRANCH_ID && !permissions.includes(PERMISSIONS.KOS_OCCUPANCY_VIEW)) {
+    permissions.push(PERMISSIONS.KOS_OCCUPANCY_VIEW);
+  }
 
   return {
     userId: user.id,
