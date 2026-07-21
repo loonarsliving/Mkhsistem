@@ -404,11 +404,18 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
   if (selectedPhotos.length === 0) throw new Error(`AI picked photos ${draft.photoIds.join(", ")} which are not in the available set`);
 
+  const isLeaseholdSale = project.project_type === "villa" && project.offering_type === "sale";
   const dailyBudgetIdr = Math.min(Math.max(draft.suggestedDailyBudgetIdr || 30_000, 20_000), remainingBudgetIdr);
-  const targeting =
-    project.project_type === "villa" && project.offering_type === "sale"
-      ? await getLeaseholdTargetGeoLocations()
-      : await resolveGeoLocationsFromNames(draft.targetAreas, 25);
+  const targeting = isLeaseholdSale ? await getLeaseholdTargetGeoLocations() : await resolveGeoLocationsFromNames(draft.targetAreas, 25);
+  // Real bug found: this column always stored the AI's own separate
+  // targetAreas research field, even for leasehold-sale campaigns where
+  // that field is never populated (researchAndDraftAd skips asking for it,
+  // see areaResearchLine) -- the actual, deterministic LEASEHOLD_TARGET_CITIES
+  // list used for real Meta targeting was never reflected here, so the "Area
+  // target" line on /markom/ads either showed nothing or an incomplete echo
+  // for villa-sale ads, even though Yogyakarta (and the rest of the list)
+  // was genuinely being targeted on Meta's side.
+  const targetAreasForDisplay = isLeaseholdSale ? LEASEHOLD_TARGET_CITIES : draft.targetAreas;
 
   try {
     const result = await launchWhatsAppLeadCampaign({
@@ -441,7 +448,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
         status: "active",
         launched_by: "ai",
         research_summary: draft.targetSummary,
-        target_areas: draft.targetAreas,
+        target_areas: targetAreasForDisplay,
       })
       .select("id")
       .single();
@@ -484,7 +491,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
       status: "failed",
       launched_by: "ai",
       research_summary: draft.targetSummary,
-      target_areas: draft.targetAreas,
+      target_areas: targetAreasForDisplay,
       failure_reason: errorMessage,
     });
     throw new NonRetryableJobError(`Meta API call failed while launching ad for "${project.name}": ${errorMessage}`);
@@ -525,6 +532,14 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
     const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
     if (selectedPhotos.length === 0) throw new Error(`AI picked photos ${draft.photoIds.join(", ")} which are not in the available set`);
 
+    // See processMetaAdsLaunch's comment on isLeaseholdSale/targetAreasForDisplay --
+    // same fix here so the draft's displayed "Area target" line reflects the
+    // real deterministic list this will actually be targeted to on launch,
+    // not the AI's own separate (and for leasehold sale, never-populated)
+    // targetAreas field.
+    const isLeaseholdSale = project.project_type === "villa" && project.offering_type === "sale";
+    const targetAreasForDisplay = isLeaseholdSale ? LEASEHOLD_TARGET_CITIES : draft.targetAreas;
+
     const { data: inserted, error: insertError } = await supabase
       .from("meta_ad_campaigns")
       .insert({
@@ -540,7 +555,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
         status: "draft",
         launched_by: "human",
         research_summary: draft.targetSummary,
-        target_areas: draft.targetAreas,
+        target_areas: targetAreasForDisplay,
       })
       .select("id")
       .single();

@@ -295,7 +295,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                     {c.research_summary && <p className="text-xs italic text-muted-foreground">Riset AI: {c.research_summary}</p>}
                     {c.target_areas && c.target_areas.length > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        Area target hasil riset AI: <span className="font-medium">{c.target_areas.join(", ")}</span>
+                        Area target iklan ini: <span className="font-medium">{c.target_areas.join(", ")}</span>
                       </p>
                     )}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
