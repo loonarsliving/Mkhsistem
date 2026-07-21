@@ -275,3 +275,11 @@ export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
  * against this fixed id instead of a role_permissions grant.
  */
 export const MANAGEMENT_PROPERTY_BRANCH_ID = "4d61f863-3358-4068-b80e-9770e882820e";
+
+/**
+ * The Jogja branch (code JOG). Right now Jogja is the only branch with a
+ * Markom employee, so the owner wants the whole Markom page group visible
+ * only to Markom + Jogja's own Kepala Cabang + Super Admin -- not every
+ * branch head. See getCurrentSession() in lib/rbac/session.ts.
+ */
+export const JOGJA_BRANCH_ID = "fdeb7f3a-e211-4e6d-a2a6-35162378e3ae";

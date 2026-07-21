@@ -117,6 +117,23 @@ export const PERMISSIONS = {
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
+/**
+ * Every branch shares the "Kepala Cabang" role, so these can't be scoped to
+ * just Jogja via role_permissions alone -- RLS still needs the role grant
+ * (removing it would break Jogja's own Kepala Cabang's queries too, since
+ * kpi_tasks/content_planner RLS already scopes each Kepala Cabang to their
+ * own branch_id). getCurrentSession() strips these back out of the session
+ * for any Kepala Cabang whose branch isn't Jogja, so the Markom pages/nav
+ * only ever render for Jogja's own branch head.
+ */
+export const MARKOM_KEPALA_CABANG_PERMISSIONS = [
+  "kpi_task.view_branch",
+  "kpi_task.assign",
+  "kpi_task.verify",
+  "content_planner.view",
+  "content_planner.manage",
+] as const satisfies readonly PermissionKey[];
+
 /** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
 export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
   [ROLE_KEYS.SUPER_ADMIN]: Object.values(PERMISSIONS),
@@ -144,16 +161,13 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
     PERMISSIONS.CRM_ANALYTICS_VIEW_EXECUTIVE,
     PERMISSIONS.CRM_PROJECT_MANAGE,
-    PERMISSIONS.CRM_PROJECT_PHOTO_MANAGE,
-    PERMISSIONS.CONTENT_SUBMISSION_MANAGE,
-    PERMISSIONS.CONTENT_PLANNER_VIEW,
-    PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
-    PERMISSIONS.KPI_TASK_VIEW_ALL,
-    PERMISSIONS.KPI_TASK_ASSIGN,
-    PERMISSIONS.KPI_TASK_VERIFY,
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    // Markom pages (Checklist/Assign/Ranking/Foto Project/Content
+    // Studio/Content Planner/Content Audit/Promo Broadcast) are
+    // deliberately NOT granted here -- owner's call: only the Markom role,
+    // Jogja's own Kepala Cabang, and Super Admin get Markom access for now.
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -179,21 +193,15 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SALES_TARGET_MANAGE,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
     PERMISSIONS.CRM_PROJECT_MANAGE,
-    PERMISSIONS.CRM_PROJECT_PHOTO_MANAGE,
-    PERMISSIONS.CONTENT_SUBMISSION_MANAGE,
-    PERMISSIONS.CONTENT_PLANNER_VIEW,
-    PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
-    PERMISSIONS.KPI_TASK_VIEW_ALL,
-    PERMISSIONS.KPI_TASK_ASSIGN,
-    PERMISSIONS.KPI_TASK_VERIFY,
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
     PERMISSIONS.SP1_WARNING_MANAGE,
     PERMISSIONS.SP1_WARNING_VIEW_ALL,
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    // Markom pages deliberately NOT granted here -- see Direktur Utama note.
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -233,6 +241,13 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
     PERMISSIONS.SALES_TARGET_VIEW_BRANCH,
     PERMISSIONS.CRM_ANALYTICS_VIEW_BRANCH,
+    // kpi_task.* / content_planner.* (Markom pages) stay granted at the role
+    // level -- every branch shares this role and RLS already scopes each
+    // Kepala Cabang to their own branch_id, so this can't leak Jogja's data
+    // to another branch. getCurrentSession() strips these back out of the
+    // session for any Kepala Cabang whose branch isn't Jogja (see
+    // MARKOM_KEPALA_CABANG_PERMISSIONS), so the pages/nav only render for
+    // Jogja's own head.
     PERMISSIONS.KPI_TASK_VIEW_BRANCH,
     PERMISSIONS.KPI_TASK_ASSIGN,
     PERMISSIONS.KPI_TASK_VERIFY,
