@@ -47,6 +47,13 @@ async function tick(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  console.log(
+    "[render-worker] DEBUG env keys present:",
+    Object.keys(process.env)
+      .filter((k) => k.includes("SUPABASE") || k.includes("GOOGLE") || k.includes("RENDER"))
+      .join(", ") || "(none matched)",
+  );
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
     process.exit(1);
