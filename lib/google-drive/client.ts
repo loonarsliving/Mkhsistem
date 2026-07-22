@@ -13,8 +13,9 @@ import { JWT } from "google-auth-library";
  * Required env vars (unset until the service account + Shared Drive/folder
  * exist -- isGoogleDriveConfigured() gates every caller so upload/read paths
  * fail with a clear message instead of a confusing auth error):
- * - GOOGLE_DRIVE_CLIENT_EMAIL: service account email
- * - GOOGLE_DRIVE_PRIVATE_KEY: service account private key (PEM, \n-escaped)
+ * - GOOGLE_SERVICE_ACCOUNT_JSON: the full service account key file's JSON
+ *   contents (client_email + private_key are read out of it), pasted as one
+ *   env var exactly as downloaded from Google Cloud Console.
  * - GOOGLE_DRIVE_ROOT_FOLDER_ID: id of the shared folder/Shared Drive the
  *   service account has Content Manager (or Editor) access to -- service
  *   accounts have no storage quota of their own, so this must be a folder a
@@ -25,13 +26,30 @@ const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 
+interface ServiceAccountKey {
+  client_email: string;
+  private_key: string;
+}
+
+function parseServiceAccountJson(): ServiceAccountKey | null {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ServiceAccountKey>;
+    if (!parsed.client_email || !parsed.private_key) return null;
+    return { client_email: parsed.client_email, private_key: parsed.private_key };
+  } catch {
+    return null;
+  }
+}
+
 export function isGoogleDriveConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY && process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
+  return Boolean(parseServiceAccountJson() && process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
 }
 
 function requireRootFolderId(): string {
   const id = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-  if (!id) throw new Error("Google Drive belum dikonfigurasi -- set env var GOOGLE_DRIVE_CLIENT_EMAIL, GOOGLE_DRIVE_PRIVATE_KEY, dan GOOGLE_DRIVE_ROOT_FOLDER_ID.");
+  if (!id) throw new Error("Google Drive belum dikonfigurasi -- set env var GOOGLE_SERVICE_ACCOUNT_JSON dan GOOGLE_DRIVE_ROOT_FOLDER_ID.");
   return id;
 }
 
@@ -40,11 +58,12 @@ let cachedClient: JWT | null = null;
 function getJwtClient(): JWT {
   if (cachedClient) return cachedClient;
 
-  const email = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const key = process.env.GOOGLE_DRIVE_PRIVATE_KEY;
-  if (!email || !key) throw new Error("Google Drive belum dikonfigurasi -- set env var GOOGLE_DRIVE_CLIENT_EMAIL dan GOOGLE_DRIVE_PRIVATE_KEY.");
+  const serviceAccount = parseServiceAccountJson();
+  if (!serviceAccount) {
+    throw new Error("Google Drive belum dikonfigurasi -- set env var GOOGLE_SERVICE_ACCOUNT_JSON (isi file JSON service account lengkap, client_email + private_key harus ada).");
+  }
 
-  cachedClient = new JWT({ email, key: key.replace(/\\n/g, "\n"), scopes: [DRIVE_SCOPE] });
+  cachedClient = new JWT({ email: serviceAccount.client_email, key: serviceAccount.private_key.replace(/\\n/g, "\n"), scopes: [DRIVE_SCOPE] });
   return cachedClient;
 }
 
