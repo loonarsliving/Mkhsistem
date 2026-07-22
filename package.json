@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "supabase:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public > types/database.types.ts",
     "seed:users": "tsx scripts/seed-users.ts",
-    "render-worker": "tsx scripts/render-worker.ts",
+    "render-worker": "NODE_OPTIONS=--conditions=react-server tsx scripts/render-worker.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
