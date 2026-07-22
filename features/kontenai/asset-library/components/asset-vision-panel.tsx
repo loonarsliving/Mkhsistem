@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Palette, RefreshCw, Sparkles, Tags } from "lucide-react";
+import { AlertTriangle, Clock, Palette, RefreshCw, Sparkles, Tags } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import type { KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories
 
 interface AssetVisionPanelProps {
   asset: KontenAiAssetWithCreator;
+}
+
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 /** Gemini Vision metadata section of the asset detail view (AssetPreviewDialog) -- loading/success/error states plus the "Analyze Again" retry button (Sprint 2). Not rendered at all for asset types Gemini Vision doesn't support (audio/logo/brand_guideline/font/template/document). */
@@ -117,6 +123,23 @@ export function AssetVisionPanel({ asset }: AssetVisionPanelProps) {
                     </Badge>
                   ))}
                 </div>
+              </div>
+            )}
+            {asset.asset_type === "video" && asset.ai_scene_summary.length > 0 && (
+              <div>
+                <p className="mb-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" /> Scene Summary
+                </p>
+                <ol className="space-y-2 border-l pl-3">
+                  {asset.ai_scene_summary.map((scene, index) => (
+                    <li key={`${scene.timestampSeconds}-${index}`} className="flex gap-2">
+                      <Badge variant="outline" className="h-fit shrink-0 font-mono text-xs">
+                        {formatTimestamp(scene.timestampSeconds)}
+                      </Badge>
+                      <p className="text-sm">{scene.description}</p>
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
           </div>

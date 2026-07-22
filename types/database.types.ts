@@ -2812,6 +2812,7 @@ export interface Database {
           ai_mood: string | null;
           ai_analyzed_at: string | null;
           ai_error: string | null;
+          ai_scene_summary: Json;
           created_by: string;
           updated_by: string | null;
           created_at: string;
@@ -2848,6 +2849,7 @@ export interface Database {
           ai_mood?: string | null;
           ai_analyzed_at?: string | null;
           ai_error?: string | null;
+          ai_scene_summary?: Json;
           created_by: string;
           updated_by?: string | null;
           created_at?: string;

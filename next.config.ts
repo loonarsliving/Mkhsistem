@@ -16,6 +16,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  // KontenAI Video Intelligence (features/kontenai/asset-library) shells out to
+  // the static ffmpeg binary from @ffmpeg-installer/ffmpeg to extract video
+  // keyframes server-side. Next.js's file tracer resolves it fine via
+  // require.resolve at runtime, but this makes the inclusion explicit so a
+  // future tracer change can't silently drop the binary from the deployed
+  // serverless function.
+  outputFileTracingIncludes: {
+    "/kontenai/asset-library": ["./node_modules/@ffmpeg-installer/**/*"],
+  },
   images: {
     remotePatterns: supabaseHostname
       ? [

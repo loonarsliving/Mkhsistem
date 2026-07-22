@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
-import { analyzeAssetWithGeminiVision } from "@/lib/ai/domains/kontenai-vision";
+import { analyzeAssetWithGeminiVision, analyzeVideoKeyframe, analyzeVideoWithoutFrames, combineVideoSceneAnalysis } from "@/lib/ai/domains/kontenai-vision";
 import { createClient } from "@/lib/supabase/server";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
+import { extractVideoKeyframes } from "@/lib/video/extract-keyframes";
 import {
   getKontenAiAsset,
   markKontenAiAssetVisionPending,
@@ -17,6 +18,56 @@ import {
 import { actionSuccess, type ActionResult, type KontenAiAssetRow } from "@/types/domain";
 
 const ASSET_LIBRARY_PATH = "/kontenai/asset-library";
+
+async function analyzeImageAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url">) {
+  const imageBase64 = await fetchUrlAsBase64(asset.public_url);
+  return analyzeAssetWithGeminiVision({
+    filename: asset.filename,
+    currentTitle: asset.title,
+    assetType: "image",
+    imageBase64,
+    imageMimeType: "image/jpeg",
+  });
+}
+
+/**
+ * Real "Video Intelligence": extracts keyframes with ffmpeg, sends every
+ * frame to Gemini Vision individually (one real vision call per frame),
+ * then combines every frame's scene caption into one consolidated
+ * video-level metadata result. Falls back to the filename/context-only
+ * analysis (analyzeVideoWithoutFrames) only if extraction yields zero
+ * usable frames -- never fails the whole analysis just because one frame
+ * failed to decode.
+ */
+async function analyzeVideoAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url" | "duration_seconds">) {
+  const frames = await extractVideoKeyframes(asset.public_url, asset.duration_seconds, { maxFrames: 8, minIntervalSeconds: 5 });
+
+  if (frames.length === 0) {
+    const fallback = await analyzeVideoWithoutFrames(asset.filename, asset.title);
+    return { result: fallback, sceneSummary: [] as { timestampSeconds: number; description: string }[] };
+  }
+
+  const sceneSummary = await Promise.all(
+    frames.map(async (frame) => ({
+      timestampSeconds: frame.timestampSeconds,
+      description: await analyzeVideoKeyframe({
+        base64: frame.base64,
+        mimeType: frame.mimeType,
+        timestampSeconds: frame.timestampSeconds,
+        filename: asset.filename,
+      }),
+    })),
+  );
+
+  const result = await combineVideoSceneAnalysis({
+    filename: asset.filename,
+    currentTitle: asset.title,
+    durationSeconds: asset.duration_seconds,
+    scenes: sceneSummary,
+  });
+
+  return { result, sceneSummary };
+}
 
 /**
  * Runs Gemini Vision on one asset and persists the result -- shared by the
@@ -29,7 +80,7 @@ const ASSET_LIBRARY_PATH = "/kontenai/asset-library";
  */
 export async function runVisionAnalysisAndSave(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  asset: Pick<KontenAiAssetRow, "id" | "title" | "filename" | "asset_type" | "public_url">,
+  asset: Pick<KontenAiAssetRow, "id" | "title" | "filename" | "asset_type" | "public_url" | "duration_seconds">,
 ): Promise<{ success: boolean; error?: string }> {
   if (!isVisionEligibleAssetType(asset.asset_type as KontenAiAssetType)) {
     return { success: false, error: "Tipe aset ini tidak didukung Gemini Vision" };
@@ -38,22 +89,14 @@ export async function runVisionAnalysisAndSave(
   try {
     await markKontenAiAssetVisionPending(supabase, asset.id);
 
-    let imageBase64: string | undefined;
-    let imageMimeType: string | undefined;
     if (asset.asset_type === "image") {
-      imageBase64 = await fetchUrlAsBase64(asset.public_url);
-      imageMimeType = "image/jpeg";
+      const result = await analyzeImageAsset(asset);
+      await saveKontenAiAssetVisionResult(supabase, asset.id, result);
+    } else {
+      const { result, sceneSummary } = await analyzeVideoAsset(asset);
+      await saveKontenAiAssetVisionResult(supabase, asset.id, { ...result, sceneSummary });
     }
 
-    const result = await analyzeAssetWithGeminiVision({
-      filename: asset.filename,
-      currentTitle: asset.title,
-      assetType: asset.asset_type as "image" | "video",
-      imageBase64,
-      imageMimeType,
-    });
-
-    await saveKontenAiAssetVisionResult(supabase, asset.id, result);
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal menganalisis aset dengan Gemini Vision";
@@ -62,7 +105,7 @@ export async function runVisionAnalysisAndSave(
   }
 }
 
-/** "Analyze Again" -- re-runs Gemini Vision on an already-uploaded asset, whatever its current ai_vision_status is. */
+/** "Analyze Again" -- re-runs Gemini Vision (image: real vision; video: re-extracts keyframes and re-runs Video Intelligence) on an already-uploaded asset, whatever its current ai_vision_status is. */
 export async function analyzeAssetVisionAction(assetId: string): Promise<ActionResult<{ analyzed: boolean; error?: string }>> {
   await requireKontenAiAccess();
   const supabase = await createClient();

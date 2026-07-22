@@ -1,14 +1,39 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
+import type { Json } from "@/types/database.types";
 import type { KontenAiAssetRow } from "@/types/domain";
 
 export type KontenAiAssetType = "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
 export type KontenAiAssetStatus = "draft" | "active" | "archived";
 export type KontenAiAssetVisionStatus = "not_analyzed" | "pending" | "completed" | "failed";
 
-export type KontenAiAssetWithCreator = KontenAiAssetRow & { creator: { full_name: string } | null };
+export interface KontenAiVideoSceneSummaryItem {
+  timestampSeconds: number;
+  description: string;
+}
+
+export type KontenAiAssetWithCreator = Omit<KontenAiAssetRow, "ai_scene_summary"> & {
+  creator: { full_name: string } | null;
+  ai_scene_summary: KontenAiVideoSceneSummaryItem[];
+};
 
 const SELECT_COLUMNS =
-  "id, title, description, filename, asset_type, storage_path, public_url, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, ai_vision_status, ai_title, ai_description, ai_tags, ai_category, ai_detected_objects, ai_dominant_colors, ai_mood, ai_analyzed_at, ai_error, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
+  "id, title, description, filename, asset_type, storage_path, public_url, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, ai_vision_status, ai_title, ai_description, ai_tags, ai_category, ai_detected_objects, ai_dominant_colors, ai_mood, ai_analyzed_at, ai_error, ai_scene_summary, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
+
+function parseSceneSummary(raw: unknown): KontenAiVideoSceneSummaryItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      timestampSeconds: typeof item.timestampSeconds === "number" ? item.timestampSeconds : Number(item.timestampSeconds) || 0,
+      description: typeof item.description === "string" ? item.description : "",
+    }))
+    .filter((item) => item.description.length > 0)
+    .sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+}
+
+function mapAssetRow(row: Record<string, unknown>): KontenAiAssetWithCreator {
+  return { ...row, ai_scene_summary: parseSceneSummary(row.ai_scene_summary) } as KontenAiAssetWithCreator;
+}
 
 export interface KontenAiAssetListFilters {
   search?: string;
@@ -68,13 +93,13 @@ export async function listKontenAiAssets(supabase: TypedSupabaseClient, filters:
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { data: (data ?? []) as unknown as KontenAiAssetWithCreator[], total: count ?? 0 };
+  return { data: (data ?? []).map((row) => mapAssetRow(row as unknown as Record<string, unknown>)), total: count ?? 0 };
 }
 
 export async function getKontenAiAsset(supabase: TypedSupabaseClient, id: string): Promise<KontenAiAssetWithCreator> {
   const { data, error } = await supabase.from("kontenai_assets").select(SELECT_COLUMNS).eq("id", id).is("deleted_at", null).single();
   if (error) throw error;
-  return data as unknown as KontenAiAssetWithCreator;
+  return mapAssetRow(data as unknown as Record<string, unknown>);
 }
 
 export interface CreateKontenAiAssetInput {
@@ -214,6 +239,8 @@ export interface SaveKontenAiAssetVisionResultInput {
   detectedObjects: string[];
   dominantColors: string[];
   mood: string;
+  /** Per-keyframe scene captions for video assets (Sprint 2 Video Intelligence) -- omitted/empty for images. */
+  sceneSummary?: KontenAiVideoSceneSummaryItem[];
 }
 
 export async function saveKontenAiAssetVisionResult(
@@ -234,6 +261,7 @@ export async function saveKontenAiAssetVisionResult(
       ai_mood: result.mood,
       ai_analyzed_at: new Date().toISOString(),
       ai_error: null,
+      ai_scene_summary: (result.sceneSummary ?? []) as unknown as Json,
     })
     .eq("id", id)
     .select()

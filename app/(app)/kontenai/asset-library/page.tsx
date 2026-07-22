@@ -6,6 +6,16 @@ import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "Asset Library" };
 
+/**
+ * Video keyframe extraction + multiple sequential Gemini Vision calls
+ * (Analyze / Analyze Again on video assets) can take well past the
+ * Next.js/Vercel default Node function timeout -- 60s is safe across every
+ * Vercel plan tier (Hobby included) and generous enough for the small
+ * (<=8 frame) batches this sprint extracts. Server actions inherit their
+ * calling route's maxDuration, so this covers the vision actions too.
+ */
+export const maxDuration = 60;
+
 export default async function AssetLibraryPage() {
   await requireKontenAiAccess();
 
