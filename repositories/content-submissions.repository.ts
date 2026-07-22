@@ -156,6 +156,11 @@ export function buildZernioMediaItems(row: {
   return [{ url: row.public_url, type: "image" as const }, ...extra];
 }
 
+/** Owner's call: once a video has actually been published somewhere (Zernio or manual), there's no more reason to keep the original file taking up Storage -- unlike photos (small, kept for the carousel/history display), videos are the bulk of Content Studio's storage footprint. Best-effort: called right after a submission flips to 'published', never blocks or fails the publish itself if the delete errors (e.g. already gone). storage_path/public_url stay on the row for history/audit even after the underlying object is gone. */
+export async function deleteSubmissionVideoFromStorage(supabase: TypedSupabaseClient, storagePath: string): Promise<void> {
+  await supabase.storage.from("markom-content-submissions").remove([storagePath]);
+}
+
 export async function deleteContentSubmission(supabase: TypedSupabaseClient, id: string) {
   const { error } = await supabase
     .from("markom_content_submissions")

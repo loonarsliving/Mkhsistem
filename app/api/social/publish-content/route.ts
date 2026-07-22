@@ -4,7 +4,12 @@ import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildZernioMediaItems, markContentPublishedViaZernio, markContentPublishFailed } from "@/repositories/content-submissions.repository";
+import {
+  buildZernioMediaItems,
+  deleteSubmissionVideoFromStorage,
+  markContentPublishedViaZernio,
+  markContentPublishFailed,
+} from "@/repositories/content-submissions.repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +44,9 @@ export async function POST() {
 
   const { data: due, error } = await supabase
     .from("markom_content_submissions")
-    .select("id, media_type, caption, public_url, content_focus, platform, submitted_by, photos:markom_content_submission_photos(public_url, display_order)")
+    .select(
+      "id, media_type, caption, public_url, storage_path, content_focus, platform, submitted_by, photos:markom_content_submission_photos(public_url, display_order)",
+    )
     .eq("status", "scheduled")
     .lte("scheduled_publish_at", new Date().toISOString())
     .order("scheduled_publish_at", { ascending: true })
@@ -74,6 +81,9 @@ export async function POST() {
         zernioPublishStatus: result.status,
         zernioPermalink: result.permalink,
       });
+      if (row.media_type === "video") {
+        await deleteSubmissionVideoFromStorage(supabase, row.storage_path).catch(() => undefined);
+      }
       published += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

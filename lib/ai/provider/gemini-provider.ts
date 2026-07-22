@@ -49,6 +49,67 @@ export class GeminiProvider implements AIProvider {
     const overallStartedAt = Date.now();
     const maxAttempts = request.maxAttempts ?? this.options.retryMaxAttempts;
 
+    // Video always goes through the Files API (uploaded once, reused across
+    // every retry attempt, cleaned up in the finally below) rather than
+    // inline base64 -- Gemini's generateContent has a ~20MB total inline-
+    // request ceiling, which is why video review used to be capped at
+    // ~19MB (see MAX_INLINE_VIDEO_REVIEW_BYTES's removal). Files API
+    // handles up to 2GB, comfortably covering the 20-50MB clips Content
+    // Studio allows.
+    let uploadedVideo: { name: string; uri: string; mimeType: string } | null = null;
+    if (request.video) {
+      try {
+        uploadedVideo = await this.uploadVideoFile(request.video);
+      } catch (err) {
+        if (err instanceof AIProviderError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw new AIProviderError(`Gemini video upload failed: ${message}`, "gemini", true, err);
+      }
+    }
+
+    try {
+      return await this.generateWithVideo(request, maxAttempts, overallStartedAt, uploadedVideo);
+    } finally {
+      if (uploadedVideo) {
+        // Best-effort cleanup -- Google auto-expires these after 48h anyway,
+        // so a failed delete here never leaves anything permanently orphaned.
+        await this.client.files.delete({ name: uploadedVideo.name }).catch(() => undefined);
+      }
+    }
+  }
+
+  /** Uploads a video to Gemini's Files API and polls until it's ACTIVE (ready to reference in a generateContent call) or FAILED/timed out. */
+  private async uploadVideoFile(video: { data: string; mimeType: string }): Promise<{ name: string; uri: string; mimeType: string }> {
+    const buffer = Buffer.from(video.data, "base64");
+    const blob = new Blob([buffer], { type: video.mimeType });
+    const uploaded = await this.client.files.upload({ file: blob, config: { mimeType: video.mimeType } });
+    if (!uploaded.name || !uploaded.uri) {
+      throw new AIProviderError("Gemini Files API did not return a file name/uri for the uploaded video", "gemini", false);
+    }
+
+    const name = uploaded.name;
+    let state = uploaded.state;
+    let uri = uploaded.uri;
+    const maxPolls = 30; // ~60s at 2s intervals -- plenty for the short-form clips Content Studio actually handles
+    for (let attempt = 0; attempt < maxPolls && state !== "ACTIVE"; attempt++) {
+      if (state === "FAILED") throw new AIProviderError("Gemini failed to process the uploaded video for review", "gemini", false);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const polled = await this.client.files.get({ name });
+      state = polled.state;
+      uri = polled.uri ?? uri;
+    }
+    if (state !== "ACTIVE") throw new AIProviderError("Gemini video processing timed out before it became ready to review", "gemini", true);
+
+    return { name, uri, mimeType: video.mimeType };
+  }
+
+  private async generateWithVideo(
+    request: AIGenerateRequest,
+    maxAttempts: number,
+    overallStartedAt: number,
+    uploadedVideo: { name: string; uri: string; mimeType: string } | null,
+  ): Promise<AIGenerateResponse> {
+
     // Shared circuit breaker, checked before spending any quota on this
     // call: if Gemini has been failing consecutively across the whole
     // fleet (not just this request), skip straight to the fallback instead
@@ -124,7 +185,7 @@ export class GeminiProvider implements AIProvider {
             ]);
           },
         },
-        () => this.callOnce(request.userPrompt, request.image, request.video, config),
+        () => this.callOnce(request.userPrompt, request.image, uploadedVideo, config),
       );
 
       const text = response.text ?? "";
@@ -165,7 +226,7 @@ export class GeminiProvider implements AIProvider {
   private async callOnce(
     userPrompt: string,
     image: AIGenerateRequest["image"],
-    video: AIGenerateRequest["video"],
+    videoFile: { uri: string; mimeType: string } | null,
     config: GenerateContentConfig,
   ): Promise<GenerateContentResult> {
     const timeoutMs = this.options.timeoutMs;
@@ -181,11 +242,14 @@ export class GeminiProvider implements AIProvider {
     // every other call keeps sending contents as a plain string, unchanged.
     // image and video are never both set by any caller today (a review is
     // either a photo or a video, never both), but if they were, Gemini
-    // happily accepts multiple inlineData parts in one turn.
-    const mediaParts = [
+    // happily accepts an inlineData image part alongside a fileData video
+    // part in one turn. Video always references the Files API upload
+    // (see generate()/uploadVideoFile) instead of inlineData -- that's what
+    // lifts video review off the ~20MB inline-request ceiling.
+    const mediaParts: ({ inlineData: { mimeType: string; data: string } } | { fileData: { fileUri: string; mimeType: string } })[] = [
       image ? { inlineData: { mimeType: image.mimeType, data: image.data } } : null,
-      video ? { inlineData: { mimeType: video.mimeType, data: video.data } } : null,
-    ].filter((part): part is { inlineData: { mimeType: string; data: string } } => part !== null);
+      videoFile ? { fileData: { fileUri: videoFile.uri, mimeType: videoFile.mimeType } } : null,
+    ].filter((part): part is NonNullable<typeof part> => part !== null);
     const contents = mediaParts.length > 0 ? [{ role: "user" as const, parts: [{ text: userPrompt }, ...mediaParts] }] : userPrompt;
 
     try {
