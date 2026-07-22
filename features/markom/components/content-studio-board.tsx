@@ -293,9 +293,13 @@ export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
             return (
               <Card key={s.id}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
-                  <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-md bg-muted sm:w-32">
+                  <div className="relative flex h-32 w-full shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted p-2 text-center sm:w-32">
                     {s.media_type === "video" ? (
-                      <video src={s.public_url} className="h-full w-full object-cover" muted />
+                      s.status === "published" ? (
+                        <p className="text-xs text-muted-foreground">Video sudah tayang -- file dihapus dari storage untuk hemat ruang</p>
+                      ) : (
+                        <video src={s.public_url} className="h-full w-full object-cover" muted />
+                      )
                     ) : (
                       <Image src={s.public_url} alt={briefTitle} fill sizes="128px" className="object-cover" unoptimized />
                     )}

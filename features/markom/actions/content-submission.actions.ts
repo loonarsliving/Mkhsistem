@@ -11,6 +11,7 @@ import {
   buildZernioMediaItems,
   createContentSubmission,
   deleteContentSubmission,
+  deleteSubmissionVideoFromStorage,
   getContentSubmission,
   listContentSubmissions,
   markContentPublished,
@@ -24,8 +25,8 @@ import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 const CONTENT_STUDIO_PATH = "/markom/content-studio";
 
-/** Gemini's inline (non-Files-API) request body has a practical ~20MB ceiling -- a video under this is sent whole for a real watch-it review; anything bigger falls back to the caption/brief-only review (see reviewContentSubmission) rather than failing the whole submission. Content Studio itself allows uploads up to 50MB (MAX_CONTENT_SIZE_BYTES, content-studio-board.tsx), so this genuinely triggers for larger clips. */
-const MAX_INLINE_VIDEO_REVIEW_BYTES = 19 * 1024 * 1024;
+/** GeminiProvider now uploads video through Gemini's Files API (handles up to 2GB), not inline base64 (which had a ~20MB ceiling) -- so this only needs to match Content Studio's own upload cap (MAX_CONTENT_SIZE_BYTES, content-studio-board.tsx), as a sanity check rather than a real Gemini limitation. A video under this is sent whole for a real watch-it review; anything bigger (shouldn't happen given the upload cap, but just in case) falls back to the caption/brief-only review (see reviewContentSubmission) rather than failing the whole submission. */
+const MAX_VIDEO_REVIEW_BYTES = 50 * 1024 * 1024;
 
 function productForFocus(focus: ContentStudioFocus): ZernioProduct {
   return focus === "beauty" ? "beauty" : "property";
@@ -198,7 +199,7 @@ async function runReviewAndSave(
       try {
         const base64 = await fetchUrlAsBase64(input.mediaUrl);
         const approxBytes = Math.ceil((base64.length * 3) / 4);
-        if (approxBytes <= MAX_INLINE_VIDEO_REVIEW_BYTES) videoBase64 = base64;
+        if (approxBytes <= MAX_VIDEO_REVIEW_BYTES) videoBase64 = base64;
       } catch {
         videoBase64 = undefined;
       }
@@ -286,6 +287,14 @@ export async function markContentPublishedAction(submissionId: string): Promise<
     return actionError(err instanceof Error ? err.message : "Gagal menandai konten selesai");
   }
 
+  // Best-effort storage cleanup -- once it's published somewhere, the
+  // original video no longer needs to sit in Storage (see
+  // deleteSubmissionVideoFromStorage's doc). Never blocks the "mark
+  // published" outcome even if this fails.
+  if (submission.media_type === "video") {
+    await deleteSubmissionVideoFromStorage(supabase, submission.storage_path).catch(() => undefined);
+  }
+
   revalidatePath(CONTENT_STUDIO_PATH);
   return actionSuccess();
 }
@@ -324,6 +333,9 @@ export async function publishContentNowAction(submissionId: string): Promise<Act
       zernioPublishStatus: result.status,
       zernioPermalink: result.permalink,
     });
+    if (submission.media_type === "video") {
+      await deleteSubmissionVideoFromStorage(supabase, submission.storage_path).catch(() => undefined);
+    }
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Zernio publish gagal";
     await markContentPublishFailed(supabase, submissionId, reason);
