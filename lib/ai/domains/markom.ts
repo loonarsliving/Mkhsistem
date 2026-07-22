@@ -608,7 +608,7 @@ export interface ContentReviewInput {
   /** Only set for images -- Gemini can actually look at the photo (see AIGenerateRequest.image). */
   imageBase64?: string;
   imageMimeType?: string;
-  /** Only set for videos Gemini can actually watch (see AIGenerateRequest.video) -- undefined means the video was too large to send inline (see MAX_INLINE_VIDEO_REVIEW_BYTES, features/markom/actions/content-submission.actions.ts), in which case the review falls back to caption/brief-only and says so explicitly to Markom. */
+  /** Only set for videos Gemini can actually watch (see AIGenerateRequest.video -- uploaded through Gemini's Files API, handling up to 2GB) -- undefined means fetching the video itself failed or it exceeded the sanity cap (see MAX_VIDEO_REVIEW_BYTES, features/markom/actions/content-submission.actions.ts), in which case the review falls back to caption/brief-only and says so explicitly to Markom. */
   videoBase64?: string;
   videoMimeType?: string;
 }
@@ -651,12 +651,13 @@ function parseContentReviewJson(text: string): ContentReviewResult {
  * the actual photo (AIGenerateRequest.image, gemini-provider.ts) and judges
  * it the way a Branch Manager looking at the file would: does it match the
  * brief's format/subject, is the framing/lighting/quality good enough to
- * post. For video, Gemini genuinely watches it too (AIGenerateRequest.video
- * -- frames, motion, audio) whenever videoBase64 was actually fetched (see
- * MAX_INLINE_VIDEO_REVIEW_BYTES in content-submission.actions.ts); only
- * when a video is too large to send inline does this fall back to a
- * caption/brief-only review, and the prompt makes the AI say so explicitly
- * in that case rather than pretend it watched something it didn't.
+ * post. For video, Gemini genuinely watches it too (AIGenerateRequest.video,
+ * uploaded through Gemini's Files API so there's no ~20MB inline ceiling)
+ * whenever videoBase64 was actually fetched (see MAX_VIDEO_REVIEW_BYTES in
+ * content-submission.actions.ts); only when fetching the video fails or it
+ * exceeds that sanity cap does this fall back to a caption/brief-only
+ * review, and the prompt makes the AI say so explicitly in that case rather
+ * than pretend it watched something it didn't.
  */
 export async function reviewContentSubmission(input: ContentReviewInput): Promise<ContentReviewResult> {
   const systemPrompt = await getSystemPrompt("markom");
