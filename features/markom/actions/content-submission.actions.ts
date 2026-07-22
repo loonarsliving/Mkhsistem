@@ -8,6 +8,7 @@ import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioPr
 import { createClient } from "@/lib/supabase/server";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import {
+  buildZernioMediaItems,
   createContentSubmission,
   deleteContentSubmission,
   getContentSubmission,
@@ -22,6 +23,9 @@ import {
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 const CONTENT_STUDIO_PATH = "/markom/content-studio";
+
+/** Gemini's inline (non-Files-API) request body has a practical ~20MB ceiling -- a video under this is sent whole for a real watch-it review; anything bigger falls back to the caption/brief-only review (see reviewContentSubmission) rather than failing the whole submission. Content Studio itself allows uploads up to 50MB (MAX_CONTENT_SIZE_BYTES, content-studio-board.tsx), so this genuinely triggers for larger clips. */
+const MAX_INLINE_VIDEO_REVIEW_BYTES = 19 * 1024 * 1024;
 
 function productForFocus(focus: ContentStudioFocus): ZernioProduct {
   return focus === "beauty" ? "beauty" : "property";
@@ -44,8 +48,8 @@ interface CreateContentSubmissionInput {
   beautyContentItemId?: string;
   contentFocus: ContentStudioFocus;
   platform: "instagram" | "tiktok";
-  storagePath: string;
-  publicUrl: string;
+  /** 1 item = single photo/video; 2-10 items = an image carousel (never a video). First item is always what ends up on the submission row itself (storage_path/public_url); the rest go into markom_content_submission_photos. */
+  media: { storagePath: string; publicUrl: string }[];
   mediaType: "image" | "video";
   mimeType: string;
   caption?: string;
@@ -69,6 +73,10 @@ interface CreateContentSubmissionInput {
 export async function createContentSubmissionAction(input: CreateContentSubmissionInput): Promise<ActionResult<{ submissionId: string; aiReviewed: boolean }>> {
   const session = await requirePermission("content_submission.manage");
   const supabase = await createClient();
+
+  if (input.media.length === 0) return actionError("Tidak ada foto/video yang diupload");
+  if (input.media.length > 10) return actionError("Maksimal 10 foto untuk satu carousel");
+  if (input.mediaType === "video" && input.media.length > 1) return actionError("Video tidak bisa digabung dengan file lain -- upload satu video saja");
 
   let taskTitle = "Konten mandiri (tanpa checklist)";
   let taskDescription: string | null = null;
@@ -109,8 +117,9 @@ export async function createContentSubmissionAction(input: CreateContentSubmissi
       platform: input.platform,
       submitted_by: session.userId,
       media_type: input.mediaType,
-      storage_path: input.storagePath,
-      public_url: input.publicUrl,
+      storage_path: input.media[0].storagePath,
+      public_url: input.media[0].publicUrl,
+      extra_photos: input.media.slice(1).map((m) => ({ storage_path: m.storagePath, public_url: m.publicUrl })),
       caption: input.caption?.trim() || null,
       created_by: session.userId,
     });
@@ -124,7 +133,7 @@ export async function createContentSubmissionAction(input: CreateContentSubmissi
     taskDescription,
     caption: input.caption ?? null,
     mediaType: input.mediaType,
-    mediaUrl: input.publicUrl,
+    mediaUrl: input.media[0].publicUrl,
     mimeType: input.mimeType,
     contentFocus: input.contentFocus,
     platform: input.platform,
@@ -177,8 +186,22 @@ async function runReviewAndSave(
 ): Promise<boolean> {
   try {
     let imageBase64: string | undefined;
+    let videoBase64: string | undefined;
     if (input.mediaType === "image") {
       imageBase64 = await fetchUrlAsBase64(input.mediaUrl);
+    } else {
+      // A too-large or unreachable video falls back to the caption-only
+      // review path (reviewContentSubmission's videoBase64-undefined
+      // branch) instead of failing the whole submission -- fetch errors
+      // here are deliberately swallowed for the same reason imageBase64's
+      // fetch failure would otherwise abort the outer try/catch.
+      try {
+        const base64 = await fetchUrlAsBase64(input.mediaUrl);
+        const approxBytes = Math.ceil((base64.length * 3) / 4);
+        if (approxBytes <= MAX_INLINE_VIDEO_REVIEW_BYTES) videoBase64 = base64;
+      } catch {
+        videoBase64 = undefined;
+      }
     }
 
     const review = await reviewContentSubmission({
@@ -188,6 +211,8 @@ async function runReviewAndSave(
       mediaType: input.mediaType,
       imageBase64,
       imageMimeType: input.mimeType,
+      videoBase64,
+      videoMimeType: input.mimeType,
     });
 
     await saveContentReview(supabase, submissionId, {
@@ -290,7 +315,7 @@ export async function publishContentNowAction(submissionId: string): Promise<Act
     if (!account) return actionError(`Belum ada akun ${platform} yang terhubung ke Zernio untuk product line ini`);
 
     const result = await createZernioPost(
-      { accountId: account.id, platform, mediaUrl: submission.public_url, mediaType: submission.media_type, caption: submission.caption },
+      { accountId: account.id, platform, media: buildZernioMediaItems(submission), caption: submission.caption },
       product,
     );
     await markContentPublishedViaZernio(supabase, submissionId, {

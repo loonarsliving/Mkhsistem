@@ -4,7 +4,7 @@ import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { markContentPublishedViaZernio, markContentPublishFailed } from "@/repositories/content-submissions.repository";
+import { buildZernioMediaItems, markContentPublishedViaZernio, markContentPublishFailed } from "@/repositories/content-submissions.repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export async function POST() {
 
   const { data: due, error } = await supabase
     .from("markom_content_submissions")
-    .select("id, media_type, caption, public_url, content_focus, platform, submitted_by")
+    .select("id, media_type, caption, public_url, content_focus, platform, submitted_by, photos:markom_content_submission_photos(public_url, display_order)")
     .eq("status", "scheduled")
     .lte("scheduled_publish_at", new Date().toISOString())
     .order("scheduled_publish_at", { ascending: true })
@@ -65,7 +65,7 @@ export async function POST() {
       if (!account) throw new Error(`Belum ada akun ${platform} yang terhubung ke Zernio untuk product line ${product}`);
 
       const result = await createZernioPost(
-        { accountId: account.id, platform, mediaUrl: row.public_url, mediaType: row.media_type, caption: row.caption },
+        { accountId: account.id, platform, media: buildZernioMediaItems(row), caption: row.caption },
         product,
       );
       await markContentPublishedViaZernio(supabase, row.id, {

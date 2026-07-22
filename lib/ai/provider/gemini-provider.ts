@@ -124,7 +124,7 @@ export class GeminiProvider implements AIProvider {
             ]);
           },
         },
-        () => this.callOnce(request.userPrompt, request.image, config),
+        () => this.callOnce(request.userPrompt, request.image, request.video, config),
       );
 
       const text = response.text ?? "";
@@ -162,7 +162,12 @@ export class GeminiProvider implements AIProvider {
    * ...}} envelope) to classify retryability; wrapping it here would hide
    * that from the retry layer.
    */
-  private async callOnce(userPrompt: string, image: AIGenerateRequest["image"], config: GenerateContentConfig): Promise<GenerateContentResult> {
+  private async callOnce(
+    userPrompt: string,
+    image: AIGenerateRequest["image"],
+    video: AIGenerateRequest["video"],
+    config: GenerateContentConfig,
+  ): Promise<GenerateContentResult> {
     const timeoutMs = this.options.timeoutMs;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -172,11 +177,16 @@ export class GeminiProvider implements AIProvider {
       );
     });
 
-    // Multimodal (vision) shape only when an image is attached -- every
-    // other call keeps sending contents as a plain string, unchanged.
-    const contents = image
-      ? [{ role: "user" as const, parts: [{ text: userPrompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }]
-      : userPrompt;
+    // Multimodal (vision) shape only when an image/video is attached --
+    // every other call keeps sending contents as a plain string, unchanged.
+    // image and video are never both set by any caller today (a review is
+    // either a photo or a video, never both), but if they were, Gemini
+    // happily accepts multiple inlineData parts in one turn.
+    const mediaParts = [
+      image ? { inlineData: { mimeType: image.mimeType, data: image.data } } : null,
+      video ? { inlineData: { mimeType: video.mimeType, data: video.data } } : null,
+    ].filter((part): part is { inlineData: { mimeType: string; data: string } } => part !== null);
+    const contents = mediaParts.length > 0 ? [{ role: "user" as const, parts: [{ text: userPrompt }, ...mediaParts] }] : userPrompt;
 
     try {
       return await Promise.race([

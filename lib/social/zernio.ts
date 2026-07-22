@@ -204,8 +204,8 @@ export async function getRecentZernioMediaPerformance(
 export interface ZernioCreatePostInput {
   accountId: string;
   platform: ZernioPlatform;
-  mediaUrl: string;
-  mediaType: "image" | "video";
+  /** 1 item = single photo/video; 2-10 items = an image carousel (Content Studio, 0158) -- Zernio's own mediaItems field is already an array, this just actually uses more than 1 slot of it. */
+  media: { url: string; type: "image" | "video" }[];
   caption: string | null;
 }
 
@@ -221,7 +221,7 @@ export async function createZernioPost(input: ZernioCreatePostInput, product: Ze
   const result = await client.posts.createPost({
     body: {
       content: input.caption ?? "",
-      mediaItems: [{ type: input.mediaType, url: input.mediaUrl }],
+      mediaItems: input.media.map((m) => ({ type: m.type, url: m.url })),
       platforms: [{ platform: input.platform, accountId: input.accountId }],
       publishNow: true,
     },
