@@ -46,7 +46,13 @@ export async function generateStoryboardAction(creativeBriefId: string): Promise
       contentAngle: brief.content_angle,
     });
 
-    const scenes: KontenAiStoryboardScene[] = drafts.map((draft, index) => ({ ...draft, id: generateSceneId(), order: index }));
+    const scenes: KontenAiStoryboardScene[] = drafts.map((draft, index) => ({
+      ...draft,
+      id: generateSceneId(),
+      order: index,
+      selectedAssetId: null,
+      assetMatches: [],
+    }));
 
     const storyboard = await createKontenAiStoryboard(supabase, {
       creativeBriefId: brief.id,

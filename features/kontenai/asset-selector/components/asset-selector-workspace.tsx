@@ -1,163 +1,134 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Boxes, Wand2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { AssetSelection } from "@/features/kontenai/types";
-import {
-  listAssetLibraryAction,
-  listStoryboardsAction,
-  selectAssetsForStoryboardAction,
-} from "@/features/kontenai/asset-selector/actions/asset-selector.actions";
-import { MatchScoreBar } from "@/features/kontenai/asset-selector/components/match-score-badge";
-import { SceneMatchPanel } from "@/features/kontenai/asset-selector/components/scene-match-panel";
-import { StoryboardList } from "@/features/kontenai/asset-selector/components/storyboard-list";
+import { listAnalyzedAssetLibraryAction } from "@/features/kontenai/asset-selector/actions/select-assets.actions";
+import { SceneAssetCard } from "@/features/kontenai/asset-selector/components/scene-asset-card";
+import { useOverrideSceneAsset, useRunAssetSelection } from "@/features/kontenai/asset-selector/hooks/use-asset-selector-mutations";
+import { getStoryboardAction } from "@/features/kontenai/storyboard-engine/actions/storyboard.actions";
+import { StoryboardHistory } from "@/features/kontenai/storyboard-engine/components/storyboard-history";
 
-/** Per-storyboard selections, keyed by storyboard id then by scene id. */
-type SelectionsByStoryboard = Record<string, Record<string, AssetSelection>>;
+function WorkspacePlaceholder() {
+  return (
+    <Card>
+      <CardContent className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 py-10 text-center">
+        <Boxes className="h-8 w-8 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Pilih storyboard dari daftar di bawah, lalu klik &quot;Auto-Select Assets&quot;.</p>
+      </CardContent>
+    </Card>
+  );
+}
 
+/** Asset Selector's workspace: pick a storyboard -> auto-select assets per scene -> review/override alternatives -> completion status. */
 export function AssetSelectorWorkspace() {
-  const queryClient = useQueryClient();
-  const [activeStoryboardId, setActiveStoryboardId] = useState<string | null>(null);
-  const [selections, setSelections] = useState<SelectionsByStoryboard>({});
-  const [overriddenScenes, setOverriddenScenes] = useState<Record<string, true>>({});
+  const [activeStoryboardId, setActiveStoryboardId] = React.useState<string | null>(null);
 
-  const storyboardsQuery = useQuery({ queryKey: ["kontenai-asset-selector-storyboards"], queryFn: listStoryboardsAction });
-  const assetLibraryQuery = useQuery({ queryKey: ["kontenai-asset-selector-library"], queryFn: listAssetLibraryAction });
-
-  const runSelectionMutation = useMutation({
-    mutationFn: (storyboardId: string) => selectAssetsForStoryboardAction(storyboardId),
-    onSuccess: (result, storyboardId) => {
-      setSelections((prev) => ({
-        ...prev,
-        [storyboardId]: Object.fromEntries(result.map((s) => [s.sceneId, s])),
-      }));
-      setActiveStoryboardId(storyboardId);
-      queryClient.setQueryData(["kontenai-asset-selector-selection", storyboardId], result);
-    },
+  const {
+    data: storyboard,
+    isLoading: isStoryboardLoading,
+    isError: isStoryboardError,
+    error: storyboardError,
+  } = useQuery({
+    queryKey: ["kontenai-storyboard", activeStoryboardId],
+    queryFn: () => getStoryboardAction(activeStoryboardId!),
+    enabled: Boolean(activeStoryboardId),
   });
 
-  const storyboards = storyboardsQuery.data ?? [];
-  const assetLibrary = useMemo(() => assetLibraryQuery.data ?? [], [assetLibraryQuery.data]);
-  const assetById = useMemo(() => new Map(assetLibrary.map((a) => [a.id, a])), [assetLibrary]);
+  const {
+    data: assetLibrary,
+    isLoading: isLibraryLoading,
+    isError: isLibraryError,
+  } = useQuery({
+    queryKey: ["kontenai-analyzed-asset-library"],
+    queryFn: listAnalyzedAssetLibraryAction,
+  });
 
-  const activeStoryboard = storyboards.find((sb) => sb.id === activeStoryboardId) ?? null;
-  const activeSelections = activeStoryboardId ? selections[activeStoryboardId] : undefined;
+  const assetById = React.useMemo(() => new Map((assetLibrary ?? []).map((asset) => [asset.id, asset])), [assetLibrary]);
 
-  const averageScore = useMemo(() => {
-    if (!activeSelections) return null;
-    const values = Object.values(activeSelections);
-    if (values.length === 0) return null;
-    return values.reduce((sum, s) => sum + s.matchScore, 0) / values.length;
-  }, [activeSelections]);
+  const runSelectionMutation = useRunAssetSelection();
+  const overrideMutation = useOverrideSceneAsset();
 
-  function handleOverride(storyboardId: string, sceneId: string, assetId: string) {
-    setSelections((prev) => {
-      const current = prev[storyboardId]?.[sceneId];
-      if (!current) return prev;
-      return {
-        ...prev,
-        [storyboardId]: {
-          ...prev[storyboardId],
-          [sceneId]: { ...current, assetId, matchScore: current.matchScore, rationale: "Aset dipilih manual oleh pengguna, menggantikan hasil auto-select." },
-        },
-      };
-    });
-    setOverriddenScenes((prev) => ({ ...prev, [`${storyboardId}:${sceneId}`]: true }));
-  }
-
-  const isLoading = storyboardsQuery.isLoading || assetLibraryQuery.isLoading;
-
-  if (isLoading) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
-        <div className="space-y-3">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </div>
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
-  }
-
-  if (storyboards.length === 0) {
-    return <p className="text-sm text-muted-foreground">Belum ada storyboard dari Storyboard Engine untuk dipilihkan asetnya.</p>;
-  }
+  const scenes = storyboard?.scenes ?? [];
+  const completedCount = scenes.filter((scene) => scene.selectedAssetId).length;
+  const allComplete = scenes.length > 0 && completedCount === scenes.length;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Storyboard</p>
-        <StoryboardList
-          storyboards={storyboards}
-          activeStoryboardId={activeStoryboardId}
-          runningStoryboardId={runSelectionMutation.isPending ? runSelectionMutation.variables ?? null : null}
-          hasResults={(id) => Boolean(selections[id])}
-          onSelect={(id) => setActiveStoryboardId(id)}
-          onRunSelection={(id) => runSelectionMutation.mutate(id)}
-        />
-      </div>
-
-      <div className="space-y-4">
-        {!activeStoryboard && (
+    <div className="space-y-6">
+      <div>
+        {!activeStoryboardId ? (
+          <WorkspacePlaceholder />
+        ) : isStoryboardLoading ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted-foreground">
-              <Sparkles className="h-8 w-8 text-muted-foreground/60" />
-              Pilih storyboard di sebelah kiri, lalu jalankan &ldquo;Auto-Select Assets&rdquo; untuk melihat hasil pencocokan per scene.
+            <CardContent className="space-y-3 py-6">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
             </CardContent>
           </Card>
-        )}
-
-        {activeStoryboard && !activeSelections && (
+        ) : isStoryboardError || !storyboard ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted-foreground">
-              Belum ada hasil untuk storyboard ini. Klik &ldquo;Auto-Select Assets&rdquo; untuk menjalankan pencocokan.
+            <CardContent className="flex items-start gap-2 py-6 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">Gagal memuat storyboard</p>
+                <p className="text-xs">{storyboardError instanceof Error ? storyboardError.message : "Terjadi kesalahan"}</p>
+              </div>
             </CardContent>
           </Card>
-        )}
-
-        {activeStoryboard && activeSelections && (
-          <>
+        ) : (
+          <div className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-sm font-medium">Ringkasan Storyboard {activeStoryboard.id}</CardTitle>
-                {averageScore !== null && (
-                  <Badge variant="outline">{Math.round(averageScore * 100)}% rata-rata match</Badge>
-                )}
-              </CardHeader>
-              <CardContent>
-                {averageScore !== null && <MatchScoreBar score={averageScore} />}
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+                <div>
+                  <p className="text-sm font-medium">{storyboard.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {scenes.length} scene -- {storyboard.total_duration_seconds}s
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {scenes.length > 0 && (
+                    <Badge variant={allComplete ? "default" : "outline"} className={allComplete ? "" : "text-amber-600"}>
+                      {allComplete ? "Semua scene sudah punya aset" : `${completedCount}/${scenes.length} scene sudah punya aset`}
+                    </Badge>
+                  )}
+                  <Button type="button" size="sm" disabled={runSelectionMutation.isPending || isLibraryLoading} onClick={() => runSelectionMutation.mutate(storyboard.id)}>
+                    <Wand2 className="h-4 w-4" />
+                    {runSelectionMutation.isPending ? "Memilih aset..." : "Auto-Select Assets"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
-            <div className="space-y-3">
-              {activeStoryboard.scenes.map((scene) => {
-                const selection = activeSelections[scene.id];
-                if (!selection) return null;
-                const asset = assetById.get(selection.assetId) ?? null;
-                const overridden = Boolean(overriddenScenes[`${activeStoryboard.id}:${scene.id}`]);
+            {isLibraryError && (
+              <p className="text-sm text-destructive">Gagal memuat Asset Library -- Auto-Select Assets mungkin tidak menemukan kandidat.</p>
+            )}
 
-                return (
-                  <SceneMatchPanel
+            {scenes.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Storyboard ini belum memiliki scene.</p>
+            ) : (
+              <div className="space-y-3">
+                {scenes.map((scene, index) => (
+                  <SceneAssetCard
                     key={scene.id}
                     scene={scene}
-                    selection={selection}
-                    asset={asset}
-                    assetLibrary={assetLibrary}
-                    overridden={overridden}
-                    onOverride={(assetId) => handleOverride(activeStoryboard.id, scene.id, assetId)}
+                    index={index}
+                    assetById={assetById}
+                    onOverride={(assetId) => overrideMutation.mutate({ storyboardId: storyboard.id, sceneId: scene.id, assetId })}
                   />
-                );
-              })}
-            </div>
-          </>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      <StoryboardHistory activeStoryboardId={activeStoryboardId} onSelect={setActiveStoryboardId} />
     </div>
   );
 }

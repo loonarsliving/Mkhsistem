@@ -1,5 +1,11 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
+import type { Json } from "@/types/database.types";
 import type { KontenAiStoryboardRow } from "@/types/domain";
+
+export interface KontenAiSceneAssetMatch {
+  assetId: string;
+  score: number;
+}
 
 export interface KontenAiStoryboardScene {
   id: string;
@@ -12,6 +18,10 @@ export interface KontenAiStoryboardScene {
   voiceOver: string;
   onScreenText: string;
   durationSeconds: number;
+  /** Sprint 5 (Asset Selector): the auto-selected (or manually overridden) asset for this scene, null until Asset Selector has run. */
+  selectedAssetId: string | null;
+  /** Sprint 5: top-5 ranked candidates (including the selected one) by relevance score, highest first -- lets the UI show alternatives without re-running the match. */
+  assetMatches: KontenAiSceneAssetMatch[];
 }
 
 export interface KontenAiStoryboardWithBrief extends Omit<KontenAiStoryboardRow, "scenes"> {
@@ -21,6 +31,17 @@ export interface KontenAiStoryboardWithBrief extends Omit<KontenAiStoryboardRow,
 
 const SELECT_COLUMNS =
   "id, creative_brief_id, title, scenes, total_duration_seconds, created_by, updated_by, created_at, updated_at, creativeBrief:creative_brief_id(product_project, objective, platform, big_idea)";
+
+function parseAssetMatches(raw: unknown): KontenAiSceneAssetMatch[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      assetId: typeof item.assetId === "string" ? item.assetId : "",
+      score: typeof item.score === "number" ? item.score : 0,
+    }))
+    .filter((match) => match.assetId.length > 0);
+}
 
 function parseScenes(raw: unknown): KontenAiStoryboardScene[] {
   if (!Array.isArray(raw)) return [];
@@ -37,6 +58,8 @@ function parseScenes(raw: unknown): KontenAiStoryboardScene[] {
       voiceOver: typeof item.voiceOver === "string" ? item.voiceOver : "",
       onScreenText: typeof item.onScreenText === "string" ? item.onScreenText : "",
       durationSeconds: typeof item.durationSeconds === "number" && item.durationSeconds > 0 ? item.durationSeconds : 4,
+      selectedAssetId: typeof item.selectedAssetId === "string" && item.selectedAssetId ? item.selectedAssetId : null,
+      assetMatches: parseAssetMatches(item.assetMatches),
     }));
 }
 
@@ -65,7 +88,7 @@ export async function createKontenAiStoryboard(
     .insert({
       creative_brief_id: input.creativeBriefId,
       title: input.title,
-      scenes: normalizedScenes,
+      scenes: normalizedScenes as unknown as Json,
       total_duration_seconds: sumSceneDurations(normalizedScenes),
       created_by: input.createdBy,
     })
@@ -99,7 +122,7 @@ export async function updateKontenAiStoryboardScenes(
   const { data, error } = await supabase
     .from("kontenai_storyboards")
     .update({
-      scenes: normalizedScenes,
+      scenes: normalizedScenes as unknown as Json,
       total_duration_seconds: sumSceneDurations(normalizedScenes),
       updated_by: updatedBy,
     })

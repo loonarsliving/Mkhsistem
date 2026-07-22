@@ -28,6 +28,8 @@ function blankScene(order: number): KontenAiStoryboardScene {
     voiceOver: "",
     onScreenText: "",
     durationSeconds: 4,
+    selectedAssetId: null,
+    assetMatches: [],
   };
 }
 

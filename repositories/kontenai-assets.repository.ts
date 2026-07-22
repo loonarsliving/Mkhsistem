@@ -283,6 +283,54 @@ export async function listAnalyzedAssetsForDirector(
   }));
 }
 
+export interface KontenAiAnalyzedAsset {
+  id: string;
+  assetType: KontenAiAssetType;
+  title: string;
+  publicUrl: string;
+  fileType: string;
+  aiTitle: string | null;
+  aiDescription: string | null;
+  aiTags: string[];
+  aiCategory: string | null;
+  aiMood: string | null;
+  aiDetectedObjects: string[];
+  aiDominantColors: string[];
+}
+
+/**
+ * Every image/video in the Asset Library with a completed Gemini Vision
+ * analysis, used by Asset Selector (Sprint 5) as the full candidate pool to
+ * rank against each storyboard scene. Capped at `limit` (default 300) --
+ * generous for the current library size while still bounding the ranking
+ * work done per scene.
+ */
+export async function listAnalyzedAssetLibrary(supabase: TypedSupabaseClient, limit = 300): Promise<KontenAiAnalyzedAsset[]> {
+  const { data, error } = await supabase
+    .from("kontenai_assets")
+    .select("id, asset_type, title, public_url, file_type, ai_title, ai_description, ai_tags, ai_category, ai_mood, ai_detected_objects, ai_dominant_colors")
+    .is("deleted_at", null)
+    .eq("ai_vision_status", "completed")
+    .order("ai_analyzed_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    assetType: row.asset_type as KontenAiAssetType,
+    title: row.title,
+    publicUrl: row.public_url,
+    fileType: row.file_type,
+    aiTitle: row.ai_title,
+    aiDescription: row.ai_description,
+    aiTags: row.ai_tags ?? [],
+    aiCategory: row.ai_category,
+    aiMood: row.ai_mood,
+    aiDetectedObjects: row.ai_detected_objects ?? [],
+    aiDominantColors: row.ai_dominant_colors ?? [],
+  }));
+}
+
 /** Flips ai_vision_status to 'pending' right before calling Gemini, so a concurrent list view shows the analysis is in flight. */
 export async function markKontenAiAssetVisionPending(supabase: TypedSupabaseClient, id: string): Promise<void> {
   const { error } = await supabase.from("kontenai_assets").update({ ai_vision_status: "pending" }).eq("id", id).is("deleted_at", null);

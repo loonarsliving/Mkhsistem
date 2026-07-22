@@ -13,7 +13,7 @@ export default async function AssetSelectorPage() {
     <div className="space-y-6">
       <PageHeader
         title="Asset Selector"
-        description="Cocokkan storyboard dari Storyboard Engine dengan aset terbaik di pustaka aset, per scene, berdasarkan kecocokan tag."
+        description="Pilih storyboard dari Storyboard Engine, lalu AI otomatis mencocokkan aset terbaik dari Asset Library untuk setiap scene berdasarkan metadata Gemini Vision -- lengkap dengan skor kecocokan, 5 alternatif per scene, dan opsi ganti manual."
       />
       <AssetSelectorWorkspace />
     </div>
