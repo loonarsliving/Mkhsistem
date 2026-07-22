@@ -54,6 +54,12 @@ export async function createKontenAiCreativeBrief(
   return data as KontenAiCreativeBriefRow;
 }
 
+export async function getKontenAiCreativeBrief(supabase: TypedSupabaseClient, id: string): Promise<KontenAiCreativeBriefRow> {
+  const { data, error } = await supabase.from("kontenai_creative_briefs").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data as KontenAiCreativeBriefRow;
+}
+
 /** Newest first -- the "riwayat Creative Brief" history list on the AI Director page. */
 export async function listKontenAiCreativeBriefs(
   supabase: TypedSupabaseClient,

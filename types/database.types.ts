@@ -2917,6 +2917,51 @@ export interface Database {
           },
         ];
       };
+      kontenai_storyboards: {
+        Row: {
+          id: string;
+          creative_brief_id: string;
+          title: string;
+          scenes: Json;
+          total_duration_seconds: number;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          creative_brief_id: string;
+          title: string;
+          scenes?: Json;
+          total_duration_seconds?: number;
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_storyboards"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_storyboards_creative_brief_id_fkey";
+            columns: ["creative_brief_id"];
+            referencedRelation: "kontenai_creative_briefs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_storyboards_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_storyboards_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
