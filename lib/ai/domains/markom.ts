@@ -605,9 +605,12 @@ export interface ContentReviewInput {
   taskDescription: string | null;
   caption: string | null;
   mediaType: "image" | "video";
-  /** Only set for images -- Gemini can actually look at the photo (see AIGenerateRequest.image). There is no equivalent for video here: no frame-level vision, review is caption/brief-only and says so explicitly to Markom. */
+  /** Only set for images -- Gemini can actually look at the photo (see AIGenerateRequest.image). */
   imageBase64?: string;
   imageMimeType?: string;
+  /** Only set for videos Gemini can actually watch (see AIGenerateRequest.video) -- undefined means the video was too large to send inline (see MAX_INLINE_VIDEO_REVIEW_BYTES, features/markom/actions/content-submission.actions.ts), in which case the review falls back to caption/brief-only and says so explicitly to Markom. */
+  videoBase64?: string;
+  videoMimeType?: string;
 }
 
 /** Score is 0-10 (one decimal); verdict is derived in code from the 8.5 auto-publish threshold, never trusted from the model's own words -- see CONTENT_AUTO_PUBLISH_SCORE_THRESHOLD. */
@@ -648,10 +651,12 @@ function parseContentReviewJson(text: string): ContentReviewResult {
  * the actual photo (AIGenerateRequest.image, gemini-provider.ts) and judges
  * it the way a Branch Manager looking at the file would: does it match the
  * brief's format/subject, is the framing/lighting/quality good enough to
- * post. For video there is no equivalent -- this codebase has no
- * frame-level video understanding -- so the review is caption+brief-only
- * and the prompt makes the AI say so explicitly rather than pretend it
- * watched the video.
+ * post. For video, Gemini genuinely watches it too (AIGenerateRequest.video
+ * -- frames, motion, audio) whenever videoBase64 was actually fetched (see
+ * MAX_INLINE_VIDEO_REVIEW_BYTES in content-submission.actions.ts); only
+ * when a video is too large to send inline does this fall back to a
+ * caption/brief-only review, and the prompt makes the AI say so explicitly
+ * in that case rather than pretend it watched something it didn't.
  */
 export async function reviewContentSubmission(input: ContentReviewInput): Promise<ContentReviewResult> {
   const systemPrompt = await getSystemPrompt("markom");
@@ -679,7 +684,29 @@ Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat u
     return parseContentReviewJson(response.text);
   }
 
-  const userPrompt = `Kamu Branch Manager yang meninjau submission konten video berikut sebelum diizinkan dijadwalkan tayang ke Instagram. PENTING: kamu TIDAK bisa menonton isi videonya -- nilai hanya berdasarkan brief dan caption di bawah, dan WAJIB sebutkan keterbatasan ini di feedback-mu serta ingatkan Markom untuk mengecek sendiri kualitas visual/audio videonya sebelum tayang.
+  if (input.mediaType === "video" && input.videoBase64 && input.videoMimeType) {
+    const userPrompt = `Kamu Branch Manager yang meninjau video konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram. Video asli terlampir -- benar-benar tonton isinya (adegan, gerakan, framing, pencahayaan, kualitas audio, kesesuaian isi dengan brief), jangan hanya menilai dari caption.
+
+Brief asli dari AI:
+Judul: ${input.taskTitle}
+Deskripsi: ${input.taskDescription ?? "-"}
+
+${captionLine}
+
+Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak video ini langsung tayang: 10 = sempurna, sesuai brief dan kualitas visual/audio sangat baik; di bawah 8.5 = butuh revisi (adegan tidak sesuai brief, kualitas gambar/suara kurang, durasi/pacing kurang pas, caption perlu diperbaiki, dll -- jelaskan persis apa yang kurang berdasarkan yang kamu tonton).
+
+Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat/didengar di videonya dan alasan skornya"}`;
+
+    const response = await generateAIText({
+      systemPrompt,
+      userPrompt,
+      video: { data: input.videoBase64, mimeType: input.videoMimeType },
+      maxOutputTokens: 1024,
+    });
+    return parseContentReviewJson(response.text);
+  }
+
+  const userPrompt = `Kamu Branch Manager yang meninjau submission konten video berikut sebelum diizinkan dijadwalkan tayang ke Instagram. PENTING: video ini terlalu besar untuk ditonton langsung -- nilai hanya berdasarkan brief dan caption di bawah, dan WAJIB sebutkan keterbatasan ini di feedback-mu serta ingatkan Markom untuk mengecek sendiri kualitas visual/audio videonya sebelum tayang.
 
 Brief asli dari AI:
 Judul: ${input.taskTitle}
@@ -689,7 +716,7 @@ ${captionLine}
 
 Beri skor 0-10 (boleh satu desimal) seberapa layak caption & konteks ini, dengan asumsi kualitas video sendiri nanti dicek manual oleh Markom: 10 = caption & konteks sudah pas dengan brief; di bawah 8.5 = caption/konteks belum sesuai brief, jelaskan apa yang kurang.
 
-Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat, Bahasa Indonesia, alasan skornya, termasuk pengingat bahwa AI tidak menonton videonya"}`;
+Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat, Bahasa Indonesia, alasan skornya, termasuk pengingat bahwa video ini belum sempat ditonton AI karena ukurannya terlalu besar"}`;
 
   const response = await generateAIText({ systemPrompt, userPrompt, maxOutputTokens: 1024 });
   return parseContentReviewJson(response.text);

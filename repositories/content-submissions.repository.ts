@@ -8,9 +8,9 @@ export interface ContentSubmissionListFilters {
   contentFocus?: ContentStudioFocus;
 }
 
-/** Newest first, joined with the brief it was made for and who uploaded it -- RLS/open-read (see migration 0096), branch scoping is an app-layer filter here same as listKpiTasks. */
+/** Newest first, joined with the brief it was made for, who uploaded it, and any 2nd-onward carousel photos (0158 -- storage_path/public_url on the row itself is always photo #1 / the single video) -- RLS/open-read (see migration 0096), branch scoping is an app-layer filter here same as listKpiTasks. */
 const SUBMISSION_BRIEF_SELECT =
-  "*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta), submitter:submitted_by(full_name)";
+  "*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta), submitter:submitted_by(full_name), photos:markom_content_submission_photos(storage_path, public_url, display_order)";
 
 export async function listContentSubmissions(supabase: TypedSupabaseClient, filters: ContentSubmissionListFilters = {}) {
   let query = supabase.from("markom_content_submissions").select(SUBMISSION_BRIEF_SELECT).is("deleted_at", null).order("created_at", { ascending: false });
@@ -27,7 +27,9 @@ export async function listContentSubmissions(supabase: TypedSupabaseClient, filt
 export async function getContentSubmission(supabase: TypedSupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("markom_content_submissions")
-    .select("*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta)")
+    .select(
+      "*, task:task_id(title, description), beauty_content_item:beauty_content_item_id(title, hook, script_notes, cta), photos:markom_content_submission_photos(storage_path, public_url, display_order)",
+    )
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -43,15 +45,32 @@ export interface CreateContentSubmissionInput {
   platform: "instagram" | "tiktok";
   submitted_by: string;
   media_type: "image" | "video";
+  /** Photo #1, or the single video -- kept on the row itself for backward compatibility with every existing single-media submission and all the display code reading it directly. */
   storage_path: string;
   public_url: string;
+  /** Photo #2 onward for an image carousel (0158) -- always empty for a video submission, never mixed with one. */
+  extra_photos?: { storage_path: string; public_url: string }[];
   caption: string | null;
   created_by: string;
 }
 
 export async function createContentSubmission(supabase: TypedSupabaseClient, input: CreateContentSubmissionInput) {
-  const { data, error } = await supabase.from("markom_content_submissions").insert(input).select("id").single();
+  const { extra_photos, ...row } = input;
+  const { data, error } = await supabase.from("markom_content_submissions").insert(row).select("id").single();
   if (error) throw error;
+
+  if (extra_photos && extra_photos.length > 0) {
+    const { error: photosError } = await supabase.from("markom_content_submission_photos").insert(
+      extra_photos.map((p, index) => ({
+        submission_id: data.id,
+        storage_path: p.storage_path,
+        public_url: p.public_url,
+        display_order: index + 1,
+      })),
+    );
+    if (photosError) throw photosError;
+  }
+
   return data;
 }
 
@@ -121,6 +140,20 @@ export async function markContentPublishFailed(supabase: TypedSupabaseClient, id
     .eq("id", id)
     .eq("status", "scheduled");
   if (error) throw error;
+}
+
+/** Builds Zernio's mediaItems array (0158) -- photo #1/the single video is always the parent row's own public_url/media_type; any 2nd-onward carousel photos come sorted by display_order. Shared by the manual "Tayangkan Sekarang" action and the 5-minute publish worker so both post the exact same carousel. */
+export function buildZernioMediaItems(row: {
+  public_url: string;
+  media_type: string;
+  photos?: { public_url: string; display_order: number }[] | null;
+}): { url: string; type: "image" | "video" }[] {
+  if (row.media_type === "video") return [{ url: row.public_url, type: "video" }];
+  const extra = (row.photos ?? [])
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((p) => ({ url: p.public_url, type: "image" as const }));
+  return [{ url: row.public_url, type: "image" as const }, ...extra];
 }
 
 export async function deleteContentSubmission(supabase: TypedSupabaseClient, id: string) {

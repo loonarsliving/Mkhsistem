@@ -86,28 +86,42 @@ export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const file = files[0];
+    const fileArray = Array.from(files);
     const briefId = usesKpiTaskBrief ? taskId : beautyItemId;
     if (!briefId) {
       toast.error("Pilih brief konten terlebih dahulu");
       return;
     }
-    const mediaType: "image" | "video" = file.type.startsWith("video/") ? "video" : "image";
+
+    const hasVideo = fileArray.some((f) => f.type.startsWith("video/"));
+    if (hasVideo && fileArray.length > 1) {
+      toast.error("Video tidak bisa digabung dengan file lain -- upload satu video saja");
+      return;
+    }
+    if (fileArray.length > 10) {
+      toast.error("Maksimal 10 foto untuk satu carousel");
+      return;
+    }
+    const mediaType: "image" | "video" = hasVideo ? "video" : "image";
 
     setUploading(true);
     try {
-      const { path, publicUrl } = await uploadEntityFile("markom-content-submissions", briefId, file, MAX_CONTENT_SIZE_BYTES);
-      if (!publicUrl) throw new Error("Gagal mendapatkan URL konten");
+      const uploaded = await Promise.all(
+        fileArray.map((file) => uploadEntityFile("markom-content-submissions", briefId, file, MAX_CONTENT_SIZE_BYTES)),
+      );
+      const media = uploaded.map(({ path, publicUrl }) => {
+        if (!publicUrl) throw new Error("Gagal mendapatkan URL konten");
+        return { storagePath: path, publicUrl };
+      });
 
       const result = await createContentSubmissionAction({
         taskId: usesKpiTaskBrief ? taskId : undefined,
         beautyContentItemId: usesKpiTaskBrief ? undefined : beautyItemId,
         contentFocus: focus,
         platform,
-        storagePath: path,
-        publicUrl,
+        media,
         mediaType,
-        mimeType: file.type,
+        mimeType: fileArray[0].type,
         caption: caption || undefined,
       });
       if (!result.success) throw new Error(result.error ?? "Gagal menyimpan konten");
@@ -243,15 +257,23 @@ export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
             <p className="text-xs font-medium text-muted-foreground">Caption (opsional)</p>
             <Textarea value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption yang akan dipakai saat konten tayang..." rows={1} />
           </div>
-          <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime" hidden onChange={(e) => handleUpload(e.target.files)} />
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+            multiple
+            hidden
+            onChange={(e) => handleUpload(e.target.files)}
+          />
           <Button type="button" onClick={() => inputRef.current?.click()} disabled={uploading || (usesKpiTaskBrief ? !taskId : !beautyItemId)}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             Upload Konten
           </Button>
           <p className="w-full text-xs text-muted-foreground">
-            AI akan memberi skor 0-10 untuk konten yang Anda upload (untuk foto, AI benar-benar melihat isi gambarnya; untuk video, AI menilai berdasarkan caption &amp; brief
-            saja karena belum bisa menonton video). Skor {AUTO_PUBLISH_SCORE_THRESHOLD} ke atas otomatis dijadwalkan dan ditayangkan sistem sendiri lewat Zernio pada jam
-            terbaik; di bawah itu Anda perlu merevisi lalu upload ulang.
+            Pilih beberapa foto sekaligus (maks 10) untuk upload sebagai satu carousel, atau satu video saja (video tidak bisa digabung dengan foto lain). AI akan memberi
+            skor 0-10 untuk konten yang Anda upload -- AI benar-benar melihat isi foto maupun menonton video-nya (kecuali video berukuran sangat besar, yang dinilai dari
+            caption &amp; brief saja). Skor {AUTO_PUBLISH_SCORE_THRESHOLD} ke atas otomatis dijadwalkan dan ditayangkan sistem sendiri lewat Zernio pada jam terbaik; di
+            bawah itu Anda perlu merevisi lalu upload ulang.
           </p>
         </CardContent>
       </Card>
@@ -267,6 +289,7 @@ export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
             const task = s.task as { title?: string; description?: string } | null;
             const beautyItem = s.beauty_content_item as { title?: string } | null;
             const briefTitle = task?.title ?? beautyItem?.title ?? "Konten mandiri";
+            const photoCount = 1 + ((s.photos as { display_order: number }[] | null)?.length ?? 0);
             return (
               <Card key={s.id}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
@@ -282,7 +305,8 @@ export function ContentStudioBoard({ focus }: { focus: ContentStudioFocus }) {
                       <div>
                         <p className="font-medium">{briefTitle}</p>
                         <p className="text-xs text-muted-foreground">
-                          {s.media_type === "video" ? "Video" : "Foto"} &middot; {s.platform === "instagram" ? "Instagram" : "TikTok"}
+                          {s.media_type === "video" ? "Video" : photoCount > 1 ? `Carousel (${photoCount} foto)` : "Foto"} &middot;{" "}
+                          {s.platform === "instagram" ? "Instagram" : "TikTok"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

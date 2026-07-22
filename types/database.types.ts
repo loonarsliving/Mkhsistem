@@ -2739,6 +2739,33 @@ export interface Database {
           },
         ];
       };
+      markom_content_submission_photos: {
+        Row: {
+          id: string;
+          submission_id: string;
+          storage_path: string;
+          public_url: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          submission_id: string;
+          storage_path: string;
+          public_url: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["markom_content_submission_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "markom_content_submission_photos_submission_id_fkey";
+            columns: ["submission_id"];
+            referencedRelation: "markom_content_submissions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       finance_branch_balances: {
         Row: {
           id: string;

@@ -18,6 +18,8 @@ export interface AIGenerateRequest {
   useWebSearch?: boolean;
   /** Attaches an image to the prompt (Gemini multimodal vision) -- e.g. reviewing an uploaded content photo against its brief. base64-encoded bytes, no data: URI prefix. */
   image?: { data: string; mimeType: string };
+  /** Attaches a video to the prompt (Gemini multimodal video understanding -- Gemini genuinely watches/analyzes frames+audio, not just a caption) -- e.g. reviewing an uploaded Content Studio video against its brief. base64-encoded bytes, no data: URI prefix. Sent inline (not via the Files API), so only safe for videos under ~20MB -- callers must check size themselves and fall back to a caption-only prompt for anything larger. */
+  video?: { data: string; mimeType: string };
   /**
    * Overrides AI_CONFIG.retryMaxAttempts for this one call — every call still
    * goes through the same centralized retry wrapper, this only changes how
