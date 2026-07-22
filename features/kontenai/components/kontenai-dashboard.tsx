@@ -1,8 +1,10 @@
 import {
+  BarChart3,
   Boxes,
   CalendarDays,
   Clapperboard,
   Compass,
+  FileText,
   FolderKanban,
   GraduationCap,
   Images,
@@ -98,10 +100,24 @@ const MODULES = [
   },
   {
     sprint: "Sprint 9",
+    title: "Analytics Dashboard",
+    description: "Pusat monitoring KPI, tren performa per periode, serta konten dengan performa terbaik dan terburuk.",
+    icon: BarChart3,
+    href: "/kontenai/analytics",
+  },
+  {
+    sprint: "Sprint 9",
     title: "AI Optimization",
-    description: "Mengoptimalkan proses produksi berdasarkan hasil Content Studio, Analytics, dan Learning.",
-    icon: Send,
+    description: "AI Recommendation berbasis riwayat Learning Engine -- Hook, Caption, CTA, Durasi, Visual Style, Posting Time.",
+    icon: Wand2,
     href: "/kontenai/ai-optimization",
+  },
+  {
+    sprint: "Sprint 9",
+    title: "AI Report",
+    description: "Rangkuman performa mingguan dan bulanan seluruh konten KontenAI.",
+    icon: FileText,
+    href: "/kontenai/ai-report",
   },
 ];
 

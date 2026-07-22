@@ -3144,6 +3144,88 @@ export interface Database {
           },
         ];
       };
+      kontenai_optimization_recommendations: {
+        Row: {
+          id: string;
+          recommended_hook: string;
+          recommended_caption: string;
+          recommended_cta: string;
+          recommended_duration_seconds: number | null;
+          recommended_visual_style: string;
+          recommended_posting_time: string;
+          rationale: string;
+          based_on_record_count: number;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recommended_hook: string;
+          recommended_caption: string;
+          recommended_cta: string;
+          recommended_duration_seconds?: number | null;
+          recommended_visual_style: string;
+          recommended_posting_time: string;
+          rationale: string;
+          based_on_record_count?: number;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_optimization_recommendations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_optimization_recommendations_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_ai_reports: {
+        Row: {
+          id: string;
+          period: "weekly" | "monthly";
+          period_start: string;
+          period_end: string;
+          total_content: number;
+          published_content: number;
+          total_views: number;
+          total_reach: number;
+          engagement_rate: number;
+          avg_ctr: number | null;
+          total_leads: number | null;
+          conversion_rate: number | null;
+          summary: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          period: "weekly" | "monthly";
+          period_start: string;
+          period_end: string;
+          total_content?: number;
+          published_content?: number;
+          total_views?: number;
+          total_reach?: number;
+          engagement_rate?: number;
+          avg_ctr?: number | null;
+          total_leads?: number | null;
+          conversion_rate?: number | null;
+          summary: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_ai_reports"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_ai_reports_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
