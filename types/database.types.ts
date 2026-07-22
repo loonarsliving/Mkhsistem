@@ -2962,6 +2962,53 @@ export interface Database {
           },
         ];
       };
+      kontenai_render_jobs: {
+        Row: {
+          id: string;
+          storyboard_id: string;
+          status: "queued" | "rendering" | "completed" | "failed";
+          progress: number;
+          stage: string;
+          output_storage_path: string | null;
+          output_public_url: string | null;
+          duration_seconds: number | null;
+          error_message: string | null;
+          created_by: string;
+          created_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          storyboard_id: string;
+          status?: "queued" | "rendering" | "completed" | "failed";
+          progress?: number;
+          stage?: string;
+          output_storage_path?: string | null;
+          output_public_url?: string | null;
+          duration_seconds?: number | null;
+          error_message?: string | null;
+          created_by: string;
+          created_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_render_jobs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_render_jobs_storyboard_id_fkey";
+            columns: ["storyboard_id"];
+            referencedRelation: "kontenai_storyboards";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_render_jobs_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {

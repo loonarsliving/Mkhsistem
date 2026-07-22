@@ -331,6 +331,20 @@ export async function listAnalyzedAssetLibrary(supabase: TypedSupabaseClient, li
   }));
 }
 
+export interface KontenAiAssetForRender {
+  id: string;
+  assetType: KontenAiAssetType;
+  publicUrl: string;
+}
+
+/** Fetches exactly the assets a storyboard's scenes point to (Render Engine, Sprint 6) -- not filtered by vision status, since a scene's selected asset is always one already surfaced by Asset Selector. */
+export async function listKontenAiAssetsByIds(supabase: TypedSupabaseClient, ids: string[]): Promise<KontenAiAssetForRender[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("kontenai_assets").select("id, asset_type, public_url").in("id", ids);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ id: row.id, assetType: row.asset_type as KontenAiAssetType, publicUrl: row.public_url }));
+}
+
 /** Flips ai_vision_status to 'pending' right before calling Gemini, so a concurrent list view shows the analysis is in flight. */
 export async function markKontenAiAssetVisionPending(supabase: TypedSupabaseClient, id: string): Promise<void> {
   const { error } = await supabase.from("kontenai_assets").update({ ai_vision_status: "pending" }).eq("id", id).is("deleted_at", null);

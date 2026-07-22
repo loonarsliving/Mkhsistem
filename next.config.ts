@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
   // serverless function.
   outputFileTracingIncludes: {
     "/kontenai/asset-library": ["./node_modules/@ffmpeg-installer/**/*"],
+    "/kontenai/render-engine": ["./node_modules/@ffmpeg-installer/**/*"],
   },
   images: {
     remotePatterns: supabaseHostname
