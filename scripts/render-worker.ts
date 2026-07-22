@@ -24,7 +24,7 @@
  * restart policy, Railway's, pm2, etc) -- this script itself just loops
  * forever with a poll interval, no supervisor logic of its own.
  */
-import { createAdminClient } from "../lib/supabase/admin";
+import { createAdminClient } from "../lib/supabase/worker-admin";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "../lib/video/render-storyboard";
 import { listKontenAiAssetsByIds } from "../repositories/kontenai-assets.repository";
