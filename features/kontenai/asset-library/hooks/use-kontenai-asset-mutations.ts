@@ -11,9 +11,11 @@ import {
   type CreateKontenAiAssetActionInput,
   type UpdateKontenAiAssetActionInput,
 } from "@/features/kontenai/asset-library/actions/asset-library.actions";
+import { analyzeAssetVisionAction } from "@/features/kontenai/asset-library/actions/gemini-vision.actions";
 import { guessAssetTypeFromMime } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { inspectFile } from "@/features/kontenai/asset-library/utils/file-inspect";
 import { buildAssetStoragePrefix } from "@/features/kontenai/asset-library/utils/storage-path";
+import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
 import { uploadEntityFile } from "@/lib/supabase/storage";
 import type { KontenAiAssetType } from "@/repositories/kontenai-assets.repository";
 
@@ -87,8 +89,13 @@ export function useUploadKontenAiAsset() {
       if (!result.success) throw new Error(result.error ?? "Gagal menyimpan aset");
       return result.data!;
     },
-    onSuccess: () => {
-      toast.success("Aset berhasil diunggah");
+    onSuccess: ({ asset, visionAnalyzed, visionError }) => {
+      if (isVisionEligibleAssetType(asset.asset_type as KontenAiAssetType)) {
+        if (visionAnalyzed) toast.success("Aset diunggah & dianalisis Gemini Vision");
+        else toast.warning(`Aset diunggah, tapi analisis Gemini Vision gagal: ${visionError ?? "unknown error"}. Coba "Analyze Again" nanti.`);
+      } else {
+        toast.success("Aset berhasil diunggah");
+      }
       invalidateAssetLibrary(queryClient);
     },
     onError: (error) => {
@@ -149,6 +156,27 @@ export function useDeleteKontenAiAsset() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Gagal menghapus aset");
+    },
+  });
+}
+
+/** "Analyze Again" -- re-runs Gemini Vision on an already-uploaded image/video asset. */
+export function useAnalyzeAssetVision() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (assetId: string) => {
+      const result = await analyzeAssetVisionAction(assetId);
+      if (!result.success) throw new Error(result.error ?? "Gagal menjalankan analisis");
+      return result.data!;
+    },
+    onSuccess: ({ analyzed, error }) => {
+      if (analyzed) toast.success("Analisis Gemini Vision selesai");
+      else toast.error(`Analisis Gemini Vision gagal: ${error ?? "unknown error"}`);
+      invalidateAssetLibrary(queryClient);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Gagal menjalankan analisis");
     },
   });
 }

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AssetCardMenu } from "@/features/kontenai/asset-library/components/asset-card-menu";
 import { AssetThumbnail } from "@/features/kontenai/asset-library/components/asset-thumbnail";
+import { AssetVisionStatusBadge } from "@/features/kontenai/asset-library/components/asset-vision-status-badge";
 import { ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { formatBytes } from "@/features/kontenai/asset-library/utils/format";
 import type { KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
@@ -31,6 +32,7 @@ export function AssetGrid({ assets, onPreview, onEdit }: AssetGridProps) {
               <Badge variant="outline" className="text-[11px]">
                 {ASSET_TYPE_LABEL[asset.asset_type as KontenAiAssetType]}
               </Badge>
+              <AssetVisionStatusBadge assetType={asset.asset_type as KontenAiAssetType} status={asset.ai_vision_status} />
               <span className="text-xs text-muted-foreground">{formatBytes(asset.file_size_bytes)}</span>
             </div>
           </CardContent>

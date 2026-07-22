@@ -3,11 +3,12 @@ import type { KontenAiAssetRow } from "@/types/domain";
 
 export type KontenAiAssetType = "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
 export type KontenAiAssetStatus = "draft" | "active" | "archived";
+export type KontenAiAssetVisionStatus = "not_analyzed" | "pending" | "completed" | "failed";
 
 export type KontenAiAssetWithCreator = KontenAiAssetRow & { creator: { full_name: string } | null };
 
 const SELECT_COLUMNS =
-  "id, title, description, filename, asset_type, storage_path, public_url, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
+  "id, title, description, filename, asset_type, storage_path, public_url, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, ai_vision_status, ai_title, ai_description, ai_tags, ai_category, ai_detected_objects, ai_dominant_colors, ai_mood, ai_analyzed_at, ai_error, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
 
 export interface KontenAiAssetListFilters {
   search?: string;
@@ -197,4 +198,54 @@ export async function listKontenAiFolderFacets(supabase: TypedSupabaseClient): P
     contentTypes: distinct(rows.map((r) => r.content_type)),
     locations: distinct(rows.map((r) => r.location)),
   };
+}
+
+/** Flips ai_vision_status to 'pending' right before calling Gemini, so a concurrent list view shows the analysis is in flight. */
+export async function markKontenAiAssetVisionPending(supabase: TypedSupabaseClient, id: string): Promise<void> {
+  const { error } = await supabase.from("kontenai_assets").update({ ai_vision_status: "pending" }).eq("id", id).is("deleted_at", null);
+  if (error) throw error;
+}
+
+export interface SaveKontenAiAssetVisionResultInput {
+  title: string;
+  description: string;
+  tags: string[];
+  category: string;
+  detectedObjects: string[];
+  dominantColors: string[];
+  mood: string;
+}
+
+export async function saveKontenAiAssetVisionResult(
+  supabase: TypedSupabaseClient,
+  id: string,
+  result: SaveKontenAiAssetVisionResultInput,
+): Promise<KontenAiAssetRow> {
+  const { data, error } = await supabase
+    .from("kontenai_assets")
+    .update({
+      ai_vision_status: "completed",
+      ai_title: result.title,
+      ai_description: result.description,
+      ai_tags: result.tags,
+      ai_category: result.category,
+      ai_detected_objects: result.detectedObjects,
+      ai_dominant_colors: result.dominantColors,
+      ai_mood: result.mood,
+      ai_analyzed_at: new Date().toISOString(),
+      ai_error: null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as KontenAiAssetRow;
+}
+
+export async function saveKontenAiAssetVisionFailure(supabase: TypedSupabaseClient, id: string, errorMessage: string): Promise<void> {
+  const { error } = await supabase
+    .from("kontenai_assets")
+    .update({ ai_vision_status: "failed", ai_error: errorMessage.slice(0, 500) })
+    .eq("id", id);
+  if (error) throw error;
 }

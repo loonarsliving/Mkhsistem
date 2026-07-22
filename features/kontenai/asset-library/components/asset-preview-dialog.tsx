@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AssetVisionPanel } from "@/features/kontenai/asset-library/components/asset-vision-panel";
 import { ASSET_TYPE_ICON, ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { formatBytes, formatDateTime, formatDuration } from "@/features/kontenai/asset-library/utils/format";
 import type { KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
@@ -20,7 +21,7 @@ export function AssetPreviewDialog({ asset, open, onOpenChange }: AssetPreviewDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -79,6 +80,8 @@ export function AssetPreviewDialog({ asset, open, onOpenChange }: AssetPreviewDi
             ))}
           </div>
         )}
+
+        <AssetVisionPanel asset={asset} />
 
         <Button asChild variant="outline" className="w-full">
           <a href={asset.public_url} download={asset.filename} target="_blank" rel="noreferrer">

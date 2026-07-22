@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { runVisionAnalysisAndSave } from "@/features/kontenai/asset-library/actions/gemini-vision.actions";
+import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -102,8 +104,23 @@ export interface CreateKontenAiAssetActionInput {
   tags: string[];
 }
 
-/** Called after the file itself has already been uploaded client-side to Supabase Storage (see lib/supabase/storage.ts uploadEntityFile) -- this only persists the metadata row. */
-export async function createKontenAiAssetAction(input: CreateKontenAiAssetActionInput): Promise<ActionResult<KontenAiAssetRow>> {
+export interface CreateKontenAiAssetActionResult {
+  asset: KontenAiAssetRow;
+  /** Whether Gemini Vision ran for this asset (image/video only) and succeeded -- false + visionError set if it ran but failed; undefined (no visionError) if the asset type isn't eligible at all. */
+  visionAnalyzed: boolean;
+  visionError?: string;
+}
+
+/**
+ * Called after the file itself has already been uploaded client-side to
+ * Supabase Storage (see lib/supabase/storage.ts uploadEntityFile) -- this
+ * persists the metadata row, then, for image/video assets, immediately
+ * runs Gemini Vision synchronously (same request) before returning --
+ * mirroring createContentSubmissionAction's "insert succeeds first,
+ * independently of the AI outcome" pattern. A failed analysis never fails
+ * the upload itself; "Analyze Again" (analyzeAssetVisionAction) can retry.
+ */
+export async function createKontenAiAssetAction(input: CreateKontenAiAssetActionInput): Promise<ActionResult<CreateKontenAiAssetActionResult>> {
   const session = await requireKontenAiAccess();
 
   const title = input.title.trim();
@@ -135,8 +152,17 @@ export async function createKontenAiAssetAction(input: CreateKontenAiAssetAction
       tags: normalizeTags(input.tags),
       created_by: session.userId,
     });
+
+    let visionAnalyzed = false;
+    let visionError: string | undefined;
+    if (isVisionEligibleAssetType(asset.asset_type as KontenAiAssetType)) {
+      const outcome = await runVisionAnalysisAndSave(supabase, asset);
+      visionAnalyzed = outcome.success;
+      visionError = outcome.error;
+    }
+
     revalidatePath(ASSET_LIBRARY_PATH);
-    return actionSuccess(asset);
+    return actionSuccess({ asset, visionAnalyzed, visionError });
   } catch (error) {
     return actionError(error instanceof Error ? error.message : "Gagal menyimpan aset");
   }

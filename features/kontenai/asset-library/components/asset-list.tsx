@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AssetCardMenu } from "@/features/kontenai/asset-library/components/asset-card-menu";
 import { AssetThumbnail } from "@/features/kontenai/asset-library/components/asset-thumbnail";
+import { AssetVisionStatusBadge } from "@/features/kontenai/asset-library/components/asset-vision-status-badge";
 import { ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { formatBytes, formatDate } from "@/features/kontenai/asset-library/utils/format";
 import type { KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
@@ -48,7 +49,10 @@ export function AssetList({ assets, onPreview, onEdit }: AssetListProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{ASSET_TYPE_LABEL[asset.asset_type as KontenAiAssetType]}</Badge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline">{ASSET_TYPE_LABEL[asset.asset_type as KontenAiAssetType]}</Badge>
+                  <AssetVisionStatusBadge assetType={asset.asset_type as KontenAiAssetType} status={asset.ai_vision_status} />
+                </div>
               </TableCell>
               <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                 {[asset.company, asset.project].filter(Boolean).join(" / ") || "-"}
