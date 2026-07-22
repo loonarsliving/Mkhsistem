@@ -3009,6 +3009,55 @@ export interface Database {
           },
         ];
       };
+      kontenai_publish_schedules: {
+        Row: {
+          id: string;
+          render_job_id: string;
+          platform: "instagram" | "facebook" | "tiktok" | "youtube_shorts";
+          caption: string;
+          hashtags: string[];
+          scheduled_at: string | null;
+          status: "draft" | "scheduled" | "published" | "failed";
+          published_at: string | null;
+          external_post_id: string | null;
+          external_post_url: string | null;
+          error_message: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          render_job_id: string;
+          platform: "instagram" | "facebook" | "tiktok" | "youtube_shorts";
+          caption?: string;
+          hashtags?: string[];
+          scheduled_at?: string | null;
+          status?: "draft" | "scheduled" | "published" | "failed";
+          published_at?: string | null;
+          external_post_id?: string | null;
+          external_post_url?: string | null;
+          error_message?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_publish_schedules"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_publish_schedules_render_job_id_fkey";
+            columns: ["render_job_id"];
+            referencedRelation: "kontenai_render_jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_publish_schedules_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {

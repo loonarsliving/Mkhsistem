@@ -1,5 +1,6 @@
 import {
   Boxes,
+  CalendarDays,
   Clapperboard,
   Compass,
   FolderKanban,
@@ -69,6 +70,20 @@ const MODULES = [
   },
   {
     sprint: "Sprint 7",
+    title: "Publishing Engine",
+    description: "Jadwalkan video hasil Render Engine untuk publish -- caption & hashtag AI, platform tujuan, tanggal/jam publish.",
+    icon: Send,
+    href: "/kontenai/publishing-engine",
+  },
+  {
+    sprint: "Sprint 7",
+    title: "Content Calendar",
+    description: "Seluruh jadwal publish dan statusnya -- Draft, Scheduled, Published, Failed.",
+    icon: CalendarDays,
+    href: "/kontenai/content-calendar",
+  },
+  {
+    sprint: "Sprint 7 (lama)",
     title: "Production Pipeline",
     description: "Menghubungkan seluruh proses produksi dan mengirim hasil render ke Content Studio.",
     icon: Layers,

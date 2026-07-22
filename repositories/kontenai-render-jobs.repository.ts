@@ -34,6 +34,18 @@ export async function listKontenAiRenderJobs(supabase: TypedSupabaseClient, limi
   return (data ?? []) as unknown as KontenAiRenderJobWithStoryboard[];
 }
 
+/** Completed render jobs only -- the candidate pool for Publishing Engine's "Ambil video hasil Render Engine" step (Sprint 7). */
+export async function listCompletedKontenAiRenderJobs(supabase: TypedSupabaseClient, limit = 50): Promise<KontenAiRenderJobWithStoryboard[]> {
+  const { data, error } = await supabase
+    .from("kontenai_render_jobs")
+    .select(SELECT_COLUMNS)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as KontenAiRenderJobWithStoryboard[];
+}
+
 /** Marks the job as actively rendering and records a coarse, real progress step -- called at each pipeline stage so polling clients see genuine progress, not a simulated animation. */
 export async function updateKontenAiRenderJobProgress(
   supabase: TypedSupabaseClient,
