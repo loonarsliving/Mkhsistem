@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
-import { AiDirectorBoard } from "@/features/kontenai/ai-director/components/ai-director-board";
+import { CreativeBriefWorkspace } from "@/features/kontenai/ai-director/components/creative-brief-workspace";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "AI Director" };
@@ -13,9 +13,9 @@ export default async function AiDirectorPage() {
     <div className="space-y-6">
       <PageHeader
         title="AI Director"
-        description="Mengubah brief Content Planner (dilengkapi insight Content Audit bila tersedia) menjadi arahan produksi -- narrative angle, key messages, gaya visual, tag aset yang direkomendasikan, dan CTA -- siap diteruskan ke Storyboard Engine."
+        description="Otak kreatif KontenAI: isi objective, platform, target audience, product/project, dan campaign goal -- AI Director membaca Asset Library & hasil Gemini Vision, lalu menyusun Creative Brief (Big Idea, Hook, Key Message, Target Emotion, CTA, Content Angle)."
       />
-      <AiDirectorBoard />
+      <CreativeBriefWorkspace />
     </div>
   );
 }

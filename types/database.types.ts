@@ -2872,6 +2872,51 @@ export interface Database {
           },
         ];
       };
+      kontenai_creative_briefs: {
+        Row: {
+          id: string;
+          objective: "brand_awareness" | "leads" | "sales" | "engagement";
+          platform: "instagram" | "tiktok" | "facebook";
+          target_audience: string;
+          product_project: string;
+          campaign_goal: string;
+          big_idea: string;
+          hook: string;
+          key_message: string;
+          target_emotion: string;
+          cta: string;
+          content_angle: string;
+          referenced_asset_ids: string[];
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          objective: "brand_awareness" | "leads" | "sales" | "engagement";
+          platform: "instagram" | "tiktok" | "facebook";
+          target_audience: string;
+          product_project: string;
+          campaign_goal: string;
+          big_idea: string;
+          hook: string;
+          key_message: string;
+          target_emotion: string;
+          cta: string;
+          content_angle: string;
+          referenced_asset_ids?: string[];
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_creative_briefs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_creative_briefs_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {

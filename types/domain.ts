@@ -41,6 +41,7 @@ export type LoonarsOrder = Tables<"loonars_orders">;
 export type LoonarsWeeklyEvaluation = Tables<"loonars_weekly_evaluations">;
 
 export type KontenAiAssetRow = Tables<"kontenai_assets">;
+export type KontenAiCreativeBriefRow = Tables<"kontenai_creative_briefs">;
 
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {

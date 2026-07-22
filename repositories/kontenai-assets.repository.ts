@@ -225,6 +225,64 @@ export async function listKontenAiFolderFacets(supabase: TypedSupabaseClient): P
   };
 }
 
+export interface DirectorAssetContextRow {
+  id: string;
+  assetType: KontenAiAssetType;
+  title: string;
+  aiDescription: string | null;
+  aiTags: string[];
+  aiCategory: string | null;
+  aiMood: string | null;
+}
+
+/**
+ * Asset Library entries with a completed Gemini Vision analysis, used by
+ * AI Director (Sprint 3) as creative context. Prefers assets whose
+ * company/project/title match `productProject` (loosely, case-insensitive);
+ * falls back to the most recently analyzed assets overall when nothing
+ * matches so AI Director always has something to reason about.
+ */
+export async function listAnalyzedAssetsForDirector(
+  supabase: TypedSupabaseClient,
+  filters: { productProject?: string; platform?: string; limit?: number } = {},
+): Promise<DirectorAssetContextRow[]> {
+  const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
+
+  async function run(withProductFilter: boolean) {
+    let query = supabase
+      .from("kontenai_assets")
+      .select("id, asset_type, title, ai_description, ai_tags, ai_category, ai_mood")
+      .is("deleted_at", null)
+      .eq("ai_vision_status", "completed");
+
+    if (filters.platform) query = query.eq("platform", filters.platform);
+
+    if (withProductFilter && filters.productProject) {
+      const term = `%${filters.productProject.trim().replace(/[,()%]/g, "")}%`;
+      query = query.or(`project.ilike.${term},company.ilike.${term},title.ilike.${term}`);
+    }
+
+    const { data, error } = await query.order("ai_analyzed_at", { ascending: false }).limit(limit);
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  let rows = filters.productProject ? await run(true) : await run(false);
+  if (rows.length === 0 && filters.productProject) {
+    rows = await run(false);
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    assetType: row.asset_type as KontenAiAssetType,
+    title: row.title,
+    aiDescription: row.ai_description,
+    aiTags: row.ai_tags ?? [],
+    aiCategory: row.ai_category,
+    aiMood: row.ai_mood,
+  }));
+}
+
 /** Flips ai_vision_status to 'pending' right before calling Gemini, so a concurrent list view shows the analysis is in flight. */
 export async function markKontenAiAssetVisionPending(supabase: TypedSupabaseClient, id: string): Promise<void> {
   const { error } = await supabase.from("kontenai_assets").update({ ai_vision_status: "pending" }).eq("id", id).is("deleted_at", null);

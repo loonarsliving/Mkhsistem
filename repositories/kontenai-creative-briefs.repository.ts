@@ -1,0 +1,69 @@
+import type { TypedSupabaseClient } from "@/lib/supabase/types";
+import type { KontenAiCreativeBriefRow } from "@/types/domain";
+
+export type KontenAiCreativeBriefObjective = "brand_awareness" | "leads" | "sales" | "engagement";
+export type KontenAiCreativeBriefPlatform = "instagram" | "tiktok" | "facebook";
+
+export interface KontenAiCreativeBriefWithCreator extends KontenAiCreativeBriefRow {
+  creator: { full_name: string } | null;
+}
+
+const SELECT_COLUMNS =
+  "id, objective, platform, target_audience, product_project, campaign_goal, big_idea, hook, key_message, target_emotion, cta, content_angle, referenced_asset_ids, created_by, created_at, creator:created_by(full_name)";
+
+export interface CreateKontenAiCreativeBriefInput {
+  objective: KontenAiCreativeBriefObjective;
+  platform: KontenAiCreativeBriefPlatform;
+  targetAudience: string;
+  productProject: string;
+  campaignGoal: string;
+  bigIdea: string;
+  hook: string;
+  keyMessage: string;
+  targetEmotion: string;
+  cta: string;
+  contentAngle: string;
+  referencedAssetIds: string[];
+  createdBy: string;
+}
+
+export async function createKontenAiCreativeBrief(
+  supabase: TypedSupabaseClient,
+  input: CreateKontenAiCreativeBriefInput,
+): Promise<KontenAiCreativeBriefRow> {
+  const { data, error } = await supabase
+    .from("kontenai_creative_briefs")
+    .insert({
+      objective: input.objective,
+      platform: input.platform,
+      target_audience: input.targetAudience,
+      product_project: input.productProject,
+      campaign_goal: input.campaignGoal,
+      big_idea: input.bigIdea,
+      hook: input.hook,
+      key_message: input.keyMessage,
+      target_emotion: input.targetEmotion,
+      cta: input.cta,
+      content_angle: input.contentAngle,
+      referenced_asset_ids: input.referencedAssetIds,
+      created_by: input.createdBy,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as KontenAiCreativeBriefRow;
+}
+
+/** Newest first -- the "riwayat Creative Brief" history list on the AI Director page. */
+export async function listKontenAiCreativeBriefs(
+  supabase: TypedSupabaseClient,
+  limit = 50,
+): Promise<KontenAiCreativeBriefWithCreator[]> {
+  const { data, error } = await supabase
+    .from("kontenai_creative_briefs")
+    .select(SELECT_COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as KontenAiCreativeBriefWithCreator[];
+}
