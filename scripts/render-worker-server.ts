@@ -17,7 +17,7 @@
  * but the shared secret keeps it from executing on any stray/malformed request.
  */
 import { createServer, type IncomingMessage } from "node:http";
-import { createAdminClient } from "../lib/supabase/admin";
+import { createAdminClient } from "../lib/supabase/worker-admin";
 import { processKontenAiRenderJob } from "../lib/kontenai/render-job-processor";
 import { claimKontenAiRenderJob } from "../repositories/kontenai-render-jobs.repository";
 
