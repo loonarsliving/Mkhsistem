@@ -84,7 +84,8 @@ export type NotificationCategoryDb =
   | "finance_expense_pending_verification"
   | "branch_balance_alert"
   | "sales_coaching_tip"
-  | "meta_ads_balance_low";
+  | "meta_ads_balance_low"
+  | "lead_wants_info";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";

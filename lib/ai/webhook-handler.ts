@@ -2,13 +2,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
-import { routeAdDrivenLead, tryBulkReassignAdLeadFollowUp, tryConfirmAdLeadFollowUp, tryReassignAdLeadFollowUp } from "./domains/ad-lead-routing";
+import {
+  routeAdDrivenLead,
+  tryBulkReassignAdLeadFollowUp,
+  tryConfirmAdLeadFollowUp,
+  tryNotifySalesLeadWantsInfo,
+  tryReassignAdLeadFollowUp,
+} from "./domains/ad-lead-routing";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
 export interface WhatsAppWebhookHandlerResult {
-  status: "processed" | "queued" | "ignored" | "error" | "ad_lead_routed";
+  status: "processed" | "queued" | "ignored" | "error" | "ad_lead_routed" | "lead_info_request_routed";
   sender?: string;
   replySent?: boolean;
   jobId?: string;
@@ -111,6 +117,23 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // stays the only one who talks to leads; WhatsApp Business's own
       // configured Auto Reply (outside this app) covers the canned
       // "terima kasih, sales kami akan segera menghubungi" greeting.
+      //
+      // Before giving up entirely: a known lead (already has a prospects
+      // row) asking for info/presentasi is a real signal that shouldn't be
+      // dropped just because this particular message carries no fresh
+      // ad_reply referral -- hand it to their assigned Sales instead of
+      // silently ignoring it (see tryNotifySalesLeadWantsInfo's doc).
+      if (inbound.content.kind === "text") {
+        trace.push("tryNotifySalesLeadWantsInfo:calling");
+        const infoResult = await tryNotifySalesLeadWantsInfo(inbound.sender, inbound.senderName, inbound.content.text);
+        trace.push(`tryNotifySalesLeadWantsInfo:${infoResult.outcome}`);
+        if (infoResult.outcome === "notified") {
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, null, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "lead_info_request_routed", sender: inbound.sender, reason: infoResult.outcome, trace };
+        }
+      }
+
       trace.push("unrecognized_sender:ignored_no_ai_reply");
       await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text message]", null, null);
       trace.push("saveAiConversationTurn:done");

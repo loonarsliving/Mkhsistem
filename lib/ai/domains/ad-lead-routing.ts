@@ -466,3 +466,64 @@ export async function tryBulkReassignAdLeadFollowUp(kepalaCabangId: string, bran
 
   return { outcome: "reassigned", sourceSalesName: sourceSales.full_name, reassignedCount: leads.length };
 }
+
+export type LeadWantsInfoOutcome = "not_an_info_request" | "no_matching_prospect" | "sales_has_no_phone" | "notified";
+
+export interface LeadWantsInfoResult {
+  outcome: LeadWantsInfoOutcome;
+  prospectId?: string;
+  salesName?: string;
+}
+
+/**
+ * A lead saying "boleh minta info/presentasi" etc. is exactly the moment a
+ * closing needs a human touch, not a canned AI reply -- see the
+ * handleWhatsAppWebhookEvent branch for unrecognized (non-employee) senders,
+ * which otherwise drops every reply from an already-known lead with no
+ * ad_reply referral (e.g. a plain follow-up message, not a fresh ad click)
+ * completely silently. This only fires for a phone number that ALREADY has
+ * a live prospects row (from a prior ad click or manual entry) -- a
+ * first-contact stranger with no prospect yet is out of scope here (that
+ * gap is routeAdDrivenLead's/manual-entry's job, not this one's).
+ */
+const INFO_REQUEST_KEYWORD_PATTERN = /\b(info|informasi|presentasi|penjelasan|brosur|penawaran|detail(?:nya)?)\b/i;
+
+export async function tryNotifySalesLeadWantsInfo(sender: string, senderName: string | undefined, messageText: string): Promise<LeadWantsInfoResult> {
+  if (!INFO_REQUEST_KEYWORD_PATTERN.test(messageText)) return { outcome: "not_an_info_request" };
+
+  const supabase = createAdminClient();
+  const senderDigits = digitsOnly(sender);
+
+  const { data: prospect } = await supabase
+    .from("prospects")
+    .select("id, customer_name, sales_id, project:project_id(name)")
+    .eq("phone_normalized", senderDigits)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!prospect) return { outcome: "no_matching_prospect" };
+
+  const { data: salesEmployee } = await supabase.from("employees").select("full_name, phone").eq("id", prospect.sales_id).maybeSingle();
+  if (!salesEmployee?.phone) return { outcome: "sales_has_no_phone" };
+
+  const project = prospect.project as { name?: string } | null;
+  const projectLabel = project?.name ? ` (${project.name})` : "";
+  const notifyText = `${prospect.customer_name || senderName || "Lead"}${projectLabel} minta info/presentasi lebih lanjut lewat WhatsApp. Segera hubungi dan sampaikan penjelasannya.`;
+  const sendResult = await sendWhatsAppText(salesEmployee.phone, notifyText);
+  if (!sendResult.success) {
+    logger.error("tryNotifySalesLeadWantsInfo: WA notify to sales failed", { salesId: prospect.sales_id, error: sendResult.error });
+  }
+
+  await supabase.from("mkc_notifications").insert({
+    user_id: prospect.sales_id,
+    type: "crm",
+    category: "lead_wants_info",
+    title: "Lead minta info/presentasi",
+    body: `${prospect.customer_name || senderName || "Lead"} minta info/presentasi lebih lanjut${projectLabel} -- segera hubungi.`,
+    link: `/crm/${prospect.id}`,
+  });
+
+  return { outcome: "notified", prospectId: prospect.id, salesName: salesEmployee.full_name };
+}
