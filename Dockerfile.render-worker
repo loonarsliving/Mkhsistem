@@ -1,0 +1,22 @@
+# Standalone Render Engine worker (KontenAI Sprint 6) -- runs
+# scripts/render-worker.ts continuously on its own host (Fly.io, Railway, a
+# VPS, anywhere). Deploy this image separately from the main Next.js app on
+# Vercel; it only needs Supabase + Google Drive env vars, never the rest of
+# MK Connect's runtime config.
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+# Full install (not --omit=dev): tsx/typescript (devDependencies) are what
+# actually run this script -- this image never ships to Vercel, so bundle
+# size doesn't matter the way it does for the Next.js app.
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY lib ./lib
+COPY repositories ./repositories
+COPY types ./types
+
+CMD ["npx", "tsx", "scripts/render-worker.ts"]

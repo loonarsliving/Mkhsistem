@@ -3,26 +3,23 @@
 import { revalidatePath } from "next/cache";
 
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
-import { resolveAssetDownloadSource } from "@/lib/kontenai/asset-source";
-import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "@/lib/video/render-storyboard";
 import { createClient } from "@/lib/supabase/server";
-import { listKontenAiAssetsByIds } from "@/repositories/kontenai-assets.repository";
-import {
-  createKontenAiRenderJob,
-  getKontenAiRenderJob,
-  listKontenAiRenderJobs,
-  markKontenAiRenderJobCompleted,
-  markKontenAiRenderJobFailed,
-  updateKontenAiRenderJobProgress,
-  type KontenAiRenderJobWithStoryboard,
-} from "@/repositories/kontenai-render-jobs.repository";
+import { createKontenAiRenderJob, getKontenAiRenderJob, listKontenAiRenderJobs, type KontenAiRenderJobWithStoryboard } from "@/repositories/kontenai-render-jobs.repository";
 import { getKontenAiStoryboard } from "@/repositories/kontenai-storyboards.repository";
 import { actionError, actionSuccess, type ActionResult, type KontenAiRenderJobRow } from "@/types/domain";
 
 const RENDER_ENGINE_PATH = "/kontenai/render-engine";
-const RENDER_BUCKET = "kontenai-renders";
 
-/** Step 1: validates the storyboard is render-ready (every scene has a selected asset) and queues a job -- fast, no ffmpeg work here yet. */
+/**
+ * Queues a render job -- validates the storyboard is render-ready (every
+ * scene has a selected asset) and inserts a 'queued' row. The actual ffmpeg
+ * render never runs inside a Vercel function: scripts/render-worker.ts, a
+ * standalone process running continuously on its own host, polls
+ * kontenai_render_jobs for 'queued' rows, claims one, and does the real
+ * encode there -- long/heavy renders would otherwise risk a serverless
+ * function's duration/memory limits. This action's only job is to queue;
+ * getRenderJobAction (polled by the UI) is how progress is observed.
+ */
 export async function createRenderJobAction(storyboardId: string): Promise<ActionResult<KontenAiRenderJobRow>> {
   const session = await requireKontenAiAccess();
   const supabase = await createClient();
@@ -39,80 +36,6 @@ export async function createRenderJobAction(storyboardId: string): Promise<Actio
     return actionSuccess(job);
   } catch (error) {
     return actionError(error instanceof Error ? error.message : "Gagal membuat render job");
-  }
-}
-
-/**
- * Step 2: the actual render -- downloads every scene's selected asset,
- * builds one fixed-size segment per scene (looped/trimmed to its duration,
- * fade in/out), concatenates them in storyboard order, muxes in a silent
- * placeholder audio track, uploads the draft mp4 to Supabase Storage, and
- * marks the job completed. Progress/stage are persisted at each real step
- * (never simulated) so a concurrent poll of getRenderJobAction sees genuine
- * status. Never throws to the caller -- always leaves the job in a clear
- * terminal state ('completed' or 'failed').
- */
-export async function processRenderJobAction(jobId: string): Promise<ActionResult<KontenAiRenderJobRow>> {
-  await requireKontenAiAccess();
-  const supabase = await createClient();
-
-  const job = await getKontenAiRenderJob(supabase, jobId);
-  if (job.status !== "queued") {
-    return actionError(`Render job ini sudah berstatus "${job.status}", tidak bisa diproses ulang`);
-  }
-
-  let workDir: string | null = null;
-  try {
-    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 2, stage: "Mengambil storyboard", markStarted: true });
-    const storyboard = await getKontenAiStoryboard(supabase, job.storyboard_id);
-
-    const assetIds = storyboard.scenes.map((scene) => scene.selectedAssetId!).filter(Boolean);
-    const assets = await listKontenAiAssetsByIds(supabase, [...new Set(assetIds)]);
-    const assetById = new Map(assets.map((asset) => [asset.id, asset]));
-
-    const scenes: RenderScene[] = await Promise.all(
-      storyboard.scenes.map(async (scene) => {
-        const asset = assetById.get(scene.selectedAssetId!);
-        if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
-        const source = await resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl });
-        return {
-          assetUrl: source.url,
-          assetHeaders: source.headers,
-          assetType: asset.assetType === "video" ? "video" : "image",
-          durationSeconds: scene.durationSeconds,
-        };
-      }),
-    );
-
-    const result = await renderStoryboardDraft(scenes, async (progress, stage) => {
-      await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
-    });
-    workDir = result.workDir;
-
-    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 95, stage: "Mengunggah hasil render" });
-    const buffer = await readRenderedFile(result.outputPath);
-    const storagePath = `${storyboard.id}/${jobId}.mp4`;
-
-    const { error: uploadError } = await supabase.storage.from(RENDER_BUCKET).upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
-    if (uploadError) throw uploadError;
-
-    const { data: publicUrlData } = supabase.storage.from(RENDER_BUCKET).getPublicUrl(storagePath);
-
-    const completed = await markKontenAiRenderJobCompleted(supabase, jobId, {
-      outputStoragePath: storagePath,
-      outputPublicUrl: publicUrlData.publicUrl,
-      durationSeconds: storyboard.total_duration_seconds,
-    });
-
-    revalidatePath(RENDER_ENGINE_PATH);
-    return actionSuccess(completed);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal merender storyboard";
-    await markKontenAiRenderJobFailed(supabase, jobId, message);
-    revalidatePath(RENDER_ENGINE_PATH);
-    return actionError(message);
-  } finally {
-    if (workDir) await cleanupRenderWorkDir(workDir);
   }
 }
 

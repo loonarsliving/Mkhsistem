@@ -46,6 +46,25 @@ export async function listCompletedKontenAiRenderJobs(supabase: TypedSupabaseCli
   return (data ?? []) as unknown as KontenAiRenderJobWithStoryboard[];
 }
 
+/** Oldest-first queued job ids -- what the standalone render worker (scripts/render-worker.ts) polls for. */
+export async function listQueuedKontenAiRenderJobIds(supabase: TypedSupabaseClient, limit = 5): Promise<string[]> {
+  const { data, error } = await supabase.from("kontenai_render_jobs").select("id").eq("status", "queued").order("created_at", { ascending: true }).limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.id);
+}
+
+/** Atomically claims one queued job by flipping it to 'rendering' only if it's still 'queued' -- returns false if another worker instance already claimed it, so callers never double-render the same job. */
+export async function claimKontenAiRenderJob(supabase: TypedSupabaseClient, id: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("kontenai_render_jobs")
+    .update({ status: "rendering", progress: 1, stage: "Mengklaim job", started_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "queued")
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 /** Marks the job as actively rendering and records a coarse, real progress step -- called at each pipeline stage so polling clients see genuine progress, not a simulated animation. */
 export async function updateKontenAiRenderJobProgress(
   supabase: TypedSupabaseClient,
