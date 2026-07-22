@@ -2779,6 +2779,76 @@ export interface Database {
           },
         ];
       };
+      kontenai_assets: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          filename: string;
+          asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
+          storage_path: string;
+          public_url: string;
+          file_type: string;
+          file_size_bytes: number;
+          resolution: string | null;
+          duration_seconds: number | null;
+          company: string | null;
+          project: string | null;
+          campaign: string | null;
+          platform: string | null;
+          content_type: string | null;
+          location: string | null;
+          status: "draft" | "active" | "archived";
+          tags: string[];
+          search_text: unknown;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          filename: string;
+          asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
+          storage_path: string;
+          public_url: string;
+          file_type: string;
+          file_size_bytes: number;
+          resolution?: string | null;
+          duration_seconds?: number | null;
+          company?: string | null;
+          project?: string | null;
+          campaign?: string | null;
+          platform?: string | null;
+          content_type?: string | null;
+          location?: string | null;
+          status?: "draft" | "active" | "archived";
+          tags?: string[];
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_assets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_assets_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_assets_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {

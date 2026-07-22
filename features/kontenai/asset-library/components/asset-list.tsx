@@ -1,83 +1,72 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { AssetRecord } from "@/features/kontenai/types";
-
-import { AssetDeleteButton } from "./asset-delete-button";
-import { AssetTagEditor } from "./asset-tag-editor";
-import { AssetThumbnail } from "./asset-thumbnail";
-import { formatBytes, formatDuration, formatUploadedAt } from "./asset-format";
-import { ASSET_TYPE_LABEL } from "./asset-type-icon";
-import { VisionStatusBadge } from "./vision-status-badge";
+import { AssetCardMenu } from "@/features/kontenai/asset-library/components/asset-card-menu";
+import { AssetThumbnail } from "@/features/kontenai/asset-library/components/asset-thumbnail";
+import { ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
+import { formatBytes, formatDate } from "@/features/kontenai/asset-library/utils/format";
+import type { KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
 
 interface AssetListProps {
-  assets: AssetRecord[];
-  onUpdateTags: (assetId: string, tags: string[]) => Promise<boolean>;
-  onDelete: (assetId: string) => void;
-  mutatingAssetId: string | null;
+  assets: KontenAiAssetWithCreator[];
+  onPreview: (asset: KontenAiAssetWithCreator) => void;
+  onEdit: (asset: KontenAiAssetWithCreator) => void;
 }
 
-export function AssetList({ assets, onUpdateTags, onDelete, mutatingAssetId }: AssetListProps) {
+export function AssetList({ assets, onPreview, onEdit }: AssetListProps) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Aset</TableHead>
-          <TableHead>Tipe</TableHead>
-          <TableHead>Ukuran</TableHead>
-          <TableHead>Tag</TableHead>
-          <TableHead>Gemini Vision</TableHead>
-          <TableHead>Diunggah</TableHead>
-          <TableHead className="text-right">Aksi</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {assets.map((asset) => {
-          const duration = formatDuration(asset.durationSeconds);
-          const isMutating = mutatingAssetId === asset.id;
-          return (
-            <TableRow key={asset.id}>
+    <div className="overflow-x-auto rounded-md border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Aset</TableHead>
+            <TableHead>Tipe</TableHead>
+            <TableHead>Company / Project</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Ukuran</TableHead>
+            <TableHead>Diperbarui</TableHead>
+            <TableHead className="text-right">Aksi</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {assets.map((asset) => (
+            <TableRow key={asset.id} className="cursor-pointer" onClick={() => onPreview(asset)}>
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <AssetThumbnail type={asset.type} className="h-10 w-10 shrink-0" iconClassName="h-5 w-5" />
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted/40">
+                    <AssetThumbnail assetType={asset.asset_type as KontenAiAssetType} publicUrl={asset.public_url} title={asset.title} />
+                  </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium" title={asset.filename}>
+                    <p className="truncate text-sm font-medium" title={asset.title}>
+                      {asset.title}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground" title={asset.filename}>
                       {asset.filename}
                     </p>
-                    {duration && <p className="text-xs text-muted-foreground">{duration}</p>}
                   </div>
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{ASSET_TYPE_LABEL[asset.type]}</Badge>
+                <Badge variant="outline">{ASSET_TYPE_LABEL[asset.asset_type as KontenAiAssetType]}</Badge>
               </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatBytes(asset.sizeBytes)}</TableCell>
-              <TableCell>
-                <div className="flex max-w-56 flex-wrap gap-1">
-                  {asset.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-[10px]">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
+              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                {[asset.company, asset.project].filter(Boolean).join(" / ") || "-"}
               </TableCell>
               <TableCell>
-                <VisionStatusBadge metadata={asset.metadata} />
+                <Badge variant="secondary">{asset.status}</Badge>
               </TableCell>
-              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {formatUploadedAt(asset.uploadedAt)}
-                <br />
-                {asset.uploadedBy}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center justify-end gap-0.5">
-                  <AssetTagEditor asset={asset} onSave={onUpdateTags} isSubmitting={isMutating} />
-                  <AssetDeleteButton asset={asset} onConfirm={onDelete} isSubmitting={isMutating} />
+              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatBytes(asset.file_size_bytes)}</TableCell>
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDate(asset.updated_at)}</TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-end">
+                  <AssetCardMenu asset={asset} onPreview={() => onPreview(asset)} onEdit={() => onEdit(asset)} />
                 </div>
               </TableCell>
             </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

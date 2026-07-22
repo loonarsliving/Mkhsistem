@@ -13,7 +13,7 @@ export default async function AssetLibraryPage() {
     <div className="space-y-6">
       <PageHeader
         title="Asset Library"
-        description="Pusat penyimpanan dan penelusuran seluruh aset produksi -- foto, video, audio, logo, dan template -- yang akan dikonsumsi oleh Gemini Vision, Asset Selector, Storyboard Engine, dan Render Engine."
+        description="Sumber tunggal seluruh aset marketing -- image, video, audio, logo, brand guideline, font, template, dan document -- yang akan digunakan oleh Gemini Vision, AI Director, Storyboard Engine, Asset Selector, Render Engine, Publishing Engine, Learning Engine, dan AI Optimization."
       />
       <AssetLibraryBoard />
     </div>

@@ -1,4 +1,4 @@
-/** Small formatting helpers shared by the Asset Library grid/list views. */
+/** Small formatting helpers shared by the Asset Library grid/list/preview views. */
 
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B";
@@ -15,6 +15,10 @@ export function formatDuration(seconds: number | null): string | null {
   return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
 
-export function formatUploadedAt(iso: string): string {
+export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }

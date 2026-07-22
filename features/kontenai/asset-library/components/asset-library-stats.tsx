@@ -1,16 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BRAND_LABELS } from "@/features/kontenai/lib/brands";
 import type { AssetLibraryStats } from "@/features/kontenai/asset-library/actions/asset-library.actions";
-import { ASSET_TYPE_LABEL } from "./asset-type-icon";
+import { ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 
 interface AssetLibraryStatsTilesProps {
   stats: AssetLibraryStats;
 }
 
-/** Stat tiles above the asset grid/list: total, per-type, and per-brand counts. */
+/** Stat tiles above the asset grid/list: total, per-type, and per-status counts. */
 export function AssetLibraryStatsTiles({ stats }: AssetLibraryStatsTilesProps) {
   const typeEntries = Object.entries(stats.byType) as [keyof typeof stats.byType, number][];
-  const brandEntries = Object.entries(stats.byBrand) as [keyof typeof stats.byBrand, number][];
+  const statusEntries = Object.entries(stats.byStatus) as [keyof typeof stats.byStatus, number][];
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -26,12 +25,12 @@ export function AssetLibraryStatsTiles({ stats }: AssetLibraryStatsTilesProps) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Berdasarkan Tipe</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Berdasarkan Status</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
-          {typeEntries.map(([type, count]) => (
-            <div key={type} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{ASSET_TYPE_LABEL[type]}</span>
+          {statusEntries.map(([status, count]) => (
+            <div key={status} className="flex items-center justify-between text-xs">
+              <span className="capitalize text-muted-foreground">{status}</span>
               <span className="font-medium tabular-nums">{count}</span>
             </div>
           ))}
@@ -40,12 +39,12 @@ export function AssetLibraryStatsTiles({ stats }: AssetLibraryStatsTilesProps) {
 
       <Card className="sm:col-span-2 lg:col-span-2">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Berdasarkan Brand</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Berdasarkan Tipe</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1">
-          {brandEntries.map(([brand, count]) => (
-            <div key={brand} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{BRAND_LABELS[brand]}</span>
+        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+          {typeEntries.map(([type, count]) => (
+            <div key={type} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{ASSET_TYPE_LABEL[type]}</span>
               <span className="font-medium tabular-nums">{count}</span>
             </div>
           ))}

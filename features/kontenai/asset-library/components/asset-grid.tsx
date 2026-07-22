@@ -1,72 +1,41 @@
-import { Clock } from "lucide-react";
+"use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import type { AssetRecord } from "@/features/kontenai/types";
-import { AssetDeleteButton } from "./asset-delete-button";
-import { AssetTagEditor } from "./asset-tag-editor";
-import { AssetThumbnail } from "./asset-thumbnail";
-import { formatBytes, formatDuration, formatUploadedAt } from "./asset-format";
-import { ASSET_TYPE_LABEL } from "./asset-type-icon";
-import { VisionStatusBadge } from "./vision-status-badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { AssetCardMenu } from "@/features/kontenai/asset-library/components/asset-card-menu";
+import { AssetThumbnail } from "@/features/kontenai/asset-library/components/asset-thumbnail";
+import { ASSET_TYPE_LABEL } from "@/features/kontenai/asset-library/utils/asset-type-meta";
+import { formatBytes } from "@/features/kontenai/asset-library/utils/format";
+import type { KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
 
 interface AssetGridProps {
-  assets: AssetRecord[];
-  onUpdateTags: (assetId: string, tags: string[]) => Promise<boolean>;
-  onDelete: (assetId: string) => void;
-  mutatingAssetId: string | null;
+  assets: KontenAiAssetWithCreator[];
+  onPreview: (asset: KontenAiAssetWithCreator) => void;
+  onEdit: (asset: KontenAiAssetWithCreator) => void;
 }
 
-export function AssetGrid({ assets, onUpdateTags, onDelete, mutatingAssetId }: AssetGridProps) {
+export function AssetGrid({ assets, onPreview, onEdit }: AssetGridProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {assets.map((asset) => {
-        const duration = formatDuration(asset.durationSeconds);
-        const isMutating = mutatingAssetId === asset.id;
-        return (
-          <Card key={asset.id} className="flex flex-col overflow-hidden">
-            <CardHeader className="p-0">
-              <AssetThumbnail type={asset.type} className="h-32 w-full rounded-none" iconClassName="h-10 w-10" />
-            </CardHeader>
-            <CardContent className="flex-1 space-y-2 pt-4">
-              <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 flex-1 truncate text-sm font-medium" title={asset.filename}>
-                  {asset.filename}
-                </p>
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <AssetTagEditor asset={asset} onSave={onUpdateTags} isSubmitting={isMutating} />
-                  <AssetDeleteButton asset={asset} onConfirm={onDelete} isSubmitting={isMutating} />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline">{ASSET_TYPE_LABEL[asset.type]}</Badge>
-                <VisionStatusBadge metadata={asset.metadata} />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{formatBytes(asset.sizeBytes)}</span>
-                {duration && (
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {duration}
-                  </span>
-                )}
-              </div>
-              {asset.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {asset.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-[10px]">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="pt-0 text-xs text-muted-foreground">
-              Diunggah {formatUploadedAt(asset.uploadedAt)} oleh {asset.uploadedBy}
-            </CardFooter>
-          </Card>
-        );
-      })}
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      {assets.map((asset) => (
+        <Card key={asset.id} className="group cursor-pointer overflow-hidden transition-colors hover:border-primary/40" onClick={() => onPreview(asset)}>
+          <div className="aspect-square overflow-hidden bg-muted/40">
+            <AssetThumbnail assetType={asset.asset_type as KontenAiAssetType} publicUrl={asset.public_url} title={asset.title} />
+          </div>
+          <CardContent className="space-y-1.5 p-3">
+            <div className="flex items-start justify-between gap-1">
+              <p className="line-clamp-1 text-sm font-medium">{asset.title}</p>
+              <AssetCardMenu asset={asset} onPreview={() => onPreview(asset)} onEdit={() => onEdit(asset)} />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="text-[11px]">
+                {ASSET_TYPE_LABEL[asset.asset_type as KontenAiAssetType]}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{formatBytes(asset.file_size_bytes)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

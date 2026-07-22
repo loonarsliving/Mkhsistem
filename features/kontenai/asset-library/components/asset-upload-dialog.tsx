@@ -1,68 +1,74 @@
 "use client";
 
-import { useState } from "react";
-import { Upload } from "lucide-react";
+import * as React from "react";
+import { UploadCloud, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AssetType } from "@/features/kontenai/types";
-import type { UploadAssetInput } from "@/features/kontenai/asset-library/actions/asset-library.actions";
-import { ASSET_TYPE_LABEL } from "./asset-type-icon";
+import { Textarea } from "@/components/ui/textarea";
+import { useUploadKontenAiAsset } from "@/features/kontenai/asset-library/hooks/use-kontenai-asset-mutations";
+import { ASSET_TYPE_ACCEPT, ASSET_TYPE_OPTIONS, guessAssetTypeFromMime } from "@/features/kontenai/asset-library/utils/asset-type-meta";
+import type { KontenAiAssetType } from "@/repositories/kontenai-assets.repository";
 
-const ASSET_TYPES: AssetType[] = ["image", "video", "audio", "logo", "template"];
+const INITIAL_TYPE: KontenAiAssetType = "image";
 
-interface AssetUploadDialogProps {
-  onUpload: (input: UploadAssetInput) => Promise<boolean>;
-  isSubmitting: boolean;
-  error?: string | null;
-}
+export function AssetUploadDialog() {
+  const uploadMutation = useUploadKontenAiAsset();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-/**
- * Mock upload flow: no real file picker/storage backend (out of scope for
- * this sprint), but the form fields, validation, and resulting
- * `uploadAssetAction` call are real -- this is what wires the previously
- * disabled "Upload Assets" button up.
- */
-export function AssetUploadDialog({ onUpload, isSubmitting, error }: AssetUploadDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [filename, setFilename] = useState("");
-  const [type, setType] = useState<AssetType>("image");
-  const [tagsInput, setTagsInput] = useState("");
-  const [sizeMb, setSizeMb] = useState("1");
-  const [durationSeconds, setDurationSeconds] = useState("");
-
-  const needsDuration = type === "video" || type === "audio";
+  const [open, setOpen] = React.useState(false);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [assetType, setAssetType] = React.useState<KontenAiAssetType>(INITIAL_TYPE);
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [company, setCompany] = React.useState("");
+  const [project, setProject] = React.useState("");
+  const [campaign, setCampaign] = React.useState("");
+  const [platform, setPlatform] = React.useState("");
+  const [contentType, setContentType] = React.useState("");
+  const [location, setLocation] = React.useState("");
+  const [tags, setTags] = React.useState<string[]>([]);
+  const [tagInput, setTagInput] = React.useState("");
 
   function resetForm() {
-    setFilename("");
-    setType("image");
-    setTagsInput("");
-    setSizeMb("1");
-    setDurationSeconds("");
+    setFile(null);
+    setAssetType(INITIAL_TYPE);
+    setTitle("");
+    setDescription("");
+    setCompany("");
+    setProject("");
+    setCampaign("");
+    setPlatform("");
+    setContentType("");
+    setLocation("");
+    setTags([]);
+    setTagInput("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleFileChange(selected: File | null) {
+    setFile(selected);
+    if (selected) {
+      setAssetType(guessAssetTypeFromMime(selected.type));
+      if (!title) setTitle(selected.name.replace(/\.[^/.]+$/, ""));
+    }
+  }
+
+  function addTag() {
+    const value = tagInput.trim();
+    if (value && !tags.includes(value)) setTags((prev) => [...prev, value]);
+    setTagInput("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const sizeBytes = Math.round(Number(sizeMb) * 1024 * 1024);
-    const success = await onUpload({
-      filename,
-      type,
-      tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
-      sizeBytes,
-      durationSeconds: needsDuration && durationSeconds ? Number(durationSeconds) : null,
-    });
-    if (success) setOpen(false);
+    if (!file) return;
+    await uploadMutation.mutateAsync({ file, title, description, assetType, company, project, campaign, platform, contentType, location, tags });
+    setOpen(false);
   }
 
   return (
@@ -75,40 +81,27 @@ export function AssetUploadDialog({ onUpload, isSubmitting, error }: AssetUpload
     >
       <DialogTrigger asChild>
         <Button type="button">
-          <Upload className="h-4 w-4" />
+          <UploadCloud className="h-4 w-4" />
           Upload Assets
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Upload Aset</DialogTitle>
-            <DialogDescription>
-              Simulasi upload -- belum ada storage backend, jadi metadata ini langsung disimpan ke library.
-            </DialogDescription>
+            <DialogDescription>Image, video, audio, logo, brand guideline, font, template, atau document -- tersimpan di Supabase Storage.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="asset-filename">Nama file</Label>
-            <Input
-              id="asset-filename"
-              value={filename}
-              onChange={(e) => setFilename(e.target.value)}
-              placeholder="contoh: villa-cariu-hero.jpg"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="asset-type">Tipe</Label>
-            <Select value={type} onValueChange={(value) => setType(value as AssetType)}>
-              <SelectTrigger id="asset-type">
-                <SelectValue placeholder="Tipe aset" />
+            <Label htmlFor="asset-upload-type">Tipe</Label>
+            <Select value={assetType} onValueChange={(value) => setAssetType(value as KontenAiAssetType)}>
+              <SelectTrigger id="asset-upload-type">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ASSET_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {ASSET_TYPE_LABEL[t]}
+                {ASSET_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -116,47 +109,95 @@ export function AssetUploadDialog({ onUpload, isSubmitting, error }: AssetUpload
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="asset-tags">Tag (pisahkan dengan koma)</Label>
+            <Label htmlFor="asset-upload-file">File</Label>
             <Input
-              id="asset-tags"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="leasehold_sales, eksterior, golden-hour"
+              id="asset-upload-file"
+              ref={fileInputRef}
+              type="file"
+              accept={ASSET_TYPE_ACCEPT[assetType]}
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+              required
             />
+            {file && (
+              <p className="text-xs text-muted-foreground">
+                {file.name} -- {(file.size / (1024 * 1024)).toFixed(2)} MB
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="asset-upload-title">Judul</Label>
+            <Input id="asset-upload-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="asset-upload-description">Deskripsi</Label>
+            <Textarea id="asset-upload-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="asset-size">Ukuran (MB)</Label>
-              <Input
-                id="asset-size"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={sizeMb}
-                onChange={(e) => setSizeMb(e.target.value)}
-                required
-              />
+              <Label htmlFor="asset-upload-company">Company</Label>
+              <Input id="asset-upload-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Leasehold, Villa, Beauty..." />
             </div>
-            {needsDuration && (
-              <div className="space-y-2">
-                <Label htmlFor="asset-duration">Durasi (detik)</Label>
-                <Input
-                  id="asset-duration"
-                  type="number"
-                  min="0"
-                  value={durationSeconds}
-                  onChange={(e) => setDurationSeconds(e.target.value)}
-                />
+            <div className="space-y-2">
+              <Label htmlFor="asset-upload-project">Project</Label>
+              <Input id="asset-upload-project" value={project} onChange={(e) => setProject(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asset-upload-campaign">Campaign</Label>
+              <Input id="asset-upload-campaign" value={campaign} onChange={(e) => setCampaign(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asset-upload-platform">Platform</Label>
+              <Input id="asset-upload-platform" value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="instagram, tiktok..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asset-upload-content-type">Content Type</Label>
+              <Input id="asset-upload-content-type" value={contentType} onChange={(e) => setContentType(e.target.value)} placeholder="reel, feed, ad, story..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asset-upload-location">Location</Label>
+              <Input id="asset-upload-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Yogyakarta, Villa Cariu..." />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="asset-upload-tags">Tags</Label>
+            <div className="flex gap-2">
+              <Input
+                id="asset-upload-tags"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+                placeholder="Ketik lalu Enter"
+              />
+              <Button type="button" variant="outline" onClick={addTag}>
+                Tambah
+              </Button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {tags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="gap-1">
+                    {tag}
+                    <button type="button" onClick={() => setTags((prev) => prev.filter((t) => t !== tag))} aria-label={`Hapus tag ${tag}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
               </div>
             )}
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Mengunggah..." : "Upload"}
+            <Button type="submit" disabled={uploadMutation.isPending || !file || !title.trim()}>
+              {uploadMutation.isPending ? "Mengunggah..." : "Upload"}
             </Button>
           </DialogFooter>
         </form>

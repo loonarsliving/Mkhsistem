@@ -40,6 +40,8 @@ export type LoonarsContentMetric = Tables<"loonars_content_metrics">;
 export type LoonarsOrder = Tables<"loonars_orders">;
 export type LoonarsWeeklyEvaluation = Tables<"loonars_weekly_evaluations">;
 
+export type KontenAiAssetRow = Tables<"kontenai_assets">;
+
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {
   userId: string;
