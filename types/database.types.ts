@@ -3058,6 +3058,65 @@ export interface Database {
           },
         ];
       };
+      kontenai_content_performance: {
+        Row: {
+          id: string;
+          publish_schedule_id: string;
+          views: number;
+          reach: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          ctr: number | null;
+          leads: number | null;
+          ai_insight: string;
+          recommended_hook: string;
+          recommended_duration_seconds: number | null;
+          recommended_cta: string;
+          recommended_visual: string;
+          recommended_target_emotion: string;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          publish_schedule_id: string;
+          views?: number;
+          reach?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          ctr?: number | null;
+          leads?: number | null;
+          ai_insight?: string;
+          recommended_hook?: string;
+          recommended_duration_seconds?: number | null;
+          recommended_cta?: string;
+          recommended_visual?: string;
+          recommended_target_emotion?: string;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_content_performance"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_content_performance_publish_schedule_id_fkey";
+            columns: ["publish_schedule_id"];
+            referencedRelation: "kontenai_publish_schedules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_content_performance_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {

@@ -45,6 +45,7 @@ export type KontenAiCreativeBriefRow = Tables<"kontenai_creative_briefs">;
 export type KontenAiStoryboardRow = Tables<"kontenai_storyboards">;
 export type KontenAiRenderJobRow = Tables<"kontenai_render_jobs">;
 export type KontenAiPublishScheduleRow = Tables<"kontenai_publish_schedules">;
+export type KontenAiContentPerformanceRow = Tables<"kontenai_content_performance">;
 
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {
