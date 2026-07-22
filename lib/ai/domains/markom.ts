@@ -663,7 +663,11 @@ export async function reviewContentSubmission(input: ContentReviewInput): Promis
   const captionLine = input.caption?.trim() ? `Caption yang ditulis Markom: "${input.caption.trim()}"` : "Markom belum menulis caption.";
 
   if (input.mediaType === "image" && input.imageBase64 && input.imageMimeType) {
-    const userPrompt = `Kamu Branch Manager yang meninjau foto konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram. Foto asli terlampir -- benar-benar lihat isinya (framing, pencahayaan, kualitas, kesesuaian subjek dengan brief), jangan hanya menilai dari caption.
+    const userPrompt = `Kamu Branch Manager yang meninjau foto konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram.
+
+ABAIKAN rubrik audit caption/hook/hashtag Instagram apapun yang ada di pengetahuanmu untuk tugas ini -- itu untuk tugas lain (audit performa konten yang SUDAH tayang), bukan untuk keputusan "layak tayang atau tidak" ini.
+
+BOBOT PENILAIAN, WAJIB DIPATUHI: skor ini terutama tentang KELAYAKAN VISUAL foto (~85% bobot) -- framing, pencahayaan, ketajaman/kualitas gambar, kesesuaian subjek dengan brief. Caption HANYA ~15% bobot dan TIDAK BOLEH menjatuhkan skor jauh kalau fotonya sendiri sudah bagus dan sesuai brief -- caption gampang direvisi kapan saja tanpa foto ulang, jadi jangan jadikan alasan utama skor rendah. Foto asli terlampir -- benar-benar lihat isinya, jangan menilai dari caption saja.
 
 Brief asli dari AI:
 Judul: ${input.taskTitle}
@@ -671,7 +675,7 @@ Deskripsi: ${input.taskDescription ?? "-"}
 
 ${captionLine}
 
-Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak foto ini langsung tayang: 10 = sempurna, sesuai brief dan kualitas visual sangat baik; di bawah 8.5 = butuh revisi (framing, kualitas, tidak sesuai brief, caption perlu diperbaiki, dll -- jelaskan persis apa yang kurang).
+Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak foto ini langsung tayang, dengan bobot di atas: 10 = fotonya sempurna secara visual dan sesuai brief; di bawah 8.5 = ada masalah VISUAL yang nyata (framing buruk, blur/gelap, tidak sesuai brief) -- kalau fotonya sendiri sudah bagus, caption yang kurang ideal paling banyak memotong skor sedikit, bukan menjatuhkannya di bawah 8.5. Jelaskan persis apa yang kurang, dan sebutkan jelas mana masalah visual vs masalah caption.
 
 Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat di foto dan alasan skornya"}`;
 
@@ -685,7 +689,11 @@ Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat u
   }
 
   if (input.mediaType === "video" && input.videoBase64 && input.videoMimeType) {
-    const userPrompt = `Kamu Branch Manager yang meninjau video konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram. Video asli terlampir -- benar-benar tonton isinya (adegan, gerakan, framing, pencahayaan, kualitas audio, kesesuaian isi dengan brief), jangan hanya menilai dari caption.
+    const userPrompt = `Kamu Branch Manager yang meninjau video konten berikut sebelum diizinkan dijadwalkan tayang ke Instagram.
+
+ABAIKAN rubrik audit caption/hook/hashtag Instagram apapun yang ada di pengetahuanmu untuk tugas ini -- itu untuk tugas lain (audit performa konten yang SUDAH tayang), bukan untuk keputusan "layak tayang atau tidak" ini.
+
+BOBOT PENILAIAN, WAJIB DIPATUHI: skor ini terutama tentang KELAYAKAN VISUAL/AUDIO video (~85% bobot) -- adegan, gerakan, framing, pencahayaan, kualitas gambar/suara, kesesuaian isi dengan brief. Caption HANYA ~15% bobot dan TIDAK BOLEH menjatuhkan skor jauh kalau videonya sendiri sudah bagus dan sesuai brief -- caption gampang direvisi kapan saja tanpa syuting ulang, jadi jangan jadikan alasan utama skor rendah. Video asli terlampir -- benar-benar tonton isinya, jangan menilai dari caption saja.
 
 Brief asli dari AI:
 Judul: ${input.taskTitle}
@@ -693,7 +701,7 @@ Deskripsi: ${input.taskDescription ?? "-"}
 
 ${captionLine}
 
-Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak video ini langsung tayang: 10 = sempurna, sesuai brief dan kualitas visual/audio sangat baik; di bawah 8.5 = butuh revisi (adegan tidak sesuai brief, kualitas gambar/suara kurang, durasi/pacing kurang pas, caption perlu diperbaiki, dll -- jelaskan persis apa yang kurang berdasarkan yang kamu tonton).
+Beri skor 0-10 (boleh satu desimal, misal 8.5) seberapa layak video ini langsung tayang, dengan bobot di atas: 10 = videonya sempurna secara visual/audio dan sesuai brief; di bawah 8.5 = ada masalah VISUAL/AUDIO yang nyata (adegan tidak sesuai brief, gambar/suara buruk, pacing kacau) -- kalau videonya sendiri sudah bagus, caption yang kurang ideal paling banyak memotong skor sedikit, bukan menjatuhkannya di bawah 8.5. Jelaskan persis apa yang kurang berdasarkan yang kamu tonton, dan sebutkan jelas mana masalah visual/audio vs masalah caption.
 
 Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat untuk Markom, Bahasa Indonesia, sebutkan hal konkret yang dilihat/didengar di videonya dan alasan skornya"}`;
 
