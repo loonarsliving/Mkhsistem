@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { PipelineBoard } from "@/features/kontenai/production-pipeline/components/pipeline-board";
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "Production Pipeline" };
 
 export default async function ProductionPipelinePage() {
-  const session = await requireSession();
-  const canView = hasPermission(session, "content_planner.view");
-  if (!canView) notFound();
+  await requireKontenAiAccess();
 
   return (
     <div className="space-y-6">

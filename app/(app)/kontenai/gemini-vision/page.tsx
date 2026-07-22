@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { GeminiVisionQueue } from "@/features/kontenai/gemini-vision/components/gemini-vision-queue";
 import { listAssetsForAnalysisAction } from "@/features/kontenai/gemini-vision/actions/gemini-vision.actions";
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "Gemini Vision" };
 
 export default async function GeminiVisionPage() {
-  const session = await requireSession();
-  const canView = hasPermission(session, "content_planner.view");
-  if (!canView) notFound();
+  await requireKontenAiAccess();
 
   const assets = await listAssetsForAnalysisAction();
 

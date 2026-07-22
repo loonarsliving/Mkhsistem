@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { RenderEngineBoard } from "@/features/kontenai/render-engine/components/render-engine-board";
@@ -7,14 +6,12 @@ import {
   listRenderJobsAction,
   listStoryboardsReadyToRenderAction,
 } from "@/features/kontenai/render-engine/actions/render-engine.actions";
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "Render Engine" };
 
 export default async function RenderEnginePage() {
-  const session = await requireSession();
-  const canView = hasPermission(session, "content_planner.view");
-  if (!canView) notFound();
+  await requireKontenAiAccess();
 
   const [storyboards, jobs] = await Promise.all([listStoryboardsReadyToRenderAction(), listRenderJobsAction()]);
 

@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { AssetLibraryBoard } from "@/features/kontenai/asset-library/components/asset-library-board";
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "Asset Library" };
 
 export default async function AssetLibraryPage() {
-  const session = await requireSession();
-  const canView = hasPermission(session, "content_planner.view");
-  if (!canView) notFound();
+  await requireKontenAiAccess();
 
   return (
     <div className="space-y-6">

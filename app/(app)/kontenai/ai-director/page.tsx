@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { AiDirectorBoard } from "@/features/kontenai/ai-director/components/ai-director-board";
-import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
 export const metadata: Metadata = { title: "AI Director" };
 
 export default async function AiDirectorPage() {
-  const session = await requireSession();
-  const canView = hasPermission(session, "content_planner.view");
-  if (!canView) notFound();
+  await requireKontenAiAccess();
 
   return (
     <div className="space-y-6">
