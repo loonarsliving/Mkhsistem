@@ -17,7 +17,7 @@ export type KontenAiAssetWithCreator = Omit<KontenAiAssetRow, "ai_scene_summary"
 };
 
 const SELECT_COLUMNS =
-  "id, title, description, filename, asset_type, storage_path, public_url, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, ai_vision_status, ai_title, ai_description, ai_tags, ai_category, ai_detected_objects, ai_dominant_colors, ai_mood, ai_analyzed_at, ai_error, ai_scene_summary, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
+  "id, title, description, filename, asset_type, storage_path, public_url, storage_provider, file_type, file_size_bytes, resolution, duration_seconds, company, project, campaign, platform, content_type, location, status, tags, ai_vision_status, ai_title, ai_description, ai_tags, ai_category, ai_detected_objects, ai_dominant_colors, ai_mood, ai_analyzed_at, ai_error, ai_scene_summary, created_by, updated_by, created_at, updated_at, creator:created_by(full_name)";
 
 function parseSceneSummary(raw: unknown): KontenAiVideoSceneSummaryItem[] {
   if (!Array.isArray(raw)) return [];
@@ -109,6 +109,7 @@ export interface CreateKontenAiAssetInput {
   asset_type: KontenAiAssetType;
   storage_path: string;
   public_url: string;
+  storage_provider: "supabase" | "google_drive";
   file_type: string;
   file_size_bytes: number;
   resolution: string | null;
@@ -170,6 +171,7 @@ export async function duplicateKontenAiAsset(supabase: TypedSupabaseClient, id: 
     asset_type: original.asset_type as KontenAiAssetType,
     storage_path: original.storage_path,
     public_url: original.public_url,
+    storage_provider: (original.storage_provider as "supabase" | "google_drive") ?? "supabase",
     file_type: original.file_type,
     file_size_bytes: original.file_size_bytes,
     resolution: original.resolution,
@@ -335,6 +337,8 @@ export interface KontenAiAssetForRender {
   id: string;
   assetType: KontenAiAssetType;
   publicUrl: string;
+  storagePath: string;
+  storageProvider: "supabase" | "google_drive";
   title: string;
   aiCategory: string | null;
   aiTags: string[];
@@ -343,12 +347,17 @@ export interface KontenAiAssetForRender {
 /** Fetches exactly the assets a storyboard's scenes point to (Render Engine Sprint 6, Learning Engine Sprint 8) -- not filtered by vision status, since a scene's selected asset is always one already surfaced by Asset Selector. */
 export async function listKontenAiAssetsByIds(supabase: TypedSupabaseClient, ids: string[]): Promise<KontenAiAssetForRender[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await supabase.from("kontenai_assets").select("id, asset_type, public_url, title, ai_category, ai_tags").in("id", ids);
+  const { data, error } = await supabase
+    .from("kontenai_assets")
+    .select("id, asset_type, public_url, storage_path, storage_provider, title, ai_category, ai_tags")
+    .in("id", ids);
   if (error) throw error;
   return (data ?? []).map((row) => ({
     id: row.id,
     assetType: row.asset_type as KontenAiAssetType,
     publicUrl: row.public_url,
+    storagePath: row.storage_path,
+    storageProvider: (row.storage_provider as "supabase" | "google_drive") ?? "supabase",
     title: row.title,
     aiCategory: row.ai_category,
     aiTags: row.ai_tags ?? [],

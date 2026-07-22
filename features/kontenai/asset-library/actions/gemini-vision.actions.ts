@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 import { analyzeAssetWithGeminiVision, analyzeVideoKeyframe, analyzeVideoWithoutFrames, combineVideoSceneAnalysis } from "@/lib/ai/domains/kontenai-vision";
+import { resolveAssetDownloadSource } from "@/lib/kontenai/asset-source";
 import { createClient } from "@/lib/supabase/server";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import { extractVideoKeyframes } from "@/lib/video/extract-keyframes";
@@ -19,8 +20,9 @@ import { actionSuccess, type ActionResult, type KontenAiAssetRow } from "@/types
 
 const ASSET_LIBRARY_PATH = "/kontenai/asset-library";
 
-async function analyzeImageAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url">) {
-  const imageBase64 = await fetchUrlAsBase64(asset.public_url);
+async function analyzeImageAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url" | "storage_path" | "storage_provider">) {
+  const source = await resolveAssetDownloadSource(asset);
+  const imageBase64 = await fetchUrlAsBase64(source.url, source.headers);
   return analyzeAssetWithGeminiVision({
     filename: asset.filename,
     currentTitle: asset.title,
@@ -39,8 +41,9 @@ async function analyzeImageAsset(asset: Pick<KontenAiAssetRow, "title" | "filena
  * usable frames -- never fails the whole analysis just because one frame
  * failed to decode.
  */
-async function analyzeVideoAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url" | "duration_seconds">) {
-  const frames = await extractVideoKeyframes(asset.public_url, asset.duration_seconds, { maxFrames: 8, minIntervalSeconds: 5 });
+async function analyzeVideoAsset(asset: Pick<KontenAiAssetRow, "title" | "filename" | "public_url" | "duration_seconds" | "storage_path" | "storage_provider">) {
+  const source = await resolveAssetDownloadSource(asset);
+  const frames = await extractVideoKeyframes(source.url, asset.duration_seconds, { maxFrames: 8, minIntervalSeconds: 5, headers: source.headers });
 
   if (frames.length === 0) {
     const fallback = await analyzeVideoWithoutFrames(asset.filename, asset.title);
@@ -80,7 +83,7 @@ async function analyzeVideoAsset(asset: Pick<KontenAiAssetRow, "title" | "filena
  */
 export async function runVisionAnalysisAndSave(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  asset: Pick<KontenAiAssetRow, "id" | "title" | "filename" | "asset_type" | "public_url" | "duration_seconds">,
+  asset: Pick<KontenAiAssetRow, "id" | "title" | "filename" | "asset_type" | "public_url" | "duration_seconds" | "storage_path" | "storage_provider">,
 ): Promise<{ success: boolean; error?: string }> {
   if (!isVisionEligibleAssetType(asset.asset_type as KontenAiAssetType)) {
     return { success: false, error: "Tipe aset ini tidak didukung Gemini Vision" };

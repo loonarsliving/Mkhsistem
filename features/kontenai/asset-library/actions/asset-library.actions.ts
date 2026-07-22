@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { runVisionAnalysisAndSave } from "@/features/kontenai/asset-library/actions/gemini-vision.actions";
 import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
+import { ensureDriveFolderPath, isGoogleDriveConfigured, uploadFileToDrive } from "@/lib/google-drive/client";
 import { createClient } from "@/lib/supabase/server";
 import {
   createKontenAiAsset,
@@ -84,26 +85,6 @@ export async function getAssetLibraryStatsAction(): Promise<AssetLibraryStats> {
   return { totalAssets: totalAssets ?? 0, byType, byStatus };
 }
 
-export interface CreateKontenAiAssetActionInput {
-  title: string;
-  description: string | null;
-  filename: string;
-  assetType: KontenAiAssetType;
-  storagePath: string;
-  publicUrl: string;
-  fileType: string;
-  fileSizeBytes: number;
-  resolution: string | null;
-  durationSeconds: number | null;
-  company: string | null;
-  project: string | null;
-  campaign: string | null;
-  platform: string | null;
-  contentType: string | null;
-  location: string | null;
-  tags: string[];
-}
-
 export interface CreateKontenAiAssetActionResult {
   asset: KontenAiAssetRow;
   /** Whether Gemini Vision ran for this asset (image/video only) and succeeded -- false + visionError set if it ran but failed; undefined (no visionError) if the asset type isn't eligible at all. */
@@ -111,45 +92,83 @@ export interface CreateKontenAiAssetActionResult {
   visionError?: string;
 }
 
+function readClassification(formData: FormData, key: string): string | null {
+  const value = formData.get(key);
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 /**
- * Called after the file itself has already been uploaded client-side to
- * Supabase Storage (see lib/supabase/storage.ts uploadEntityFile) -- this
- * persists the metadata row, then, for image/video assets, immediately
- * runs Gemini Vision synchronously (same request) before returning --
- * mirroring createContentSubmissionAction's "insert succeeds first,
- * independently of the AI outcome" pattern. A failed analysis never fails
- * the upload itself; "Analyze Again" (analyzeAssetVisionAction) can retry.
+ * Uploads the file itself to Google Drive (server-side, using the KontenAI
+ * Drive service account -- see lib/google-drive/client.ts), persists the
+ * metadata row, then, for image/video assets, immediately runs Gemini
+ * Vision synchronously (same request) before returning -- mirroring
+ * createContentSubmissionAction's "insert succeeds first, independently of
+ * the AI outcome" pattern. A failed analysis never fails the upload itself;
+ * "Analyze Again" (analyzeAssetVisionAction) can retry.
+ *
+ * Every new asset is written to Drive, not Supabase Storage -- Asset
+ * Library's single source of truth going forward. Pre-existing rows stay on
+ * Supabase Storage (storage_provider='supabase', untouched).
  */
-export async function createKontenAiAssetAction(input: CreateKontenAiAssetActionInput): Promise<ActionResult<CreateKontenAiAssetActionResult>> {
+export async function uploadKontenAiAssetAction(formData: FormData): Promise<ActionResult<CreateKontenAiAssetActionResult>> {
   const session = await requireKontenAiAccess();
 
-  const title = input.title.trim();
-  if (!title) return actionError("Judul tidak boleh kosong");
-  if (!input.filename.trim()) return actionError("Nama file tidak valid");
-  if (!ASSET_TYPES.includes(input.assetType)) return actionError("Tipe aset tidak valid");
-  if (!Number.isFinite(input.fileSizeBytes) || input.fileSizeBytes <= 0) return actionError("Ukuran file tidak valid");
-  if (!input.storagePath || !input.publicUrl) return actionError("Upload file gagal, path/URL penyimpanan kosong");
+  if (!isGoogleDriveConfigured()) {
+    return actionError("Google Drive belum dikonfigurasi -- set env var GOOGLE_DRIVE_CLIENT_EMAIL, GOOGLE_DRIVE_PRIVATE_KEY, dan GOOGLE_DRIVE_ROOT_FOLDER_ID di Vercel.");
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return actionError("File tidak ditemukan");
+
+  const title = (formData.get("title") as string | null)?.trim() || file.name;
+  const assetType = (formData.get("assetType") as string | null) || "";
+  if (!ASSET_TYPES.includes(assetType as KontenAiAssetType)) return actionError("Tipe aset tidak valid");
+
+  const company = readClassification(formData, "company");
+  const project = readClassification(formData, "project");
+  const campaign = readClassification(formData, "campaign");
+  const platform = readClassification(formData, "platform");
+  const contentType = readClassification(formData, "contentType");
+  const location = readClassification(formData, "location");
+  const description = readClassification(formData, "description");
+  const resolution = readClassification(formData, "resolution");
+  const durationRaw = formData.get("durationSeconds") as string | null;
+  const durationSeconds = durationRaw ? Number(durationRaw) || null : null;
+  const tags = normalizeTags(JSON.parse((formData.get("tags") as string | null) || "[]"));
 
   const supabase = await createClient();
   try {
+    const dateSegment = new Date().toISOString().slice(0, 10);
+    const folderSegments = [company, project, campaign, platform, contentType, dateSegment].filter((s): s is string => Boolean(s));
+    const folderId = await ensureDriveFolderPath(folderSegments);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { fileId, webViewLink } = await uploadFileToDrive({
+      folderId,
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      buffer,
+    });
+
     const asset = await createKontenAiAsset(supabase, {
       title,
-      description: input.description?.trim() || null,
-      filename: input.filename.trim(),
-      asset_type: input.assetType,
-      storage_path: input.storagePath,
-      public_url: input.publicUrl,
-      file_type: input.fileType,
-      file_size_bytes: Math.round(input.fileSizeBytes),
-      resolution: input.resolution,
-      duration_seconds: input.durationSeconds,
-      company: input.company?.trim() || null,
-      project: input.project?.trim() || null,
-      campaign: input.campaign?.trim() || null,
-      platform: input.platform?.trim() || null,
-      content_type: input.contentType?.trim() || null,
-      location: input.location?.trim() || null,
-      tags: normalizeTags(input.tags),
+      description,
+      filename: file.name,
+      asset_type: assetType as KontenAiAssetType,
+      storage_path: fileId,
+      public_url: webViewLink,
+      storage_provider: "google_drive",
+      file_type: file.type || "application/octet-stream",
+      file_size_bytes: file.size,
+      resolution,
+      duration_seconds: durationSeconds,
+      company,
+      project,
+      campaign,
+      platform,
+      content_type: contentType,
+      location,
+      tags,
       created_by: session.userId,
     });
 

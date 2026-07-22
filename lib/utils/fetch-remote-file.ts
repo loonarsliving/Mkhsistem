@@ -8,12 +8,12 @@ import "server-only";
  * photo into Gemini's vision input without duplicating the fetch/timeout
  * boilerplate.
  */
-export async function fetchUrlAsBase64(url: string, timeoutMs = 20_000): Promise<string> {
+export async function fetchUrlAsBase64(url: string, headers?: Record<string, string>, timeoutMs = 20_000): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
-    response = await fetch(url, { signal: controller.signal });
+    response = await fetch(url, { signal: controller.signal, headers });
   } catch (err) {
     throw new Error(
       err instanceof Error && err.name === "AbortError"

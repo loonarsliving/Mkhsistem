@@ -34,6 +34,8 @@ function fadeDuration(sceneDurationSeconds: number): number {
 
 export interface RenderScene {
   assetUrl: string;
+  /** Auth header needed to fetch assetUrl's raw bytes (Drive-backed assets); omit/empty for a plain public URL. */
+  assetHeaders?: Record<string, string>;
   assetType: "image" | "video";
   durationSeconds: number;
 }
@@ -44,11 +46,11 @@ export interface RenderResult {
   workDir: string;
 }
 
-async function downloadToTemp(url: string, destPath: string): Promise<void> {
+async function downloadToTemp(url: string, headers: Record<string, string>, destPath: string): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal, headers });
     if (!response.ok || !response.body) {
       throw new Error(`Gagal mengunduh aset (HTTP ${response.status})`);
     }
@@ -142,7 +144,7 @@ export async function renderStoryboardDraft(scenes: RenderScene[], onProgress?: 
     scenes.map(async (scene, index) => {
       const ext = scene.assetType === "image" ? "img" : "mp4";
       const sourcePath = join(workDir, `source-${index}.${ext}`);
-      await downloadToTemp(scene.assetUrl, sourcePath);
+      await downloadToTemp(scene.assetUrl, scene.assetHeaders ?? {}, sourcePath);
       return sourcePath;
     }),
   );

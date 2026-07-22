@@ -2816,6 +2816,7 @@ export interface Database {
           asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
           storage_path: string;
           public_url: string;
+          storage_provider: "supabase" | "google_drive";
           file_type: string;
           file_size_bytes: number;
           resolution: string | null;
@@ -2854,6 +2855,7 @@ export interface Database {
           asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
           storage_path: string;
           public_url: string;
+          storage_provider?: "supabase" | "google_drive";
           file_type: string;
           file_size_bytes: number;
           resolution?: string | null;

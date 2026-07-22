@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
+import { resolveAssetDownloadSource } from "@/lib/kontenai/asset-source";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "@/lib/video/render-storyboard";
 import { createClient } from "@/lib/supabase/server";
 import { listKontenAiAssetsByIds } from "@/repositories/kontenai-assets.repository";
@@ -69,11 +70,19 @@ export async function processRenderJobAction(jobId: string): Promise<ActionResul
     const assets = await listKontenAiAssetsByIds(supabase, [...new Set(assetIds)]);
     const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
-    const scenes: RenderScene[] = storyboard.scenes.map((scene) => {
-      const asset = assetById.get(scene.selectedAssetId!);
-      if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
-      return { assetUrl: asset.publicUrl, assetType: asset.assetType === "video" ? "video" : "image", durationSeconds: scene.durationSeconds };
-    });
+    const scenes: RenderScene[] = await Promise.all(
+      storyboard.scenes.map(async (scene) => {
+        const asset = assetById.get(scene.selectedAssetId!);
+        if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
+        const source = await resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl });
+        return {
+          assetUrl: source.url,
+          assetHeaders: source.headers,
+          assetType: asset.assetType === "video" ? "video" : "image",
+          durationSeconds: scene.durationSeconds,
+        };
+      }),
+    );
 
     const result = await renderStoryboardDraft(scenes, async (progress, stage) => {
       await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });

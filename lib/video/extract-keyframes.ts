@@ -45,11 +45,11 @@ export function computeKeyframeTimestamps(durationSeconds: number, maxFrames = 8
   return Array.from({ length: count }, (_, i) => Math.min(durationSeconds - 0.5, Math.round((i * step + step / 2) * 10) / 10));
 }
 
-async function downloadVideoToTemp(url: string, destPath: string): Promise<void> {
+async function downloadVideoToTemp(url: string, headers: Record<string, string>, destPath: string): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal, headers });
     if (!response.ok || !response.body) {
       throw new Error(`Gagal mengunduh video (HTTP ${response.status})`);
     }
@@ -92,7 +92,7 @@ async function extractSingleFrame(videoPath: string, timestampSeconds: number, o
 export async function extractVideoKeyframes(
   videoUrl: string,
   durationSeconds: number | null,
-  options?: { maxFrames?: number; minIntervalSeconds?: number },
+  options?: { maxFrames?: number; minIntervalSeconds?: number; headers?: Record<string, string> },
 ): Promise<VideoKeyframe[]> {
   const timestamps = computeKeyframeTimestamps(durationSeconds ?? 20, options?.maxFrames ?? 8, options?.minIntervalSeconds ?? 5);
 
@@ -100,7 +100,7 @@ export async function extractVideoKeyframes(
   const videoPath = join(workDir, "source.mp4");
 
   try {
-    await downloadVideoToTemp(videoUrl, videoPath);
+    await downloadVideoToTemp(videoUrl, options?.headers ?? {}, videoPath);
 
     const results = await Promise.allSettled(
       timestamps.map(async (timestampSeconds, index) => {
