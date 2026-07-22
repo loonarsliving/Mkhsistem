@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kontenai-render-worker",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-01-01",
+  "containers": [
+    {
+      "class_name": "RenderContainer",
+      "image": "./Dockerfile.render-worker-container",
+      "max_instances": 5,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "RENDER_CONTAINER", "class_name": "RenderContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RenderContainer"] }]
+}

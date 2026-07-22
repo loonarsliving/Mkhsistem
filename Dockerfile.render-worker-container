@@ -1,0 +1,24 @@
+# On-demand Render Engine worker image for Cloudflare Containers -- runs
+# scripts/render-worker-server.ts, which renders exactly one job per HTTP
+# request instead of polling forever (see that file for why). Cloudflare
+# starts an instance of this image on request and sleeps it after
+# `sleepAfter` idle time (configured in worker/wrangler.jsonc), so cost
+# tracks actual render time instead of 24/7 uptime.
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+# Full install (not --omit=dev): tsx/typescript (devDependencies) are what
+# actually run this script -- this image never ships to Vercel, so bundle
+# size doesn't matter the way it does for the Next.js app.
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY lib ./lib
+COPY repositories ./repositories
+COPY types ./types
+
+EXPOSE 8080
+CMD ["npx", "tsx", "scripts/render-worker-server.ts"]
