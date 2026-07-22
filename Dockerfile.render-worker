@@ -19,4 +19,11 @@ COPY lib ./lib
 COPY repositories ./repositories
 COPY types ./types
 
+# lib/**/*.ts is shared with the Next.js app and marks server-only modules
+# with `import "server-only"` -- a conditional export that Next's bundler
+# resolves to a no-op via the "react-server" condition, but that plain Node
+# resolves to the throwing default export. Setting the same condition here
+# keeps those shared files importable without forking them for the worker.
+ENV NODE_OPTIONS="--conditions=react-server"
+
 CMD ["npx", "tsx", "scripts/render-worker.ts"]

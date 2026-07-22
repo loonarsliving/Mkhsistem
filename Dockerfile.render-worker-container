@@ -20,5 +20,10 @@ COPY lib ./lib
 COPY repositories ./repositories
 COPY types ./types
 
+# See Dockerfile.render-worker for why this condition is needed -- lib/**/*.ts
+# marks server-only modules for Next's bundler via a conditional export that
+# plain Node otherwise resolves to a throwing stub.
+ENV NODE_OPTIONS="--conditions=react-server"
+
 EXPOSE 8080
 CMD ["npx", "tsx", "scripts/render-worker-server.ts"]

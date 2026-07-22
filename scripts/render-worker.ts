@@ -29,7 +29,7 @@
  * one job per HTTP request and shares the same render pipeline via
  * lib/kontenai/render-job-processor.ts.
  */
-import { createAdminClient } from "../lib/supabase/worker-admin";
+import { createAdminClient } from "../lib/supabase/admin";
 import { processKontenAiRenderJob } from "../lib/kontenai/render-job-processor";
 import { claimKontenAiRenderJob, listQueuedKontenAiRenderJobIds } from "../repositories/kontenai-render-jobs.repository";
 
