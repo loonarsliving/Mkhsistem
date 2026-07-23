@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import { GEMINI_TTS_PCM_SAMPLE_RATE } from "../ai/tts";
 
 const execFileAsync = promisify(execFile);
 
@@ -22,10 +23,27 @@ const DOWNLOAD_TIMEOUT_MS = 30_000;
 /** Per-asset download cap -- render runs inside a single serverless invocation, so oversized source assets are rejected up front instead of risking a timeout. */
 export const MAX_RENDER_ASSET_SIZE_BYTES = 150 * 1024 * 1024;
 
-/** Output frame -- 480p keeps ultrafast-preset encode time low for a "draft" render; a later sprint can offer higher-res final renders. */
-const OUTPUT_WIDTH = 854;
-const OUTPUT_HEIGHT = 480;
 const OUTPUT_FPS = 24;
+
+/**
+ * Output frame size by destination platform -- draft resolution (short side
+ * 480px) keeps ultrafast-preset encode time low; a later sprint can offer
+ * higher-res final renders. Instagram has no separate feed/reels signal in
+ * the creative brief yet, so it defaults to the vertical short-form size
+ * (Reels/Stories) alongside TikTok; Facebook keeps the classic landscape
+ * frame. Falls back to landscape for an unrecognized/missing platform.
+ */
+const OUTPUT_DIMENSIONS_BY_PLATFORM: Record<string, { width: number; height: number }> = {
+  tiktok: { width: 480, height: 854 },
+  instagram: { width: 480, height: 854 },
+  facebook: { width: 854, height: 480 },
+};
+const DEFAULT_OUTPUT_DIMENSIONS = OUTPUT_DIMENSIONS_BY_PLATFORM.facebook;
+
+function resolveOutputDimensions(targetPlatform?: string | null): { width: number; height: number } {
+  if (targetPlatform && targetPlatform in OUTPUT_DIMENSIONS_BY_PLATFORM) return OUTPUT_DIMENSIONS_BY_PLATFORM[targetPlatform];
+  return DEFAULT_OUTPUT_DIMENSIONS;
+}
 
 /** Simple fade in/out per scene (Sprint 6 spec item 5) -- capped so it never eats more than a third of a very short scene. */
 function fadeDuration(sceneDurationSeconds: number): number {
@@ -38,6 +56,8 @@ export interface RenderScene {
   assetHeaders?: Record<string, string>;
   assetType: "image" | "video";
   durationSeconds: number;
+  /** Raw PCM (16-bit LE, mono, 24kHz -- Gemini TTS's output format) narration for this scene; omitted/null renders the scene silent. */
+  voiceOverPcm?: Buffer | null;
 }
 
 export interface RenderResult {
@@ -66,27 +86,55 @@ async function downloadToTemp(url: string, headers: Record<string, string>, dest
   }
 }
 
-function scaleFadeFilter(durationSeconds: number): string {
+function scaleFadeFilter(durationSeconds: number, dimensions: { width: number; height: number }): string {
   const fade = fadeDuration(durationSeconds);
   const fadeOutStart = Math.max(0, durationSeconds - fade);
   return [
-    `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=decrease`,
-    `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black`,
+    `scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease`,
+    `pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2:color=black`,
     `fps=${OUTPUT_FPS}`,
     `fade=t=in:st=0:d=${fade.toFixed(2)}`,
     `fade=t=out:st=${fadeOutStart.toFixed(2)}:d=${fade.toFixed(2)}`,
   ].join(",");
 }
 
-/** Builds one scene's segment -- image is looped as a still for its scene duration, video is looped/trimmed to it -- both scaled/padded to a shared frame size and codec so the concat demuxer can stitch them without re-encoding again. */
-async function buildSceneSegment(scene: RenderScene, sourcePath: string, outputPath: string): Promise<void> {
-  const filter = scaleFadeFilter(scene.durationSeconds);
-  const inputArgs =
-    scene.assetType === "image" ? ["-loop", "1", "-i", sourcePath] : ["-stream_loop", "-1", "-i", sourcePath];
+/**
+ * Builds one scene's segment -- image is looped as a still for its scene
+ * duration, video is looped/trimmed to it -- both scaled/padded to a shared
+ * frame size and codec so the concat demuxer can stitch them without
+ * re-encoding again. Audio is either the scene's Gemini TTS narration (padded
+ * with silence if shorter than the scene, trimmed if longer) or a silent
+ * placeholder -- every segment always carries an AAC track so concat -c copy
+ * never hits a stream mismatch between narrated and silent scenes.
+ */
+async function buildSceneSegment(scene: RenderScene, sourcePath: string, outputPath: string, workDir: string, index: number, dimensions: { width: number; height: number }): Promise<void> {
+  const filter = scaleFadeFilter(scene.durationSeconds, dimensions);
+  const inputArgs = scene.assetType === "image" ? ["-loop", "1", "-i", sourcePath] : ["-stream_loop", "-1", "-i", sourcePath];
+
+  let audioInputArgs: string[];
+  let audioFilter: string;
+  if (scene.voiceOverPcm) {
+    const pcmPath = join(workDir, `voiceover-${index}.pcm`);
+    await writeFile(pcmPath, scene.voiceOverPcm);
+    audioInputArgs = ["-f", "s16le", "-ar", String(GEMINI_TTS_PCM_SAMPLE_RATE), "-ac", "1", "-i", pcmPath];
+    audioFilter = "apad"; // pad with silence if the narration is shorter than the scene; global -t below trims if longer
+  } else {
+    audioInputArgs = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"];
+    audioFilter = "anull";
+  }
 
   await execFileAsync(
     FFMPEG_PATH,
-    [...inputArgs, "-t", String(scene.durationSeconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", outputPath],
+    [
+      ...inputArgs,
+      ...audioInputArgs,
+      "-t", String(scene.durationSeconds),
+      "-vf", filter,
+      "-af", audioFilter,
+      "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-ar", "44100", "-ac", "2",
+      "-y", outputPath,
+    ],
     { timeout: FFMPEG_SEGMENT_TIMEOUT_MS },
   );
 }
@@ -99,29 +147,6 @@ async function concatSegments(segmentPaths: string[], workDir: string, outputPat
   await execFileAsync(FFMPEG_PATH, ["-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-y", outputPath], { timeout: FFMPEG_MUX_TIMEOUT_MS });
 }
 
-/**
- * Adds a silent placeholder audio track (Sprint 6 spec item 6 -- "placeholder
- * untuk Voice Over dan Background Music") so the draft has a proper audio
- * channel ready for a future sprint to replace with real narration/music,
- * without generating any actual voice or music itself.
- */
-async function addPlaceholderAudioTrack(videoPath: string, outputPath: string): Promise<void> {
-  await execFileAsync(
-    FFMPEG_PATH,
-    [
-      "-i", videoPath,
-      "-f", "lavfi",
-      "-i", "anullsrc=r=44100:cl=stereo",
-      "-shortest",
-      "-c:v", "copy",
-      "-c:a", "aac",
-      "-y",
-      outputPath,
-    ],
-    { timeout: FFMPEG_MUX_TIMEOUT_MS },
-  );
-}
-
 export interface RenderProgressReporter {
   (progress: number, stage: string): Promise<void>;
 }
@@ -130,13 +155,16 @@ export interface RenderProgressReporter {
  * Renders a storyboard's scenes (in order, each with its selected asset) into
  * one draft mp4: download every asset once, build one fixed-size/fixed-fps
  * segment per scene (looped/trimmed to that scene's duration, simple fade
- * in/out), concatenate them in order, then mux in a silent placeholder audio
- * track. Reports coarse, real (not simulated) progress via `onProgress` as
+ * in/out, its own narration or silent audio track), then concatenate them in
+ * order. `targetPlatform` (the creative brief's destination platform) picks
+ * the output aspect ratio -- vertical for TikTok/Instagram, landscape for
+ * Facebook. Reports coarse, real (not simulated) progress via `onProgress` as
  * each stage actually completes, so a caller can persist it for polling.
  */
-export async function renderStoryboardDraft(scenes: RenderScene[], onProgress?: RenderProgressReporter): Promise<RenderResult> {
+export async function renderStoryboardDraft(scenes: RenderScene[], targetPlatform?: string | null, onProgress?: RenderProgressReporter): Promise<RenderResult> {
   if (scenes.length === 0) throw new Error("Storyboard tidak memiliki scene untuk dirender");
 
+  const dimensions = resolveOutputDimensions(targetPlatform);
   const workDir = await mkdtemp(join(tmpdir(), "kontenai-render-"));
 
   await onProgress?.(5, "Mengunduh aset");
@@ -153,18 +181,14 @@ export async function renderStoryboardDraft(scenes: RenderScene[], onProgress?: 
   const segmentPaths: string[] = [];
   for (let index = 0; index < scenes.length; index += 1) {
     const segmentPath = join(workDir, `segment-${index}.mp4`);
-    await buildSceneSegment(scenes[index], sourcePaths[index], segmentPath);
+    await buildSceneSegment(scenes[index], sourcePaths[index], segmentPath, workDir, index, dimensions);
     segmentPaths.push(segmentPath);
-    await onProgress?.(25 + Math.round(((index + 1) / scenes.length) * 45), `Encoding scene ${index + 1}/${scenes.length}`);
+    await onProgress?.(25 + Math.round(((index + 1) / scenes.length) * 60), `Encoding scene ${index + 1}/${scenes.length}`);
   }
 
-  await onProgress?.(75, "Menggabungkan scene");
-  const concatenatedPath = join(workDir, "concatenated.mp4");
-  await concatSegments(segmentPaths, workDir, concatenatedPath);
-
-  await onProgress?.(88, "Menambahkan placeholder audio");
+  await onProgress?.(90, "Menggabungkan scene");
   const outputPath = join(workDir, "output.mp4");
-  await addPlaceholderAudioTrack(concatenatedPath, outputPath);
+  await concatSegments(segmentPaths, workDir, outputPath);
 
   return { outputPath, workDir };
 }
