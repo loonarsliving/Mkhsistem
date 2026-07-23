@@ -2074,7 +2074,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -2086,7 +2086,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -2918,6 +2918,7 @@ export interface Database {
           referenced_asset_ids: string[];
           created_by: string;
           created_at: string;
+          kpi_task_id: string | null;
         };
         Insert: {
           id?: string;
@@ -2935,12 +2936,42 @@ export interface Database {
           referenced_asset_ids?: string[];
           created_by: string;
           created_at?: string;
+          kpi_task_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["kontenai_creative_briefs"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "kontenai_creative_briefs_created_by_fkey";
             columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_creative_briefs_kpi_task_id_fkey";
+            columns: ["kpi_task_id"];
+            referencedRelation: "kpi_tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_automation_settings: {
+        Row: {
+          id: string;
+          enabled: boolean;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          enabled?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_automation_settings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_automation_settings_updated_by_fkey";
+            columns: ["updated_by"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
           },

@@ -25,6 +25,8 @@ export interface CreateKontenAiCreativeBriefInput {
   contentAngle: string;
   referencedAssetIds: string[];
   createdBy: string;
+  /** Set only when this brief was produced by the daily automation pipeline from a kpi_task; null for manually-created briefs (AI Director UI). */
+  kpiTaskId?: string | null;
 }
 
 export async function createKontenAiCreativeBrief(
@@ -47,6 +49,7 @@ export async function createKontenAiCreativeBrief(
       content_angle: input.contentAngle,
       referenced_asset_ids: input.referencedAssetIds,
       created_by: input.createdBy,
+      kpi_task_id: input.kpiTaskId ?? null,
     })
     .select()
     .single();
