@@ -167,7 +167,10 @@ export async function reconcileZernioPublishStatus(
         : { zernio_publish_status: result.zernioPublishStatus, zernio_permalink: result.zernioPermalink },
     )
     .eq("id", id)
-    .eq("status", "published");
+    // Also allowed on an already-'failed' row: re-polling can refine
+    // failure_reason with Zernio's real error detail once that's wired in
+    // (see zernio_publish_reconcile), not just move published -> failed.
+    .in("status", ["published", "failed"]);
   if (error) throw error;
 }
 
