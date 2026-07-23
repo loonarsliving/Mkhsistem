@@ -43,9 +43,12 @@ const ORPHANED_PATHS = [
   "7dedc970-71bc-4e28-8baa-89151af39af7/1784714734091-03_FEED_CARAUSEL_LOONARS_VILLA_JULI_2026_-_5.png",
 ];
 
-export async function POST() {
+async function run() {
   const supabase = createAdminClient();
   const { data, error } = await supabase.storage.from("markom-content-submissions").remove(ORPHANED_PATHS);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ removed: data?.length ?? 0 });
 }
+
+export const POST = run;
+export const GET = run;
