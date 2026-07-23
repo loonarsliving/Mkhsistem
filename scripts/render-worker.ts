@@ -110,9 +110,6 @@ async function tick(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const envKeys = Object.keys(process.env);
-  console.log(`[render-worker] DEBUG ${envKeys.length} total env keys:`, envKeys.sort().join(", ") || "(empty)");
-
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
     process.exit(1);
