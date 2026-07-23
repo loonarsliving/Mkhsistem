@@ -3,14 +3,28 @@ import { z } from "zod";
 import * as announcementRepo from "@/repositories/announcement.repository";
 import * as attendanceRepo from "@/repositories/attendance.repository";
 import * as branchRepo from "@/repositories/branch.repository";
+import * as contentSubmissionsRepo from "@/repositories/content-submissions.repository";
 import * as crmRepo from "@/repositories/crm.repository";
+import * as crmPromoRepo from "@/repositories/crm-promo.repository";
 import * as divisionRepo from "@/repositories/division.repository";
 import * as employeeRepo from "@/repositories/employee.repository";
+import * as financeBranchBalanceRepo from "@/repositories/finance-branch-balance.repository";
+import * as hrFinanceRepo from "@/repositories/hr-finance.repository";
+import * as kontenaiAiReportsRepo from "@/repositories/kontenai-ai-reports.repository";
+import * as kontenaiAnalyticsRepo from "@/repositories/kontenai-analytics.repository";
+import * as kontenaiContentPerformanceRepo from "@/repositories/kontenai-content-performance.repository";
+import * as kontenaiOptimizationRepo from "@/repositories/kontenai-optimization.repository";
+import * as kosOccupancyRepo from "@/repositories/kos-occupancy.repository";
+import * as beautyRepo from "@/repositories/loonars-beauty.repository";
+import * as markomRepo from "@/repositories/markom.repository";
 import * as memoRepo from "@/repositories/memo.repository";
+import * as metaAdsRepo from "@/repositories/meta-ads.repository";
 import * as monitoringRepo from "@/repositories/monitoring.repository";
 import * as notificationRepo from "@/repositories/notification.repository";
 import * as positionRepo from "@/repositories/position.repository";
 import * as searchRepo from "@/repositories/search.repository";
+import * as socialRepo from "@/repositories/social.repository";
+import * as workScheduleRepo from "@/repositories/work-schedule.repository";
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { CurrentSession } from "@/types/domain";
 
@@ -295,6 +309,267 @@ export const voiceBridgeTools = {
     parametersSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false },
     inputSchema: z.object({ query: z.string().min(1) }),
     handler: async (supabase, _session, input) => searchRepo.globalSearch(supabase, input.query),
+  },
+
+  // --- Markom / audit media sosial -----------------------------------------
+  social_weekly_content_audits: {
+    description: "Riwayat audit konten mingguan media sosial (properti/leasehold/occupancy) yang sudah dinilai, terbaru dulu. limit opsional (default 12).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }).optional(),
+    handler: async (supabase, _session, input) => socialRepo.listWeeklyEvaluations(supabase, input?.limit ?? 12),
+  },
+  social_latest_weekly_content_audit: {
+    description: "Audit konten mingguan media sosial (properti) yang paling baru.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => socialRepo.getLatestWeeklyEvaluation(supabase),
+  },
+  social_account_snapshots: {
+    description: "Snapshot metrik akun Instagram/TikTok terbaru (followers, engagement, dll).",
+    parametersSchema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["instagram", "tiktok"] },
+        limit: { type: "integer", minimum: 1, maximum: 30 },
+        productLine: { type: "string", enum: ["property", "beauty"] },
+      },
+      required: ["platform"],
+      additionalProperties: false,
+    },
+    inputSchema: z.object({
+      platform: z.enum(["instagram", "tiktok"]),
+      limit: z.number().int().positive().max(30).optional(),
+      productLine: z.enum(["property", "beauty"]).optional(),
+    }),
+    handler: async (supabase, _session, input) =>
+      socialRepo.listRecentAccountSnapshots(supabase, input.platform, input.limit ?? 1, input.productLine ?? "property"),
+  },
+  social_competitor_accounts: {
+    description: "Daftar akun kompetitor yang dipantau untuk satu fokus konten (leasehold_sales/occupancy/beauty).",
+    parametersSchema: { type: "object", properties: { focus: { type: "string", enum: ["leasehold_sales", "occupancy", "beauty"] } }, required: ["focus"], additionalProperties: false },
+    inputSchema: z.object({ focus: z.enum(["leasehold_sales", "occupancy", "beauty"]) }),
+    handler: async (supabase, _session, input) => socialRepo.listCompetitorAccounts(supabase, input.focus),
+  },
+  social_competitor_content_logs: {
+    description: "Log konten kompetitor yang terpantau untuk satu fokus konten, opsional per akun kompetitor.",
+    parametersSchema: {
+      type: "object",
+      properties: {
+        focus: { type: "string", enum: ["leasehold_sales", "occupancy", "beauty"] },
+        competitorAccountId: { type: "string", format: "uuid" },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+      },
+      required: ["focus"],
+      additionalProperties: false,
+    },
+    inputSchema: z.object({
+      focus: z.enum(["leasehold_sales", "occupancy", "beauty"]),
+      competitorAccountId: z.string().uuid().optional(),
+      limit: z.number().int().positive().max(100).optional(),
+    }),
+    handler: async (supabase, _session, input) =>
+      socialRepo.listCompetitorContentLogs(supabase, input.focus, input.competitorAccountId, input.limit ?? 30),
+  },
+  markom_kpi_tasks: {
+    description: "Checklist tugas KPI tim Markom untuk satu bulan/cabang, opsional per minggu/status/fokus konten.",
+    parametersSchema: {
+      type: "object",
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        periodYear: { type: "integer" },
+        periodMonth: { type: "integer", minimum: 1, maximum: 12 },
+        periodWeek: { type: "integer" },
+        status: { type: "string", enum: ["pending", "awaiting_verification", "completed", "rejected"] },
+        contentFocus: { type: "string", enum: ["leasehold_sales", "occupancy", "general"] },
+      },
+      required: ["periodYear", "periodMonth"],
+      additionalProperties: false,
+    },
+    inputSchema: z.object({
+      branchId: z.string().uuid().optional(),
+      periodYear: z.number().int(),
+      periodMonth: z.number().int().min(1).max(12),
+      periodWeek: z.number().int().optional(),
+      status: z.enum(["pending", "awaiting_verification", "completed", "rejected"]).optional(),
+      contentFocus: z.enum(["leasehold_sales", "occupancy", "general"]).optional(),
+    }),
+    handler: async (supabase, _session, input) => markomRepo.listKpiTasks(supabase, input),
+  },
+  markom_team_employees: {
+    description: "Anggota tim Markom aktif di satu cabang.",
+    parametersSchema: { type: "object", properties: { branchId: { type: "string", format: "uuid" } }, required: ["branchId"], additionalProperties: false },
+    inputSchema: z.object({ branchId: z.string().uuid() }),
+    handler: async (supabase, _session, input) => markomRepo.listMarkomEmployees(supabase, input.branchId),
+  },
+  meta_ads_campaigns: {
+    description: "Daftar kampanye iklan Meta (Instagram/Facebook), opsional per cabang.",
+    parametersSchema: { type: "object", properties: { branchId: { type: "string", format: "uuid" } }, additionalProperties: false },
+    inputSchema: z.object({ branchId: z.string().uuid().optional() }).optional(),
+    handler: async (supabase, _session, input) => metaAdsRepo.listAdCampaigns(supabase, input?.branchId),
+  },
+  meta_ads_campaign_get: {
+    description: "Detail satu kampanye iklan Meta lewat id-nya.",
+    parametersSchema: { type: "object", properties: { id: { type: "string", format: "uuid" } }, required: ["id"], additionalProperties: false },
+    inputSchema: z.object({ id: z.string().uuid() }),
+    handler: async (supabase, _session, input) => metaAdsRepo.getAdCampaign(supabase, input.id),
+  },
+  content_submissions_list: {
+    description: "Daftar submission konten Content Studio (video/foto) dengan filter opsional (branchId, taskId, contentFocus).",
+    parametersSchema: {
+      type: "object",
+      properties: {
+        branchId: { type: "string", format: "uuid" },
+        taskId: { type: "string", format: "uuid" },
+        contentFocus: { type: "string", enum: ["leasehold_sales", "occupancy", "beauty"] },
+      },
+      additionalProperties: false,
+    },
+    inputSchema: z
+      .object({
+        branchId: z.string().uuid().optional(),
+        taskId: z.string().uuid().optional(),
+        contentFocus: z.enum(["leasehold_sales", "occupancy", "beauty"]).optional(),
+      })
+      .optional(),
+    handler: async (supabase, _session, input) => contentSubmissionsRepo.listContentSubmissions(supabase, input ?? {}),
+  },
+  content_submission_get: {
+    description: "Detail satu submission konten Content Studio lewat id-nya.",
+    parametersSchema: { type: "object", properties: { id: { type: "string", format: "uuid" } }, required: ["id"], additionalProperties: false },
+    inputSchema: z.object({ id: z.string().uuid() }),
+    handler: async (supabase, _session, input) => contentSubmissionsRepo.getContentSubmission(supabase, input.id),
+  },
+
+  // --- Loonars Beauty --------------------------------------------------------
+  beauty_content_audits: {
+    description: "Riwayat audit konten mingguan Loonars Beauty, terbaru dulu. limit opsional (default 12).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }).optional(),
+    handler: async (supabase, _session, input) => beautyRepo.listContentAudits(supabase, input?.limit ?? 12),
+  },
+  beauty_latest_weekly_evaluation: {
+    description: "Evaluasi mingguan Loonars Beauty yang paling baru.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => beautyRepo.getLatestWeeklyEvaluation(supabase),
+  },
+  beauty_content_items: {
+    description: "Daftar item konten Loonars Beauty, opsional filter kategori/status.",
+    parametersSchema: { type: "object", properties: { category: { type: "string" }, status: { type: "string" } }, additionalProperties: false },
+    inputSchema: z.object({ category: z.string().optional(), status: z.string().optional() }).optional(),
+    handler: async (supabase, _session, input) => beautyRepo.listContentItems(supabase, input as never),
+  },
+  beauty_orders_list: {
+    description: "Daftar order Loonars Beauty dengan filter opsional (status, channel, search) dan limit (default 50).",
+    parametersSchema: {
+      type: "object",
+      properties: { status: { type: "string" }, channel: { type: "string" }, search: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 200 } },
+      additionalProperties: false,
+    },
+    inputSchema: z
+      .object({ status: z.string().optional(), channel: z.string().optional(), search: z.string().optional(), limit: z.number().int().positive().max(200).optional() })
+      .optional(),
+    handler: async (supabase, _session, input) => beautyRepo.listOrders(supabase, input as never, input?.limit ?? 50),
+  },
+  beauty_order_stats: {
+    description: "Ringkasan statistik order Loonars Beauty (jumlah, revenue, breakdown per status/channel) sejak tanggal tertentu (ISO date).",
+    parametersSchema: { type: "object", properties: { sinceISODate: { type: "string" } }, required: ["sinceISODate"], additionalProperties: false },
+    inputSchema: z.object({ sinceISODate: z.string() }),
+    handler: async (supabase, _session, input) => beautyRepo.getOrderStats(supabase, input.sinceISODate),
+  },
+
+  // --- KontenAI ---------------------------------------------------------------
+  kontenai_analytics_content: {
+    description: "Baris analitik performa konten KontenAI lintas platform.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => kontenaiAnalyticsRepo.listAnalyticsContentRows(supabase),
+  },
+  kontenai_publish_schedule_counts: {
+    description: "Jumlah jadwal publikasi KontenAI per status.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => kontenaiAnalyticsRepo.countPublishSchedules(supabase),
+  },
+  kontenai_content_performance: {
+    description: "Data performa konten KontenAI (views, engagement, dll). limit opsional (default 100).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 200 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(200).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiContentPerformanceRepo.listKontenAiContentPerformance(supabase, input?.limit ?? 100),
+  },
+  kontenai_ai_reports: {
+    description: "Laporan AI KontenAI (ringkasan insight otomatis). limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 100 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(100).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiAiReportsRepo.listKontenAiAiReports(supabase, input?.limit ?? 50),
+  },
+  kontenai_optimization_recommendations: {
+    description: "Rekomendasi optimasi konten dari KontenAI. limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 100 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(100).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiOptimizationRepo.listKontenAiOptimizationRecommendations(supabase, input?.limit ?? 50),
+  },
+
+  // --- CRM promo, HR/finance, kos, jadwal kerja --------------------------------
+  crm_promo_templates: {
+    description: "Daftar template broadcast promo CRM.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => crmPromoRepo.listPromoTemplates(supabase),
+  },
+  crm_promo_sends: {
+    description: "Riwayat pengiriman broadcast promo untuk satu template. limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { templateId: { type: "string", format: "uuid" }, limit: { type: "integer", minimum: 1, maximum: 200 } }, required: ["templateId"], additionalProperties: false },
+    inputSchema: z.object({ templateId: z.string().uuid(), limit: z.number().int().positive().max(200).optional() }),
+    handler: async (supabase, _session, input) => crmPromoRepo.listPromoSends(supabase, input.templateId, input.limit ?? 50),
+  },
+  hr_finance_pending_expenses: {
+    description: "Pengeluaran HR yang masih menunggu proses.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => hrFinanceRepo.listPendingHrExpenses(supabase),
+  },
+  hr_finance_draft_payroll: {
+    description: "Payroll run yang masih berstatus draft.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => hrFinanceRepo.listDraftPayrollRuns(supabase),
+  },
+  hr_finance_active_employees: {
+    description: "Daftar karyawan aktif untuk keperluan HR/finance sync.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => hrFinanceRepo.listActiveEmployees(supabase),
+  },
+  hr_finance_sync_log: {
+    description: "Log sinkronisasi HR/finance terbaru.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => hrFinanceRepo.listRecentSyncLog(supabase),
+  },
+  finance_branch_balances: {
+    description: "Saldo keuangan seluruh cabang.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => financeBranchBalanceRepo.listBranchBalances(supabase),
+  },
+  finance_branch_balance_get: {
+    description: "Saldo keuangan satu cabang lewat id-nya.",
+    parametersSchema: { type: "object", properties: { branchId: { type: "string", format: "uuid" } }, required: ["branchId"], additionalProperties: false },
+    inputSchema: z.object({ branchId: z.string().uuid() }),
+    handler: async (supabase, _session, input) => financeBranchBalanceRepo.getBranchBalance(supabase, input.branchId),
+  },
+  kos_occupancy: {
+    description: "Data okupansi properti Kos/Management Property.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => kosOccupancyRepo.getKosOccupancy(supabase),
+  },
+  work_schedules_list: {
+    description: "Daftar jadwal kerja (jam masuk/pulang) yang berlaku.",
+    parametersSchema: noParams,
+    inputSchema: empty,
+    handler: async (supabase) => workScheduleRepo.listWorkSchedules(supabase),
   },
 } satisfies Record<string, VoiceBridgeTool<any, unknown>>; // eslint-disable-line @typescript-eslint/no-explicit-any -- each tool's own inputSchema/handler pair is still fully typed; this widens only the map's index signature
 
