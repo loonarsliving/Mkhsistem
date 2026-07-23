@@ -61,4 +61,25 @@ export function isSuperAdmin(session: CurrentSession): boolean {
   return session.roleKey === ROLE_KEYS.SUPER_ADMIN;
 }
 
+export type BearerAuthResult =
+  | { ok: true; session: CurrentSession; supabase: ReturnType<typeof createBearerClient> }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Shared entrypoint for both voice-bridge routes (tool dispatch and the
+ * conversational assistant): reads the Authorization header, resolves the
+ * session, and enforces the Super Admin gate in one place.
+ */
+export async function requireSuperAdminBearer(request: Request): Promise<BearerAuthResult> {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
+  if (!token) return { ok: false, status: 401, error: "Missing bearer token" };
+
+  const session = await getBearerSession(token);
+  if (!session) return { ok: false, status: 401, error: "Invalid or expired session" };
+  if (!isSuperAdmin(session)) return { ok: false, status: 403, error: "Forbidden" };
+
+  return { ok: true, session, supabase: createBearerClient(token) };
+}
+
 export { PERMISSIONS };

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { createBearerClient, getBearerSession, isSuperAdmin } from "@/lib/supabase/bearer";
+import { requireSuperAdminBearer } from "@/lib/supabase/bearer";
+import { corsHeaders } from "@/lib/ai/voice-bridge/cors";
 import { listToolDefinitions, voiceBridgeTools, type VoiceBridgeToolName } from "@/lib/ai/voice-bridge/tools";
 import { logger } from "@/lib/logger";
 
@@ -8,59 +9,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Voice bridge for Ultron (the Filehub voice assistant) to call into MK
- * Connect. Deliberately scoped to Super Admin only — this is a personal
- * voice interface for one operator, not a general integration surface.
- * Auth is a Supabase access token in the Authorization header (Ultron logs
- * the operator in directly against this project's Supabase instance and
- * forwards the resulting token); every tool call still runs through RLS via
- * that token, on top of the Super Admin gate below.
- *
- * Cross-origin by design (Ultron is a separate Vercel deployment), so CORS
- * is scoped to a single configured origin rather than left wide open.
+ * Raw tool dispatch for the voice bridge — GET lists every callable tool
+ * (name, description, JSON Schema), POST invokes one. Scoped to Super Admin
+ * only (see requireSuperAdminBearer). This is the low-level surface used
+ * for introspection/testing; the conversational assistant Ultron actually
+ * talks to (app/api/ai/voice-assistant) calls these same tool handlers
+ * in-process rather than round-tripping through HTTP to itself.
  */
-function allowedOrigin(request: Request): string | null {
-  const origin = request.headers.get("origin");
-  const allowed = process.env.VOICE_BRIDGE_ALLOWED_ORIGIN;
-  if (!origin || !allowed) return null;
-  return origin === allowed ? origin : null;
-}
-
-function corsHeaders(request: Request): HeadersInit {
-  const origin = allowedOrigin(request);
-  if (!origin) return {};
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    Vary: "Origin",
-  };
-}
-
 export async function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
-type AuthResult =
-  | { ok: true; session: Awaited<ReturnType<typeof getBearerSession>> & object; supabase: ReturnType<typeof createBearerClient> }
-  | { ok: false; status: number; error: string };
-
-async function requireSuperAdminSession(request: Request): Promise<AuthResult> {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-  if (!token) return { ok: false, status: 401, error: "Missing bearer token" };
-
-  const session = await getBearerSession(token);
-  if (!session) return { ok: false, status: 401, error: "Invalid or expired session" };
-  if (!isSuperAdmin(session)) return { ok: false, status: 403, error: "Forbidden" };
-
-  return { ok: true, session, supabase: createBearerClient(token) };
-}
-
-/** Lists every callable tool with its description + JSON Schema, for the LLM driving the voice conversation. */
 export async function GET(request: Request) {
   const headers = corsHeaders(request);
-  const result = await requireSuperAdminSession(request);
+  const result = await requireSuperAdminBearer(request);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status, headers });
   }
@@ -69,7 +31,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const headers = corsHeaders(request);
-  const result = await requireSuperAdminSession(request);
+  const result = await requireSuperAdminBearer(request);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status, headers });
   }
