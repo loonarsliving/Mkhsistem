@@ -28,7 +28,6 @@ import { createAdminClient } from "../lib/supabase/admin";
 import { fetchBackgroundMusic } from "../lib/ai/music";
 import { synthesizeVoiceOver } from "../lib/ai/tts";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
-import { uploadFileToDrive } from "../lib/google-drive/client";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "../lib/video/render-storyboard";
 import { listKontenAiAssetsByIds } from "../repositories/kontenai-assets.repository";
 import {
@@ -43,16 +42,13 @@ import { getKontenAiStoryboard } from "../repositories/kontenai-storyboards.repo
 const POLL_INTERVAL_MS = Number(process.env.RENDER_WORKER_POLL_INTERVAL_MS ?? 5000);
 
 /**
- * Drive folder finished renders are uploaded to, before a human moves them
- * into Content Studio for publishing -- keeps output out of Supabase
- * Storage, which is shared with several other features and was already
- * ~950MB into its 1GB free-plan quota after a single test render.
+ * Google Drive was tried for render output (to keep it out of Supabase
+ * Storage's shared quota) but a service account has zero storage quota of
+ * its own -- uploading a NEW file into a folder it only has Editor access to
+ * fails with HTTP 403 unless the folder lives inside a real Shared Drive,
+ * which isn't available on this Google account. Back to Supabase Storage.
  */
-function requireRenderOutputFolderId(): string {
-  const id = process.env.GOOGLE_DRIVE_RENDER_OUTPUT_FOLDER_ID;
-  if (!id) throw new Error("Set env var GOOGLE_DRIVE_RENDER_OUTPUT_FOLDER_ID (folder Drive tempat menyimpan hasil render).");
-  return id;
-}
+const RENDER_BUCKET = "kontenai-renders";
 
 async function processJob(jobId: string): Promise<void> {
   const supabase = createAdminClient();
@@ -104,18 +100,16 @@ async function processJob(jobId: string): Promise<void> {
 
     await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 95, stage: "Mengunggah hasil render" });
     const buffer = await readRenderedFile(result.outputPath);
-    const filename = `${storyboard.id}-${jobId}.mp4`;
+    const storagePath = `${storyboard.id}/${jobId}.mp4`;
 
-    const { fileId, webViewLink } = await uploadFileToDrive({
-      folderId: requireRenderOutputFolderId(),
-      filename,
-      mimeType: "video/mp4",
-      buffer,
-    });
+    const { error: uploadError } = await supabase.storage.from(RENDER_BUCKET).upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
+    if (uploadError) throw uploadError;
+
+    const { data: publicUrlData } = supabase.storage.from(RENDER_BUCKET).getPublicUrl(storagePath);
 
     await markKontenAiRenderJobCompleted(supabase, jobId, {
-      outputStoragePath: fileId,
-      outputPublicUrl: webViewLink,
+      outputStoragePath: storagePath,
+      outputPublicUrl: publicUrlData.publicUrl,
       durationSeconds: storyboard.total_duration_seconds,
     });
     console.log(`[render-worker] job ${jobId} completed`);

@@ -42,7 +42,6 @@ import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFoc
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
 import { saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
-import { driveMediaUrl, getDriveAuthHeader } from "@/lib/google-drive/client";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
@@ -226,7 +225,7 @@ async function processContentSubmissionReview(supabase: AdminClient, job: JobRow
 
   const { data: submission, error: submissionError } = await supabase
     .from("markom_content_submissions")
-    .select("id, task_id, caption, media_type, storage_path, submitted_by, content_focus, platform")
+    .select("id, task_id, caption, media_type, public_url, submitted_by, content_focus, platform")
     .eq("id", payload.submission_id)
     .single();
   if (submissionError || !submission) throw new Error(`Content submission ${payload.submission_id} not found: ${submissionError?.message}`);
@@ -246,10 +245,10 @@ async function processContentSubmissionReview(supabase: AdminClient, job: JobRow
   const mimeType = submission.media_type === "video" ? "video/mp4" : "image/jpeg";
 
   if (submission.media_type === "image") {
-    imageBase64 = await fetchUrlAsBase64(driveMediaUrl(submission.storage_path), await getDriveAuthHeader());
+    imageBase64 = await fetchUrlAsBase64(submission.public_url);
   } else {
     try {
-      const base64 = await fetchUrlAsBase64(driveMediaUrl(submission.storage_path), await getDriveAuthHeader());
+      const base64 = await fetchUrlAsBase64(submission.public_url);
       const approxBytes = Math.ceil((base64.length * 3) / 4);
       if (approxBytes <= CONTENT_REVIEW_MAX_VIDEO_BYTES) videoBase64 = base64;
     } catch {
