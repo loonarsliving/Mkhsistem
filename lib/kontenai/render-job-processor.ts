@@ -1,5 +1,6 @@
 /* eslint-disable no-console -- shared render pipeline: progress/completion logging is intended output for both worker deploy modes */
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
+import { fetchBackgroundMusic } from "../ai/music";
 import { synthesizeVoiceOver } from "../ai/tts";
 import { resolveAssetDownloadSource } from "./asset-source";
 import { uploadFileToDrive } from "../google-drive/client";
@@ -59,8 +60,17 @@ export async function processKontenAiRenderJob(supabase: TypedSupabaseClient, jo
       }),
     );
 
-    const result = await renderStoryboardDraft(scenes, storyboard.creativeBrief?.platform, async (progress, stage) => {
-      await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 18, stage: "Mencari background music" });
+    const musicQuery = storyboard.creativeBrief?.big_idea || storyboard.creativeBrief?.product_project || "cinematic background music";
+    const music = await fetchBackgroundMusic(musicQuery);
+    if (music) console.log(`[render-worker] job ${jobId} background music: "${music.name}" (${music.license})`);
+
+    const result = await renderStoryboardDraft(scenes, {
+      targetPlatform: storyboard.creativeBrief?.platform,
+      musicBuffer: music?.buffer,
+      onProgress: async (progress, stage) => {
+        await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+      },
     });
     workDir = result.workDir;
 

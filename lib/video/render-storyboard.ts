@@ -147,21 +147,57 @@ async function concatSegments(segmentPaths: string[], workDir: string, outputPat
   await execFileAsync(FFMPEG_PATH, ["-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-y", outputPath], { timeout: FFMPEG_MUX_TIMEOUT_MS });
 }
 
+/** How quiet the background track sits under narration/scene audio -- low enough to stay a bed, not a distraction. */
+const MUSIC_VOLUME = 0.18;
+
+/**
+ * Mixes a looping background music bed under the video's existing audio
+ * (scene narration/silence) -- the music loops if shorter than the video and
+ * is cut to match if longer, ducked to MUSIC_VOLUME so narration stays the
+ * clear foreground. Re-encodes only audio; video stream is copied untouched.
+ */
+async function mixBackgroundMusic(videoPath: string, musicBuffer: Buffer, workDir: string, outputPath: string): Promise<void> {
+  const musicPath = join(workDir, "music-input.mp3");
+  await writeFile(musicPath, musicBuffer);
+
+  await execFileAsync(
+    FFMPEG_PATH,
+    [
+      "-i", videoPath,
+      "-stream_loop", "-1", "-i", musicPath,
+      "-filter_complex", `[1:a]volume=${MUSIC_VOLUME}[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
+      "-map", "0:v", "-map", "[aout]",
+      "-c:v", "copy", "-c:a", "aac",
+      "-shortest",
+      "-y", outputPath,
+    ],
+    { timeout: FFMPEG_MUX_TIMEOUT_MS },
+  );
+}
+
 export interface RenderProgressReporter {
   (progress: number, stage: string): Promise<void>;
+}
+
+export interface RenderStoryboardOptions {
+  /** The creative brief's destination platform -- picks the output aspect ratio (vertical for TikTok/Instagram, landscape for Facebook). */
+  targetPlatform?: string | null;
+  /** Royalty-free background track (e.g. from Freesound) to mix under the whole video; omitted/null renders with no music bed. */
+  musicBuffer?: Buffer | null;
+  onProgress?: RenderProgressReporter;
 }
 
 /**
  * Renders a storyboard's scenes (in order, each with its selected asset) into
  * one draft mp4: download every asset once, build one fixed-size/fixed-fps
  * segment per scene (looped/trimmed to that scene's duration, simple fade
- * in/out, its own narration or silent audio track), then concatenate them in
- * order. `targetPlatform` (the creative brief's destination platform) picks
- * the output aspect ratio -- vertical for TikTok/Instagram, landscape for
- * Facebook. Reports coarse, real (not simulated) progress via `onProgress` as
- * each stage actually completes, so a caller can persist it for polling.
+ * in/out, its own narration or silent audio track), concatenate them in
+ * order, then mix in a looping background music bed if one was supplied.
+ * Reports coarse, real (not simulated) progress via `onProgress` as each
+ * stage actually completes, so a caller can persist it for polling.
  */
-export async function renderStoryboardDraft(scenes: RenderScene[], targetPlatform?: string | null, onProgress?: RenderProgressReporter): Promise<RenderResult> {
+export async function renderStoryboardDraft(scenes: RenderScene[], options: RenderStoryboardOptions = {}): Promise<RenderResult> {
+  const { targetPlatform, musicBuffer, onProgress } = options;
   if (scenes.length === 0) throw new Error("Storyboard tidak memiliki scene untuk dirender");
 
   const dimensions = resolveOutputDimensions(targetPlatform);
@@ -177,18 +213,24 @@ export async function renderStoryboardDraft(scenes: RenderScene[], targetPlatfor
     }),
   );
 
-  await onProgress?.(25, "Menyusun scene");
+  await onProgress?.(20, "Menyusun scene");
   const segmentPaths: string[] = [];
   for (let index = 0; index < scenes.length; index += 1) {
     const segmentPath = join(workDir, `segment-${index}.mp4`);
     await buildSceneSegment(scenes[index], sourcePaths[index], segmentPath, workDir, index, dimensions);
     segmentPaths.push(segmentPath);
-    await onProgress?.(25 + Math.round(((index + 1) / scenes.length) * 60), `Encoding scene ${index + 1}/${scenes.length}`);
+    await onProgress?.(20 + Math.round(((index + 1) / scenes.length) * 50), `Encoding scene ${index + 1}/${scenes.length}`);
   }
 
-  await onProgress?.(90, "Menggabungkan scene");
+  await onProgress?.(80, "Menggabungkan scene");
+  const concatenatedPath = join(workDir, "concatenated.mp4");
+  await concatSegments(segmentPaths, workDir, concatenatedPath);
+
+  if (!musicBuffer) return { outputPath: concatenatedPath, workDir };
+
+  await onProgress?.(90, "Menambahkan background music");
   const outputPath = join(workDir, "output.mp4");
-  await concatSegments(segmentPaths, workDir, outputPath);
+  await mixBackgroundMusic(concatenatedPath, musicBuffer, workDir, outputPath);
 
   return { outputPath, workDir };
 }
