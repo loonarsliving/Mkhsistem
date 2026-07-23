@@ -1,5 +1,6 @@
 /* eslint-disable no-console -- shared render pipeline: progress/completion logging is intended output for both worker deploy modes */
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
+import { synthesizeVoiceOver } from "../ai/tts";
 import { resolveAssetDownloadSource } from "./asset-source";
 import { uploadFileToDrive } from "../google-drive/client";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "../video/render-storyboard";
@@ -39,21 +40,26 @@ export async function processKontenAiRenderJob(supabase: TypedSupabaseClient, jo
     const assets = await listKontenAiAssetsByIds(supabase, [...new Set(assetIds)]);
     const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
+    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 10, stage: "Membuat voice over" });
     const scenes: RenderScene[] = await Promise.all(
       storyboard.scenes.map(async (scene) => {
         const asset = assetById.get(scene.selectedAssetId!);
         if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
-        const source = await resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl });
+        const [source, voiceOverPcm] = await Promise.all([
+          resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl }),
+          synthesizeVoiceOver(scene.voiceOver),
+        ]);
         return {
           assetUrl: source.url,
           assetHeaders: source.headers,
           assetType: asset.assetType === "video" ? "video" : "image",
           durationSeconds: scene.durationSeconds,
+          voiceOverPcm,
         };
       }),
     );
 
-    const result = await renderStoryboardDraft(scenes, async (progress, stage) => {
+    const result = await renderStoryboardDraft(scenes, storyboard.creativeBrief?.platform, async (progress, stage) => {
       await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
     });
     workDir = result.workDir;
