@@ -49,6 +49,15 @@ const PUBLIC_PATHS = [
   "/api/social/publish-content",
   "/api/markom/check-ads-balance",
   "/api/markom/refresh-ad-campaign-spend",
+  // Called cross-origin by the Ultron voice assistant (separate "filehub"
+  // deployment) with a Supabase access token in the Authorization header,
+  // never a same-site session cookie -- must stay out of the cookie-based
+  // redirect below, or even the CORS preflight OPTIONS gets redirected to
+  // /login before it reaches the route handler. Both routes enforce their
+  // own Super Admin bearer-token auth (requireSuperAdminBearer) and CORS
+  // (VOICE_BRIDGE_ALLOWED_ORIGIN) independently -- see lib/ai/voice-bridge/.
+  "/api/ai/voice-bridge",
+  "/api/ai/voice-assistant",
 ];
 
 function isPublicPath(pathname: string) {
