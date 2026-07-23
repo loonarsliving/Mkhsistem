@@ -78,7 +78,13 @@ export async function converseWithVoiceAssistant(
       return (response.text ?? "").trim() || "Maaf, aku tidak punya jawaban untuk itu.";
     }
 
-    contents.push({ role: "model", parts: functionCalls.map((call): Part => ({ functionCall: call })) });
+    // Push the model's own turn back verbatim (not reconstructed from just
+    // `functionCalls`) -- Gemini 3.x's function-calling parts carry a
+    // thoughtSignature the next request must echo back, and rebuilding the
+    // parts from scratch silently drops it, which the API then rejects with
+    // "Function call is missing a thought_signature" on the next round.
+    const modelContent = response.candidates?.[0]?.content;
+    contents.push(modelContent ?? { role: "model", parts: functionCalls.map((call): Part => ({ functionCall: call })) });
 
     const responseParts = await Promise.all(
       functionCalls.map(async (call): Promise<Part> => {
