@@ -3,7 +3,13 @@
 # VPS, anywhere). Deploy this image separately from the main Next.js app on
 # Vercel; it only needs Supabase + Google Drive env vars, never the rest of
 # MK Connect's runtime config.
-FROM node:20-slim
+#
+# Node 22+ (not 20): @supabase/realtime-js constructs a RealtimeClient on
+# every createClient() call and needs the native `WebSocket` global that
+# only landed in Node 22 -- on Node 20 it throws "native WebSocket not
+# found" the moment the admin client is created, even though this worker
+# never actually uses realtime subscriptions.
+FROM node:22-slim
 
 WORKDIR /app
 

@@ -4,7 +4,8 @@
 # starts an instance of this image on request and sleeps it after
 # `sleepAfter` idle time (configured in worker/wrangler.jsonc), so cost
 # tracks actual render time instead of 24/7 uptime.
-FROM node:20-slim
+# See Dockerfile.render-worker for why Node 22+ is required (native WebSocket).
+FROM node:22-slim
 
 WORKDIR /app
 
