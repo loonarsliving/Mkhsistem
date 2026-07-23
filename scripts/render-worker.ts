@@ -25,6 +25,7 @@
  * forever with a poll interval, no supervisor logic of its own.
  */
 import { createAdminClient } from "../lib/supabase/admin";
+import { fetchBackgroundMusic } from "../lib/ai/music";
 import { synthesizeVoiceOver } from "../lib/ai/tts";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
 import { uploadFileToDrive } from "../lib/google-drive/client";
@@ -87,8 +88,17 @@ async function processJob(jobId: string): Promise<void> {
       }),
     );
 
-    const result = await renderStoryboardDraft(scenes, storyboard.creativeBrief?.platform, async (progress, stage) => {
-      await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 18, stage: "Mencari background music" });
+    const musicQuery = storyboard.creativeBrief?.big_idea || storyboard.creativeBrief?.product_project || "cinematic background music";
+    const music = await fetchBackgroundMusic(musicQuery);
+    if (music) console.log(`[render-worker] job ${jobId} background music: "${music.name}" (${music.license})`);
+
+    const result = await renderStoryboardDraft(scenes, {
+      targetPlatform: storyboard.creativeBrief?.platform,
+      musicBuffer: music?.buffer,
+      onProgress: async (progress, stage) => {
+        await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+      },
     });
     workDir = result.workDir;
 
