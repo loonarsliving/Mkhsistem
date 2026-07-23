@@ -24,6 +24,7 @@ import {
   discoverPropertyCompetitors,
   researchAndDraftAd,
   researchAndGenerateChecklist,
+  reviewContentSubmission,
   type ChecklistContentFocus,
   type ContentPlannerContext,
   type WeeklyContentAuditResult,
@@ -39,6 +40,9 @@ import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webho
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
+import { saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
+import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
+import { driveMediaUrl, getDriveAuthHeader } from "@/lib/google-drive/client";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
@@ -120,6 +124,10 @@ interface OccupancyTeachingBiweeklyJobPayload {
   branch_name: string;
 }
 
+interface ContentSubmissionReviewJobPayload {
+  submission_id: string;
+}
+
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
 class NonRetryableJobError extends Error {
   readonly retryable = false as const;
@@ -198,6 +206,81 @@ async function processCrmSp1Draft(supabase: AdminClient, job: JobRow) {
   }
 
   return { warningId: warning.id };
+}
+
+const CONTENT_REVIEW_MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Runs Content Studio's AI review (reviewContentSubmission) for a submission
+ * that has no browser session to run inside -- currently only content the
+ * KontenAI Render Engine produced and registered directly via SQL (Drive-
+ * hosted output, never went through createContentSubmissionAction's upload
+ * form). Mirrors runReviewAndSave in
+ * features/markom/actions/content-submission.actions.ts, except the video
+ * fetch goes through the Drive service account (getDriveAuthHeader +
+ * driveMediaUrl) instead of a plain public fetch, since a Drive file's
+ * storage_path here is a Drive file id, not a Supabase Storage path.
+ */
+async function processContentSubmissionReview(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as ContentSubmissionReviewJobPayload;
+
+  const { data: submission, error: submissionError } = await supabase
+    .from("markom_content_submissions")
+    .select("id, task_id, caption, media_type, storage_path, submitted_by, content_focus, platform")
+    .eq("id", payload.submission_id)
+    .single();
+  if (submissionError || !submission) throw new Error(`Content submission ${payload.submission_id} not found: ${submissionError?.message}`);
+
+  let taskTitle = "Konten mandiri (tanpa checklist)";
+  let taskDescription: string | null = null;
+  if (submission.task_id) {
+    const { data: task } = await supabase.from("kpi_tasks").select("title, description").eq("id", submission.task_id).single();
+    if (task) {
+      taskTitle = task.title;
+      taskDescription = task.description;
+    }
+  }
+
+  let imageBase64: string | undefined;
+  let videoBase64: string | undefined;
+  const mimeType = submission.media_type === "video" ? "video/mp4" : "image/jpeg";
+
+  if (submission.media_type === "image") {
+    imageBase64 = await fetchUrlAsBase64(driveMediaUrl(submission.storage_path), await getDriveAuthHeader());
+  } else {
+    try {
+      const base64 = await fetchUrlAsBase64(driveMediaUrl(submission.storage_path), await getDriveAuthHeader());
+      const approxBytes = Math.ceil((base64.length * 3) / 4);
+      if (approxBytes <= CONTENT_REVIEW_MAX_VIDEO_BYTES) videoBase64 = base64;
+    } catch {
+      videoBase64 = undefined;
+    }
+  }
+
+  const review = await reviewContentSubmission({
+    taskTitle,
+    taskDescription,
+    caption: submission.caption,
+    mediaType: submission.media_type as "image" | "video",
+    imageBase64,
+    imageMimeType: mimeType,
+    videoBase64,
+    videoMimeType: mimeType,
+  });
+
+  await saveContentReview(supabase, submission.id, {
+    status: review.verdict,
+    score: review.score,
+    aiVerdict: review.feedback,
+    updatedBy: submission.submitted_by,
+  });
+
+  if (review.verdict === "approved") {
+    const target = new Date(Date.now() + 60 * 60 * 1000);
+    await scheduleContentSubmission(supabase, submission.id, target.toISOString(), submission.submitted_by);
+  }
+
+  return { score: review.score, verdict: review.verdict };
 }
 
 /** One Gemini attempt to coach a sales rep with 0 closings in the last 30 days -- a supportive weekly nudge (see 0101), not a warning. Sent directly to the sales rep only, unlike stuck_prospect_alert/SP1 which also reach their manager. */
@@ -1461,7 +1544,9 @@ export async function POST(request: Request) {
                                           ? await processOccupancyIntelligenceRefresh(job)
                                           : job.job_type === "occupancy_teaching_biweekly"
                                             ? await processOccupancyTeachingBiweekly(supabase, job)
-                                            : await processSocialWeeklyEvaluation(supabase);
+                                            : job.job_type === "content_submission_review"
+                                              ? await processContentSubmissionReview(supabase, job)
+                                              : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
