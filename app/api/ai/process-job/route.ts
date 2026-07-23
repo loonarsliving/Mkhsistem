@@ -561,10 +561,12 @@ function zernioProductForFocus(focus: string): ZernioProduct {
 }
 
 /**
- * Re-polls Zernio for one 'published' submission whose per-platform status
- * wasn't final yet at publish time (see 0170's migration doc) -- updates
- * zernio_publish_status/zernio_permalink with the real current state, or
- * flips the submission to 'failed' if Zernio itself now reports the
+ * Re-polls Zernio for one 'published' (or already-'failed', to pick up the
+ * real error detail -- see reconcileZernioPublishStatus's doc) submission
+ * whose per-platform status wasn't final yet at publish time (see 0170's
+ * migration doc) -- updates zernio_publish_status/zernio_permalink with the
+ * real current state, or flips/refines the submission to 'failed' with
+ * Zernio's actual errorCategory/errorMessage if Zernio now reports the
  * platform publish failed. A submission whose status is already 'published'
  * in Zernio's own terms is left with nothing to do (dispatch's WHERE clause
  * won't even enqueue it again once that's true).
@@ -578,7 +580,7 @@ async function processZernioPublishReconcile(supabase: AdminClient, job: JobRow)
     .eq("id", payload.submission_id)
     .single();
   if (submissionError || !submission) throw new Error(`Content submission ${payload.submission_id} not found: ${submissionError?.message}`);
-  if (submission.status !== "published" || !submission.zernio_post_id) {
+  if (!["published", "failed"].includes(submission.status) || !submission.zernio_post_id) {
     return { skipped: true, reason: `submission status is ${submission.status}, nothing to reconcile` };
   }
 
@@ -586,14 +588,18 @@ async function processZernioPublishReconcile(supabase: AdminClient, job: JobRow)
   const result = await getZernioPostStatus(submission.zernio_post_id, product);
 
   const failed = result.status === "failed";
+  const failureReason = failed
+    ? [result.errorCategory, result.errorMessage].filter(Boolean).join(": ") || "Zernio melaporkan publish ke platform gagal (tidak ada detail error)"
+    : undefined;
+
   await reconcileZernioPublishStatus(supabase, submission.id, {
     zernioPublishStatus: result.status,
     zernioPermalink: result.permalink,
     failed,
-    failureReason: failed ? "Zernio melaporkan publish ke platform gagal (lihat zernio_publish_status)" : undefined,
+    failureReason,
   });
 
-  return { zernioStatus: result.status, permalink: result.permalink, failed };
+  return { zernioStatus: result.status, permalink: result.permalink, failed, errorMessage: result.errorMessage, errorCategory: result.errorCategory, errorSource: result.errorSource };
 }
 
 /** One Gemini attempt to coach a sales rep with 0 closings in the last 30 days -- a supportive weekly nudge (see 0101), not a warning. Sent directly to the sales rep only, unlike stuck_prospect_alert/SP1 which also reach their manager. */
