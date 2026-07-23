@@ -40,7 +40,7 @@ import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webho
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
-import { createContentSubmission, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
+import { createContentSubmission, reconcileZernioPublishStatus, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import { generateCreativeBrief, type DirectorObjective, type DirectorPlatform } from "@/lib/ai/domains/kontenai-director";
 import { generateStoryboardFromBrief } from "@/lib/ai/domains/kontenai-storyboard";
@@ -51,7 +51,7 @@ import { createKontenAiStoryboard, updateKontenAiStoryboardScenes, type KontenAi
 import { createKontenAiRenderJob } from "@/repositories/kontenai-render-jobs.repository";
 import { moveRenderOutputToContentStudio } from "@/lib/kontenai/content-studio-bridge";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
-import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
+import { getZernioPostStatus, isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance, type ZernioProduct } from "@/lib/social/zernio";
 import {
   LEASEHOLD_TARGET_CITIES,
   getLeaseholdTargetGeoLocations,
@@ -141,6 +141,10 @@ interface KontenAiAutoProduceJobPayload {
 
 interface KontenAiAutoBridgeToStudioJobPayload {
   render_job_id: string;
+}
+
+interface ZernioPublishReconcileJobPayload {
+  submission_id: string;
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -550,6 +554,46 @@ async function processKontenAiAutoBridgeToStudio(supabase: AdminClient, job: Job
   await supabase.from("ai_job_queue").insert({ job_type: "content_submission_review", payload: { submission_id: submission.id } });
 
   return { submissionId: submission.id };
+}
+
+function zernioProductForFocus(focus: string): ZernioProduct {
+  return focus === "beauty" ? "beauty" : "property";
+}
+
+/**
+ * Re-polls Zernio for one 'published' submission whose per-platform status
+ * wasn't final yet at publish time (see 0170's migration doc) -- updates
+ * zernio_publish_status/zernio_permalink with the real current state, or
+ * flips the submission to 'failed' if Zernio itself now reports the
+ * platform publish failed. A submission whose status is already 'published'
+ * in Zernio's own terms is left with nothing to do (dispatch's WHERE clause
+ * won't even enqueue it again once that's true).
+ */
+async function processZernioPublishReconcile(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as ZernioPublishReconcileJobPayload;
+
+  const { data: submission, error: submissionError } = await supabase
+    .from("markom_content_submissions")
+    .select("id, content_focus, zernio_post_id, status")
+    .eq("id", payload.submission_id)
+    .single();
+  if (submissionError || !submission) throw new Error(`Content submission ${payload.submission_id} not found: ${submissionError?.message}`);
+  if (submission.status !== "published" || !submission.zernio_post_id) {
+    return { skipped: true, reason: `submission status is ${submission.status}, nothing to reconcile` };
+  }
+
+  const product = zernioProductForFocus(submission.content_focus);
+  const result = await getZernioPostStatus(submission.zernio_post_id, product);
+
+  const failed = result.status === "failed";
+  await reconcileZernioPublishStatus(supabase, submission.id, {
+    zernioPublishStatus: result.status,
+    zernioPermalink: result.permalink,
+    failed,
+    failureReason: failed ? "Zernio melaporkan publish ke platform gagal (lihat zernio_publish_status)" : undefined,
+  });
+
+  return { zernioStatus: result.status, permalink: result.permalink, failed };
 }
 
 /** One Gemini attempt to coach a sales rep with 0 closings in the last 30 days -- a supportive weekly nudge (see 0101), not a warning. Sent directly to the sales rep only, unlike stuck_prospect_alert/SP1 which also reach their manager. */
@@ -1819,7 +1863,9 @@ export async function POST(request: Request) {
                                                 ? await processKontenAiAutoProduce(supabase, job)
                                                 : job.job_type === "kontenai_auto_bridge_to_studio"
                                                   ? await processKontenAiAutoBridgeToStudio(supabase, job)
-                                                  : await processSocialWeeklyEvaluation(supabase);
+                                                  : job.job_type === "zernio_publish_reconcile"
+                                                    ? await processZernioPublishReconcile(supabase, job)
+                                                    : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

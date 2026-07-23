@@ -142,6 +142,35 @@ export async function markContentPublishFailed(supabase: TypedSupabaseClient, id
   if (error) throw error;
 }
 
+/**
+ * markContentPublishedViaZernio marks a submission 'published' the instant
+ * Zernio's createPost call is *accepted* -- but Zernio's own platformPostUrl
+ * often isn't populated yet at that point (its own SDK docs say so), and its
+ * per-platform status can still read 'pending'/'publishing' well after our
+ * row already says 'published'. This reconciles that gap by re-polling
+ * Zernio (getZernioPostStatus) for a submission already marked published and
+ * updating zernio_publish_status/zernio_permalink with what's actually true
+ * now -- or flips it to 'failed' if Zernio itself reports the platform
+ * publish failed (something markContentPublishFailed can't do, since it's
+ * scoped to status='scheduled', a different transition than this one).
+ */
+export async function reconcileZernioPublishStatus(
+  supabase: TypedSupabaseClient,
+  id: string,
+  result: { zernioPublishStatus: string | null; zernioPermalink: string | null; failed: boolean; failureReason?: string },
+) {
+  const { error } = await supabase
+    .from("markom_content_submissions")
+    .update(
+      result.failed
+        ? { status: "failed", failure_reason: result.failureReason ?? "Zernio melaporkan publish gagal", zernio_publish_status: result.zernioPublishStatus }
+        : { zernio_publish_status: result.zernioPublishStatus, zernio_permalink: result.zernioPermalink },
+    )
+    .eq("id", id)
+    .eq("status", "published");
+  if (error) throw error;
+}
+
 /** Builds Zernio's mediaItems array (0158) -- photo #1/the single video is always the parent row's own public_url/media_type; any 2nd-onward carousel photos come sorted by display_order. Shared by the manual "Tayangkan Sekarang" action and the 5-minute publish worker so both post the exact same carousel. */
 export function buildZernioMediaItems(row: {
   public_url: string;
