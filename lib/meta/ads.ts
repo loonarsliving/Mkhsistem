@@ -1,0 +1,575 @@
+import "server-only";
+
+import { META_CONFIG } from "./config";
+import { metaGraphRequest } from "./client";
+
+/**
+ * Meta Marketing API primitives for Click-to-WhatsApp lead ads. Every call
+ * here is a thin, typed wrapper around one Graph API endpoint -- no
+ * business logic (research, copywriting, budget policy) lives in this file,
+ * that's lib/ai/domains/markom.ts (research + copy) and the ai_job_queue
+ * "meta_ads_launch" job handler (orchestration + the budget-cap safety
+ * check), so this module can be unit-reasoned-about as "what Meta's API
+ * actually accepts" in one place.
+ */
+
+/** Fetches an image by its public URL and uploads it to the ad account's image library, returning the image_hash ad creatives reference. Never generates an image -- the URL always points at a real photo Markom uploaded (crm_project_photos). */
+export async function uploadAdImageFromUrl(imageUrl: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  let imageResponse: Response;
+  try {
+    imageResponse = await fetch(imageUrl, { signal: controller.signal });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error && err.name === "AbortError"
+        ? `Gagal mengambil foto sumber (${imageUrl}): tidak merespon dalam 20 detik`
+        : `Gagal mengambil foto sumber (${imageUrl}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!imageResponse.ok) throw new Error(`Failed to fetch source image (${imageUrl}): HTTP ${imageResponse.status}`);
+  const buffer = Buffer.from(await imageResponse.arrayBuffer());
+
+  const result = await metaGraphRequest<{ images: Record<string, { hash: string }> }>(
+    `/${META_CONFIG.adAccountId}/adimages`,
+    { bytes: buffer.toString("base64") },
+    "POST",
+  );
+  const entry = Object.values(result.images ?? {})[0];
+  if (!entry?.hash) throw new Error("Meta did not return an image hash for the uploaded photo");
+  return entry.hash;
+}
+
+export interface UploadedAdVideo {
+  videoId: string;
+  thumbnailUrl: string;
+}
+
+/**
+ * Registers a video (by its public Supabase Storage URL) with the ad
+ * account's video library via Meta's advideos endpoint, then polls until
+ * Meta finishes processing it (encoding + thumbnail generation) -- unlike
+ * a photo (uploadAdImageFromUrl, synchronous), video processing on Meta's
+ * side is asynchronous, so it can't be used in a creative immediately
+ * after the upload call returns.
+ *
+ * Polls for up to ~90s (5s intervals) -- short Click-to-WhatsApp property
+ * videos are usually ready well within that. If it's still processing
+ * after that, throws so the caller can retry the launch shortly after;
+ * NOTE this re-uploads the video on retry (Meta's video_id from the first
+ * attempt isn't persisted anywhere across a failed launch attempt) --
+ * wasteful but not harmful, since Meta doesn't charge for video library
+ * storage. A cleaner retry-without-re-upload flow would need the video_id
+ * persisted in the draft row between attempts; not built yet since a
+ * property-tour video finishing processing within 90s is the common case.
+ *
+ * This is the first video-ad implementation in this codebase -- verify
+ * with one real manual launch (a human reviews the draft anyway, see
+ * processMetaAdsResearch) before relying on it for judgement-free
+ * autonomous launches.
+ */
+export async function uploadAdVideoFromUrl(videoUrl: string): Promise<UploadedAdVideo> {
+  const created = await metaGraphRequest<{ id: string }>(`/${META_CONFIG.adAccountId}/advideos`, { file_url: videoUrl }, "POST");
+  if (!created.id) throw new Error("Meta did not return a video id for the uploaded video");
+  const videoId = created.id;
+
+  const maxAttempts = 18;
+  const pollIntervalMs = 5000;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await metaGraphRequest<{ status?: { video_status?: string } }>(`/${videoId}`, { fields: "status" });
+    const videoStatus = status.status?.video_status;
+    if (videoStatus === "ready") {
+      const thumbnailUrl = await getVideoThumbnailUrl(videoId);
+      return { videoId, thumbnailUrl };
+    }
+    if (videoStatus === "error") {
+      throw new Error("Meta gagal memproses video yang diunggah (video_status: error) -- coba unggah ulang videonya dengan format/encoding lain (mp4 H.264 direkomendasikan)");
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error(
+    `Video masih diproses Meta setelah ${Math.round((maxAttempts * pollIntervalMs) / 1000)} detik -- coba luncurkan lagi dalam beberapa menit (video sudah berhasil diunggah ke Meta, prosesnya cuma butuh waktu lebih lama dari biasanya)`,
+  );
+}
+
+/** Meta generates candidate thumbnails once a video finishes processing -- picks the one marked is_preferred, or the first available, since video_data (the creative payload) requires an explicit thumbnail image_url. */
+async function getVideoThumbnailUrl(videoId: string): Promise<string> {
+  const result = await metaGraphRequest<{ data: { uri: string; is_preferred?: boolean }[] }>(`/${videoId}/thumbnails`, {});
+  const preferred = result.data?.find((t) => t.is_preferred) ?? result.data?.[0];
+  if (!preferred?.uri) throw new Error("Meta did not return a thumbnail for the uploaded video");
+  return preferred.uri;
+}
+
+export interface ResolvedGeoLocation {
+  key: string;
+  name: string;
+  type: "city" | "region";
+}
+
+/** Resolves a human place name (e.g. "Yogyakarta", "Bali") to Meta's opaque targeting key via the Targeting Search API -- geo_locations.cities/regions need this key, not the plain name. Returns null if Meta has no match. */
+export async function searchAdGeoLocation(query: string): Promise<ResolvedGeoLocation | null> {
+  const result = await metaGraphRequest<{ data: { key: string; name: string; type: string; country_code?: string }[] }>("/search", {
+    type: "adgeolocation",
+    q: query,
+    location_types: JSON.stringify(["city", "region"]),
+    country_code: "ID",
+    limit: 1,
+  });
+  const match = result.data?.find((r) => r.type === "city" || r.type === "region");
+  if (!match) return null;
+  return { key: match.key, name: match.name, type: match.type === "region" ? "region" : "city" };
+}
+
+/**
+ * Villa leasehold buyer cities per the user's own market knowledge (not
+ * derived from CRM data -- at the time this was added, the CRM had zero
+ * recorded closings and prospect-origin data was dominated by wherever
+ * marketing had already focused, not a reliable "who actually buys"
+ * signal). Plain business config, not something worth spending an AI call
+ * on -- edit this list directly as real closing data accumulates and a
+ * data-driven city list becomes possible.
+ */
+export const LEASEHOLD_TARGET_CITIES = ["Yogyakarta", "Surabaya", "Bandung", "Surakarta", "Bali", "Malang", "Semarang"];
+
+/**
+ * Resolves a list of place names into real Meta targeting keys, splitting
+ * them into cities vs regions since Meta returns e.g. "Bali" as a region,
+ * not a city. Falls back to country-wide ["ID"] targeting if nothing
+ * resolves (a Meta API hiccup or an unrecognized place name shouldn't block
+ * an ad launch entirely -- it just makes that one launch less targeted).
+ */
+export async function resolveGeoLocationsFromNames(names: string[], radiusKm: number): Promise<AdSetTargeting> {
+  const resolved = await Promise.all(names.map((name) => searchAdGeoLocation(name)));
+  const cities = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "city").map((r) => ({ key: r.key, radiusKm }));
+  const regions = resolved.filter((r): r is ResolvedGeoLocation => r?.type === "region").map((r) => ({ key: r.key }));
+
+  if (cities.length === 0 && regions.length === 0) {
+    return { countries: ["ID"] };
+  }
+
+  return { cities, regions };
+}
+
+let cachedLeaseholdGeoLocations: AdSetTargeting | null = null;
+
+/**
+ * Resolves LEASEHOLD_TARGET_CITIES into real Meta targeting keys once per
+ * process (they're stable place IDs, no need to re-resolve every launch).
+ */
+export async function getLeaseholdTargetGeoLocations(): Promise<AdSetTargeting> {
+  if (cachedLeaseholdGeoLocations) return cachedLeaseholdGeoLocations;
+  const resolved = await resolveGeoLocationsFromNames(LEASEHOLD_TARGET_CITIES, 30);
+  if (!resolved.cities?.length && !resolved.regions?.length) return resolved;
+  cachedLeaseholdGeoLocations = resolved;
+  return cachedLeaseholdGeoLocations;
+}
+
+export interface CreateCampaignInput {
+  name: string;
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/** Rollback helper for launchWhatsAppLeadCampaign -- deletes a campaign that was created but whose ad set/creative/ad step failed, so a failed launch attempt never leaves an orphaned empty campaign behind. */
+export async function deleteAdCampaign(campaignId: string): Promise<void> {
+  await metaGraphRequest(`/${campaignId}`, {}, "DELETE");
+}
+
+/**
+ * OUTCOME_ENGAGEMENT is the objective family Click-to-WhatsApp ad sets
+ * (destination_type: WHATSAPP, optimization_goal: CONVERSATIONS) live under.
+ * No campaign-level daily_budget is ever set here -- budget lives on the ad
+ * set (createAdSet) -- so Meta requires is_adset_budget_sharing_enabled to
+ * be explicit (error_subcode 4834011 otherwise). false keeps this campaign's
+ * single ad set fully in control of its own budget, matching the existing
+ * per-launch dailyBudgetIdr semantics, instead of opting into Meta's
+ * Advantage Campaign Budget sharing behavior (ad sets pooling/reallocating
+ * ~20% of budget among each other).
+ */
+export async function createAdCampaign(input: CreateCampaignInput): Promise<{ id: string }> {
+  return metaGraphRequest(
+    `/${META_CONFIG.adAccountId}/campaigns`,
+    {
+      name: input.name,
+      objective: "OUTCOME_ENGAGEMENT",
+      special_ad_categories: [],
+      status: input.status ?? "PAUSED",
+      is_adset_budget_sharing_enabled: false,
+    },
+    "POST",
+  );
+}
+
+export interface AdSetTargeting {
+  countries?: string[];
+  /** Resolved via searchAdGeoLocation -- Meta's geo_locations.cities needs its opaque `key`, not a plain city name. */
+  cities?: { key: string; radiusKm?: number }[];
+  regions?: { key: string }[];
+  ageMin?: number;
+  ageMax?: number;
+}
+
+export interface CreateAdSetInput {
+  name: string;
+  campaignId: string;
+  /** IDR is a zero-decimal currency for Meta's Marketing API -- pass whole Rupiah, not cents. */
+  dailyBudgetIdr: number;
+  targeting: AdSetTargeting;
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/** destination_type: WHATSAPP + promoted_object.page_id is what makes this a Click-to-WhatsApp ad set -- the actual destination number is whichever WhatsApp Business Account is linked to that Page in Business Manager, not an API field. */
+export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string }> {
+  return metaGraphRequest(
+    `/${META_CONFIG.adAccountId}/adsets`,
+    {
+      name: input.name,
+      campaign_id: input.campaignId,
+      daily_budget: Math.round(input.dailyBudgetIdr),
+      billing_event: "IMPRESSIONS",
+      optimization_goal: "CONVERSATIONS",
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+      destination_type: "WHATSAPP",
+      promoted_object: { page_id: META_CONFIG.pageId },
+      targeting: {
+        geo_locations: {
+          ...(input.targeting.countries?.length ? { countries: input.targeting.countries } : {}),
+          ...(input.targeting.cities?.length
+            ? { cities: input.targeting.cities.map((c) => ({ key: c.key, radius: c.radiusKm ?? 25, distance_unit: "kilometer" })) }
+            : {}),
+          ...(input.targeting.regions?.length ? { regions: input.targeting.regions.map((r) => ({ key: r.key })) } : {}),
+        },
+        age_min: input.targeting.ageMin ?? 21,
+        // Advantage+ Audience (targeting_automation.advantage_audience: 1
+        // below) rejects any age_max below 65 outright (error_subcode
+        // 1870189) -- it treats a tighter cap as a mere delivery suggestion
+        // it's allowed to override, not a hard ceiling, so Meta requires the
+        // stated max to already be effectively "no cap". age_min is not
+        // restricted the same way, so a real floor (e.g. 21) still holds.
+        age_max: Math.max(input.targeting.ageMax ?? 55, 65),
+        // Required explicit flag (error_subcode 1870227 otherwise). Enabled
+        // (1) deliberately -- it lets Meta's delivery system find people
+        // likely to convert beyond our exact targeting criteria, which is
+        // what actually drives more clicks/conversations for a fixed
+        // budget, not just a flag to satisfy the API.
+        targeting_automation: { advantage_audience: 1 },
+      },
+      status: input.status ?? "PAUSED",
+    },
+    "POST",
+  );
+}
+
+export interface CreateAdCreativeInput {
+  name: string;
+  /** From uploadAdImageFromUrl -- always real Markom-uploaded photo(s). 1 hash makes a plain single-image ad; 2-10 makes a swipeable carousel (Meta's own card range) -- see createAdCreative. Empty when `video` is set instead -- an ad is either a video or image(s)/carousel, never both. */
+  imageHashes: string[];
+  /** From uploadAdVideoFromUrl -- mutually exclusive with imageHashes. */
+  video?: UploadedAdVideo;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  /** Pre-filled greeting shown when the lead's WhatsApp chat opens from the ad. */
+  welcomeMessage?: string;
+}
+
+/**
+ * object_story_spec.link_data + call_to_action WHATSAPP_MESSAGE is what
+ * makes tapping the ad open a WhatsApp chat instead of a normal landing
+ * page. 2+ image hashes switches link_data from a flat single image to
+ * child_attachments (Meta's carousel format, max 10 cards) -- every card
+ * shares the same headline/description/CTA since the AI draft (and the
+ * manual launch flow) only ever produces one set of copy for the whole ad,
+ * not per-slide copy.
+ *
+ * A video ad uses object_story_spec.video_data instead of link_data (Meta's
+ * schema for video link ads) -- the WhatsApp destination link lives inside
+ * call_to_action.value.link there, not as a sibling field like link_data's
+ * flat `link`. video_data has no carousel equivalent -- always exactly one
+ * video, never combined with imageHashes.
+ */
+export async function createAdCreative(input: CreateAdCreativeInput): Promise<{ id: string }> {
+  if (!input.video && input.imageHashes.length === 0) throw new Error("createAdCreative requires at least one image hash or a video");
+
+  const waLink = META_CONFIG.whatsappPhoneNumber
+    ? `https://api.whatsapp.com/send?phone=${META_CONFIG.whatsappPhoneNumber}`
+    : "https://api.whatsapp.com/send";
+  const callToAction = { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
+
+  const objectStorySpec = input.video
+    ? {
+        page_id: META_CONFIG.pageId,
+        video_data: {
+          video_id: input.video.videoId,
+          image_url: input.video.thumbnailUrl,
+          title: input.headline,
+          message: input.primaryText,
+          link_description: input.description,
+          call_to_action: { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP", link: waLink } },
+        },
+        ...(input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
+      }
+    : {
+        page_id: META_CONFIG.pageId,
+        link_data:
+          input.imageHashes.length === 1
+            ? {
+                image_hash: input.imageHashes[0],
+                link: waLink,
+                message: input.primaryText,
+                name: input.headline,
+                description: input.description,
+                call_to_action: callToAction,
+              }
+            : {
+                link: waLink,
+                message: input.primaryText,
+                child_attachments: input.imageHashes.slice(0, 10).map((hash) => ({
+                  link: waLink,
+                  image_hash: hash,
+                  name: input.headline,
+                  description: input.description,
+                  call_to_action: callToAction,
+                })),
+              },
+        ...(input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
+      };
+
+  return metaGraphRequest(`/${META_CONFIG.adAccountId}/adcreatives`, { name: input.name, object_story_spec: objectStorySpec }, "POST");
+}
+
+/**
+ * Ad creatives are immutable on Meta's side once created -- there is no
+ * "edit creative" endpoint. Refreshing copy on an already-live ad means
+ * creating a brand new creative object and swapping it onto the existing
+ * ad (POST /{adId} {creative:{creative_id}}), which keeps the same ad_id
+ * (and therefore its accumulated insights/learning) while changing what
+ * people actually see. Meta re-reviews the new creative, which can cause
+ * a brief delivery pause -- an accepted tradeoff for fixing a proven
+ * low-converting creative rather than leaving it running as-is.
+ */
+export async function updateAdCreative(adId: string, input: CreateAdCreativeInput): Promise<{ creativeId: string }> {
+  const creative = await createAdCreative(input);
+  await metaGraphRequest(`/${adId}`, { creative: { creative_id: creative.id } }, "POST");
+  return { creativeId: creative.id };
+}
+
+export interface CreateAdInput {
+  name: string;
+  adSetId: string;
+  creativeId: string;
+  status?: "ACTIVE" | "PAUSED";
+}
+
+export async function createAd(input: CreateAdInput): Promise<{ id: string }> {
+  return metaGraphRequest(
+    `/${META_CONFIG.adAccountId}/ads`,
+    {
+      name: input.name,
+      adset_id: input.adSetId,
+      creative: { creative_id: input.creativeId },
+      status: input.status ?? "PAUSED",
+    },
+    "POST",
+  );
+}
+
+export interface LaunchCampaignInput {
+  projectName: string;
+  /** 1 URL makes a single-image ad; 2-10 makes a swipeable carousel (see createAdCreative). Ignored when videoUrl is set. */
+  photoUrls: string[];
+  /** Mutually exclusive with photoUrls -- a public URL to a real Markom-uploaded video (crm_project_photos, media_type='video'). */
+  videoUrl?: string;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  welcomeMessage?: string;
+  dailyBudgetIdr: number;
+  /** Defaults to country-wide ["ID"] if omitted -- callers pass getLeaseholdTargetGeoLocations() for villa projects. */
+  targeting?: AdSetTargeting;
+}
+
+export interface LaunchCampaignResult {
+  campaignId: string;
+  adSetId: string;
+  creativeId: string;
+  adId: string;
+}
+
+/**
+ * The full Campaign -> AdSet -> Creative -> Ad sequence, real spend from
+ * the moment it returns. Pure Meta orchestration only -- no DB writes, so
+ * both the fully-autonomous job handler (processMetaAdsLaunch,
+ * app/api/ai/process-job/route.ts) and the manual "Luncurkan" server
+ * action (launchDraftCampaignAction, features/markom/actions/ads.actions.ts)
+ * share this instead of duplicating it, each doing its own DB bookkeeping
+ * around the call.
+ */
+export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Promise<LaunchCampaignResult> {
+  if (!input.videoUrl && input.photoUrls.length === 0) throw new Error("launchWhatsAppLeadCampaign requires at least one photo or a video");
+
+  const [imageHashes, video] = await Promise.all([
+    input.videoUrl ? Promise.resolve([]) : Promise.all(input.photoUrls.map((url) => uploadAdImageFromUrl(url))),
+    input.videoUrl ? uploadAdVideoFromUrl(input.videoUrl) : Promise.resolve(undefined),
+  ]);
+  const campaign = await createAdCampaign({ name: `${input.projectName} - Leads WA (AI)`, status: "ACTIVE" });
+
+  // Once the campaign exists, every following step that throws must delete it
+  // first -- otherwise a failed ad set/creative/ad step (e.g. a Page
+  // permission error) leaves an empty, real, ACTIVE campaign sitting in the
+  // ad account forever, and every retry piles up another one.
+  try {
+    const adSet = await createAdSet({
+      name: `${input.projectName} - Ad Set`,
+      campaignId: campaign.id,
+      dailyBudgetIdr: input.dailyBudgetIdr,
+      targeting: input.targeting ?? { countries: ["ID"] },
+      status: "ACTIVE",
+    });
+    const creative = await createAdCreative({
+      name: `${input.projectName} - Creative`,
+      imageHashes,
+      video,
+      headline: input.headline,
+      primaryText: input.primaryText,
+      description: input.description,
+      welcomeMessage: input.welcomeMessage,
+    });
+    const ad = await createAd({ name: `${input.projectName} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
+    return { campaignId: campaign.id, adSetId: adSet.id, creativeId: creative.id, adId: ad.id };
+  } catch (err) {
+    await deleteAdCampaign(campaign.id).catch(() => undefined);
+    throw err;
+  }
+}
+
+/** Human override from the Ads Specialist page -- pause/resume an ad AI already launched. */
+export async function setAdStatus(adId: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: boolean }> {
+  return metaGraphRequest(`/${adId}`, { status }, "POST");
+}
+
+/** Human override from the Ads Specialist page -- tighten/loosen an already-launched ad set's daily budget. Budget lives on the ad set (see createAdSet), not the campaign or ad. IDR is zero-decimal -- pass whole Rupiah. */
+export async function updateAdSetDailyBudget(adSetId: string, dailyBudgetIdr: number): Promise<{ success: boolean }> {
+  return metaGraphRequest(`/${adSetId}`, { daily_budget: Math.round(dailyBudgetIdr) }, "POST");
+}
+
+/**
+ * Hard safety gate: fails closed (throws) if no operator has set
+ * META_ADS_DAILY_BUDGET_CAP_IDR, or if today's spend already reached that
+ * cap -- called before every autonomous campaign launch, before any Meta
+ * API call that would commit real spend. Returns the IDR headroom left
+ * today so the caller can clamp a new campaign's daily_budget to it.
+ */
+export async function getRemainingDailyBudgetIdr(): Promise<number> {
+  if (META_CONFIG.dailyBudgetCapIdr <= 0) {
+    throw new Error(
+      "Batas budget iklan harian belum diatur. Tambahkan environment variable META_ADS_DAILY_BUDGET_CAP_IDR di Vercel (isi dengan angka Rupiah, mis. 200000 untuk Rp 200.000/hari), lalu redeploy -- ini pengaman wajib agar AI/sistem tidak bisa menghabiskan budget iklan tanpa batas.",
+    );
+  }
+  const spentToday = await getTodaySpendIdr();
+  const remaining = META_CONFIG.dailyBudgetCapIdr - spentToday;
+  if (remaining <= 0) {
+    throw new Error(
+      `Batas budget iklan harian (Rp ${META_CONFIG.dailyBudgetCapIdr.toLocaleString("id-ID")}) sudah tercapai hari ini (sudah terpakai Rp ${spentToday.toLocaleString("id-ID")}). Coba lagi besok, atau naikkan META_ADS_DAILY_BUDGET_CAP_IDR.`,
+    );
+  }
+  return remaining;
+}
+
+export interface AdAccountBalanceInfo {
+  /** Only meaningful for prepaid accounts -- 0 (or absent) for accounts on monthly invoicing/direct debit, where there's no prepaid balance to draw down. */
+  balanceIdr: number;
+  amountSpentIdr: number;
+  currency: string;
+  fundingSourceDescription: string | null;
+}
+
+/**
+ * Read-only -- the Marketing API has no endpoint to add funds to an ad
+ * account. Adding/changing a payment method or topping up a prepaid
+ * balance can only be done by a human in Meta Business Suite -> Billing.
+ * This just surfaces what's already there.
+ */
+export async function getAdAccountBalanceInfo(): Promise<AdAccountBalanceInfo> {
+  const account = await metaGraphRequest<{
+    balance?: string;
+    amount_spent?: string;
+    currency?: string;
+    funding_source_details?: { display_string?: string };
+  }>(`/${META_CONFIG.adAccountId}`, { fields: "balance,amount_spent,currency,funding_source_details" });
+
+  return {
+    balanceIdr: Number(account.balance ?? "0"),
+    amountSpentIdr: Number(account.amount_spent ?? "0"),
+    currency: account.currency ?? "IDR",
+    fundingSourceDescription: account.funding_source_details?.display_string ?? null,
+  };
+}
+
+/** Total spend (IDR) across the whole ad account so far today -- the budget-cap safety check reads this before every new campaign launch. */
+export async function getTodaySpendIdr(): Promise<number> {
+  const insights = await metaGraphRequest<{ data: { spend?: string }[] }>(`/${META_CONFIG.adAccountId}/insights`, {
+    date_preset: "today",
+    fields: "spend",
+  });
+  return Number(insights.data?.[0]?.spend ?? "0");
+}
+
+export interface AdInsights {
+  spendIdr: number;
+  impressions: number;
+  clicks: number;
+  messagingConversationsStarted: number;
+  /** Unique people reached -- combined with frequency, tells apart "audience is exhausted" (high frequency, low reach growth) from "audience is fine, creative/offer is the problem". */
+  reach: number;
+  /** Average times a unique person has seen this ad. Meta's own guidance: above ~3-4 without a creative refresh is a common cause of CTR decay ("ad fatigue"). */
+  frequency: number;
+  ctrPercent: number;
+}
+
+/**
+ * Per-ad performance, used both by the Ads Specialist dashboard and by the
+ * AI's own decision to keep/pause/scale a campaign. date_preset: "maximum"
+ * is deliberate -- without an explicit date range, Meta's insights edge
+ * defaults to a rolling window (not the ad's full lifetime), which silently
+ * produced numbers that didn't match how many days the ad had actually been
+ * running for (the daysRunning figure computed from created_at) and made
+ * every analysis built on it unreliable.
+ *
+ * Reads inline_link_clicks (+ its own CTR), NOT the plain `clicks`/`ctr`
+ * fields -- Meta's `clicks` is "all clicks" (photo expand, page likes,
+ * comments, profile taps, everything), which runs far higher than actual
+ * clicks on the WhatsApp CTA and made the dashboard's "Klik" number look
+ * inflated/unrealistic for a Click-to-WhatsApp campaign whose only real
+ * goal is the link click that opens the chat. inline_link_clicks is the
+ * metric that actually corresponds to that.
+ */
+export async function getAdInsights(adId: string): Promise<AdInsights> {
+  const insights = await metaGraphRequest<{
+    data: {
+      spend?: string;
+      impressions?: string;
+      inline_link_clicks?: string;
+      reach?: string;
+      frequency?: string;
+      inline_link_click_ctr?: string;
+      actions?: { action_type: string; value: string }[];
+    }[];
+  }>(`/${adId}/insights`, { fields: "spend,impressions,inline_link_clicks,reach,frequency,inline_link_click_ctr,actions", date_preset: "maximum" });
+
+  const row = insights.data?.[0];
+  const messagingConversationsStarted = Number(
+    row?.actions?.find((a) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? "0",
+  );
+
+  return {
+    spendIdr: Number(row?.spend ?? "0"),
+    impressions: Number(row?.impressions ?? "0"),
+    clicks: Number(row?.inline_link_clicks ?? "0"),
+    messagingConversationsStarted,
+    reach: Number(row?.reach ?? "0"),
+    frequency: Number(row?.frequency ?? "0"),
+    ctrPercent: Number(row?.inline_link_click_ctr ?? "0"),
+  };
+}

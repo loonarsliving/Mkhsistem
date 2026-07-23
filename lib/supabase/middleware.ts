@@ -5,7 +5,51 @@ import { logger } from "@/lib/logger";
 import { buildCspHeader } from "@/lib/security/csp";
 import type { Database } from "@/types/database.types";
 
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/api/health"];
+// /api/push/send and /api/ai/whatsapp-relay are called by the mkc_notifications
+// DB trigger (server-to-server, no browser session) -- see their own route
+// files for request-level authorization (re-fetches by id, rejects anything
+// not created in the last 2 minutes). /api/integrations/whatsapp/webhook is
+// called by Meta directly (Meta's own verify-token handshake is its auth).
+// /api/debug/whatsapp-config is TEMPORARY -- meant to be opened directly in a
+// browser for diagnosis, returns booleans/labels only, never a secret value.
+// /api/ai/process-job is called by the ai_job_queue insert trigger and the
+// pg_cron sweep (migration 0065), server-to-server -- its own atomic claim
+// (UPDATE ... WHERE status = 'pending') is the request-level authorization:
+// job_id is an unguessable v4 UUID, and any call against an already-claimed
+// job is a safe no-op, mirroring /api/push/send's re-fetch-by-id pattern.
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  // Must stay publicly reachable without login -- Meta/TikTok app review
+  // (and end users) need to open these URLs directly, not get redirected
+  // to /login.
+  "/privacy-policy",
+  "/terms-of-service",
+  "/api/health",
+  "/api/push/send",
+  "/api/ai/whatsapp-relay",
+  "/api/ai/process-job",
+  "/api/integrations/whatsapp/webhook",
+  "/api/debug/whatsapp-config",
+  "/api/debug/meta-ads-config",
+  // TEMPORARY -- Zernio Instagram/TikTok connect setup + status check, see
+  // app/api/debug/zernio-connect/route.ts. Remove once both platforms are
+  // connected and confirmed flowing real data.
+  "/api/debug/zernio-connect",
+  // pg_cron-triggered worker routes (net.http_post carries no session
+  // cookie) -- found missing here while building 0096: every tick of
+  // crm-promo-sends-worker and the daily social-snapshot capture cron has
+  // been silently redirected to /login instead of running, confirmed via
+  // social_account_snapshots/crm_promo_sends both being completely empty.
+  "/api/crm/dispatch-promo-sends",
+  "/api/social/capture-snapshots",
+  "/api/social/publish-content",
+  "/api/markom/check-ads-balance",
+  "/api/markom/refresh-ad-campaign-spend",
+];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

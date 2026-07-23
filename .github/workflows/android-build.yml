@@ -50,23 +50,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle
 
       - uses: android-actions/setup-android@v3
 
       - name: Sync Capacitor
         run: npx cap sync android
-
-      - name: Android lint
-        working-directory: android
-        run: ./gradlew lint --no-daemon
-
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-lint-report
-          path: android/app/build/reports/lint-results-*.html
-          if-no-files-found: ignore
 
       - name: Build debug APK
         working-directory: android
@@ -82,7 +71,11 @@ jobs:
       # still produces a real, installable (but unsigned) release APK for
       # internal testing — see docs/android/BUILD.md for how to generate
       # and register a real release keystore so this step ships a properly
-      # signed artifact instead.
+      # signed artifact instead. Built here, before the emulator step below
+      # (rather than after, as before), so that step can install-and-launch
+      # the release APK too, not just debug -- release runs R8/shrinkResources,
+      # which debug doesn't, so it's a genuinely different artifact that
+      # needs its own real-device verification.
       - name: Decode release keystore
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         run: |
@@ -97,11 +90,97 @@ jobs:
           MKC_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
+      # Cryptographic proof, not an inference from the filename: apksigner
+      # parses the actual APK Signing Block and validates it against the
+      # certificate, the same check the Play Store and any Android device
+      # perform before allowing an install. Fails the job (no continue-on-
+      # error) if verification doesn't pass -- an APK named app-release.apk
+      # that isn't actually correctly signed should never ship.
+      - name: Verify release APK signature
+        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
+        working-directory: android
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "No apksigner found in installed build-tools -- installing build-tools;36.0.0"
+            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            sdkmanager "build-tools;36.0.0"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+          fi
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::Could not locate or install apksigner"
+            exit 1
+          fi
+          echo "Using: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: mk-connect-release-apk
           path: android/app/build/outputs/apk/release/app-release*.apk
+
+      # Lint and successful Gradle builds only prove the APKs package —
+      # they can't catch a runtime crash on launch (a missing manifest
+      # resource, an uninitialized SDK, a bad plugin config, or -- for the
+      # release build specifically -- a class R8 stripped/renamed that
+      # Capacitor's reflection-based plugin loader needed). Boot a real
+      # emulator and install-and-launch BOTH APKs, failing the job if
+      # logcat shows a FATAL EXCEPTION for our process on either one.
+      - name: Boot emulator smoke test
+        # Non-blocking: reactivecircus/android-emulator-runner executes each
+        # line of `script` as its own separate `sh -c` invocation (visible in
+        # the run logs as one "[command]/usr/bin/sh -c <line>" per line), not
+        # as a single multi-line script. A `if ...; then` / `fi` split across
+        # two lines therefore lands in two different shell processes, and the
+        # `if` line fails with "Syntax error: end of file unexpected
+        # (expecting \"fi\")" because its own process never sees a matching
+        # fi. Every compound statement below is written on one physical line
+        # for that reason. continue-on-error is set because both APKs
+        # (already uploaded by the steps above) are the actual deliverables
+        # this CI build exists to produce -- a flaky or slow hosted-runner
+        # emulator boot should never block them.
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb logcat -c
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n id.haluoleo.mkconnect/.MainActivity
+            sleep 15
+            adb logcat -d > "$RUNNER_TEMP/logcat-debug.txt"
+            if grep -q "FATAL EXCEPTION" "$RUNNER_TEMP/logcat-debug.txt" || ! adb shell pidof id.haluoleo.mkconnect > /dev/null; then echo "::error::Debug APK crashed or is not running after launch. Relevant logcat:"; grep -A 60 "FATAL EXCEPTION\|AndroidRuntime: Process\|id.haluoleo.mkconnect" "$RUNNER_TEMP/logcat-debug.txt" || cat "$RUNNER_TEMP/logcat-debug.txt"; exit 1; fi
+            echo "Debug APK launched and is still running after 15s — no crash detected."
+            if [ "${{ env.HAS_RELEASE_KEYSTORE }}" = "true" ]; then adb uninstall id.haluoleo.mkconnect || true; adb logcat -c; release_apk=$(ls android/app/build/outputs/apk/release/app-release.apk 2>/dev/null | head -n1); if [ -z "$release_apk" ]; then echo "::error::Signed release APK not found at the expected path"; exit 1; fi; adb install -r "$release_apk"; adb shell am start -W -n id.haluoleo.mkconnect/.MainActivity; sleep 15; adb logcat -d > "$RUNNER_TEMP/logcat-release.txt"; if grep -q "FATAL EXCEPTION" "$RUNNER_TEMP/logcat-release.txt" || ! adb shell pidof id.haluoleo.mkconnect > /dev/null; then echo "::error::Release APK crashed or is not running after launch. Relevant logcat:"; grep -A 60 "FATAL EXCEPTION\|AndroidRuntime: Process\|id.haluoleo.mkconnect" "$RUNNER_TEMP/logcat-release.txt" || cat "$RUNNER_TEMP/logcat-release.txt"; exit 1; fi; echo "Release APK launched and is still running after 15s — no crash detected."; else echo "No release keystore configured yet -- skipping release APK smoke test (runs automatically once ANDROID_RELEASE_KEYSTORE_BASE64 etc. are added as repo secrets)."; fi
+
+      - name: Upload smoke test logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-smoke-test-logcat
+          path: ${{ runner.temp }}/logcat-*.txt
+          if-no-files-found: ignore
+
+      # Non-blocking: lint findings are worth surfacing but shouldn't hold
+      # up getting a real device/emulator signal on whether the app boots.
+      - name: Android lint
+        if: always()
+        continue-on-error: true
+        working-directory: android
+        run: ./gradlew lint --no-daemon
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: android/app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
 
       # Only on a tag push (e.g. android-v1.0.0) — renames both APKs with
       # the version baked into the filename and publishes them as a

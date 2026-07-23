@@ -6,14 +6,24 @@ import { PERMISSIONS, type PermissionKey } from "@/constants/rbac";
 import { cn } from "@/lib/utils";
 
 const ACTIONS = [
-  { label: "Ajukan Izin/Sakit", href: "/attendance/history?action=leave", icon: CalendarPlus, permission: PERMISSIONS.ATTENDANCE_VIEW_OWN },
-  { label: "Buat Memo", href: "/memo/new", icon: FilePlus2, permission: PERMISSIONS.MEMO_CREATE },
-  { label: "Buat Pengumuman", href: "/announcements/new", icon: Megaphone, permission: PERMISSIONS.ANNOUNCEMENT_CREATE },
-  { label: "Data Karyawan", href: "/employees", icon: Users, permission: PERMISSIONS.EMPLOYEE_VIEW_BRANCH },
+  {
+    label: "Ajukan Izin/Sakit",
+    href: "/attendance/history?action=leave",
+    icon: CalendarPlus,
+    permission: [PERMISSIONS.ATTENDANCE_VIEW_OWN, PERMISSIONS.ATTENDANCE_VIEW_BRANCH, PERMISSIONS.ATTENDANCE_VIEW_ALL],
+  },
+  { label: "Buat Memo", href: "/memo/new", icon: FilePlus2, permission: [PERMISSIONS.MEMO_CREATE] },
+  { label: "Buat Pengumuman", href: "/announcements/new", icon: Megaphone, permission: [PERMISSIONS.ANNOUNCEMENT_CREATE] },
+  {
+    label: "Data Karyawan",
+    href: "/employees",
+    icon: Users,
+    permission: [PERMISSIONS.EMPLOYEE_VIEW_BRANCH, PERMISSIONS.EMPLOYEE_VIEW_ALL],
+  },
 ] as const;
 
 export function QuickActions({ permissions }: { permissions: PermissionKey[] }) {
-  const actions = ACTIONS.filter((a) => permissions.includes(a.permission));
+  const actions = ACTIONS.filter((a) => a.permission.some((key) => permissions.includes(key)));
   if (actions.length === 0) return null;
 
   return (

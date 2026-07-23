@@ -13,4 +13,10 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
+    // Matches @capacitor/push-notifications' own default (its build.gradle
+    // falls back to this same literal if rootProject doesn't define it) --
+    // pinned here too so android/app/build.gradle can depend on FirebaseApp
+    // directly at this exact version instead of drifting from whatever the
+    // plugin resolves.
+    firebaseMessagingVersion = '25.0.1'
 }

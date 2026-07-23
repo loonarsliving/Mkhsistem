@@ -26,6 +26,29 @@ export type ErrorLog = Tables<"mkc_error_logs">;
 export type PerformanceMetric = Tables<"mkc_performance_metrics">;
 export type PerformanceSummary = Views<"v_performance_summary">;
 
+export type CrmProject = Tables<"crm_projects">;
+export type Prospect = Tables<"prospects">;
+export type ProspectFollowUp = Tables<"prospect_follow_ups">;
+export type ProspectPayment = Tables<"prospect_payments">;
+export type SalesTarget = Tables<"sales_targets">;
+export type BranchSalesTarget = Tables<"branch_sales_targets">;
+
+export type KpiTask = Tables<"kpi_tasks">;
+
+export type LoonarsContentItem = Tables<"loonars_content_items">;
+export type LoonarsContentMetric = Tables<"loonars_content_metrics">;
+export type LoonarsOrder = Tables<"loonars_orders">;
+export type LoonarsWeeklyEvaluation = Tables<"loonars_weekly_evaluations">;
+
+export type KontenAiAssetRow = Tables<"kontenai_assets">;
+export type KontenAiCreativeBriefRow = Tables<"kontenai_creative_briefs">;
+export type KontenAiStoryboardRow = Tables<"kontenai_storyboards">;
+export type KontenAiRenderJobRow = Tables<"kontenai_render_jobs">;
+export type KontenAiPublishScheduleRow = Tables<"kontenai_publish_schedules">;
+export type KontenAiContentPerformanceRow = Tables<"kontenai_content_performance">;
+export type KontenAiOptimizationRecommendationRow = Tables<"kontenai_optimization_recommendations">;
+export type KontenAiAiReportRow = Tables<"kontenai_ai_reports">;
+
 /** The authenticated session shape used throughout server code and client providers. */
 export interface CurrentSession {
   userId: string;

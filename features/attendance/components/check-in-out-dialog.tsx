@@ -39,21 +39,28 @@ export function CheckInOutDialog({ mode, userId, open, onOpenChange }: CheckInOu
   }, [open]);
 
   async function handleSubmit() {
+    console.warn(`[check-in-out-dialog] handleSubmit: start, mode=${mode}`);
     if (!photoBlob) {
+      console.warn("[check-in-out-dialog] handleSubmit: aborting, no photoBlob");
       toast.error("Ambil foto selfie terlebih dahulu");
       return;
     }
     if (geo.latitude === null || geo.longitude === null) {
+      console.warn("[check-in-out-dialog] handleSubmit: aborting, no geolocation");
       toast.error("Lokasi belum terdeteksi. Aktifkan GPS dan coba lagi.");
       return;
     }
 
     setSubmitting(true);
     try {
+      console.warn("[check-in-out-dialog] handleSubmit: uploading selfie");
       const { path } = await uploadUserFile(STORAGE_BUCKETS.ATTENDANCE_SELFIES, userId, photoBlob, "selfie.jpg");
+      console.warn("[check-in-out-dialog] handleSubmit: upload complete, path =", path);
 
       const payload = { latitude: geo.latitude, longitude: geo.longitude, photoUrl: path, note: note || undefined };
+      console.warn(`[check-in-out-dialog] handleSubmit: calling ${mode === "check-in" ? "checkInAction" : "checkOutAction"}`);
       const result = mode === "check-in" ? await checkInAction(payload) : await checkOutAction(payload);
+      console.warn("[check-in-out-dialog] handleSubmit: action result =", result.success ? "success" : `error: ${result.error}`);
 
       if (!result.success) {
         toast.error(result.error ?? "Gagal memproses absensi");
@@ -61,11 +68,17 @@ export function CheckInOutDialog({ mode, userId, open, onOpenChange }: CheckInOu
       }
 
       toast.success(mode === "check-in" ? "Check-in berhasil" : "Check-out berhasil");
+      console.warn("[check-in-out-dialog] handleSubmit: closing dialog and refreshing route (router.refresh, no navigation)");
       onOpenChange(false);
       router.refresh();
     } catch (err) {
+      console.error(
+        "[check-in-out-dialog] handleSubmit: threw:",
+        err instanceof Error ? err.message : err,
+      );
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {
+      console.warn("[check-in-out-dialog] handleSubmit: finally, setSubmitting(false)");
       setSubmitting(false);
     }
   }

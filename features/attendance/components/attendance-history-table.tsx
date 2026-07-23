@@ -19,6 +19,7 @@ import { getInitials } from "@/lib/utils";
 import type { AttendanceHistoryFilters } from "@/repositories/attendance.repository";
 
 import { exportAttendanceHistoryCsvAction, listAttendanceHistoryAction } from "../actions/attendance-query.actions";
+import { AttendanceDetailDialog } from "./attendance-detail-dialog";
 
 interface AttendanceRow {
   id: string;
@@ -37,6 +38,7 @@ export function AttendanceHistoryTable({ showEmployeeColumn }: { showEmployeeCol
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
   const [exporting, setExporting] = React.useState(false);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   const filters: AttendanceHistoryFilters = {
     page,
@@ -118,7 +120,7 @@ export function AttendanceHistoryTable({ showEmployeeColumn }: { showEmployeeCol
             </TableHeader>
             <TableBody>
               {items.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className="cursor-pointer" onClick={() => setSelectedId(row.id)}>
                   <TableCell className="whitespace-nowrap">
                     {format(new Date(row.attendance_date), "dd MMM yyyy", { locale: idLocale })}
                   </TableCell>
@@ -161,6 +163,8 @@ export function AttendanceHistoryTable({ showEmployeeColumn }: { showEmployeeCol
 
         <Pagination page={page} pageSize={DEFAULT_PAGE_SIZE} total={data?.total ?? 0} onPageChange={setPage} />
       </CardContent>
+
+      <AttendanceDetailDialog attendanceId={selectedId} open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)} />
     </Card>
   );
 }

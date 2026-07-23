@@ -7,12 +7,18 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
  * isNativePlatform() is true.
  */
 export async function takeNativePhoto(): Promise<Blob | null> {
+  console.warn("[camera] takeNativePhoto: checking permission");
   const permission = await Camera.checkPermissions();
   if (permission.camera !== "granted") {
+    console.warn("[camera] takeNativePhoto: requesting permission");
     const requested = await Camera.requestPermissions({ permissions: ["camera"] });
-    if (requested.camera !== "granted") return null;
+    if (requested.camera !== "granted") {
+      console.warn("[camera] takeNativePhoto: permission denied");
+      return null;
+    }
   }
 
+  console.warn("[camera] takeNativePhoto: launching Camera.getPhoto()");
   const photo = await Camera.getPhoto({
     resultType: CameraResultType.Base64,
     source: CameraSource.Camera,
@@ -21,11 +27,16 @@ export async function takeNativePhoto(): Promise<Blob | null> {
     allowEditing: false,
     correctOrientation: true,
   });
+  console.warn("[camera] takeNativePhoto: Camera.getPhoto() returned, format =", photo.format);
 
-  if (!photo.base64String) return null;
+  if (!photo.base64String) {
+    console.warn("[camera] takeNativePhoto: no base64String in result, returning null");
+    return null;
+  }
   const byteChars = atob(photo.base64String);
   const bytes = new Uint8Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  console.warn("[camera] takeNativePhoto: decoded blob, bytes =", bytes.length);
   return new Blob([bytes], { type: `image/${photo.format || "jpeg"}` });
 }
 

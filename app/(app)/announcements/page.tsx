@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { AnnouncementList } from "@/features/announcements/components/announcement-list";
 import { CategoryManagerDialog } from "@/features/announcements/components/category-manager-dialog";
+import { EmergencyNoticeDialog } from "@/features/announcements/components/emergency-notice-dialog";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { listAnnouncements } from "@/repositories/announcement.repository";
@@ -25,6 +26,7 @@ export default async function AnnouncementsPage() {
         description="Pengumuman resmi dari perusahaan."
         actions={
           <>
+            {hasPermission(session, "branch.manage") && <EmergencyNoticeDialog />}
             {canManage && <CategoryManagerDialog />}
             {hasPermission(session, "announcement.create") && (
               <Button asChild>

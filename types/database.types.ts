@@ -20,8 +20,85 @@ export type LeaveStatusDb = "pending" | "approved" | "rejected";
 export type EmploymentStatusDb = "active" | "inactive" | "on_leave" | "terminated";
 export type MemoPriorityDb = "low" | "normal" | "high" | "urgent";
 export type TargetTypeDb = "all_branch" | "branch" | "all_division" | "division" | "position" | "user";
-export type NotificationTypeDb = "memo" | "announcement" | "attendance" | "leave_request" | "system" | "registration";
+export type NotificationTypeDb =
+  | "memo"
+  | "announcement"
+  | "attendance"
+  | "leave_request"
+  | "system"
+  | "registration"
+  | "crm"
+  | "kpi_task"
+  | "hr"
+  | "finance"
+  | "project"
+  | "approval";
+export type NotificationCategoryDb =
+  | "attendance_reminder"
+  | "late_attendance"
+  | "forgot_checkout"
+  | "leave_approved"
+  | "leave_rejected"
+  | "payroll_available"
+  | "new_prospect"
+  | "new_ad_lead"
+  | "follow_up_reminder"
+  | "new_assignment"
+  | "closing_approved"
+  | "customer_verification"
+  | "target_reminder"
+  | "markom_new_task"
+  | "task_revision"
+  | "task_approved"
+  | "weekly_reminder"
+  | "project_progress"
+  | "material_request"
+  | "inspection_reminder"
+  | "payment_received"
+  | "invoice_due"
+  | "reimbursement_approved"
+  | "waiting_approval"
+  | "approved"
+  | "rejected"
+  | "new_announcement"
+  | "new_memo"
+  | "maintenance"
+  | "version_update"
+  | "emergency_notice"
+  | "stuck_prospect_reminder"
+  | "stuck_prospect_alert"
+  | "branch_target_reminder"
+  | "sp1_pending_review"
+  | "sp1_issued"
+  | "sp1_escalation"
+  | "task_pending_verification"
+  | "daily_motivation"
+  | "daily_report"
+  | "birthday_wish"
+  | "ad_campaign_launched"
+  | "ad_campaign_failed"
+  | "content_published"
+  | "content_publish_reminder"
+  | "content_publish_failed"
+  | "finance_expense_alert"
+  | "finance_expense_pending_verification"
+  | "branch_balance_alert"
+  | "sales_coaching_tip"
+  | "meta_ads_balance_low"
+  | "lead_wants_info";
+export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
+export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
+export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" | "referral" | "whatsapp" | "marketplace" | "other";
+export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "survey" | "video_call" | "site_visit" | "negotiation";
+export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
+export type PaymentStatusDb = "pending" | "approved" | "rejected";
+export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
+export type CrmProjectOfferingTypeDb = "sale" | "rental_stay" | "management_service";
+export type CrmProjectStatusDb = "planning" | "selling" | "completed";
+export type KpiTaskStatusDb = "pending" | "awaiting_verification" | "completed" | "rejected";
+export type KpiTaskContentFocusDb = "leasehold_sales" | "occupancy" | "general";
+export type KpiRankingScopeDb = "weekly" | "monthly";
 
 export interface Database {
   public: {
@@ -211,6 +288,7 @@ export interface Database {
           rejected_by: string | null;
           rejected_at: string | null;
           rejection_reason: string | null;
+          ads_lead_routing_paused: boolean;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -241,6 +319,7 @@ export interface Database {
           rejected_by?: string | null;
           rejected_at?: string | null;
           rejection_reason?: string | null;
+          ads_lead_routing_paused?: boolean;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -675,11 +754,13 @@ export interface Database {
           id: string;
           user_id: string;
           type: NotificationTypeDb;
+          category: NotificationCategoryDb | null;
           title: string;
           body: string | null;
           link: string | null;
           is_read: boolean;
           read_at: string | null;
+          status: NotificationStatusDb;
           metadata: Json;
           created_at: string;
         };
@@ -687,11 +768,13 @@ export interface Database {
           id?: string;
           user_id: string;
           type: NotificationTypeDb;
+          category?: NotificationCategoryDb | null;
           title: string;
           body?: string | null;
           link?: string | null;
           is_read?: boolean;
           read_at?: string | null;
+          status?: NotificationStatusDb;
           metadata?: Json;
           created_at?: string;
         };
@@ -726,6 +809,37 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "mkc_device_push_tokens_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mkc_push_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth_key: string;
+          user_agent: string | null;
+          created_at: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth_key: string;
+          user_agent?: string | null;
+          created_at?: string;
+          last_seen_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_push_subscriptions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "mkc_push_subscriptions_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
@@ -844,6 +958,2307 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mkc_performance_metrics"]["Insert"]>;
         Relationships: [];
       };
+      crm_projects: {
+        Row: {
+          id: string;
+          name: string;
+          city: string | null;
+          branch_id: string;
+          project_type: CrmProjectTypeDb;
+          offering_type: CrmProjectOfferingTypeDb;
+          status: CrmProjectStatusDb;
+          start_date: string | null;
+          target_launch_date: string | null;
+          is_active: boolean;
+          mkh_project_code: string | null;
+          product_description: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          city?: string | null;
+          branch_id: string;
+          project_type?: CrmProjectTypeDb;
+          offering_type?: CrmProjectOfferingTypeDb;
+          status?: CrmProjectStatusDb;
+          start_date?: string | null;
+          target_launch_date?: string | null;
+          is_active?: boolean;
+          mkh_project_code?: string | null;
+          product_description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_projects"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_projects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_project_photos: {
+        Row: {
+          id: string;
+          project_id: string;
+          storage_path: string;
+          public_url: string;
+          caption: string | null;
+          media_type: "image" | "video";
+          uploaded_by: string;
+          created_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          storage_path: string;
+          public_url: string;
+          caption?: string | null;
+          media_type?: "image" | "video";
+          uploaded_by: string;
+          created_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_project_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_project_photos_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_project_photos_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_promo_templates: {
+        Row: {
+          id: string;
+          branch_id: string | null;
+          name: string;
+          message_body: string;
+          photo_storage_path: string | null;
+          photo_public_url: string | null;
+          cadence_days: number;
+          send_hour_local: number;
+          is_active: boolean;
+          last_dispatched_at: string | null;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          branch_id?: string | null;
+          name: string;
+          message_body: string;
+          photo_storage_path?: string | null;
+          photo_public_url?: string | null;
+          cadence_days?: number;
+          send_hour_local?: number;
+          is_active?: boolean;
+          last_dispatched_at?: string | null;
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_promo_templates"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_promo_templates_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_promo_templates_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_promo_sends: {
+        Row: {
+          id: string;
+          template_id: string;
+          prospect_id: string;
+          message_body: string;
+          status: "queued" | "sent" | "failed";
+          sent_at: string | null;
+          error: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          prospect_id: string;
+          message_body: string;
+          status?: "queued" | "sent" | "failed";
+          sent_at?: string | null;
+          error?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_promo_sends"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_promo_sends_template_id_fkey";
+            columns: ["template_id"];
+            referencedRelation: "crm_promo_templates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_promo_sends_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      freelance_lead_recipients: {
+        Row: {
+          id: string;
+          full_name: string;
+          phone: string;
+          branch_id: string;
+          project_id: string | null;
+          active: boolean;
+          last_lead_sent_at: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          phone: string;
+          branch_id: string;
+          project_id?: string | null;
+          active?: boolean;
+          last_lead_sent_at?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["freelance_lead_recipients"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "freelance_lead_recipients_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "freelance_lead_recipients_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      freelance_lead_deliveries: {
+        Row: {
+          id: string;
+          recipient_id: string;
+          customer_name: string | null;
+          phone: string;
+          phone_normalized: string;
+          campaign_id: string | null;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipient_id: string;
+          customer_name?: string | null;
+          phone: string;
+          campaign_id?: string | null;
+          sent_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["freelance_lead_deliveries"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "freelance_lead_deliveries_recipient_id_fkey";
+            columns: ["recipient_id"];
+            referencedRelation: "freelance_lead_recipients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "freelance_lead_deliveries_campaign_id_fkey";
+            columns: ["campaign_id"];
+            referencedRelation: "meta_ad_campaigns";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meta_ads_balance_state: {
+        Row: {
+          id: string;
+          last_balance_idr: number | null;
+          alert_active: boolean;
+          checked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          last_balance_idr?: number | null;
+          alert_active?: boolean;
+          checked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ads_balance_state"]["Insert"]>;
+        Relationships: [];
+      };
+      meta_ad_campaigns: {
+        Row: {
+          id: string;
+          project_id: string | null;
+          branch_id: string;
+          photo_id: string | null;
+          meta_campaign_id: string | null;
+          meta_adset_id: string | null;
+          meta_creative_id: string | null;
+          meta_ad_id: string | null;
+          name: string;
+          headline: string;
+          primary_text: string;
+          description: string | null;
+          welcome_message: string | null;
+          daily_budget_idr: number;
+          status: "draft" | "active" | "paused" | "ended" | "failed";
+          launched_by: "ai" | "human";
+          research_summary: string | null;
+          failure_reason: string | null;
+          spend_idr: number | null;
+          impressions: number | null;
+          clicks: number | null;
+          conversations_started: number | null;
+          ai_analysis: string | null;
+          analyzed_at: string | null;
+          target_areas: string[] | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id?: string | null;
+          branch_id: string;
+          photo_id?: string | null;
+          meta_campaign_id?: string | null;
+          meta_adset_id?: string | null;
+          meta_creative_id?: string | null;
+          meta_ad_id?: string | null;
+          name: string;
+          headline: string;
+          primary_text: string;
+          description?: string | null;
+          welcome_message?: string | null;
+          daily_budget_idr: number;
+          status?: "draft" | "active" | "paused" | "ended" | "failed";
+          launched_by?: "ai" | "human";
+          research_summary?: string | null;
+          failure_reason?: string | null;
+          spend_idr?: number | null;
+          impressions?: number | null;
+          clicks?: number | null;
+          conversations_started?: number | null;
+          ai_analysis?: string | null;
+          analyzed_at?: string | null;
+          target_areas?: string[] | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ad_campaigns"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_campaigns_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaigns_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaigns_photo_id_fkey";
+            columns: ["photo_id"];
+            referencedRelation: "crm_project_photos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meta_ad_campaign_photos: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          photo_id: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          photo_id: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_ad_campaign_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_campaign_photos_campaign_id_fkey";
+            columns: ["campaign_id"];
+            referencedRelation: "meta_ad_campaigns";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meta_ad_campaign_photos_photo_id_fkey";
+            columns: ["photo_id"];
+            referencedRelation: "crm_project_photos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      social_competitor_accounts: {
+        Row: {
+          id: string;
+          platform: "instagram" | "tiktok";
+          handle: string;
+          display_name: string | null;
+          notes: string | null;
+          is_active: boolean;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          source: "manual" | "ai_discovered";
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          platform: "instagram" | "tiktok";
+          handle: string;
+          display_name?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          content_focus?: "leasehold_sales" | "occupancy" | "beauty";
+          source?: "manual" | "ai_discovered";
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_competitor_accounts"]["Insert"]>;
+        Relationships: [];
+      };
+      social_competitor_content_logs: {
+        Row: {
+          id: string;
+          competitor_account_id: string;
+          content_url: string | null;
+          content_type: "reel" | "video" | "photo" | "carousel" | "story" | "other" | null;
+          hook: string | null;
+          duration_seconds: number | null;
+          caption: string | null;
+          hashtags: string | null;
+          engagement_notes: string | null;
+          logged_by: string;
+          logged_at: string;
+        };
+        Insert: {
+          id?: string;
+          competitor_account_id: string;
+          content_url?: string | null;
+          content_type?: "reel" | "video" | "photo" | "carousel" | "story" | "other" | null;
+          hook?: string | null;
+          duration_seconds?: number | null;
+          caption?: string | null;
+          hashtags?: string | null;
+          engagement_notes?: string | null;
+          logged_by: string;
+          logged_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_competitor_content_logs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "social_competitor_content_logs_competitor_account_id_fkey";
+            columns: ["competitor_account_id"];
+            referencedRelation: "social_competitor_accounts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      social_account_snapshots: {
+        Row: {
+          id: string;
+          platform: "instagram" | "tiktok";
+          product_line: "property" | "beauty";
+          captured_at: string;
+          followers_count: number | null;
+          reach: number | null;
+          impressions: number | null;
+          likes: number | null;
+          comments: number | null;
+          shares: number | null;
+          saves: number | null;
+          watch_time_seconds: number | null;
+          engagement_rate: number | null;
+          best_upload_hour: number | null;
+          top_content_type: string | null;
+          raw_data: Json | null;
+        };
+        Insert: {
+          id?: string;
+          platform: "instagram" | "tiktok";
+          product_line?: "property" | "beauty";
+          captured_at?: string;
+          followers_count?: number | null;
+          reach?: number | null;
+          impressions?: number | null;
+          likes?: number | null;
+          comments?: number | null;
+          shares?: number | null;
+          saves?: number | null;
+          watch_time_seconds?: number | null;
+          engagement_rate?: number | null;
+          best_upload_hour?: number | null;
+          top_content_type?: string | null;
+          raw_data?: Json | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_account_snapshots"]["Insert"]>;
+        Relationships: [];
+      };
+      social_weekly_evaluations: {
+        Row: {
+          id: string;
+          week_start: string;
+          evaluation: string;
+          audit: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          week_start: string;
+          evaluation: string;
+          audit?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_weekly_evaluations"]["Insert"]>;
+        Relationships: [];
+      };
+      social_leasehold_competitor_comparisons: {
+        Row: {
+          id: string;
+          generated_at: string;
+          narrative: string;
+          comparison: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          generated_at?: string;
+          narrative: string;
+          comparison: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_leasehold_competitor_comparisons"]["Insert"]>;
+        Relationships: [];
+      };
+      wa_pending_media_relay: {
+        Row: {
+          id: string;
+          sender: string;
+          employee_id: string;
+          image_url: string;
+          caption: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sender: string;
+          employee_id: string;
+          image_url: string;
+          caption?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["wa_pending_media_relay"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_knowledge_bank: {
+        Row: {
+          id: string;
+          topic: string;
+          product_line: "property" | "beauty";
+          title: string;
+          content: string;
+          researched_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          topic: string;
+          product_line: "property" | "beauty";
+          title: string;
+          content: string;
+          researched_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_knowledge_bank"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_investor_intelligence_bank: {
+        Row: {
+          id: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_investor_intelligence_bank"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_occupancy_intelligence_bank: {
+        Row: {
+          id: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_occupancy_intelligence_bank"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_cashflow_intelligence_bank: {
+        Row: {
+          id: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          topic: string;
+          title: string;
+          content: string;
+          researched_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_cashflow_intelligence_bank"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_content_items: {
+        Row: {
+          id: string;
+          category: "problem_solution" | "ugc" | "edukasi" | "promosi";
+          platform: "tiktok" | "instagram";
+          title: string;
+          hook: string | null;
+          caption: string | null;
+          script_notes: string | null;
+          cta: string | null;
+          product_name: string;
+          status: "idea" | "draft" | "scheduled" | "published" | "archived";
+          content_url: string | null;
+          scheduled_at: string | null;
+          published_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          category: "problem_solution" | "ugc" | "edukasi" | "promosi";
+          platform: "tiktok" | "instagram";
+          title: string;
+          hook?: string | null;
+          caption?: string | null;
+          script_notes?: string | null;
+          cta?: string | null;
+          product_name?: string;
+          status?: "idea" | "draft" | "scheduled" | "published" | "archived";
+          content_url?: string | null;
+          scheduled_at?: string | null;
+          published_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_content_items"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_content_metrics: {
+        Row: {
+          id: string;
+          content_item_id: string;
+          captured_at: string;
+          views: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          watch_through_50pct: boolean;
+          link_clicks: number;
+          boosted_spark_ads: boolean;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_item_id: string;
+          captured_at?: string;
+          views?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          watch_through_50pct?: boolean;
+          link_clicks?: number;
+          boosted_spark_ads?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_content_metrics"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_content_metrics_content_item_id_fkey";
+            columns: ["content_item_id"];
+            referencedRelation: "loonars_content_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_orders: {
+        Row: {
+          id: string;
+          order_number: string;
+          customer_name: string;
+          customer_phone: string | null;
+          customer_address: string | null;
+          channel: "shopee" | "tokopedia" | "whatsapp" | "instagram" | "website" | "offline" | "other";
+          product_name: string;
+          quantity: number;
+          unit_price: number;
+          total_amount: number;
+          status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
+          courier: string | null;
+          tracking_number: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          order_number?: string;
+          customer_name: string;
+          customer_phone?: string | null;
+          customer_address?: string | null;
+          channel: "shopee" | "tokopedia" | "whatsapp" | "instagram" | "website" | "offline" | "other";
+          product_name?: string;
+          quantity?: number;
+          unit_price?: number;
+          total_amount?: number;
+          status?: "pending" | "processing" | "shipped" | "completed" | "cancelled";
+          courier?: string | null;
+          tracking_number?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_orders"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_weekly_evaluations: {
+        Row: {
+          id: string;
+          week_start: string;
+          evaluation: string;
+          content_ratio_actual: Json | null;
+          recommended_boost_content_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          week_start: string;
+          evaluation: string;
+          content_ratio_actual?: Json | null;
+          recommended_boost_content_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_weekly_evaluations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_weekly_evaluations_recommended_boost_content_id_fkey";
+            columns: ["recommended_boost_content_id"];
+            referencedRelation: "loonars_content_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_beauty_competitor_comparisons: {
+        Row: {
+          id: string;
+          generated_at: string;
+          narrative: string;
+          comparison: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          generated_at?: string;
+          narrative: string;
+          comparison: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_beauty_competitor_comparisons"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_beauty_weekly_content_audits: {
+        Row: {
+          id: string;
+          week_start: string;
+          evaluation: string;
+          audit: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          week_start: string;
+          evaluation: string;
+          audit: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_beauty_weekly_content_audits"]["Insert"]>;
+        Relationships: [];
+      };
+      prospects: {
+        Row: {
+          id: string;
+          customer_name: string;
+          phone: string;
+          phone_normalized: string;
+          project_id: string | null;
+          house_type: string;
+          city: string;
+          lead_source: LeadSourceDb;
+          notes: string | null;
+          status: ProspectStatusDb;
+          sales_id: string;
+          branch_id: string;
+          last_follow_up_at: string | null;
+          last_reminder_sent_at: string | null;
+          total_collection: number;
+          total_commission: number;
+          closed_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          customer_name: string;
+          phone: string;
+          project_id?: string | null;
+          house_type: string;
+          city: string;
+          lead_source: LeadSourceDb;
+          notes?: string | null;
+          status?: ProspectStatusDb;
+          sales_id: string;
+          branch_id: string;
+          last_follow_up_at?: string | null;
+          last_reminder_sent_at?: string | null;
+          total_collection?: number;
+          total_commission?: number;
+          closed_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospects"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospects_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospects_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      prospect_follow_ups: {
+        Row: {
+          id: string;
+          prospect_id: string;
+          activity_type: FollowUpActivityTypeDb;
+          activity_date: string;
+          activity_time: string | null;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prospect_id: string;
+          activity_type: FollowUpActivityTypeDb;
+          activity_date?: string;
+          activity_time?: string | null;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospect_follow_ups"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospect_follow_ups_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_follow_ups_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      prospect_payments: {
+        Row: {
+          id: string;
+          prospect_id: string;
+          payment_type: PaymentTypeDb;
+          amount: number;
+          payment_date: string;
+          status: PaymentStatusDb;
+          commission_amount: number | null;
+          notes: string | null;
+          recorded_by: string;
+          approved_by: string | null;
+          approved_at: string | null;
+          rejection_reason: string | null;
+          reference_number: string | null;
+          unit_label: string | null;
+          finance_confirmed_at: string | null;
+          finance_confirmed_by: string | null;
+          finance_reference_no: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prospect_id: string;
+          payment_type: PaymentTypeDb;
+          amount: number;
+          payment_date?: string;
+          status?: PaymentStatusDb;
+          commission_amount?: number | null;
+          notes?: string | null;
+          recorded_by: string;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          rejection_reason?: string | null;
+          reference_number?: string | null;
+          unit_label?: string | null;
+          finance_confirmed_at?: string | null;
+          finance_confirmed_by?: string | null;
+          finance_reference_no?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospect_payments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "prospect_payments_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_payments_recorded_by_fkey";
+            columns: ["recorded_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "prospect_payments_approved_by_fkey";
+            columns: ["approved_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payroll_runs: {
+        Row: {
+          id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          status: "draft" | "approved";
+          total_amount: number;
+          created_by: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          status?: "draft" | "approved";
+          total_amount?: number;
+          created_by?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payroll_runs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payroll_runs_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payroll_items: {
+        Row: {
+          id: string;
+          payroll_run_id: string;
+          employee_id: string;
+          base_salary: number;
+          allowances: number;
+          deductions: number;
+          net_salary: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payroll_run_id: string;
+          employee_id: string;
+          base_salary?: number;
+          allowances?: number;
+          deductions?: number;
+          net_salary: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payroll_items"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payroll_items_payroll_run_id_fkey";
+            columns: ["payroll_run_id"];
+            referencedRelation: "payroll_runs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_items_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      hr_expenses: {
+        Row: {
+          id: string;
+          expense_type: "bonus" | "reimbursement" | "other";
+          employee_id: string;
+          branch_id: string;
+          amount: number;
+          expense_date: string;
+          description: string;
+          status: "pending" | "approved" | "rejected";
+          requested_by: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          expense_type: "bonus" | "reimbursement" | "other";
+          employee_id: string;
+          branch_id: string;
+          amount: number;
+          expense_date?: string;
+          description: string;
+          status?: "pending" | "approved" | "rejected";
+          requested_by?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hr_expenses"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "hr_expenses_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "hr_expenses_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_job_queue: {
+        Row: {
+          id: string;
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile";
+          payload: Json;
+          status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
+          attempt_count: number;
+          max_attempts: number;
+          last_error: string | null;
+          next_attempt_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile";
+          payload: Json;
+          status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
+          attempt_count?: number;
+          max_attempts?: number;
+          last_error?: string | null;
+          next_attempt_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_job_queue"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_sp1_warnings: {
+        Row: {
+          id: string;
+          sales_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          reason: string;
+          stuck_prospect_ids: string[];
+          ai_draft_content: string | null;
+          status: "pending_ai" | "pending_review" | "approved" | "rejected";
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_note: string | null;
+          upload_days_30d: number | null;
+          follow_up_count_30d: number | null;
+          closings_30d: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          sales_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          reason: string;
+          stuck_prospect_ids?: string[];
+          ai_draft_content?: string | null;
+          status?: "pending_ai" | "pending_review" | "approved" | "rejected";
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          review_note?: string | null;
+          upload_days_30d?: number | null;
+          follow_up_count_30d?: number | null;
+          closings_30d?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_sp1_warnings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_sp1_warnings_sales_id_fkey";
+            columns: ["sales_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_sp1_warnings_branch_id_fkey";
+            columns: ["branch_id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_sp1_warnings_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_circuit_breaker_state: {
+        Row: {
+          provider: string;
+          state: "closed" | "open" | "half_open";
+          consecutive_failures: number;
+          opened_at: string | null;
+          last_failure_at: string | null;
+          last_success_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          provider: string;
+          state?: "closed" | "open" | "half_open";
+          consecutive_failures?: number;
+          opened_at?: string | null;
+          last_failure_at?: string | null;
+          last_success_at?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_circuit_breaker_state"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_request_telemetry: {
+        Row: {
+          id: string;
+          provider: string;
+          model: string;
+          job_id: string | null;
+          attempt: number;
+          max_attempts: number;
+          http_status: number | null;
+          error_body: string | null;
+          wait_ms: number | null;
+          response_time_ms: number;
+          outcome: "success" | "retrying" | "failed_final" | "model_not_found" | "circuit_open";
+          circuit_state: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider: string;
+          model: string;
+          job_id?: string | null;
+          attempt: number;
+          max_attempts: number;
+          http_status?: number | null;
+          error_body?: string | null;
+          wait_ms?: number | null;
+          response_time_ms: number;
+          outcome: "success" | "retrying" | "failed_final" | "model_not_found" | "circuit_open";
+          circuit_state?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_request_telemetry"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_request_telemetry_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_job_queue";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_system_prompts: {
+        Row: {
+          key: string;
+          label: string;
+          content: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          key: string;
+          label: string;
+          content: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_system_prompts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_system_prompts_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_integration_logs: {
+        Row: {
+          id: string;
+          connector: "whatsapp" | "meta";
+          direction: "outgoing" | "incoming";
+          payload: Json;
+          status: "success" | "error";
+          response_status: number | null;
+          error: string | null;
+          latency_ms: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          connector: "whatsapp" | "meta";
+          direction: "outgoing" | "incoming";
+          payload: Json;
+          status: "success" | "error";
+          response_status?: number | null;
+          error?: string | null;
+          latency_ms?: number | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_integration_logs"]["Insert"]>;
+        Relationships: [];
+      };
+      ai_conversations: {
+        Row: {
+          id: string;
+          connector: "whatsapp";
+          sender: string;
+          employee_id: string | null;
+          inbound_text: string;
+          reply_text: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          connector: "whatsapp";
+          sender: string;
+          employee_id?: string | null;
+          inbound_text: string;
+          reply_text?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_conversations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sync_log: {
+        Row: {
+          id: string;
+          direction: "outbound" | "inbound";
+          event_type: string;
+          source_table: string;
+          source_id: string;
+          idempotency_key: string;
+          payload: Json;
+          status: "pending" | "sent" | "succeeded" | "failed" | "dead_letter" | "skipped";
+          attempt_count: number;
+          max_attempts: number;
+          last_error: string | null;
+          last_attempt_at: string | null;
+          next_attempt_at: string;
+          request_id: number | null;
+          target_ref: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          direction: "outbound" | "inbound";
+          event_type: string;
+          source_table: string;
+          source_id: string;
+          idempotency_key: string;
+          payload: Json;
+          status?: "pending" | "sent" | "succeeded" | "failed" | "dead_letter" | "skipped";
+          attempt_count?: number;
+          max_attempts?: number;
+          last_error?: string | null;
+          last_attempt_at?: string | null;
+          next_attempt_at?: string;
+          request_id?: number | null;
+          target_ref?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sync_log"]["Insert"]>;
+        Relationships: [];
+      };
+      sync_config: {
+        Row: { key: string; value: string; updated_at: string };
+        Insert: { key: string; value: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["sync_config"]["Insert"]>;
+        Relationships: [];
+      };
+      sales_targets: {
+        Row: {
+          id: string;
+          sales_id: string;
+          product_id: string | null;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          selling_price_per_unit: number;
+          commission_percent: number;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          sales_id: string;
+          product_id?: string | null;
+          period_month: number;
+          period_year: number;
+          target_units?: number;
+          selling_price_per_unit?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["sales_targets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "sales_targets_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sales_targets_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_products: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          product_name: string;
+          category: string | null;
+          unit: string;
+          default_price: number;
+          default_commission: number;
+          status: "active" | "inactive";
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          product_name: string;
+          category?: string | null;
+          unit?: string;
+          default_price?: number;
+          default_commission?: number;
+          status?: "active" | "inactive";
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_products"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_product_sales_assignments: {
+        Row: {
+          id: string;
+          product_id: string;
+          sales_id: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          sales_id: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_product_sales_assignments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_product_sales_assignments_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_product_sales_assignments_sales_id_fkey";
+            columns: ["sales_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_target_headers: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string | null;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_target_headers"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_target_headers_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_target_details: {
+        Row: {
+          id: string;
+          target_header_id: string;
+          product_id: string;
+          target_unit: number;
+          selling_price: number;
+          commission_percent: number;
+          target_revenue: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          target_header_id: string;
+          product_id: string;
+          target_unit?: number;
+          selling_price?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_target_details"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "crm_target_details_target_header_id_fkey";
+            columns: ["target_header_id"];
+            referencedRelation: "crm_target_headers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_target_details_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "crm_products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      branch_sales_targets: {
+        Row: {
+          id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          selling_price_per_unit: number;
+          commission_percent: number;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units?: number;
+          selling_price_per_unit?: number;
+          commission_percent?: number;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["branch_sales_targets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "branch_sales_targets_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kpi_tasks: {
+        Row: {
+          id: string;
+          division_id: string;
+          branch_id: string;
+          title: string;
+          description: string | null;
+          period_year: number;
+          period_month: number;
+          period_week: number;
+          due_date: string | null;
+          status: KpiTaskStatusDb;
+          content_focus: KpiTaskContentFocusDb;
+          completed_at: string | null;
+          verified_by: string | null;
+          notes: string | null;
+          assignee_response: string | null;
+          assignee_response_at: string | null;
+          ai_guidance: string | null;
+          ai_guidance_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          division_id: string;
+          branch_id: string;
+          title: string;
+          description?: string | null;
+          period_year: number;
+          period_month: number;
+          period_week: number;
+          due_date?: string | null;
+          status?: KpiTaskStatusDb;
+          content_focus?: KpiTaskContentFocusDb;
+          completed_at?: string | null;
+          verified_by?: string | null;
+          notes?: string | null;
+          assignee_response?: string | null;
+          assignee_response_at?: string | null;
+          ai_guidance?: string | null;
+          ai_guidance_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kpi_tasks"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kpi_tasks_division_id_fkey";
+            columns: ["division_id"];
+            referencedRelation: "divisions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kpi_tasks_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kpi_tasks_verified_by_fkey";
+            columns: ["verified_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      markom_content_submissions: {
+        Row: {
+          id: string;
+          task_id: string | null;
+          beauty_content_item_id: string | null;
+          branch_id: string;
+          division_id: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform: "instagram" | "tiktok";
+          submitted_by: string;
+          media_type: "image" | "video";
+          storage_path: string;
+          public_url: string;
+          caption: string | null;
+          status: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_score: number | null;
+          ai_verdict: string | null;
+          ai_reviewed_at: string | null;
+          scheduled_publish_at: string | null;
+          ig_container_id: string | null;
+          ig_media_id: string | null;
+          published_at: string | null;
+          reminder_sent_at: string | null;
+          zernio_account_id: string | null;
+          zernio_post_id: string | null;
+          zernio_publish_status: string | null;
+          zernio_permalink: string | null;
+          failure_reason: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          task_id?: string | null;
+          beauty_content_item_id?: string | null;
+          branch_id: string;
+          division_id: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform?: "instagram" | "tiktok";
+          submitted_by: string;
+          media_type: "image" | "video";
+          storage_path: string;
+          public_url: string;
+          caption?: string | null;
+          status?: "pending_review" | "needs_revision" | "approved" | "scheduled" | "published" | "failed";
+          ai_score?: number | null;
+          ai_verdict?: string | null;
+          ai_reviewed_at?: string | null;
+          scheduled_publish_at?: string | null;
+          ig_container_id?: string | null;
+          ig_media_id?: string | null;
+          published_at?: string | null;
+          reminder_sent_at?: string | null;
+          zernio_account_id?: string | null;
+          zernio_post_id?: string | null;
+          zernio_publish_status?: string | null;
+          zernio_permalink?: string | null;
+          failure_reason?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["markom_content_submissions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "markom_content_submissions_task_id_fkey";
+            columns: ["task_id"];
+            referencedRelation: "kpi_tasks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_beauty_content_item_id_fkey";
+            columns: ["beauty_content_item_id"];
+            referencedRelation: "loonars_content_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "markom_content_submissions_submitted_by_fkey";
+            columns: ["submitted_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      markom_content_submission_photos: {
+        Row: {
+          id: string;
+          submission_id: string;
+          storage_path: string;
+          public_url: string;
+          display_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          submission_id: string;
+          storage_path: string;
+          public_url: string;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["markom_content_submission_photos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "markom_content_submission_photos_submission_id_fkey";
+            columns: ["submission_id"];
+            referencedRelation: "markom_content_submissions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      finance_branch_balances: {
+        Row: {
+          id: string;
+          branch_id: string;
+          branch_name: string;
+          saldo: number;
+          source_system: string;
+          synced_at: string;
+          updated_at: string;
+          alert_threshold: number;
+          notify_dirops: boolean;
+          situation_type: string;
+          situation_note: string | null;
+          reminder_interval_days: number;
+          cashflow_teaching_threshold: number | null;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          branch_name: string;
+          saldo?: number;
+          source_system?: string;
+          synced_at?: string;
+          updated_at?: string;
+          alert_threshold?: number;
+          notify_dirops?: boolean;
+          situation_type?: string;
+          situation_note?: string | null;
+          reminder_interval_days?: number;
+          cashflow_teaching_threshold?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["finance_branch_balances"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "finance_branch_balances_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_assets: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          filename: string;
+          asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
+          storage_path: string;
+          public_url: string;
+          storage_provider: "supabase" | "google_drive";
+          file_type: string;
+          file_size_bytes: number;
+          resolution: string | null;
+          duration_seconds: number | null;
+          company: string | null;
+          project: string | null;
+          campaign: string | null;
+          platform: string | null;
+          content_type: string | null;
+          location: string | null;
+          status: "draft" | "active" | "archived";
+          tags: string[];
+          search_text: unknown;
+          ai_vision_status: "not_analyzed" | "pending" | "completed" | "failed";
+          ai_title: string | null;
+          ai_description: string | null;
+          ai_tags: string[];
+          ai_category: string | null;
+          ai_detected_objects: string[];
+          ai_dominant_colors: string[];
+          ai_mood: string | null;
+          ai_analyzed_at: string | null;
+          ai_error: string | null;
+          ai_scene_summary: Json;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          filename: string;
+          asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
+          storage_path: string;
+          public_url: string;
+          storage_provider?: "supabase" | "google_drive";
+          file_type: string;
+          file_size_bytes: number;
+          resolution?: string | null;
+          duration_seconds?: number | null;
+          company?: string | null;
+          project?: string | null;
+          campaign?: string | null;
+          platform?: string | null;
+          content_type?: string | null;
+          location?: string | null;
+          status?: "draft" | "active" | "archived";
+          tags?: string[];
+          ai_vision_status?: "not_analyzed" | "pending" | "completed" | "failed";
+          ai_title?: string | null;
+          ai_description?: string | null;
+          ai_tags?: string[];
+          ai_category?: string | null;
+          ai_detected_objects?: string[];
+          ai_dominant_colors?: string[];
+          ai_mood?: string | null;
+          ai_analyzed_at?: string | null;
+          ai_error?: string | null;
+          ai_scene_summary?: Json;
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_assets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_assets_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_assets_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_creative_briefs: {
+        Row: {
+          id: string;
+          objective: "brand_awareness" | "leads" | "sales" | "engagement";
+          platform: "instagram" | "tiktok" | "facebook";
+          target_audience: string;
+          product_project: string;
+          campaign_goal: string;
+          big_idea: string;
+          hook: string;
+          key_message: string;
+          target_emotion: string;
+          cta: string;
+          content_angle: string;
+          referenced_asset_ids: string[];
+          created_by: string;
+          created_at: string;
+          kpi_task_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          objective: "brand_awareness" | "leads" | "sales" | "engagement";
+          platform: "instagram" | "tiktok" | "facebook";
+          target_audience: string;
+          product_project: string;
+          campaign_goal: string;
+          big_idea: string;
+          hook: string;
+          key_message: string;
+          target_emotion: string;
+          cta: string;
+          content_angle: string;
+          referenced_asset_ids?: string[];
+          created_by: string;
+          created_at?: string;
+          kpi_task_id?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_creative_briefs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_creative_briefs_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_creative_briefs_kpi_task_id_fkey";
+            columns: ["kpi_task_id"];
+            referencedRelation: "kpi_tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_automation_settings: {
+        Row: {
+          id: string;
+          enabled: boolean;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          enabled?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_automation_settings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_automation_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_storyboards: {
+        Row: {
+          id: string;
+          creative_brief_id: string;
+          title: string;
+          scenes: Json;
+          total_duration_seconds: number;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          creative_brief_id: string;
+          title: string;
+          scenes?: Json;
+          total_duration_seconds?: number;
+          created_by: string;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_storyboards"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_storyboards_creative_brief_id_fkey";
+            columns: ["creative_brief_id"];
+            referencedRelation: "kontenai_creative_briefs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_storyboards_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_storyboards_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_render_jobs: {
+        Row: {
+          id: string;
+          storyboard_id: string;
+          status: "queued" | "rendering" | "completed" | "failed";
+          progress: number;
+          stage: string;
+          output_storage_path: string | null;
+          output_public_url: string | null;
+          duration_seconds: number | null;
+          error_message: string | null;
+          created_by: string;
+          created_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          storyboard_id: string;
+          status?: "queued" | "rendering" | "completed" | "failed";
+          progress?: number;
+          stage?: string;
+          output_storage_path?: string | null;
+          output_public_url?: string | null;
+          duration_seconds?: number | null;
+          error_message?: string | null;
+          created_by: string;
+          created_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_render_jobs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_render_jobs_storyboard_id_fkey";
+            columns: ["storyboard_id"];
+            referencedRelation: "kontenai_storyboards";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_render_jobs_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_publish_schedules: {
+        Row: {
+          id: string;
+          render_job_id: string;
+          platform: "instagram" | "facebook" | "tiktok" | "youtube_shorts";
+          caption: string;
+          hashtags: string[];
+          scheduled_at: string | null;
+          status: "draft" | "scheduled" | "published" | "failed";
+          published_at: string | null;
+          external_post_id: string | null;
+          external_post_url: string | null;
+          error_message: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          render_job_id: string;
+          platform: "instagram" | "facebook" | "tiktok" | "youtube_shorts";
+          caption?: string;
+          hashtags?: string[];
+          scheduled_at?: string | null;
+          status?: "draft" | "scheduled" | "published" | "failed";
+          published_at?: string | null;
+          external_post_id?: string | null;
+          external_post_url?: string | null;
+          error_message?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_publish_schedules"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_publish_schedules_render_job_id_fkey";
+            columns: ["render_job_id"];
+            referencedRelation: "kontenai_render_jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_publish_schedules_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_content_performance: {
+        Row: {
+          id: string;
+          publish_schedule_id: string;
+          views: number;
+          reach: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          ctr: number | null;
+          leads: number | null;
+          ai_insight: string;
+          recommended_hook: string;
+          recommended_duration_seconds: number | null;
+          recommended_cta: string;
+          recommended_visual: string;
+          recommended_target_emotion: string;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          publish_schedule_id: string;
+          views?: number;
+          reach?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          ctr?: number | null;
+          leads?: number | null;
+          ai_insight?: string;
+          recommended_hook?: string;
+          recommended_duration_seconds?: number | null;
+          recommended_cta?: string;
+          recommended_visual?: string;
+          recommended_target_emotion?: string;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_content_performance"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_content_performance_publish_schedule_id_fkey";
+            columns: ["publish_schedule_id"];
+            referencedRelation: "kontenai_publish_schedules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_content_performance_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_optimization_recommendations: {
+        Row: {
+          id: string;
+          recommended_hook: string;
+          recommended_caption: string;
+          recommended_cta: string;
+          recommended_duration_seconds: number | null;
+          recommended_visual_style: string;
+          recommended_posting_time: string;
+          rationale: string;
+          based_on_record_count: number;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recommended_hook: string;
+          recommended_caption: string;
+          recommended_cta: string;
+          recommended_duration_seconds?: number | null;
+          recommended_visual_style: string;
+          recommended_posting_time: string;
+          rationale: string;
+          based_on_record_count?: number;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_optimization_recommendations"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_optimization_recommendations_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_ai_reports: {
+        Row: {
+          id: string;
+          period: "weekly" | "monthly";
+          period_start: string;
+          period_end: string;
+          total_content: number;
+          published_content: number;
+          total_views: number;
+          total_reach: number;
+          engagement_rate: number;
+          avg_ctr: number | null;
+          total_leads: number | null;
+          conversion_rate: number | null;
+          summary: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          period: "weekly" | "monthly";
+          period_start: string;
+          period_end: string;
+          total_content?: number;
+          published_content?: number;
+          total_views?: number;
+          total_reach?: number;
+          engagement_rate?: number;
+          avg_ctr?: number | null;
+          total_leads?: number | null;
+          conversion_rate?: number | null;
+          summary: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_ai_reports"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_ai_reports_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       v_employee_directory: {
@@ -925,6 +3340,14 @@ export interface Database {
       app_current_branch_id: { Args: Record<string, never>; Returns: string };
       app_has_permission: { Args: { p_permission_key: string }; Returns: boolean };
       app_is_super_admin: { Args: Record<string, never>; Returns: boolean };
+      get_kos_occupancy: {
+        Args: Record<string, never>;
+        Returns: { property_id: string; property_name: string; total: number; terisi: number; kosong: number }[];
+      };
+      get_kos_occupancy_internal: {
+        Args: Record<string, never>;
+        Returns: { property_id: string; property_name: string; total: number; terisi: number; kosong: number }[];
+      };
       attendance_check_in: {
         Args: { p_latitude: number; p_longitude: number; p_photo_url: string; p_note?: string | null };
         Returns: Database["public"]["Tables"]["attendance"]["Row"];
@@ -965,6 +3388,8 @@ export interface Database {
       };
       mark_notification_read: { Args: { p_notification_id: string }; Returns: undefined };
       mark_all_notifications_read: { Args: Record<string, never>; Returns: undefined };
+      archive_notification: { Args: { p_notification_id: string }; Returns: undefined };
+      create_emergency_notice: { Args: { p_title: string; p_content: string }; Returns: string };
       get_memo_audience: { Args: { p_memo_id: string }; Returns: { user_id: string }[] };
       get_announcement_audience: { Args: { p_announcement_id: string }; Returns: { user_id: string }[] };
       health_check: { Args: Record<string, never>; Returns: Json };
@@ -980,6 +3405,335 @@ export interface Database {
       reject_employee_registration: {
         Args: { p_employee_id: string; p_reason?: string | null };
         Returns: Database["public"]["Tables"]["employees"]["Row"];
+      };
+      crm_find_duplicate_prospect: {
+        Args: { p_phone: string; p_customer_name: string };
+        Returns: {
+          id: string;
+          customer_name: string;
+          phone: string;
+          status: ProspectStatusDb;
+          created_at: string;
+          sales_name: string;
+          is_phone_match: boolean;
+        }[];
+      };
+      crm_create_prospect: {
+        Args: {
+          p_customer_name: string;
+          p_phone: string;
+          p_project_id: string | null;
+          p_house_type: string;
+          p_city: string;
+          p_lead_source: LeadSourceDb;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_add_follow_up: {
+        Args: {
+          p_prospect_id: string;
+          p_activity_type: FollowUpActivityTypeDb;
+          p_activity_date: string;
+          p_activity_time: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_set_prospect_green: { Args: { p_prospect_id: string }; Returns: undefined };
+      crm_pick_round_robin_sales: { Args: { p_branch_id: string }; Returns: string | null };
+      crm_pick_round_robin_sales_excluding: { Args: { p_branch_id: string; p_exclude_sales_id: string }; Returns: string | null };
+      crm_pick_round_robin_sales_or_freelance: {
+        Args: { p_branch_id: string; p_project_id: string | null };
+        Returns: { recipient_type: string; recipient_id: string; full_name: string; phone: string | null }[];
+      };
+      crm_record_payment: {
+        Args: {
+          p_prospect_id: string;
+          p_payment_type: PaymentTypeDb;
+          p_amount: number;
+          p_payment_date: string;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
+      crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
+      crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
+      markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };
+      loonars_beauty_request_weekly_evaluation: { Args: Record<PropertyKey, never>; Returns: undefined };
+      markom_request_leasehold_competitor_comparison: { Args: Record<PropertyKey, never>; Returns: undefined };
+      markom_request_competitor_discovery: { Args: { p_focus: string }; Returns: undefined };
+      loonars_beauty_request_competitor_comparison: { Args: Record<PropertyKey, never>; Returns: undefined };
+      loonars_beauty_request_content_ideas: { Args: Record<PropertyKey, never>; Returns: undefined };
+      loonars_beauty_request_weekly_content_audit: { Args: Record<PropertyKey, never>; Returns: undefined };
+      create_payroll_run: {
+        Args: { p_branch_id: string; p_period_month: number; p_period_year: number };
+        Returns: string;
+      };
+      approve_payroll_run: { Args: { p_payroll_run_id: string; p_items: Json }; Returns: undefined };
+      create_hr_expense: {
+        Args: {
+          p_expense_type: string;
+          p_employee_id: string;
+          p_branch_id: string;
+          p_amount: number;
+          p_expense_date: string;
+          p_description: string;
+        };
+        Returns: string;
+      };
+      approve_hr_expense: { Args: { p_id: string }; Returns: undefined };
+      reject_hr_expense: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
+      sync_dispatch_pending: { Args: Record<string, never>; Returns: undefined };
+      sync_collect_responses: { Args: Record<string, never>; Returns: undefined };
+      get_sync_secret: { Args: Record<string, never>; Returns: string };
+      crm_upsert_sales_target: {
+        Args: {
+          p_sales_id: string;
+          p_period_month: number;
+          p_period_year: number;
+          p_target_units: number;
+          p_commission_percent: number;
+        };
+        Returns: string;
+      };
+      crm_set_branch_target: {
+        Args: {
+          p_branch_id: string;
+          p_period_month: number;
+          p_period_year: number;
+          p_target_units: number;
+          p_selling_price_per_unit: number;
+          p_commission_percent: number;
+        };
+        Returns: { branch_target_id: string; distributed_count: number }[];
+      };
+      crm_upsert_product: {
+        Args: {
+          p_id?: string | null;
+          p_product_name: string;
+          p_category?: string | null;
+          p_unit?: string;
+          p_default_price?: number;
+          p_default_commission?: number;
+          p_status?: string;
+        };
+        Returns: string;
+      };
+      crm_set_product_sales_assignment: {
+        Args: { p_product_id: string; p_sales_id: string; p_assigned: boolean };
+        Returns: undefined;
+      };
+      crm_save_and_distribute_target: {
+        Args: { p_branch_id: string; p_period_month: number; p_period_year: number; p_details: Json };
+        Returns: { header_id: string; distributed_count: number; total_target_units: number; total_target_revenue: number }[];
+      };
+      crm_sales_stats: {
+        Args: { p_sales_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          sales_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          selling_price_per_unit: number;
+          commission_percent: number;
+          target_revenue: number;
+          max_commission: number;
+          closing_units: number;
+          achievement_percent: number;
+          remaining_target: number;
+          collection: number;
+          estimated_commission: number;
+          verified_commission: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          today_prospect: number;
+          today_follow_up: number;
+          late_follow_up: number;
+        }[];
+      };
+      crm_branch_stats: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          target_revenue: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+          active_sales_count: number;
+          pending_finance_verification: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          sales_performance: Json;
+        }[];
+      };
+      crm_national_stats: {
+        Args: { p_month?: number | null; p_year?: number | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          total_prospects: number;
+          prospects_red: number;
+          prospects_yellow: number;
+          prospects_green: number;
+          prospects_closing: number;
+          conversion_percent: number;
+          total_target_units: number;
+          total_target_revenue: number;
+          total_closing_units: number;
+          achievement_percent: number;
+          collection: number;
+          monthly_growth_percent: number | null;
+          pending_finance_verification: number;
+          branch_ranking: Json;
+          top_sales: Json;
+        }[];
+      };
+      crm_sales_ranking: {
+        Args: { p_month?: number | null; p_year?: number | null; p_branch_id?: string | null };
+        Returns: {
+          rank: number;
+          sales_id: string;
+          full_name: string;
+          branch_name: string;
+          target_units: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+        }[];
+      };
+      crm_conversion_analytics: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null };
+        Returns: {
+          total_prospects: number;
+          total_closing: number;
+          conversion_percent: number;
+          avg_follow_up_days: number | null;
+          avg_closing_days: number | null;
+          lead_source_performance: Json;
+        }[];
+      };
+      crm_monthly_trend: {
+        Args: { p_months_back?: number; p_branch_id?: string | null; p_sales_id?: string | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          closing_units: number;
+          achievement_percent: number;
+          collection: number;
+        }[];
+      };
+      kpi_assign_tasks: {
+        Args: {
+          p_branch_id: string;
+          p_period_year: number;
+          p_period_month: number;
+          p_period_week: number;
+          p_items: Json;
+          p_division_id?: string | null;
+        };
+        Returns: string[];
+      };
+      kpi_update_task: {
+        Args: { p_task_id: string; p_title: string; p_description: string | null; p_due_date: string | null };
+        Returns: undefined;
+      };
+      kpi_delete_task: {
+        Args: { p_task_id: string };
+        Returns: undefined;
+      };
+      kpi_complete_task: {
+        Args: { p_task_id: string };
+        Returns: undefined;
+      };
+      kpi_submit_obstacle_response: {
+        Args: { p_task_id: string; p_response: string };
+        Returns: undefined;
+      };
+      kpi_apply_ai_response: {
+        Args: { p_task_id: string; p_action: string; p_new_title: string | null; p_new_description: string | null; p_ai_guidance: string };
+        Returns: undefined;
+      };
+      ai_circuit_breaker_check: {
+        Args: { p_provider: string; p_open_cooldown_ms?: number };
+        Returns: Json;
+      };
+      ai_circuit_breaker_report: {
+        Args: { p_provider: string; p_success: boolean; p_failure_threshold?: number };
+        Returns: Json;
+      };
+      ai_job_dispatch_pending: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      kpi_verify_task: {
+        Args: { p_task_id: string; p_status: string; p_notes?: string | null };
+        Returns: undefined;
+      };
+      kpi_team_stats: {
+        Args: { p_branch_id?: string | null; p_month?: number | null; p_year?: number | null; p_division_id?: string | null };
+        Returns: {
+          branch_id: string;
+          branch_name: string;
+          division_id: string;
+          period_month: number;
+          period_year: number;
+          current_week: number;
+          team_members: Json;
+          weekly_total: number;
+          weekly_completed: number;
+          weekly_remaining: number;
+          weekly_achievement_percent: number;
+          monthly_total: number;
+          monthly_completed: number;
+          monthly_remaining: number;
+          monthly_achievement_percent: number;
+          overdue_count: number;
+          waiting_review_count: number;
+        }[];
+      };
+      kpi_national_stats: {
+        Args: { p_month?: number | null; p_year?: number | null; p_division_id?: string | null };
+        Returns: {
+          period_month: number;
+          period_year: number;
+          current_week: number;
+          team_count: number;
+          monthly_total: number;
+          monthly_completed: number;
+          monthly_achievement_percent: number;
+          overdue_count: number;
+          branch_ranking: Json;
+        }[];
+      };
+      kpi_ranking: {
+        Args: {
+          p_scope?: string;
+          p_month?: number | null;
+          p_year?: number | null;
+          p_week?: number | null;
+          p_branch_id?: string | null;
+          p_division_id?: string | null;
+        };
+        Returns: {
+          rank: number;
+          branch_id: string;
+          branch_name: string;
+          team_members: Json;
+          assigned: number;
+          completed: number;
+          rejected: number;
+          achievement_percent: number;
+        }[];
       };
     };
     Enums: Record<string, never>;

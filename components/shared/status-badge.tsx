@@ -1,5 +1,19 @@
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { ATTENDANCE_STATUS_LABEL, type AttendanceStatus, type EmploymentStatus, type LeaveStatusType, type MemoPriority } from "@/constants/app";
+import {
+  ATTENDANCE_STATUS_LABEL,
+  KPI_TASK_STATUS_LABEL,
+  PAYMENT_STATUS_LABEL,
+  PROJECT_STATUS_LABEL,
+  PROSPECT_STATUS_LABEL,
+  type AttendanceStatus,
+  type EmploymentStatus,
+  type KpiTaskStatus,
+  type LeaveStatusType,
+  type MemoPriority,
+  type PaymentStatus,
+  type ProjectStatus,
+  type ProspectStatus,
+} from "@/constants/app";
 
 const ATTENDANCE_VARIANT: Record<AttendanceStatus, BadgeProps["variant"]> = {
   hadir: "success",
@@ -60,4 +74,46 @@ const PRIORITY_LABEL: Record<MemoPriority, string> = {
 
 export function PriorityBadge({ priority }: { priority: MemoPriority }) {
   return <Badge variant={PRIORITY_VARIANT[priority]}>{PRIORITY_LABEL[priority]}</Badge>;
+}
+
+const PROSPECT_VARIANT: Record<ProspectStatus, BadgeProps["variant"]> = {
+  red: "destructive",
+  yellow: "warning",
+  green: "success",
+  closing: "default",
+  inactive: "secondary",
+};
+
+export function ProspectStatusBadge({ status }: { status: ProspectStatus }) {
+  return <Badge variant={PROSPECT_VARIANT[status]}>{PROSPECT_STATUS_LABEL[status]}</Badge>;
+}
+
+const PAYMENT_STATUS_VARIANT: Record<PaymentStatus, BadgeProps["variant"]> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "destructive",
+};
+
+export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
+  return <Badge variant={PAYMENT_STATUS_VARIANT[status]}>{PAYMENT_STATUS_LABEL[status]}</Badge>;
+}
+
+const PROJECT_STATUS_VARIANT: Record<ProjectStatus, BadgeProps["variant"]> = {
+  planning: "secondary",
+  selling: "success",
+  completed: "default",
+};
+
+export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  return <Badge variant={PROJECT_STATUS_VARIANT[status]}>{PROJECT_STATUS_LABEL[status]}</Badge>;
+}
+
+const KPI_TASK_STATUS_VARIANT: Record<KpiTaskStatus, BadgeProps["variant"]> = {
+  pending: "warning",
+  completed: "success",
+  rejected: "destructive",
+};
+
+export function KpiTaskStatusBadge({ status }: { status: KpiTaskStatus }) {
+  return <Badge variant={KPI_TASK_STATUS_VARIANT[status]}>{KPI_TASK_STATUS_LABEL[status]}</Badge>;
 }

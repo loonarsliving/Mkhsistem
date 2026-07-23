@@ -13,11 +13,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logoutAction } from "@/features/auth/actions/auth.actions";
+import { unsubscribeFromWebPush } from "@/lib/push/web-push";
 import { getInitials } from "@/lib/utils";
 import type { CurrentSession } from "@/types/domain";
 
 export function UserMenu({ session }: { session: CurrentSession }) {
   const { employee } = session;
+
+  async function handleLogout() {
+    // Best-effort: a shared/lost device shouldn't keep receiving this
+    // user's pushes after they sign out. Never block logout on this.
+    await unsubscribeFromWebPush().catch(() => {});
+    await logoutAction();
+  }
 
   return (
     <DropdownMenu>
@@ -55,7 +63,7 @@ export function UserMenu({ session }: { session: CurrentSession }) {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => logoutAction()} className="text-destructive focus:text-destructive">
+        <DropdownMenuItem onSelect={() => handleLogout()} className="text-destructive focus:text-destructive">
           <LogOut className="h-4 w-4" /> Keluar
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -47,7 +47,11 @@ export function useCamera() {
 
   const capture = React.useCallback((): Promise<Blob | null> => {
     if (isNativePlatform()) {
-      return takeNativePhoto().catch(() => null);
+      return takeNativePhoto().catch((err: unknown) => {
+        console.error("[use-camera] takeNativePhoto() threw:", err instanceof Error ? err.message : err);
+        setError("Gagal mengambil foto. Coba lagi.");
+        return null;
+      });
     }
     return new Promise((resolve) => {
       const video = videoRef.current;

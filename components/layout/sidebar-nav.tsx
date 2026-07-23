@@ -13,7 +13,11 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
       {NAV_GROUPS.map((group) => {
-        const items = group.items.filter((item) => !item.permission || permissions.includes(item.permission));
+        const items = group.items.filter((item) => {
+          if (!item.permission) return true;
+          const required = Array.isArray(item.permission) ? item.permission : [item.permission];
+          return required.some((key) => permissions.includes(key));
+        });
         if (items.length === 0) return null;
 
         return (

@@ -19,6 +19,7 @@ export function useNotifications(userId: string) {
       const { data, error } = await supabase
         .from("mkc_notifications")
         .select("*")
+        .neq("status", "archived")
         .order("created_at", { ascending: false })
         .limit(20);
       if (error) throw error;
@@ -32,7 +33,7 @@ export function useNotifications(userId: string) {
       const { count, error } = await supabase
         .from("mkc_notifications")
         .select("*", { count: "exact", head: true })
-        .eq("is_read", false);
+        .eq("status", "unread");
       if (error) throw error;
       return count ?? 0;
     },
