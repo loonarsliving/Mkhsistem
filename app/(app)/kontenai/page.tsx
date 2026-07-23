@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { getKontenAiAutomationEnabledAction } from "@/features/kontenai/actions/automation-settings.actions";
 import { KontenAiDashboard } from "@/features/kontenai/components/kontenai-dashboard";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = { title: "KontenAI" };
 
 export default async function KontenAiPage() {
   await requireKontenAiAccess();
+  const automationEnabled = await getKontenAiAutomationEnabledAction();
 
   return (
     <div className="space-y-6">
@@ -15,7 +17,7 @@ export default async function KontenAiPage() {
         title="KontenAI"
         description="AI production engine yang mengubah hasil Content Planner menjadi konten siap tayang, lalu mengirimkannya ke Content Studio untuk dinilai dan direvisi bila perlu."
       />
-      <KontenAiDashboard />
+      <KontenAiDashboard automationEnabled={automationEnabled} />
     </div>
   );
 }

@@ -40,8 +40,16 @@ import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webho
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
-import { saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
+import { createContentSubmission, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
+import { generateCreativeBrief, type DirectorObjective, type DirectorPlatform } from "@/lib/ai/domains/kontenai-director";
+import { generateStoryboardFromBrief } from "@/lib/ai/domains/kontenai-storyboard";
+import { matchAssetsToScenes } from "@/features/kontenai/asset-selector/lib/scene-asset-matching";
+import { listAnalyzedAssetLibrary, listAnalyzedAssetsForDirector } from "@/repositories/kontenai-assets.repository";
+import { createKontenAiCreativeBrief } from "@/repositories/kontenai-creative-briefs.repository";
+import { createKontenAiStoryboard, updateKontenAiStoryboardScenes, type KontenAiStoryboardScene } from "@/repositories/kontenai-storyboards.repository";
+import { createKontenAiRenderJob } from "@/repositories/kontenai-render-jobs.repository";
+import { moveRenderOutputToContentStudio } from "@/lib/kontenai/content-studio-bridge";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance } from "@/lib/social/zernio";
 import {
@@ -125,6 +133,14 @@ interface OccupancyTeachingBiweeklyJobPayload {
 
 interface ContentSubmissionReviewJobPayload {
   submission_id: string;
+}
+
+interface KontenAiAutoProduceJobPayload {
+  kpi_task_id: string;
+}
+
+interface KontenAiAutoBridgeToStudioJobPayload {
+  render_job_id: string;
 }
 
 /** Distinguishes "no point retrying" (not configured, no photos, budget exhausted) from transient failures -- dead-letters on the first attempt instead of burning through max_attempts backoff for something a retry can never fix. */
@@ -280,6 +296,260 @@ async function processContentSubmissionReview(supabase: AdminClient, job: JobRow
   }
 
   return { score: review.score, verdict: review.verdict };
+}
+
+const KONTENAI_PRODUCT_CONTEXT: Record<string, { productProject: string; targetAudience: string }> = {
+  occupancy: { productProject: "Villa & Kos - Booking Harian (Occupancy)", targetAudience: "Wisatawan dan calon tamu yang mencari staycation/kos harian" },
+  leasehold_sales: { productProject: "Properti Leasehold - Penjualan Unit", targetAudience: "Calon investor dan pembeli unit properti" },
+  beauty: { productProject: "Loonars Beauty", targetAudience: "Pelanggan skincare/beauty yang aktif di media sosial" },
+};
+
+/**
+ * Restricted to instagram/tiktok, never facebook -- Content Studio
+ * (markom_content_submissions) only supports those two for actual publish,
+ * so an automation-originated brief must never target a platform the bridge
+ * step can't hand off downstream.
+ */
+function inferPlatformFromText(text: string): DirectorPlatform {
+  return text.toLowerCase().includes("tiktok") ? "tiktok" : "instagram";
+}
+
+function extractCaptionFromDescription(description: string | null, fallback: string): string {
+  if (!description) return fallback;
+  const match = description.match(/Caption:\s*['"]([^'"]+)['"]/i);
+  return match ? match[1].trim() : fallback;
+}
+
+function generateAutomationSceneId(): string {
+  return `scene-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
+}
+
+/**
+ * Short "what worked/didn't work recently" note for this content_focus,
+ * folded into the next brief's campaignGoal -- the closest thing to a daily
+ * learning loop without a live-tuned model: AI Director sees actual recent
+ * Content Studio scores/feedback for the same product line every time it
+ * writes a new brief, instead of writing every day's brief from a blank slate.
+ */
+async function buildRecentPerformanceNote(supabase: AdminClient, contentFocus: "leasehold_sales" | "occupancy" | "beauty"): Promise<string> {
+  const { data: recent } = await supabase
+    .from("markom_content_submissions")
+    .select("ai_score, ai_verdict")
+    .eq("content_focus", contentFocus)
+    .not("ai_score", "is", null)
+    .order("ai_reviewed_at", { ascending: false })
+    .limit(5);
+
+  if (!recent || recent.length === 0) return "";
+
+  const avgScore = recent.reduce((sum, row) => sum + Number(row.ai_score ?? 0), 0) / recent.length;
+  const feedbackLines = recent
+    .slice(0, 3)
+    .map((row) => `- (skor ${row.ai_score}) ${row.ai_verdict ?? ""}`.trim())
+    .filter((line) => line.length > 10);
+
+  if (feedbackLines.length === 0) return "";
+
+  return `\n\nCatatan performa konten sebelumnya untuk lini ini (rata-rata skor AI ${avgScore.toFixed(1)}/10):\n${feedbackLines.join("\n")}\nGunakan catatan ini untuk memperbaiki brief baru -- hindari pengulangan kelemahan yang sama.`;
+}
+
+/**
+ * Full "brief -> siap di-render" chain for one automation-originated
+ * kpi_task: AI Director generates a Creative Brief (real Gemini call, with
+ * recent Content Studio performance folded in as context), Storyboard Engine
+ * turns it into scenes (another Gemini call), Asset Selector matches every
+ * scene against the analyzed Asset Library (deterministic, no AI call), and
+ * a render job is queued for the existing Railway worker to pick up. Mirrors
+ * generateCreativeBriefAction/generateStoryboardAction/runAssetSelectionAction/
+ * createRenderJobAction exactly, just without the session each of those
+ * requires (this runs from a cron dispatch, not a logged-in user).
+ */
+async function processKontenAiAutoProduce(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as KontenAiAutoProduceJobPayload;
+
+  const { data: existingBrief } = await supabase
+    .from("kontenai_creative_briefs")
+    .select("id")
+    .eq("kpi_task_id", payload.kpi_task_id)
+    .maybeSingle();
+  if (existingBrief) return { skipped: true, reason: "brief already exists for this task" };
+
+  const { data: task, error: taskError } = await supabase
+    .from("kpi_tasks")
+    .select("id, title, description, content_focus, created_by")
+    .eq("id", payload.kpi_task_id)
+    .single();
+  if (taskError || !task) throw new Error(`kpi_task ${payload.kpi_task_id} not found: ${taskError?.message}`);
+  if (!task.created_by) throw new NonRetryableJobError(`kpi_task ${task.id} has no created_by -- can't attribute automation-produced rows to an actor`);
+  const createdBy = task.created_by;
+  const contentFocus = task.content_focus as "leasehold_sales" | "occupancy" | "beauty";
+
+  const context = KONTENAI_PRODUCT_CONTEXT[contentFocus] ?? KONTENAI_PRODUCT_CONTEXT.occupancy;
+  const platform = inferPlatformFromText(task.description ?? task.title);
+  const objective: DirectorObjective = "engagement";
+  const performanceNote = await buildRecentPerformanceNote(supabase, contentFocus);
+  const campaignGoal = `${task.title} -- tujuan utama: meningkatkan engagement.${performanceNote}`;
+
+  const assets = await listAnalyzedAssetsForDirector(supabase, { productProject: context.productProject, platform, limit: 20 });
+  const directorResult = await generateCreativeBrief({
+    objective,
+    platform,
+    targetAudience: context.targetAudience,
+    productProject: context.productProject,
+    campaignGoal,
+    assets: assets.map((asset) => ({
+      title: asset.title,
+      assetType: asset.assetType,
+      aiDescription: asset.aiDescription,
+      aiTags: asset.aiTags,
+      aiCategory: asset.aiCategory,
+      aiMood: asset.aiMood,
+    })),
+  });
+
+  const brief = await createKontenAiCreativeBrief(supabase, {
+    objective,
+    platform,
+    targetAudience: context.targetAudience,
+    productProject: context.productProject,
+    campaignGoal,
+    bigIdea: directorResult.bigIdea,
+    hook: directorResult.hook,
+    keyMessage: directorResult.keyMessage,
+    targetEmotion: directorResult.targetEmotion,
+    cta: directorResult.cta,
+    contentAngle: directorResult.contentAngle,
+    referencedAssetIds: assets.map((asset) => asset.id),
+    createdBy,
+    kpiTaskId: task.id,
+  });
+
+  const sceneDrafts = await generateStoryboardFromBrief({
+    platform: brief.platform,
+    objective: brief.objective,
+    bigIdea: brief.big_idea,
+    hook: brief.hook,
+    keyMessage: brief.key_message,
+    targetEmotion: brief.target_emotion,
+    cta: brief.cta,
+    contentAngle: brief.content_angle,
+  });
+
+  const draftScenes: KontenAiStoryboardScene[] = sceneDrafts.map((draft, index) => ({
+    ...draft,
+    id: generateAutomationSceneId(),
+    order: index,
+    selectedAssetId: null,
+    assetMatches: [],
+  }));
+
+  const storyboard = await createKontenAiStoryboard(supabase, {
+    creativeBriefId: brief.id,
+    title: `Storyboard: ${brief.product_project}`,
+    scenes: draftScenes,
+    createdBy,
+  });
+
+  const assetPool = await listAnalyzedAssetLibrary(supabase);
+  const matches = matchAssetsToScenes(draftScenes, assetPool);
+  const selectedScenes: KontenAiStoryboardScene[] = draftScenes.map((scene, index) => ({
+    ...scene,
+    selectedAssetId: matches[index].selectedAssetId,
+    assetMatches: matches[index].assetMatches,
+  }));
+
+  if (!selectedScenes.every((scene) => scene.selectedAssetId)) {
+    throw new NonRetryableJobError(
+      `Asset Library belum punya cukup aset yang cocok untuk brief "${task.title}" -- tambahkan lebih banyak footage lalu jalankan lagi manual, atau tunggu tick berikutnya setelah aset bertambah.`,
+    );
+  }
+
+  const updatedStoryboard = await updateKontenAiStoryboardScenes(supabase, storyboard.id, selectedScenes, createdBy);
+  const renderJob = await createKontenAiRenderJob(supabase, { storyboardId: updatedStoryboard.id, createdBy });
+
+  return { creativeBriefId: brief.id, storyboardId: updatedStoryboard.id, renderJobId: renderJob.id };
+}
+
+/**
+ * Bridges one completed automation render into Content Studio: moves the
+ * video from kontenai-renders into markom-content-submissions (see
+ * lib/kontenai/content-studio-bridge.ts -- the only bucket
+ * deleteSubmissionVideoFromStorage cleans up on publish), creates the
+ * submission row, then enqueues content_submission_review so it gets a real
+ * AI score the same way any other submission does. If that review approves
+ * it (score >= 8.5), the existing auto-schedule + 5-minute publish worker
+ * (app/api/social/publish-content) take it the rest of the way to actually
+ * going live and deleting the video afterward -- nothing new needed there.
+ */
+async function processKontenAiAutoBridgeToStudio(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as KontenAiAutoBridgeToStudioJobPayload;
+
+  const { data: renderJob, error: renderJobError } = await supabase
+    .from("kontenai_render_jobs")
+    .select("id, status, output_storage_path, storyboard_id")
+    .eq("id", payload.render_job_id)
+    .single();
+  if (renderJobError || !renderJob) throw new Error(`Render job ${payload.render_job_id} not found: ${renderJobError?.message}`);
+  if (renderJob.status !== "completed" || !renderJob.output_storage_path) {
+    return { skipped: true, reason: `render job status is ${renderJob.status}, not completed yet` };
+  }
+
+  const { data: storyboard, error: storyboardError } = await supabase
+    .from("kontenai_storyboards")
+    .select("id, creative_brief_id")
+    .eq("id", renderJob.storyboard_id)
+    .single();
+  if (storyboardError || !storyboard) throw new Error(`Storyboard for render job ${renderJob.id} not found: ${storyboardError?.message}`);
+
+  const { data: brief, error: briefError } = await supabase
+    .from("kontenai_creative_briefs")
+    .select("id, platform, kpi_task_id")
+    .eq("id", storyboard.creative_brief_id)
+    .single();
+  if (briefError || !brief || !brief.kpi_task_id) throw new Error(`Automation brief for storyboard ${storyboard.id} not found or has no kpi_task_id`);
+
+  const { data: existingSubmission } = await supabase
+    .from("markom_content_submissions")
+    .select("id")
+    .eq("task_id", brief.kpi_task_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (existingSubmission) return { skipped: true, reason: "submission already exists for this task" };
+
+  const { data: task, error: taskError } = await supabase
+    .from("kpi_tasks")
+    .select("id, title, description, content_focus, branch_id, division_id, created_by")
+    .eq("id", brief.kpi_task_id)
+    .single();
+  if (taskError || !task) throw new Error(`kpi_task ${brief.kpi_task_id} not found: ${taskError?.message}`);
+  if (!task.created_by) throw new NonRetryableJobError(`kpi_task ${task.id} has no created_by -- can't attribute the Content Studio submission to an actor`);
+  const createdBy = task.created_by;
+
+  const moved = await moveRenderOutputToContentStudio(supabase, {
+    sourcePath: renderJob.output_storage_path,
+    submissionOwnerId: createdBy,
+  });
+
+  const caption = extractCaptionFromDescription(task.description, task.title);
+
+  const submission = await createContentSubmission(supabase, {
+    task_id: task.id,
+    beauty_content_item_id: null,
+    branch_id: task.branch_id,
+    division_id: task.division_id,
+    content_focus: task.content_focus as "leasehold_sales" | "occupancy" | "beauty",
+    platform: brief.platform as "instagram" | "tiktok",
+    submitted_by: createdBy,
+    media_type: "video",
+    storage_path: moved.storagePath,
+    public_url: moved.publicUrl,
+    caption,
+    created_by: createdBy,
+  });
+
+  await supabase.from("ai_job_queue").insert({ job_type: "content_submission_review", payload: { submission_id: submission.id } });
+
+  return { submissionId: submission.id };
 }
 
 /** One Gemini attempt to coach a sales rep with 0 closings in the last 30 days -- a supportive weekly nudge (see 0101), not a warning. Sent directly to the sales rep only, unlike stuck_prospect_alert/SP1 which also reach their manager. */
@@ -1545,7 +1815,11 @@ export async function POST(request: Request) {
                                             ? await processOccupancyTeachingBiweekly(supabase, job)
                                             : job.job_type === "content_submission_review"
                                               ? await processContentSubmissionReview(supabase, job)
-                                              : await processSocialWeeklyEvaluation(supabase);
+                                              : job.job_type === "kontenai_auto_produce"
+                                                ? await processKontenAiAutoProduce(supabase, job)
+                                                : job.job_type === "kontenai_auto_bridge_to_studio"
+                                                  ? await processKontenAiAutoBridgeToStudio(supabase, job)
+                                                  : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
