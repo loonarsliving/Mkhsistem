@@ -14,6 +14,7 @@ import {
   Wand2,
 } from "lucide-react";
 
+import { AutomationToggle } from "@/features/kontenai/components/automation-toggle";
 import { ModuleLinkCard } from "@/features/kontenai/components/module-link-card";
 import { PipelineFlow } from "@/features/kontenai/components/pipeline-flow";
 import { StatTile } from "@/features/kontenai/components/stat-tile";
@@ -121,9 +122,14 @@ const MODULES = [
   },
 ];
 
-export function KontenAiDashboard() {
+interface KontenAiDashboardProps {
+  automationEnabled: boolean;
+}
+
+export function KontenAiDashboard({ automationEnabled }: KontenAiDashboardProps) {
   return (
     <div className="space-y-6">
+      <AutomationToggle initialEnabled={automationEnabled} />
       <PipelineFlow />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">

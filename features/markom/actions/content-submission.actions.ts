@@ -333,9 +333,10 @@ export async function publishContentNowAction(submissionId: string): Promise<Act
       zernioPublishStatus: result.status,
       zernioPermalink: result.permalink,
     });
-    if (submission.media_type === "video") {
-      await deleteSubmissionVideoFromStorage(supabase, submission.storage_path).catch(() => undefined);
-    }
+    // No storage cleanup here -- see app/api/social/publish-content's doc:
+    // createPost being accepted isn't the platform having actually fetched
+    // the media yet. zernio_publish_reconcile (0170) deletes it once
+    // Zernio's own status confirms that really happened.
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Zernio publish gagal";
     await markContentPublishFailed(supabase, submissionId, reason);

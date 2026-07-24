@@ -6,7 +6,6 @@ import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioPr
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildZernioMediaItems,
-  deleteSubmissionVideoFromStorage,
   markContentPublishedViaZernio,
   markContentPublishFailed,
 } from "@/repositories/content-submissions.repository";
@@ -81,9 +80,13 @@ export async function POST() {
         zernioPublishStatus: result.status,
         zernioPermalink: result.permalink,
       });
-      if (row.media_type === "video") {
-        await deleteSubmissionVideoFromStorage(supabase, row.storage_path).catch(() => undefined);
-      }
+      // Storage cleanup deliberately does NOT happen here. createPost being
+      // *accepted* isn't the same as Instagram/TikTok having actually
+      // fetched the media yet -- deleting immediately raced a real submission
+      // straight into "Instagram couldn't fetch your media from the URL"
+      // (the video was gone from our bucket before Instagram got to it).
+      // zernio_publish_reconcile (0170) deletes it once Zernio's own status
+      // confirms the platform actually finished fetching/publishing.
       published += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

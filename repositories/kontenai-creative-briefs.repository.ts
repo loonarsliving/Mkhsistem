@@ -29,6 +29,8 @@ export interface CreateKontenAiCreativeBriefInput {
   /** Which brand this brief is for -- set by cross-module bridges (e.g. Loonars Beauty's "Kirim ke KontenAI"); omitted for briefs made directly on the AI Director page, which isn't brand-scoped. */
   contentFocus?: KontenAiCreativeBriefContentFocus;
   createdBy: string;
+  /** Set only when this brief was produced by the daily automation pipeline from a kpi_task; null for manually-created briefs (AI Director UI). */
+  kpiTaskId?: string | null;
 }
 
 export async function createKontenAiCreativeBrief(
@@ -52,6 +54,7 @@ export async function createKontenAiCreativeBrief(
       referenced_asset_ids: input.referencedAssetIds,
       content_focus: input.contentFocus ?? null,
       created_by: input.createdBy,
+      kpi_task_id: input.kpiTaskId ?? null,
     })
     .select()
     .single();

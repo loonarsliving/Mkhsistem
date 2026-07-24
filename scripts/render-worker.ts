@@ -25,6 +25,8 @@
  * forever with a poll interval, no supervisor logic of its own.
  */
 import { createAdminClient } from "../lib/supabase/admin";
+import { fetchBackgroundMusic } from "../lib/ai/music";
+import { synthesizeVoiceOver } from "../lib/ai/tts";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "../lib/video/render-storyboard";
 import { listKontenAiAssetsByIds } from "../repositories/kontenai-assets.repository";
@@ -38,6 +40,14 @@ import {
 import { getKontenAiStoryboard } from "../repositories/kontenai-storyboards.repository";
 
 const POLL_INTERVAL_MS = Number(process.env.RENDER_WORKER_POLL_INTERVAL_MS ?? 5000);
+
+/**
+ * Google Drive was tried for render output (to keep it out of Supabase
+ * Storage's shared quota) but a service account has zero storage quota of
+ * its own -- uploading a NEW file into a folder it only has Editor access to
+ * fails with HTTP 403 unless the folder lives inside a real Shared Drive,
+ * which isn't available on this Google account. Back to Supabase Storage.
+ */
 const RENDER_BUCKET = "kontenai-renders";
 
 async function processJob(jobId: string): Promise<void> {
@@ -55,22 +65,36 @@ async function processJob(jobId: string): Promise<void> {
     const assets = await listKontenAiAssetsByIds(supabase, [...new Set(assetIds)]);
     const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
+    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 10, stage: "Membuat voice over" });
     const scenes: RenderScene[] = await Promise.all(
       storyboard.scenes.map(async (scene) => {
         const asset = assetById.get(scene.selectedAssetId!);
         if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
-        const source = await resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl });
+        const [source, voiceOverPcm] = await Promise.all([
+          resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl }),
+          synthesizeVoiceOver(scene.voiceOver),
+        ]);
         return {
           assetUrl: source.url,
           assetHeaders: source.headers,
           assetType: asset.assetType === "video" ? "video" : "image",
           durationSeconds: scene.durationSeconds,
+          voiceOverPcm,
         };
       }),
     );
 
-    const result = await renderStoryboardDraft(scenes, async (progress, stage) => {
-      await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 18, stage: "Mencari background music" });
+    const musicQuery = storyboard.creativeBrief?.big_idea || storyboard.creativeBrief?.product_project || "cinematic background music";
+    const music = await fetchBackgroundMusic(musicQuery);
+    if (music) console.log(`[render-worker] job ${jobId} background music: "${music.name}" (${music.license})`);
+
+    const result = await renderStoryboardDraft(scenes, {
+      targetPlatform: storyboard.creativeBrief?.platform,
+      musicBuffer: music?.buffer,
+      onProgress: async (progress, stage) => {
+        await updateKontenAiRenderJobProgress(supabase, jobId, { progress, stage });
+      },
     });
     workDir = result.workDir;
 
