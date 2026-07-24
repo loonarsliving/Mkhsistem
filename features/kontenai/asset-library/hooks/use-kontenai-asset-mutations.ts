@@ -4,18 +4,23 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  createKontenAiAssetAction,
   deleteKontenAiAssetAction,
   duplicateKontenAiAssetAction,
   updateKontenAiAssetAction,
-  uploadKontenAiAssetAction,
+  type CreateKontenAiAssetActionInput,
   type UpdateKontenAiAssetActionInput,
 } from "@/features/kontenai/asset-library/actions/asset-library.actions";
+import { syncKontenAiAssetsFromDriveAction } from "@/features/kontenai/asset-library/actions/drive-import.actions";
 import { analyzeAssetVisionAction } from "@/features/kontenai/asset-library/actions/gemini-vision.actions";
 import { guessAssetTypeFromMime } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { inspectFile } from "@/features/kontenai/asset-library/utils/file-inspect";
+import { buildAssetStoragePrefix } from "@/features/kontenai/asset-library/utils/storage-path";
 import { isVisionEligibleAssetType } from "@/features/kontenai/asset-library/utils/vision-eligibility";
+import { uploadEntityFile } from "@/lib/supabase/storage";
 import type { KontenAiAssetType } from "@/repositories/kontenai-assets.repository";
 
+export const KONTENAI_ASSET_BUCKET = "kontenai-assets";
 export const MAX_KONTENAI_ASSET_SIZE_BYTES = 200 * 1024 * 1024;
 
 function invalidateAssetLibrary(queryClient: ReturnType<typeof useQueryClient>) {
@@ -47,24 +52,41 @@ export function useUploadKontenAiAsset() {
         throw new Error(`Ukuran file melebihi batas maksimum ${Math.round(MAX_KONTENAI_ASSET_SIZE_BYTES / (1024 * 1024))}MB`);
       }
 
-      const meta = await inspectFile(input.file);
+      const classification = {
+        company: input.company || null,
+        project: input.project || null,
+        campaign: input.campaign || null,
+        platform: input.platform || null,
+        contentType: input.contentType || null,
+      };
+      const prefix = buildAssetStoragePrefix(classification);
+      const [{ path, publicUrl }, meta] = await Promise.all([
+        uploadEntityFile(KONTENAI_ASSET_BUCKET, prefix, input.file, MAX_KONTENAI_ASSET_SIZE_BYTES),
+        inspectFile(input.file),
+      ]);
+      if (!publicUrl) throw new Error("Gagal mendapatkan URL publik aset");
 
-      const formData = new FormData();
-      formData.set("file", input.file);
-      formData.set("title", input.title || input.file.name);
-      formData.set("description", input.description || "");
-      formData.set("assetType", input.assetType || guessAssetTypeFromMime(input.file.type));
-      formData.set("company", input.company || "");
-      formData.set("project", input.project || "");
-      formData.set("campaign", input.campaign || "");
-      formData.set("platform", input.platform || "");
-      formData.set("contentType", input.contentType || "");
-      formData.set("location", input.location || "");
-      formData.set("tags", JSON.stringify(input.tags));
-      if (meta.resolution) formData.set("resolution", meta.resolution);
-      if (meta.durationSeconds !== null) formData.set("durationSeconds", String(meta.durationSeconds));
+      const payload: CreateKontenAiAssetActionInput = {
+        title: input.title || input.file.name,
+        description: input.description || null,
+        filename: input.file.name,
+        assetType: input.assetType || guessAssetTypeFromMime(input.file.type),
+        storagePath: path,
+        publicUrl,
+        fileType: input.file.type || "application/octet-stream",
+        fileSizeBytes: input.file.size,
+        resolution: meta.resolution,
+        durationSeconds: meta.durationSeconds,
+        company: classification.company,
+        project: classification.project,
+        campaign: classification.campaign,
+        platform: classification.platform,
+        contentType: classification.contentType,
+        location: input.location || null,
+        tags: input.tags,
+      };
 
-      const result = await uploadKontenAiAssetAction(formData);
+      const result = await createKontenAiAssetAction(payload);
       if (!result.success) throw new Error(result.error ?? "Gagal menyimpan aset");
       return result.data!;
     },
@@ -135,6 +157,33 @@ export function useDeleteKontenAiAsset() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Gagal menghapus aset");
+    },
+  });
+}
+
+/** "Sync from Drive" -- imports any footage newly added to the KontenAI Drive folder tree, deriving company/content_type from the folder path (see lib/kontenai/drive-import.ts). */
+export function useSyncKontenAiAssetsFromDrive() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const result = await syncKontenAiAssetsFromDriveAction();
+      if (!result.success) throw new Error(result.error ?? "Gagal sinkronisasi dari Google Drive");
+      return result.data!;
+    },
+    onSuccess: (summary) => {
+      if (summary.errors.length > 0) {
+        toast.warning(`${summary.imported} footage baru diimpor, ${summary.errors.length} gagal. Cek console untuk detail.`);
+        console.error("Drive sync errors:", summary.errors);
+      } else if (summary.imported > 0) {
+        toast.success(`${summary.imported} footage baru diimpor dari Drive (${summary.skipped} sudah ada sebelumnya).`);
+      } else {
+        toast.info("Tidak ada footage baru di Drive untuk diimpor.");
+      }
+      invalidateAssetLibrary(queryClient);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Gagal sinkronisasi dari Google Drive");
     },
   });
 }

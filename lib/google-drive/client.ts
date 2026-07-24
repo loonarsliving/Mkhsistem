@@ -83,6 +83,39 @@ export function driveMediaUrl(fileId: string): string {
   return `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}?alt=media`;
 }
 
+export function driveWebViewLink(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/** The configured Drive root (Asset Library's "KontenAI" folder) -- exported so the Drive import walk (lib/kontenai/drive-import.ts) can start from it without duplicating the env var read. */
+export function getDriveRootFolderId(): string {
+  return requireRootFolderId();
+}
+
+export interface DriveChildFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: string;
+}
+
+/** Lists the direct children (files and subfolders) of a Drive folder -- used by the KontenAI "Sync from Drive" import (lib/kontenai/drive-import.ts) to walk the brand/content-type/Foto-Vidio tree and turn newly-added footage into kontenai_assets rows without a human re-typing company/content_type by hand. */
+export async function listDriveFolderChildren(folderId: string): Promise<DriveChildFile[]> {
+  const headers = await getDriveAuthHeader();
+  const query = `'${folderId}' in parents and trashed = false`;
+  const children: DriveChildFile[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = `${DRIVE_FILES_URL}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent("nextPageToken,files(id,name,mimeType,size)")}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Gagal membaca isi folder Drive (HTTP ${res.status})`);
+    const data = (await res.json()) as { files?: DriveChildFile[]; nextPageToken?: string };
+    children.push(...(data.files ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return children;
+}
+
 interface DriveFileRef {
   id: string;
   name: string;

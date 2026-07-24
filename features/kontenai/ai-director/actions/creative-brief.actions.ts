@@ -9,6 +9,7 @@ import { listAnalyzedAssetsForDirector } from "@/repositories/kontenai-assets.re
 import {
   createKontenAiCreativeBrief,
   listKontenAiCreativeBriefs,
+  type KontenAiCreativeBriefContentFocus,
   type KontenAiCreativeBriefWithCreator,
 } from "@/repositories/kontenai-creative-briefs.repository";
 import { actionError, actionSuccess, type ActionResult, type KontenAiCreativeBriefRow } from "@/types/domain";
@@ -24,6 +25,8 @@ export interface GenerateCreativeBriefActionInput {
   targetAudience: string;
   productProject: string;
   campaignGoal: string;
+  /** Which brand this brief is for -- set by cross-module bridges (e.g. Loonars Beauty's "Kirim ke KontenAI"); omitted for briefs made directly on this page. */
+  contentFocus?: KontenAiCreativeBriefContentFocus;
 }
 
 export interface GenerateCreativeBriefActionResult {
@@ -86,6 +89,7 @@ export async function generateCreativeBriefAction(
       cta: result.cta,
       contentAngle: result.contentAngle,
       referencedAssetIds: assets.map((asset) => asset.id),
+      contentFocus: input.contentFocus,
       createdBy: session.userId,
     });
 

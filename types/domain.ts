@@ -44,6 +44,7 @@ export type KontenAiAssetRow = Tables<"kontenai_assets">;
 export type KontenAiCreativeBriefRow = Tables<"kontenai_creative_briefs">;
 export type KontenAiStoryboardRow = Tables<"kontenai_storyboards">;
 export type KontenAiRenderJobRow = Tables<"kontenai_render_jobs">;
+export type KontenAiVideoGenerationJobRow = Tables<"kontenai_video_generation_jobs">;
 export type KontenAiPublishScheduleRow = Tables<"kontenai_publish_schedules">;
 export type KontenAiContentPerformanceRow = Tables<"kontenai_content_performance">;
 export type KontenAiOptimizationRecommendationRow = Tables<"kontenai_optimization_recommendations">;

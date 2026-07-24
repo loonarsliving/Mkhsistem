@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, FolderOpen, RefreshCw } from "lucide-react";
+import { AlertTriangle, CloudDownload, FolderOpen, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import { AssetLibraryToolbar, type AssetLibraryFilterState } from "@/features/ko
 import { AssetPreviewDialog } from "@/features/kontenai/asset-library/components/asset-preview-dialog";
 import { AssetUploadDialog } from "@/features/kontenai/asset-library/components/asset-upload-dialog";
 import { useAssetLibraryStatsQuery, useKontenAiAssetsQuery, useKontenAiFolderFacetsQuery } from "@/features/kontenai/asset-library/hooks/use-kontenai-assets";
+import { useSyncKontenAiAssetsFromDrive } from "@/features/kontenai/asset-library/hooks/use-kontenai-asset-mutations";
 import { DEFAULT_PAGE_SIZE, type AssetLibraryViewMode, type SortOption } from "@/features/kontenai/asset-library/types";
 import type { KontenAiAssetListFilters, KontenAiAssetStatus, KontenAiAssetType, KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
 
@@ -105,6 +106,7 @@ export function AssetLibraryBoard() {
   const assetsQuery = useKontenAiAssetsQuery(queryFilters);
   const statsQuery = useAssetLibraryStatsQuery();
   const facetsQuery = useKontenAiFolderFacetsQuery();
+  const syncFromDriveMutation = useSyncKontenAiAssetsFromDrive();
 
   const assets = assetsQuery.data?.data ?? [];
   const total = assetsQuery.data?.total ?? 0;
@@ -130,7 +132,20 @@ export function AssetLibraryBoard() {
         onSortChange={setSort}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        uploadSlot={<AssetUploadDialog />}
+        uploadSlot={
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => syncFromDriveMutation.mutate()}
+              disabled={syncFromDriveMutation.isPending}
+            >
+              <CloudDownload className="h-4 w-4" />
+              {syncFromDriveMutation.isPending ? "Sinkronisasi..." : "Sync dari Drive"}
+            </Button>
+            <AssetUploadDialog />
+          </div>
+        }
       />
 
       {assetsQuery.isLoading ? (

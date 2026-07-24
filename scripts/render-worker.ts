@@ -12,11 +12,10 @@
  * it never runs ffmpeg itself anymore.
  *
  * Deploy: copy this repo (or just enough of it -- scripts/, lib/video,
- * lib/kontenai, lib/google-drive, lib/supabase/admin.ts, repositories/,
- * types/ -- to a host with Node 20+, then run continuously:
+ * lib/kontenai, lib/supabase/admin.ts, repositories/, types/ -- to a host
+ * with Node 22+, then run continuously:
  *
  *   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
- *   GOOGLE_SERVICE_ACCOUNT_JSON=... GOOGLE_DRIVE_ROOT_FOLDER_ID=... \
  *   npx tsx scripts/render-worker.ts
  *
  * (or `npm run render-worker` if the host has this whole repo). Restart-on-
@@ -133,12 +132,7 @@ async function tick(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
-    process.exit(1);
-  }
-
+export async function runRenderWorker(): Promise<void> {
   console.log(`[render-worker] polling every ${POLL_INTERVAL_MS}ms`);
   for (;;) {
     try {
@@ -150,4 +144,10 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+if (require.main === module) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
+    process.exit(1);
+  }
+  void runRenderWorker();
+}
