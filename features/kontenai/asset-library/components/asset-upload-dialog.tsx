@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { BRAND_LABELS, CONTENT_FOCUS_VALUES } from "@/constants/app";
 import { useUploadKontenAiAsset } from "@/features/kontenai/asset-library/hooks/use-kontenai-asset-mutations";
 import { ASSET_TYPE_ACCEPT, ASSET_TYPE_OPTIONS, guessAssetTypeFromMime } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import type { KontenAiAssetType } from "@/repositories/kontenai-assets.repository";
@@ -138,7 +139,18 @@ export function AssetUploadDialog() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="asset-upload-company">Company</Label>
-              <Input id="asset-upload-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Leasehold, Villa, Beauty..." />
+              <Select value={company || undefined} onValueChange={setCompany}>
+                <SelectTrigger id="asset-upload-company">
+                  <SelectValue placeholder="Pilih brand" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTENT_FOCUS_VALUES.map((focus) => (
+                    <SelectItem key={focus} value={focus}>
+                      {BRAND_LABELS[focus]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="asset-upload-project">Project</Label>
