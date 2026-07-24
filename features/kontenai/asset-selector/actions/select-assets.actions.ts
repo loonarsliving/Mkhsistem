@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { matchAssetsToScenes } from "@/features/kontenai/asset-selector/lib/scene-asset-matching";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
+import { isVeoConfigured } from "@/lib/ai/veo/client";
 import { createClient } from "@/lib/supabase/server";
 import { listAnalyzedAssetLibrary, type KontenAiAnalyzedAsset } from "@/repositories/kontenai-assets.repository";
 import { getKontenAiStoryboard, updateKontenAiStoryboardScenes, type KontenAiStoryboardScene } from "@/repositories/kontenai-storyboards.repository";
@@ -44,7 +45,11 @@ export interface RunAssetSelectionActionResult {
  * (their selectedAssetId stays as that weak match in the meantime, so
  * render CAN still proceed immediately if the caller doesn't want to wait
  * for Veo -- the worker overwrites it with a proper generated clip once
- * done).
+ * done) -- but only when Veo is actually configured (VEO_API_KEY set); if
+ * it isn't, every scene just keeps its best available match as-is instead
+ * of queuing jobs nothing will ever process, which would otherwise leave a
+ * storyboard stuck forever waiting on a render that never gets queued (see
+ * scripts/veo-worker.ts's auto-queue-on-completion logic).
  */
 export async function runAssetSelectionAction(storyboardId: string): Promise<ActionResult<RunAssetSelectionActionResult>> {
   const session = await requireKontenAiAccess();
@@ -66,19 +71,21 @@ export async function runAssetSelectionAction(storyboardId: string): Promise<Act
     const updated = await updateKontenAiStoryboardScenes(supabase, storyboardId, scenes, session.userId);
 
     let queuedVideoGenerationCount = 0;
-    for (let index = 0; index < scenes.length; index += 1) {
-      const topScore = matches[index].assetMatches[0]?.score ?? 0;
-      const baseAssetId = matches[index].selectedAssetId;
-      if (topScore >= LOW_CONFIDENCE_SCORE_THRESHOLD || !baseAssetId) continue;
+    if (isVeoConfigured()) {
+      for (let index = 0; index < scenes.length; index += 1) {
+        const topScore = matches[index].assetMatches[0]?.score ?? 0;
+        const baseAssetId = matches[index].selectedAssetId;
+        if (topScore >= LOW_CONFIDENCE_SCORE_THRESHOLD || !baseAssetId) continue;
 
-      await createKontenAiVideoGenerationJob(supabase, {
-        storyboardId,
-        sceneId: scenes[index].id,
-        prompt: buildVeoPrompt(scenes[index]),
-        baseAssetId,
-        createdBy: session.userId,
-      });
-      queuedVideoGenerationCount += 1;
+        await createKontenAiVideoGenerationJob(supabase, {
+          storyboardId,
+          sceneId: scenes[index].id,
+          prompt: buildVeoPrompt(scenes[index]),
+          baseAssetId,
+          createdBy: session.userId,
+        });
+        queuedVideoGenerationCount += 1;
+      }
     }
 
     revalidatePath(ASSET_SELECTOR_PATH);

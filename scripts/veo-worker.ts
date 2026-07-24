@@ -8,11 +8,18 @@
  * Asset Selector (features/kontenai/asset-selector/actions/select-assets.actions.ts)
  * queues a job whenever a scene's best Asset Library match scores too low
  * to trust. This worker: picks the weak match as Veo's starting image,
- * generates a proper clip from the scene's brief, uploads it to Google
- * Drive as a new Asset Library entry, and overwrites that scene's
+ * generates a proper clip from the scene's brief, uploads it to Supabase
+ * Storage as a new Asset Library entry, and overwrites that scene's
  * selectedAssetId with the new asset. Once every job for a storyboard is
  * done and every scene has a selectedAssetId, it queues the render job
  * itself -- the pipeline finishes on its own, no manual click needed.
+ *
+ * Not Google Drive: a service account has no storage quota of its own, and
+ * uploading into a folder it's merely been given Editor access to fails
+ * with HTTP 403 unless that folder lives inside a real Shared Drive (a
+ * Google Workspace feature, not available on a plain Google account) -- the
+ * same wall scripts/render-worker.ts already hit and backed off from for
+ * render output.
  *
  * Deploy alongside scripts/render-worker.ts (see scripts/worker-main.ts,
  * which runs both loops in one process) on the same always-on host.
@@ -22,7 +29,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { generateVideoFromImage, isVeoConfigured } from "../lib/ai/veo/client";
-import { ensureDriveFolderPath, uploadFileToDrive } from "../lib/google-drive/client";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
 import { createAdminClient } from "../lib/supabase/admin";
 import { createKontenAiAsset, getKontenAiAsset } from "../repositories/kontenai-assets.repository";
@@ -38,6 +44,7 @@ import {
 } from "../repositories/kontenai-video-generation.repository";
 
 const POLL_INTERVAL_MS = Number(process.env.VEO_WORKER_POLL_INTERVAL_MS ?? 10000);
+const ASSET_BUCKET = "kontenai-assets";
 
 async function fetchImageAsBase64(assetId: string): Promise<{ base64: string; mimeType: string }> {
   const supabase = createAdminClient();
@@ -78,17 +85,19 @@ async function processJob(jobId: string): Promise<void> {
     await generateVideoFromImage({ prompt: job.prompt, imageBase64: base64, imageMimeType: mimeType, downloadPath: videoPath });
 
     const buffer = await readFile(videoPath);
-    const folderId = await ensureDriveFolderPath(["Veo Generated", new Date().toISOString().slice(0, 10)]);
-    const { fileId, webViewLink } = await uploadFileToDrive({ folderId, filename: `veo-${jobId}.mp4`, mimeType: "video/mp4", buffer });
+    const storagePath = `veo-generated/${jobId}.mp4`;
+    const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
+    if (uploadError) throw uploadError;
+    const { data: publicUrlData } = supabase.storage.from(ASSET_BUCKET).getPublicUrl(storagePath);
 
     const asset = await createKontenAiAsset(supabase, {
       title: `Veo: ${job.prompt.slice(0, 80)}`,
       description: job.prompt,
       filename: `veo-${jobId}.mp4`,
       asset_type: "video",
-      storage_path: fileId,
-      public_url: webViewLink,
-      storage_provider: "google_drive",
+      storage_path: storagePath,
+      public_url: publicUrlData.publicUrl,
+      storage_provider: "supabase",
       file_type: "video/mp4",
       file_size_bytes: buffer.byteLength,
       resolution: null,

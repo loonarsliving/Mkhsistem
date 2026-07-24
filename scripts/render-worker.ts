@@ -12,11 +12,10 @@
  * it never runs ffmpeg itself anymore.
  *
  * Deploy: copy this repo (or just enough of it -- scripts/, lib/video,
- * lib/kontenai, lib/google-drive, lib/supabase/admin.ts, repositories/,
- * types/ -- to a host with Node 20+, then run continuously:
+ * lib/kontenai, lib/supabase/admin.ts, repositories/, types/ -- to a host
+ * with Node 22+, then run continuously:
  *
  *   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
- *   GOOGLE_SERVICE_ACCOUNT_JSON=... GOOGLE_DRIVE_ROOT_FOLDER_ID=... \
  *   npx tsx scripts/render-worker.ts
  *
  * (or `npm run render-worker` if the host has this whole repo). Restart-on-
