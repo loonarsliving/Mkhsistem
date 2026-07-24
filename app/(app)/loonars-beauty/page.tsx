@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { ROLE_KEYS } from "@/constants/rbac";
 import { ContentBoard } from "@/features/loonars-beauty/components/content-board";
 import { ContentRatioSummary } from "@/features/loonars-beauty/components/content-ratio-summary";
 import { RetargetingAlerts } from "@/features/loonars-beauty/components/retargeting-alerts";
@@ -23,7 +24,7 @@ export default async function LoonarsBeautyPage() {
       />
       <ContentRatioSummary />
       <RetargetingAlerts />
-      <ContentBoard canManage={canManage} />
+      <ContentBoard canManage={canManage} isSuperAdmin={session.roleKey === ROLE_KEYS.SUPER_ADMIN} />
     </div>
   );
 }

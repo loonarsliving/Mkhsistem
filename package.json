@@ -15,6 +15,8 @@
     "supabase:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public > types/database.types.ts",
     "seed:users": "tsx scripts/seed-users.ts",
     "render-worker": "tsx scripts/render-worker.ts",
+    "veo-worker": "tsx scripts/veo-worker.ts",
+    "workers": "tsx scripts/worker-main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

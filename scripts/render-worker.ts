@@ -109,12 +109,7 @@ async function tick(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
-    process.exit(1);
-  }
-
+export async function runRenderWorker(): Promise<void> {
   console.log(`[render-worker] polling every ${POLL_INTERVAL_MS}ms`);
   for (;;) {
     try {
@@ -126,4 +121,10 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+if (require.main === module) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the render worker.");
+    process.exit(1);
+  }
+  void runRenderWorker();
+}

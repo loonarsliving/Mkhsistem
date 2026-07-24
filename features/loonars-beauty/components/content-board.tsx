@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 
+import { sendContentItemToKontenAiAction } from "../actions/kontenai-bridge.actions";
 import {
   createContentItemAction,
   deleteContentItemAction,
@@ -46,7 +47,7 @@ const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "outl
   archived: "outline",
 };
 
-export function ContentBoard({ canManage }: { canManage: boolean }) {
+export function ContentBoard({ canManage, isSuperAdmin = false }: { canManage: boolean; isSuperAdmin?: boolean }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
   const [statusTarget, setStatusTarget] = React.useState<string | null>(null);
@@ -72,6 +73,27 @@ export function ContentBoard({ canManage }: { canManage: boolean }) {
     queryClient.invalidateQueries({ queryKey: ["loonars-beauty-ratio-summary"] });
     queryClient.invalidateQueries({ queryKey: ["loonars-beauty-retargeting"] });
   }
+
+  const sendToKontenAiMutation = useMutation({
+    mutationFn: async (contentItemId: string) => {
+      const result = await sendContentItemToKontenAiAction(contentItemId);
+      if (!result.success) throw new Error(result.error ?? "Gagal mengirim ke KontenAI");
+      return result.data!;
+    },
+    onSuccess: ({ renderQueued, pendingVideoGenerationCount }) => {
+      if (renderQueued) {
+        toast.success("Terkirim ke KontenAI -- storyboard lengkap, render otomatis sudah diantrikan");
+      } else if (pendingVideoGenerationCount > 0) {
+        toast.success(`Terkirim ke KontenAI -- ${pendingVideoGenerationCount} scene menunggu video AI (Veo), render akan otomatis lanjut setelah selesai`);
+      } else {
+        toast.success("Terkirim ke KontenAI");
+      }
+      invalidate();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Gagal mengirim ke KontenAI");
+    },
+  });
 
   async function handleCreate() {
     setSubmitting(true);
@@ -209,8 +231,13 @@ export function ContentBoard({ canManage }: { canManage: boolean }) {
                     Lihat konten <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
+                {item.kontenai_creative_brief_id && (
+                  <a href="/kontenai/ai-director" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <Sparkles className="h-3 w-3" /> Terkirim ke KontenAI
+                  </a>
+                )}
                 {canManage && (
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       size="sm"
                       variant="outline"
@@ -222,6 +249,21 @@ export function ContentBoard({ canManage }: { canManage: boolean }) {
                     >
                       Ubah Status
                     </Button>
+                    {isSuperAdmin && !item.kontenai_creative_brief_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={sendToKontenAiMutation.isPending}
+                        onClick={() => sendToKontenAiMutation.mutate(item.id)}
+                      >
+                        {sendToKontenAiMutation.isPending && sendToKontenAiMutation.variables === item.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5" />
+                        )}
+                        Kirim ke KontenAI
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget(item.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>

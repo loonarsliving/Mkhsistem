@@ -1,8 +1,9 @@
-# Standalone Render Engine worker (KontenAI Sprint 6) -- runs
-# scripts/render-worker.ts continuously on its own host (Fly.io, Railway, a
-# VPS, anywhere). Deploy this image separately from the main Next.js app on
-# Vercel; it only needs Supabase + Google Drive env vars, never the rest of
-# MK Connect's runtime config.
+# Standalone KontenAI workers -- runs scripts/worker-main.ts, which starts
+# both the ffmpeg Render Engine worker (Sprint 6) and the Veo image-to-video
+# worker (Sprint 5 fallback) concurrently, continuously, on its own host
+# (Fly.io, Railway, a VPS, anywhere). Deploy this image separately from the
+# main Next.js app on Vercel; it only needs Supabase + Google Drive + Veo
+# env vars, never the rest of MK Connect's runtime config.
 FROM node:20-slim
 
 WORKDIR /app
@@ -19,4 +20,4 @@ COPY lib ./lib
 COPY repositories ./repositories
 COPY types ./types
 
-CMD ["npx", "tsx", "scripts/render-worker.ts"]
+CMD ["npx", "tsx", "scripts/worker-main.ts"]
