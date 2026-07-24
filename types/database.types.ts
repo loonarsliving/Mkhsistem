@@ -958,6 +958,24 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mkc_performance_metrics"]["Insert"]>;
         Relationships: [];
       };
+      voice_bridge_daily_digests: {
+        Row: {
+          id: string;
+          generated_at: string;
+          digest_text: string;
+          model: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          generated_at?: string;
+          digest_text: string;
+          model: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["voice_bridge_daily_digests"]["Insert"]>;
+        Relationships: [];
+      };
       crm_projects: {
         Row: {
           id: string;
