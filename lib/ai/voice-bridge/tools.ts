@@ -12,8 +12,13 @@ import * as financeBranchBalanceRepo from "@/repositories/finance-branch-balance
 import * as hrFinanceRepo from "@/repositories/hr-finance.repository";
 import * as kontenaiAiReportsRepo from "@/repositories/kontenai-ai-reports.repository";
 import * as kontenaiAnalyticsRepo from "@/repositories/kontenai-analytics.repository";
+import * as kontenaiAssetsRepo from "@/repositories/kontenai-assets.repository";
 import * as kontenaiContentPerformanceRepo from "@/repositories/kontenai-content-performance.repository";
+import * as kontenaiCreativeBriefsRepo from "@/repositories/kontenai-creative-briefs.repository";
 import * as kontenaiOptimizationRepo from "@/repositories/kontenai-optimization.repository";
+import * as kontenaiPublishSchedulesRepo from "@/repositories/kontenai-publish-schedules.repository";
+import * as kontenaiRenderJobsRepo from "@/repositories/kontenai-render-jobs.repository";
+import * as kontenaiStoryboardsRepo from "@/repositories/kontenai-storyboards.repository";
 import * as kosOccupancyRepo from "@/repositories/kos-occupancy.repository";
 import * as beautyRepo from "@/repositories/loonars-beauty.repository";
 import * as markomRepo from "@/repositories/markom.repository";
@@ -570,6 +575,57 @@ export const voiceBridgeTools = {
     parametersSchema: noParams,
     inputSchema: empty,
     handler: async (supabase) => workScheduleRepo.listWorkSchedules(supabase),
+  },
+
+  // --- Pengetahuan yang dipelajari/dihasilkan AI (KontenAI) --------------------
+  kontenai_asset_library: {
+    description:
+      "Asset library KontenAI yang sudah dianalisis AI (vision: deskripsi, tag, mood, dll). limit opsional (default 300).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 500 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(500).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiAssetsRepo.listAnalyzedAssetLibrary(supabase, input?.limit ?? 300),
+  },
+  kontenai_assets_search: {
+    description: "Cari/daftar asset KontenAI mentah dengan filter (search, assetType, company, project, campaign, platform, contentType, status, tags, dll).",
+    parametersSchema: { type: "object", additionalProperties: true },
+    inputSchema: z.record(z.string(), z.unknown()).optional(),
+    handler: async (supabase, _session, input) => kontenaiAssetsRepo.listKontenAiAssets(supabase, (input ?? {}) as never),
+  },
+  kontenai_creative_briefs: {
+    description: "Riwayat Creative Brief yang dihasilkan AI Director KontenAI, terbaru dulu. limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 100 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(100).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiCreativeBriefsRepo.listKontenAiCreativeBriefs(supabase, input?.limit ?? 50),
+  },
+  kontenai_creative_brief_get: {
+    description: "Detail satu Creative Brief KontenAI lewat id-nya.",
+    parametersSchema: { type: "object", properties: { id: { type: "string", format: "uuid" } }, required: ["id"], additionalProperties: false },
+    inputSchema: z.object({ id: z.string().uuid() }),
+    handler: async (supabase, _session, input) => kontenaiCreativeBriefsRepo.getKontenAiCreativeBrief(supabase, input.id),
+  },
+  kontenai_storyboards: {
+    description: "Daftar Storyboard (rangkaian scene) yang dihasilkan AI KontenAI, terbaru dulu. limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 100 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(100).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiStoryboardsRepo.listKontenAiStoryboards(supabase, input?.limit ?? 50),
+  },
+  kontenai_storyboard_get: {
+    description: "Detail satu Storyboard KontenAI lewat id-nya, termasuk scene dan asset yang dicocokkan.",
+    parametersSchema: { type: "object", properties: { id: { type: "string", format: "uuid" } }, required: ["id"], additionalProperties: false },
+    inputSchema: z.object({ id: z.string().uuid() }),
+    handler: async (supabase, _session, input) => kontenaiStoryboardsRepo.getKontenAiStoryboard(supabase, input.id),
+  },
+  kontenai_render_jobs: {
+    description: "Daftar render job video KontenAI (status render), terbaru dulu. limit opsional (default 50).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 100 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(100).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiRenderJobsRepo.listKontenAiRenderJobs(supabase, input?.limit ?? 50),
+  },
+  kontenai_publish_schedules: {
+    description: "Daftar jadwal publikasi konten KontenAI beserta hasilnya, terbaru dulu. limit opsional (default 100).",
+    parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 200 } }, additionalProperties: false },
+    inputSchema: z.object({ limit: z.number().int().positive().max(200).optional() }).optional(),
+    handler: async (supabase, _session, input) => kontenaiPublishSchedulesRepo.listKontenAiPublishSchedules(supabase, input?.limit ?? 100),
   },
 } satisfies Record<string, VoiceBridgeTool<any, unknown>>; // eslint-disable-line @typescript-eslint/no-explicit-any -- each tool's own inputSchema/handler pair is still fully typed; this widens only the map's index signature
 
