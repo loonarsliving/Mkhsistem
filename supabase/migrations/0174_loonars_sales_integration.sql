@@ -6,11 +6,11 @@
 -- Supabase project and already posts cash-in journal entries directly there
 -- on closing (untouched by this migration — no double-booking of cash).
 --
--- MKH Property's 0009_loonars_fee_integration.sql now sends two new
--- outbound events through the existing sync pipeline:
+-- MKH Property's 0009_loonars_fee_integration.sql sends two new outbound
+-- events through the existing sync pipeline:
 --
 -- 1. loonars_fee_submitted    -> notify every super_admin (WhatsApp +
---    in-app), same mechanism as finance_expense_alert (0098).
+--    in-app), same mechanism as finance_expense_alert.
 -- 2. loonars_closing_approved -> match the marketing's phone number to an
 --    `employees` row, then upsert a `prospects` record with
 --    status='closing' tied to that sales_id/branch_id so the closing counts
@@ -20,11 +20,23 @@
 --    reconciliation, and super_admin still gets alerted.
 --
 -- No new secret/endpoint: extends the existing PostgREST-callable
--- public.sync_inbound() RPC (0058/0098), authenticated the same way
--- (X-Sync-Secret vs Vault's mk_sync_shared_secret).
+-- public.sync_inbound() RPC, authenticated the same way (X-Sync-Secret vs
+-- Vault's mk_sync_shared_secret).
+--
+-- IMPORTANT: this replaces public.sync_inbound() and
+-- public.mkc_notifications_whatsapp_trigger() wholesale (CREATE OR
+-- REPLACE), so their bodies here are the full LIVE definitions as of this
+-- migration (queried directly from the production database, not the
+-- current repo history) plus the two new branches/category — both
+-- functions had already drifted ahead of what earlier migration files in
+-- this repo showed (a finance_expense_submitted branch and ~10 additional
+-- notification categories from migrations not centered on this file). If
+-- you're adding a new event/category after this, pg_get_functiondef the
+-- live version first rather than trusting the previous migration file, or
+-- you will silently drop whatever was added in between.
 -- ============================================================================
 
-create table public.loonars_integration_log (
+create table if not exists public.loonars_integration_log (
   id uuid primary key default gen_random_uuid(),
   event_type text not null,
   fee_id text,
@@ -39,6 +51,7 @@ create table public.loonars_integration_log (
 
 alter table public.loonars_integration_log enable row level security;
 
+drop policy if exists "loonars_integration_log_select" on public.loonars_integration_log;
 create policy "loonars_integration_log_select" on public.loonars_integration_log
   for select to authenticated
   using (public.app_has_permission('crm_analytics.view_all'));
@@ -46,9 +59,6 @@ create policy "loonars_integration_log_select" on public.loonars_integration_log
 comment on table public.loonars_integration_log is
   'Audit trail for loonars-sales -> MK Connect sync events (loonars_fee_submitted, loonars_closing_approved), especially phone-number match/no-match outcomes for manual reconciliation.';
 
--- ----------------------------------------------------------------------------
--- New notification category, piggybacking the existing WhatsApp relay
--- ----------------------------------------------------------------------------
 alter table public.mkc_notifications drop constraint mkc_notifications_category_check;
 alter table public.mkc_notifications add constraint mkc_notifications_category_check
   check (category is null or category = any (array[
@@ -68,6 +78,9 @@ alter table public.mkc_notifications add constraint mkc_notifications_category_c
     'new_ad_lead',
     'content_published', 'content_publish_reminder',
     'finance_expense_alert', 'branch_balance_alert',
+    'sales_coaching_tip', 'ad_lead_followup_reminder', 'ad_lead_escalation_branch', 'ad_lead_escalation_director',
+    'whatsapp_webhook_silence_alert', 'finance_expense_pending_verification', 'sales_conduct_warning',
+    'meta_ads_balance_low', 'content_publish_failed', 'database_followup_push', 'lead_wants_info',
     -- This migration
     'loonars_fee_alert'
   ]));
@@ -94,6 +107,13 @@ begin
     'birthday_wish',
     'ad_campaign_launched', 'ad_campaign_failed',
     'finance_expense_alert', 'branch_balance_alert',
+    'sales_coaching_tip',
+    'ad_lead_followup_reminder', 'ad_lead_escalation_branch', 'ad_lead_escalation_director',
+    'whatsapp_webhook_silence_alert',
+    'finance_expense_pending_verification',
+    'sales_conduct_warning',
+    'meta_ads_balance_low',
+    'lead_wants_info',
     -- This migration
     'loonars_fee_alert'
   ]) then
@@ -165,6 +185,31 @@ begin
 
       v_target_ref := v_mkc_payment_id::text;
 
+    elsif p_event_type = 'finance_expense_submitted' then
+      select id into v_branch_id from public.branches where lower(name) = lower(p_payload ->> 'branch_name') limit 1;
+      if v_branch_id is not null then
+        for v_admin in
+          select em.id from public.employees em
+          join public.roles r on r.id = em.role_id
+          where em.branch_id = v_branch_id and em.deleted_at is null and em.employment_status = 'active' and r.key = 'kepala_cabang'
+        loop
+          insert into public.mkc_notifications (user_id, type, category, title, body, link, metadata)
+          values (
+            v_admin.id, 'system', 'finance_expense_pending_verification',
+            'Pengajuan Baru Menunggu Verifikasi — ' || coalesce(p_payload ->> 'proyek_nama', p_payload ->> 'proyek', '-'),
+            '🧾 Item: ' || coalesce(p_payload ->> 'item', '-')
+              || case when coalesce(p_payload ->> 'supplier', '') <> '' then ' (' || (p_payload ->> 'supplier') || ')' else '' end
+              || E'\n💰 Nilai: Rp ' || to_char(coalesce((p_payload ->> 'nominal')::numeric, 0), 'FM999,999,999,999')
+              || E'\n📝 Keterangan: ' || coalesce(p_payload ->> 'keterangan', '-')
+              || E'\n👤 Diinput oleh: ' || coalesce(p_payload ->> 'admin_email', '-')
+              || E'\n\n🔗 Verifikasi di sini: ' || coalesce(p_payload ->> 'verification_link', 'https://finance.haluoleo.id/verifikasi.html'),
+            coalesce(p_payload ->> 'verification_link', 'https://finance.haluoleo.id/verifikasi.html'),
+            jsonb_build_object('pengajuan_id', p_payload ->> 'pengajuan_id', 'proyek', p_payload ->> 'proyek')
+          );
+        end loop;
+      end if;
+      v_target_ref := p_payload ->> 'pengajuan_id';
+
     elsif p_event_type = 'finance_expense_approved' then
       for v_admin in
         select em.id from public.employees em
@@ -175,10 +220,12 @@ begin
         values (
           v_admin.id, 'system', 'finance_expense_alert',
           'Pengeluaran Disetujui — ' || coalesce(p_payload ->> 'proyek_nama', p_payload ->> 'proyek', '-'),
-          'Rp ' || to_char(coalesce((p_payload ->> 'nominal')::numeric, 0), 'FM999,999,999,999')
-            || ' — ' || coalesce(p_payload ->> 'keterangan', '-')
-            || E'\nDiinput oleh: ' || coalesce(p_payload ->> 'admin_email', '-')
-            || E'\nDisetujui oleh: ' || coalesce(p_payload ->> 'approved_by', '-'),
+          '🧾 Item: ' || coalesce(p_payload ->> 'item', '-')
+            || case when coalesce(p_payload ->> 'supplier', '') <> '' then ' (' || (p_payload ->> 'supplier') || ')' else '' end
+            || E'\n💰 Nilai: Rp ' || to_char(coalesce((p_payload ->> 'nominal')::numeric, 0), 'FM999,999,999,999')
+            || E'\n📝 Keterangan: ' || coalesce(p_payload ->> 'keterangan', '-')
+            || E'\n👤 Diinput oleh: ' || coalesce(p_payload ->> 'admin_email', '-')
+            || E'\n✅ Disetujui oleh: ' || coalesce(p_payload ->> 'approved_by', '-'),
           '/hr/finance-sync',
           jsonb_build_object('pengajuan_id', p_payload ->> 'pengajuan_id', 'proyek', p_payload ->> 'proyek')
         );
@@ -303,4 +350,4 @@ end;
 $$;
 
 comment on function public.sync_inbound is
-  'PostgREST-callable receiver for MKH Property -> MK Connect sync events (finance_payment_confirmed, finance_expense_approved, finance_branch_balance_updated, loonars_fee_submitted, loonars_closing_approved). Authenticated via X-Sync-Secret header against Supabase Vault, not JWT.';
+  'PostgREST-callable receiver for MKH Property -> MK Connect sync events (finance_payment_confirmed, finance_expense_submitted, finance_expense_approved, finance_branch_balance_updated, loonars_fee_submitted, loonars_closing_approved). Authenticated via X-Sync-Secret header against Supabase Vault, not JWT.';
