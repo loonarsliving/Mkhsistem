@@ -58,9 +58,13 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     permissions = permissions.filter((key) => !(MARKOM_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 
-  // Siteplan Loonars Villa (loonars-sales) is a Jogja-only project -- only
-  // Jogja branch employees get the nav link to it.
-  if (employee.branch_id === JOGJA_BRANCH_ID && !permissions.includes(PERMISSIONS.LOONARS_SALES_VIEW)) {
+  // Siteplan Loonars Villa (loonars-sales) is a Jogja-only project -- Jogja
+  // branch employees get the nav link to it, and Super Admin sees it too
+  // since that role spans every branch.
+  if (
+    (employee.branch_id === JOGJA_BRANCH_ID || employee.role_key === ROLE_KEYS.SUPER_ADMIN) &&
+    !permissions.includes(PERMISSIONS.LOONARS_SALES_VIEW)
+  ) {
     permissions.push(PERMISSIONS.LOONARS_SALES_VIEW);
   }
 
