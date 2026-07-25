@@ -9,7 +9,9 @@ export interface KontenAiCreativeBriefWithCreator extends KontenAiCreativeBriefR
 }
 
 const SELECT_COLUMNS =
-  "id, objective, platform, target_audience, product_project, campaign_goal, big_idea, hook, key_message, target_emotion, cta, content_angle, referenced_asset_ids, created_by, created_at, creator:created_by(full_name)";
+  "id, objective, platform, target_audience, product_project, campaign_goal, big_idea, hook, key_message, target_emotion, cta, content_angle, referenced_asset_ids, content_focus, created_by, created_at, creator:created_by(full_name)";
+
+export type KontenAiCreativeBriefContentFocus = "leasehold_sales" | "occupancy" | "beauty";
 
 export interface CreateKontenAiCreativeBriefInput {
   objective: KontenAiCreativeBriefObjective;
@@ -24,6 +26,8 @@ export interface CreateKontenAiCreativeBriefInput {
   cta: string;
   contentAngle: string;
   referencedAssetIds: string[];
+  /** Which brand this brief is for -- set by cross-module bridges (e.g. Loonars Beauty's "Kirim ke KontenAI"); omitted for briefs made directly on the AI Director page, which isn't brand-scoped. */
+  contentFocus?: KontenAiCreativeBriefContentFocus;
   createdBy: string;
   /** Set only when this brief was produced by the daily automation pipeline from a kpi_task; null for manually-created briefs (AI Director UI). */
   kpiTaskId?: string | null;
@@ -48,6 +52,7 @@ export async function createKontenAiCreativeBrief(
       cta: input.cta,
       content_angle: input.contentAngle,
       referenced_asset_ids: input.referencedAssetIds,
+      content_focus: input.contentFocus ?? null,
       created_by: input.createdBy,
       kpi_task_id: input.kpiTaskId ?? null,
     })

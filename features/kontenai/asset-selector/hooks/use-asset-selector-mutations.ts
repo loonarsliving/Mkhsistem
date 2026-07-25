@@ -20,8 +20,12 @@ export function useRunAssetSelection() {
       if (!result.success) throw new Error(result.error ?? "Gagal menjalankan Asset Selector");
       return result.data!;
     },
-    onSuccess: (storyboard) => {
-      toast.success("Asset Selector selesai memilih aset untuk setiap scene");
+    onSuccess: ({ storyboard, queuedVideoGenerationCount }) => {
+      toast.success(
+        queuedVideoGenerationCount > 0
+          ? `Asset Selector selesai -- ${queuedVideoGenerationCount} scene menunggu video AI (Veo) karena belum ada aset yang cocok`
+          : "Asset Selector selesai memilih aset untuk setiap scene",
+      );
       invalidate(queryClient, storyboard.id);
     },
     onError: (error) => {

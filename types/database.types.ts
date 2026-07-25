@@ -1621,6 +1621,7 @@ export interface Database {
           content_url: string | null;
           scheduled_at: string | null;
           published_at: string | null;
+          kontenai_creative_brief_id: string | null;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -1641,6 +1642,7 @@ export interface Database {
           content_url?: string | null;
           scheduled_at?: string | null;
           published_at?: string | null;
+          kontenai_creative_brief_id?: string | null;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1648,7 +1650,14 @@ export interface Database {
           updated_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["loonars_content_items"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "loonars_content_items_kontenai_creative_brief_id_fkey";
+            columns: ["kontenai_creative_brief_id"];
+            referencedRelation: "kontenai_creative_briefs";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       loonars_content_metrics: {
         Row: {
@@ -2934,6 +2943,7 @@ export interface Database {
           cta: string;
           content_angle: string;
           referenced_asset_ids: string[];
+          content_focus: "leasehold_sales" | "occupancy" | "beauty" | null;
           created_by: string;
           created_at: string;
           kpi_task_id: string | null;
@@ -2952,6 +2962,7 @@ export interface Database {
           cta: string;
           content_angle: string;
           referenced_asset_ids?: string[];
+          content_focus?: "leasehold_sales" | "occupancy" | "beauty" | null;
           created_by: string;
           created_at?: string;
           kpi_task_id?: string | null;
@@ -3081,6 +3092,63 @@ export interface Database {
           },
           {
             foreignKeyName: "kontenai_render_jobs_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kontenai_video_generation_jobs: {
+        Row: {
+          id: string;
+          storyboard_id: string;
+          scene_id: string;
+          prompt: string;
+          base_asset_id: string | null;
+          status: "queued" | "generating" | "completed" | "failed";
+          generated_asset_id: string | null;
+          error_message: string | null;
+          created_by: string;
+          created_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          storyboard_id: string;
+          scene_id: string;
+          prompt: string;
+          base_asset_id?: string | null;
+          status?: "queued" | "generating" | "completed" | "failed";
+          generated_asset_id?: string | null;
+          error_message?: string | null;
+          created_by: string;
+          created_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["kontenai_video_generation_jobs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "kontenai_video_generation_jobs_storyboard_id_fkey";
+            columns: ["storyboard_id"];
+            referencedRelation: "kontenai_storyboards";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_video_generation_jobs_base_asset_id_fkey";
+            columns: ["base_asset_id"];
+            referencedRelation: "kontenai_assets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_video_generation_jobs_generated_asset_id_fkey";
+            columns: ["generated_asset_id"];
+            referencedRelation: "kontenai_assets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kontenai_video_generation_jobs_created_by_fkey";
             columns: ["created_by"];
             referencedRelation: "employees";
             referencedColumns: ["id"];

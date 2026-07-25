@@ -109,7 +109,8 @@ export interface CreateKontenAiAssetInput {
   asset_type: KontenAiAssetType;
   storage_path: string;
   public_url: string;
-  storage_provider: "supabase" | "google_drive";
+  /** Defaults to 'supabase' (the DB column's default) -- only set explicitly when a caller uploaded elsewhere (currently nothing does; Asset Library uploads go to Supabase Storage). */
+  storage_provider?: "supabase" | "google_drive";
   file_type: string;
   file_size_bytes: number;
   resolution: string | null;
