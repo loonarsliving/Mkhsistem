@@ -2793,6 +2793,77 @@ export interface Database {
           },
         ];
       };
+      loonars_closings: {
+        Row: {
+          id: string;
+          aset_id: number;
+          proyek: string;
+          blok: string;
+          buyer: string | null;
+          nik: string | null;
+          phone: string | null;
+          address: string | null;
+          tipe: string | null;
+          price: number | null;
+          tgl: string | null;
+          marketing_name: string | null;
+          marketing_email: string | null;
+          matched_employee_id: string | null;
+          branch_id: string | null;
+          status: "pending_verification" | "verified" | "rejected";
+          verified_by: string | null;
+          verified_at: string | null;
+          reject_reason: string | null;
+          fee_requested: boolean;
+          fee_amount: number | null;
+          fee_phone: string | null;
+          fee_requested_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          aset_id: number;
+          proyek: string;
+          blok: string;
+          buyer?: string | null;
+          nik?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          tipe?: string | null;
+          price?: number | null;
+          tgl?: string | null;
+          marketing_name?: string | null;
+          marketing_email?: string | null;
+          matched_employee_id?: string | null;
+          branch_id?: string | null;
+          status?: "pending_verification" | "verified" | "rejected";
+          verified_by?: string | null;
+          verified_at?: string | null;
+          reject_reason?: string | null;
+          fee_requested?: boolean;
+          fee_amount?: number | null;
+          fee_phone?: string | null;
+          fee_requested_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_closings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_closings_matched_employee_id_fkey";
+            columns: ["matched_employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_closings_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       finance_branch_balances: {
         Row: {
           id: string;
@@ -3544,6 +3615,9 @@ export interface Database {
         Returns: string;
       };
       crm_approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
+      loonars_closing_verify: { Args: { p_id: string }; Returns: undefined };
+      loonars_closing_reject: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
+      loonars_fee_request: { Args: { p_id: string; p_fee_amount: number }; Returns: undefined };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };

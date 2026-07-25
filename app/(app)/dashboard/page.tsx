@@ -8,6 +8,7 @@ import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-
 import { AttendanceSummaryCard } from "@/features/dashboard/components/attendance-summary-card";
 import { AllBranchBalancesCard, BranchBalanceCard } from "@/features/dashboard/components/branch-balance-card";
 import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
+import { LoonarsFeeCard } from "@/features/dashboard/components/loonars-fee-card";
 import { PayrollStatusCard } from "@/features/dashboard/components/payroll-status-card";
 import { PendingApprovalsCard } from "@/features/dashboard/components/pending-approvals-card";
 import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summary-card";
@@ -119,6 +120,8 @@ export default async function DashboardPage() {
       <PageHeader title={`Halo, ${session.employee.full_name.split(" ")[0]}`} description="Berikut ringkasan aktivitas Anda hari ini." />
 
       <ProfileSummaryCard employee={session.employee} />
+
+      <LoonarsFeeCard />
 
       {isSuperAdmin && (
         <div className="space-y-2">
