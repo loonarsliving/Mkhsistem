@@ -101,7 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         label: "Siteplan Loonars Villa",
-        href: "https://loonars.haluoleo.id",
+        href: "/api/sso/loonars-sales",
         icon: MapPinned,
         permission: PERMISSIONS.LOONARS_SALES_VIEW,
         external: true,
