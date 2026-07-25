@@ -5,44 +5,31 @@ import { ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
-import { AttendanceSummaryCard } from "@/features/dashboard/components/attendance-summary-card";
-import { AllBranchBalancesCard, BranchBalanceCard } from "@/features/dashboard/components/branch-balance-card";
-import { CrmDirectorSummaryCard } from "@/features/dashboard/components/crm-director-summary-card";
 import { LoonarsFeeCard } from "@/features/dashboard/components/loonars-fee-card";
-import { PayrollStatusCard } from "@/features/dashboard/components/payroll-status-card";
-import { PendingApprovalsCard } from "@/features/dashboard/components/pending-approvals-card";
 import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summary-card";
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentAnnouncementList } from "@/features/dashboard/components/recent-announcement-list";
 import { RecentMemoList } from "@/features/dashboard/components/recent-memo-list";
+import { AllBranchBalancesSection } from "@/features/dashboard/components/sections/all-branch-balances-section";
+import { BranchDashboardSection } from "@/features/dashboard/components/sections/branch-dashboard-section";
+import {
+  DirekturOperasionalSection,
+  DirekturUtamaSection,
+  GenericDirectorSection,
+} from "@/features/dashboard/components/sections/executive-dashboard-sections";
+import { MarkomDashboardSection } from "@/features/dashboard/components/sections/markom-dashboard-section";
+import { SalesDashboardSection } from "@/features/dashboard/components/sections/sales-dashboard-section";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
 import { MetaHealthStatusCard } from "@/features/monitoring/components/meta-health-status-card";
 import { TikTokHealthStatusCard } from "@/features/monitoring/components/tiktok-health-status-card";
 import { WhatsAppHealthStatusCard } from "@/features/monitoring/components/whatsapp-health-status-card";
-import {
-  branchStatsAction as crmBranchStatsAction,
-  conversionAnalyticsAction,
-  listRecentFollowUpsBySalesAction,
-  monthlyTrendAction,
-  nationalStatsAction,
-  salesStatsAction,
-} from "@/features/crm/actions/crm-query.actions";
-import { BranchPerformanceCard } from "@/features/crm/components/branch-performance-card";
-import { ExecutiveDashboardSection } from "@/features/crm/components/executive-dashboard-section";
-import { OperationalDashboardSection } from "@/features/crm/components/operational-dashboard-section";
-import { RecentProspectActivityCard } from "@/features/crm/components/recent-prospect-activity-card";
-import { SalesCrmActivityCard } from "@/features/crm/components/sales-crm-activity-card";
-import { SalesTargetCommissionSection } from "@/features/crm/components/sales-target-commission-section";
-import { teamStatsAction as markomTeamStatsAction } from "@/features/markom/actions/markom-query.actions";
-import { TeamSummaryCard as MarkomTeamSummaryCard } from "@/features/markom/components/team-summary-card";
 import { ROLE_KEYS } from "@/constants/rbac";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
-import { getCompanyAttendanceSummary, getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
+import { getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
 import { listRecentAnnouncements } from "@/repositories/announcement.repository";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
-import { getBranchBalance, listBranchBalances } from "@/repositories/finance-branch-balance.repository";
 import { listRecentMemos } from "@/repositories/memo.repository";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -54,6 +41,15 @@ export const metadata: Metadata = { title: "Dashboard" };
  * Dashboard card. Markom widgets only appear here for the Markom role itself
  * (its own team, i.e. its primary responsibility) -- every other role,
  * including Super Admin, reaches Markom exclusively via the sidebar module.
+ *
+ * Only cheap, always-needed queries run in the server-side Promise.all
+ * below (today's attendance, this month's stats, memos/announcements,
+ * pending registration count). Every heavier, role-gated analytics query
+ * (CRM national/branch/sales stats, conversion, trend, branch balances,
+ * company attendance summary) fetches client-side inside its own section
+ * component instead -- see features/dashboard/components/sections -- so
+ * the page shell renders immediately rather than waiting on ~10 extra
+ * Supabase round-trips that only some roles even need.
  */
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -79,40 +75,12 @@ export default async function DashboardPage() {
   const isSalesRole = session.roleKey === ROLE_KEYS.SALES;
   const isSuperAdmin = session.roleKey === ROLE_KEYS.SUPER_ADMIN;
 
-  const [
-    attendance,
-    monthlyStats,
-    memos,
-    announcements,
-    pendingRegistrationCount,
-    nationalStats,
-    crmConversion,
-    crmTrend,
-    attendanceSummary,
-    crmBranchStats,
-    markomTeamStats,
-    salesStats,
-    recentProspectActivity,
-    branchBalance,
-    allBranchBalances,
-  ] = await Promise.all([
+  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
     getMonthlyStats(supabase, session.userId, new Date()),
     listRecentMemos(supabase, 5),
     listRecentAnnouncements(supabase, 5),
     canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
-    isDirector ? nationalStatsAction() : Promise.resolve(null),
-    showGenericDirectorTier ? conversionAnalyticsAction() : Promise.resolve(null),
-    showGenericDirectorTier ? monthlyTrendAction(6) : Promise.resolve([]),
-    isDirector ? getCompanyAttendanceSummary(supabase) : Promise.resolve(null),
-    canViewBranchCrm ? crmBranchStatsAction() : Promise.resolve(null),
-    isMarkomRole ? markomTeamStatsAction() : Promise.resolve(null),
-    isSalesRole ? salesStatsAction() : Promise.resolve(null),
-    isSalesRole ? listRecentFollowUpsBySalesAction(session.userId, 8) : Promise.resolve([]),
-    !isDirector && canViewBranchCrm && session.employee.branch_id
-      ? getBranchBalance(supabase, session.employee.branch_id)
-      : Promise.resolve(null),
-    isDirector ? listBranchBalances(supabase) : Promise.resolve([]),
   ]);
 
   return (
@@ -145,8 +113,6 @@ export default async function DashboardPage() {
       {isSalesRole && (
         <>
           {/* Sales Home Dashboard order: Profile -> Target & Commission -> Memo/Announcement -> Attendance -> CRM Activity -> Recent Prospect Activity. */}
-          <SalesTargetCommissionSection stats={salesStats} />
-
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="space-y-6">
               <RecentMemoList memos={memos} />
@@ -161,52 +127,26 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <SalesCrmActivityCard stats={salesStats} />
-          <RecentProspectActivityCard activities={recentProspectActivity as unknown as Parameters<typeof RecentProspectActivityCard>[0]["activities"]} />
+          <SalesDashboardSection userId={session.userId} />
         </>
       )}
 
-      {isDirekturUtama && nationalStats && (
-        <>
-          <ExecutiveDashboardSection stats={nationalStats} />
-          {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
-        </>
-      )}
+      {isDirekturUtama && <DirekturUtamaSection />}
 
-      {isDirekturOperasional && nationalStats && (
-        <>
-          <OperationalDashboardSection stats={nationalStats} />
-          <div className="grid gap-6 sm:grid-cols-2">
-            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
-            <PendingApprovalsCard
-              registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
-              financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
-            />
-          </div>
-        </>
+      {isDirekturOperasional && (
+        <DirekturOperasionalSection registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined} />
       )}
 
       {showGenericDirectorTier && (
-        <>
-          {nationalStats && <CrmDirectorSummaryCard stats={nationalStats} conversion={crmConversion} trend={crmTrend} />}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {attendanceSummary && <AttendanceSummaryCard summary={attendanceSummary} />}
-            <PayrollStatusCard />
-            <PendingApprovalsCard
-              registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined}
-              financeVerificationCount={nationalStats?.pending_finance_verification ?? 0}
-            />
-          </div>
-        </>
+        <GenericDirectorSection registrationCount={canReviewRegistrations ? pendingRegistrationCount : undefined} />
       )}
 
-      {isDirector && allBranchBalances.length > 0 && <AllBranchBalancesCard balances={allBranchBalances} />}
+      {isDirector && <AllBranchBalancesSection />}
 
       {/* Kepala Cabang: branch KPIs only -- no Sales Summary/ranking, no Markom, per Home Dashboard scope. */}
-      {!isDirector && canViewBranchCrm && crmBranchStats && <BranchPerformanceCard stats={crmBranchStats} />}
-      {!isDirector && canViewBranchCrm && branchBalance && <BranchBalanceCard balance={branchBalance} />}
+      {!isDirector && canViewBranchCrm && <BranchDashboardSection branchId={session.employee.branch_id} />}
 
-      {isMarkomRole && <MarkomTeamSummaryCard stats={markomTeamStats} />}
+      {isMarkomRole && <MarkomDashboardSection />}
 
       {!isSalesRole && (
         <div className="grid gap-6 lg:grid-cols-3">
