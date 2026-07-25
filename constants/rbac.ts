@@ -78,6 +78,11 @@ export const PERMISSIONS = {
   CRM_ANALYTICS_VIEW_ALL: "crm_analytics.view_all",
   CRM_ANALYTICS_VIEW_EXECUTIVE: "crm_analytics.view_executive",
   CRM_PROJECT_MANAGE: "crm_project.manage",
+  // Not a real DB-granted permission — injected in-session for Jogja branch
+  // employees only (see lib/rbac/session.ts), same pattern as
+  // KOS_OCCUPANCY_VIEW. Gates the "Siteplan Loonars Villa" nav link, since
+  // that project only exists in Jogja.
+  LOONARS_SALES_VIEW: "loonars_sales.view",
 
   KPI_TASK_VIEW_OWN: "kpi_task.view_own",
   KPI_TASK_VIEW_BRANCH: "kpi_task.view_branch",

@@ -15,6 +15,7 @@ import {
   Images,
   LayoutDashboard,
   ListChecks,
+  MapPinned,
   Megaphone,
   MessageCircle,
   Network,
@@ -43,6 +44,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Shown if the user has ANY of these permissions. A single key is shorthand for a one-item array. */
   permission?: PermissionKey | PermissionKey[];
+  /** Renders as a plain external <a target="_blank"> instead of an internal Next <Link>. */
+  external?: boolean;
 }
 
 export interface NavGroup {
@@ -95,6 +98,13 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/crm/analytics",
         icon: BarChart3,
         permission: [PERMISSIONS.CRM_ANALYTICS_VIEW_BRANCH, PERMISSIONS.CRM_ANALYTICS_VIEW_ALL],
+      },
+      {
+        label: "Siteplan Loonars Villa",
+        href: "https://loonars.haluoleo.id",
+        icon: MapPinned,
+        permission: PERMISSIONS.LOONARS_SALES_VIEW,
+        external: true,
       },
     ],
   },

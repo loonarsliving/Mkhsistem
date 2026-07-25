@@ -26,18 +26,29 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
               {group.label}
             </p>
             {items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = !item.external && (pathname === item.href || pathname.startsWith(`${item.href}/`));
               const Icon = item.icon;
+              const linkClassName = cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                active && "bg-sidebar-accent text-sidebar-foreground",
+              );
+              if (item.external) {
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={onNavigate}
+                    className={linkClassName}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {item.label}
+                  </a>
+                );
+              }
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                    active && "bg-sidebar-accent text-sidebar-foreground",
-                  )}
-                >
+                <Link key={item.href} href={item.href} onClick={onNavigate} className={linkClassName}>
                   <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
                 </Link>
