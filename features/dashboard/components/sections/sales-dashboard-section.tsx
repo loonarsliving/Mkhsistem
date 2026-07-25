@@ -16,7 +16,7 @@ import { SalesTargetCommissionSection } from "@/features/crm/components/sales-ta
  * fill in once ready, instead of adding to TTFB.
  */
 export function SalesDashboardSection({ userId }: { userId: string }) {
-  const { data: stats, isLoading: statsLoading } = useQuery({ queryKey: ["sales-stats"], queryFn: salesStatsAction });
+  const { data: stats, isLoading: statsLoading } = useQuery({ queryKey: ["sales-stats"], queryFn: () => salesStatsAction() });
   const { data: activities, isLoading: activitiesLoading } = useQuery({
     queryKey: ["sales-recent-follow-ups", userId],
     queryFn: () => listRecentFollowUpsBySalesAction(userId, 8),
