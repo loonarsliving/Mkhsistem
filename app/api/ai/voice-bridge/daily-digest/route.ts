@@ -26,10 +26,12 @@ Kalau suatu bagian data kosong/nol, boleh dilewatkan singkat saja atau tidak dis
 
 /**
  * Daily digest generator -- triggered once a day by pg_cron
- * (voice-bridge-daily-digest, supabase/migrations/0171). No per-request
- * auth, same established pattern as the other pg_cron-triggered routes in
- * this app (e.g. /api/crm/dispatch-promo-sends, /api/social/capture-snapshots)
- * -- a forged call just generates one extra (harmless) digest.
+ * (voice-bridge-daily-digest, supabase/migrations/0171). Guarded by
+ * requireCronAuth, same as the other pg_cron-triggered routes in this app
+ * (e.g. /api/crm/dispatch-promo-sends, /api/social/capture-snapshots) --
+ * a forged call would otherwise spend a Gemini token on an extra digest.
+ * Only POST is cron-only: GET below is Ultron's read path and keeps its
+ * own Super Admin bearer + CORS gate.
  *
  * One Gemini call writes a short spoken-style summary of the day's MK
  * Connect activity, so Ultron can recite it instantly for "ringkasan hari
