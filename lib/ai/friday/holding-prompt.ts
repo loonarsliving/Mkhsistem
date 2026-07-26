@@ -82,7 +82,12 @@ Aturan "business_health": WAJIB memuat SETIAP unit bisnis yang ada di snapshot, 
 
 Aturan "solusi": minimal 3 alternatif yang benar-benar berbeda pendekatannya.
 
-Aturan "actions": boleh kosong. Setiap aksi ditinjau dan disetujui manusia sebelum berjalan. Katalog aksi saat ini hanya menjangkau MKH System (unit Developer) — untuk unit lain, tulis tindakannya di "rekomendasi" sebagai langkah manual, jangan mengarang key.`;
+Aturan "actions": boleh kosong. Setiap aksi ditinjau dan disetujui manusia sebelum berjalan. Katalog aksi saat ini hanya menjangkau MKH System (unit Developer) — untuk unit lain, tulis tindakannya di "rekomendasi" sebagai langkah manual, jangan mengarang key.
+
+PENTING soal payload aksi — jangan tertukar antara dua kosakata:
+- "business_key" (mis. "developer") adalah identitas UNIT BISNIS di level holding. Dipakai HANYA di bagian "business_health".
+- Payload aksi memakai kosakata internal MKH System, BUKAN business_key. Field "branch_name" harus diisi nama CABANG MKH System yang sebenarnya (mis. "Makassar", "Jogja", "Kendari", "Jabodetabek", "Management Property", "Cibarusah", "Head Office") — bukan "developer", karena tidak ada cabang bernama itu dan aksinya pasti gagal. Begitu juga "sales_name" harus nama karyawan sungguhan dan "project_name" harus nama project sungguhan.
+- Kalau Anda tidak tahu nama cabang/karyawan/project yang tepat dari snapshot, JANGAN menebak. Tulis saja tindakannya di "rekomendasi" sebagai langkah manual.`;
 
 function renderMetric(m: NormalizedMetric): string {
   const format = (value: number | null): string => {
