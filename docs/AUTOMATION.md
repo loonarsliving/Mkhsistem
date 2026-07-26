@@ -133,7 +133,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `ai-knowledge-bank-weekly-refresh` | `0 2 * * 1` | Sen 10:00 | Refresh knowledge bank |
 | `ai-occupancy-intelligence-weekly-refresh` | `20 2 * * 1` | Sen 10:20 | Refresh intelligence okupansi |
 | `mp-occupancy-teaching-biweekly` | `0 5 * * 3,5` | Rab/Jum 13:00 | Teaching engine okupansi |
-| `friday-executive-briefing-daily` | `30 22 * * *` | 06:30 | Briefing eksekutif lintas domain FRIDAY — **`active = false` sampai kode ter-deploy** |
+| `friday-executive-briefing-daily` | `30 22 * * *` | 06:30 | Briefing eksekutif lintas domain FRIDAY |
 
 `friday-executive-briefing-daily` sengaja dijadwalkan **di luar** jendela burst
 Senin 01:00–02:00 UTC (temuan **T5** di bawah). Menaruh laporan yang paling
@@ -144,15 +144,18 @@ job yang mati di `dead_letter` tetap terlihat sebagai briefing `failed` di
 `/friday` — bukan halaman kosong yang tidak bisa dibedakan dari "hari ini tidak
 ada temuan".
 
-> **Job ini sengaja dibuat `active = false` saat migrasi 0179 diterapkan.**
-> Skema sudah live, tapi handler `friday_executive_briefing` baru ada di kode
-> yang belum ter-deploy. Sebelum perbaikan di route (lihat di bawah), job type
-> yang tidak dikenal jatuh ke cabang terakhir rantai dispatch dan menjalankan
-> `processSocialWeeklyEvaluation` — artinya cron ini akan mengirim broadcast
-> evaluasi konten setiap pagi, dilaporkan `succeeded`. Aktifkan dengan
-> `select cron.alter_job((select jobid from cron.job where jobname =
-> 'friday-executive-briefing-daily'), active := true);` **setelah** deploy yang
-> memuat handler-nya naik ke produksi.
+> **Catatan urutan penerapan (26 Juli).** Job ini sengaja dijalankan dengan
+> `active = false` selama jendela antara migrasi `0179` diterapkan dan kode
+> handler-nya ter-deploy. Saat itu rantai dispatch di `process-job` masih
+> berakhir pada fallback telanjang ke `processSocialWeeklyEvaluation`, sehingga
+> job type yang tidak dikenal akan mengirim broadcast evaluasi konten setiap
+> pagi dan melaporkannya `succeeded`. Fallback itu kini diganti
+> `NonRetryableJobError`, handler-nya sudah live, rantainya diverifikasi
+> end-to-end dua kali, dan job ini **sudah aktif**.
+>
+> Polanya layak diingat untuk migrasi berikutnya yang menambah `job_type`:
+> terapkan migrasi dengan cron nonaktif, deploy kodenya, verifikasi satu kali
+> jalan, baru aktifkan.
 
 ### Voice bridge
 
