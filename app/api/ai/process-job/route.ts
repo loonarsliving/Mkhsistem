@@ -303,7 +303,7 @@ async function processContentSubmissionReview(supabase: AdminClient, job: JobRow
   // Same tick-the-checklist-and-notify step the browser upload path runs
   // (createContentSubmissionAction). KontenAI-sourced content has no session
   // behind it, so this reaches markom_content_submitted as the service role --
-  // see 0179 for why the function accepts that caller.
+  // see 0183 for why the function accepts that caller.
   //
   // Non-fatal on purpose: the review is already saved by this point, and
   // letting a notification failure fail the job would send it back through
