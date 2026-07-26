@@ -40,7 +40,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 
 ---
 
-## 2. Inventaris `pg_cron` — 55 job
+## 2. Inventaris `pg_cron` — 56 job (54 lama + 2 dari audit ini)
 
 ### Platform & housekeeping
 
