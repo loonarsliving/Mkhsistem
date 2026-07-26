@@ -14,6 +14,7 @@ import * as crmRepo from "@/repositories/crm.repository";
 import * as memoRepo from "@/repositories/memo.repository";
 import * as monitoringRepo from "@/repositories/monitoring.repository";
 import * as socialRepo from "@/repositories/social.repository";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,9 @@ Kalau suatu bagian data kosong/nol, boleh dilewatkan singkat saja atau tidak dis
  * Connect activity, so Ultron can recite it instantly for "ringkasan hari
  * ini" style questions without spending a Gemini call on every ask.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   const supabase = createAdminClient();
 
   try {

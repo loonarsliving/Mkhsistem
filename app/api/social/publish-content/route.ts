@@ -4,6 +4,7 @@ import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 import {
   buildZernioMediaItems,
   markContentPublishedViaZernio,
@@ -38,7 +39,9 @@ function productForFocus(focus: string): ZernioProduct {
  * lib/social/zernio.ts's module doc for why two products' Zernio clients
  * must never be constructed concurrently.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   const supabase = createAdminClient();
 
   const { data: due, error } = await supabase

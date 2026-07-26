@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { getAdAccountBalanceInfo } from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,9 @@ const STATE_ROW_ID = "00000000-0000-0000-0000-000000000001";
  * lib/meta/ads.ts's AdAccountBalanceInfo doc); 0 means monthly invoicing,
  * not "no money", so that case is skipped entirely rather than alerting.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   if (!isMetaConfigured()) {
     return NextResponse.json({ status: "skipped", reason: "not_configured" });
   }

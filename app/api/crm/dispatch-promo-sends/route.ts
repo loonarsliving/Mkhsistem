@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,14 +14,17 @@ const BATCH_SIZE = 5;
 
 /**
  * Paced sender worker for crm_promo_sends (migration 0089) -- triggered
- * every 5 minutes by pg_cron (crm-promo-sends-worker), same no-auth
- * cron-triggered pattern as /api/social/capture-snapshots. Deliberately
+ * every 5 minutes by pg_cron (crm-promo-sends-worker), same
+ * requireCronAuth-guarded pattern as /api/social/capture-snapshots.
+ * Deliberately
  * separate from the (instant) enqueue step in
  * crm_run_promo_cadence_dispatch(): sending only a small batch per tick,
  * and only during each template's chosen send_hour_local (WITA), is what
  * keeps this from looking like a mass blast to WhatsApp.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   const supabase = createAdminClient();
   const witaHour = (new Date().getUTCHours() + 8) % 24;
 

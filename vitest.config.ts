@@ -7,6 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      // `import "server-only"` throws outside Next's "react-server"
+      // condition, which would make every server module untestable here.
+      // See tests/stubs/server-only.ts for why this is safe.
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
     },
   },
   test: {

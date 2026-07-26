@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { getAdInsights } from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,9 @@ export const dynamic = "force-dynamic";
  * still only regenerates on demand to avoid an unnecessary Gemini call
  * every run.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   if (!isMetaConfigured()) {
     return NextResponse.json({ status: "skipped", reason: "not_configured" });
   }

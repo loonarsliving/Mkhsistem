@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateBranchAdvisory, type BranchSituationType } from "@/lib/ai/domains/finance";
 import type { TablesInsert } from "@/types/database.types";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,9 @@ const SITUATION_TITLE: Record<BranchSituationType, (branchName: string) => strin
  * Jabodetabek's notify_dirops also routes its no_sales advisory to
  * Direktur Operasional in addition to its Kepala Cabang.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   const supabase = createAdminClient();
 
   const { data: allBalances, error: balancesError } = await supabase

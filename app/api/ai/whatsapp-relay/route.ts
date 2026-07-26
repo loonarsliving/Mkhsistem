@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,13 +13,16 @@ export const dynamic = "force-dynamic";
  * notification in a WhatsApp-eligible category is inserted — Reminder
  * Absen, Reminder Memo, Reminder Target Sales, Reminder Markom, Reminder
  * Payroll, Reminder Approval, Reminder Project. Mirrors the exact security
- * model already established by app/api/push/send/route.ts: no shared
- * secret, this endpoint re-fetches the notification by id itself and only
+ * model already established by app/api/push/send/route.ts: guarded by
+ * requireCronAuth once CRON_SECRET is configured, and independently of
+ * that, this endpoint re-fetches the notification by id itself and only
  * acts on rows created in the last 2 minutes, so a forged call can only
  * cause an already-legitimate, already-persisted, very recent notification
  * to be (re-)sent to its rightful owner.
  */
 export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   let notificationId: string | undefined;
   try {
     const body = await request.json();

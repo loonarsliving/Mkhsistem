@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import webpush from "web-push";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,9 @@ webpush.setVapidDetails("mailto:admin@haluoleo.id", VAPID_PUBLIC_KEY, VAPID_PRIV
  * configured in production for registration/employee actions) were not, so
  * the whole push-sending job moved here instead.
  *
- * No shared secret: this endpoint ALWAYS re-fetches the notification by id
+ * Defence in depth: the endpoint is behind requireCronAuth (see
+ * lib/security/cron-auth.ts) once CRON_SECRET is configured, and
+ * independently of that it ALWAYS re-fetches the notification by id
  * with its own service-role client rather than trusting the request body,
  * and only acts on notifications created within the last 2 minutes. A
  * forged call can therefore only cause an already-legitimate, already-
@@ -36,6 +39,8 @@ webpush.setVapidDetails("mailto:admin@haluoleo.id", VAPID_PUBLIC_KEY, VAPID_PRIV
  * window.
  */
 export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   let notificationId: string | undefined;
   try {
     const body = await request.json();

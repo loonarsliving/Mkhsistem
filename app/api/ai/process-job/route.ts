@@ -60,6 +60,7 @@ import {
   resolveGeoLocationsFromNames,
 } from "@/lib/meta/ads";
 import type { Json } from "@/types/database.types";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1792,6 +1793,8 @@ async function processLoonarsBeautyWeeklyEvaluation(supabase: AdminClient) {
  * returns.
  */
 export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   let jobId: string | undefined;
   try {
     const body = await request.json();

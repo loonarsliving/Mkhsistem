@@ -14,6 +14,7 @@ import { getTikTokAccountSnapshot } from "@/lib/social/tiktok";
 import { isTikTokConfigured } from "@/lib/social/tiktok-config";
 import { isZernioConfigured, listZernioAccounts, getZernioAccountSnapshot, getRecentZernioMediaPerformance, type ZernioProduct } from "@/lib/social/zernio";
 import type { Json } from "@/types/database.types";
+import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -141,7 +142,9 @@ async function captureForProduct(supabase: AdminClient, product: ZernioProduct):
  * lib/social/zernio.ts's module doc for why running two products'
  * Zernio calls concurrently corrupts both with cross-authenticated data.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   const supabase = createAdminClient();
   const property = await captureForProduct(supabase, "property");
   const beauty = await captureForProduct(supabase, "beauty");
