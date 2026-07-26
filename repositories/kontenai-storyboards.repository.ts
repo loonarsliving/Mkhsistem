@@ -26,11 +26,11 @@ export interface KontenAiStoryboardScene {
 
 export interface KontenAiStoryboardWithBrief extends Omit<KontenAiStoryboardRow, "scenes"> {
   scenes: KontenAiStoryboardScene[];
-  creativeBrief: { product_project: string; objective: string; platform: string; big_idea: string; production_direction: Json } | null;
+  creativeBrief: { product_project: string; objective: string; platform: string; big_idea: string; production_direction: Json; content_focus: string | null } | null;
 }
 
 const SELECT_COLUMNS =
-  "id, creative_brief_id, title, scenes, total_duration_seconds, created_by, updated_by, created_at, updated_at, creativeBrief:creative_brief_id(product_project, objective, platform, big_idea, production_direction)";
+  "id, creative_brief_id, title, scenes, total_duration_seconds, created_by, updated_by, created_at, updated_at, creativeBrief:creative_brief_id(product_project, objective, platform, big_idea, production_direction, content_focus)";
 
 function parseAssetMatches(raw: unknown): KontenAiSceneAssetMatch[] {
   if (!Array.isArray(raw)) return [];

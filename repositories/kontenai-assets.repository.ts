@@ -417,3 +417,53 @@ export async function saveKontenAiAssetVisionFailure(supabase: TypedSupabaseClie
     .eq("id", id);
   if (error) throw error;
 }
+
+export interface KontenAiAssetForVision {
+  id: string;
+  title: string;
+  filename: string;
+  asset_type: KontenAiAssetType;
+  public_url: string;
+  duration_seconds: number | null;
+  storage_path: string;
+  storage_provider: "supabase" | "google_drive";
+}
+
+/**
+ * Footage for one brand that Gemini Vision has not looked at yet.
+ *
+ * Used by Asset Selector during a production run, not by any sweep: the
+ * pipeline analyzes the footage the brief in hand might actually use, scoped
+ * to that brief's brand folder. Google Drive stays storage -- nothing
+ * pre-analyzes the whole library.
+ *
+ * 'failed' is included alongside 'not_analyzed' because a production run is
+ * exactly the moment worth retrying a previous failure: the alternative is
+ * that one bad read permanently excludes a clip from every future video.
+ */
+export async function listUnanalyzedAssetsByCompany(
+  supabase: TypedSupabaseClient,
+  company: string,
+  limit: number,
+): Promise<KontenAiAssetForVision[]> {
+  const { data, error } = await supabase
+    .from("kontenai_assets")
+    .select("id, title, filename, asset_type, public_url, duration_seconds, storage_path, storage_provider")
+    .is("deleted_at", null)
+    .eq("company", company)
+    .in("ai_vision_status", ["not_analyzed", "failed"])
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    title: row.title,
+    filename: row.filename,
+    asset_type: row.asset_type as KontenAiAssetType,
+    public_url: row.public_url,
+    duration_seconds: row.duration_seconds,
+    storage_path: row.storage_path,
+    storage_provider: row.storage_provider as "supabase" | "google_drive",
+  }));
+}
