@@ -25,6 +25,7 @@ import {
   ReceiptText,
   Rocket,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -178,6 +179,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/hr",
         icon: BriefcaseBusiness,
         permission: PERMISSIONS.HR_WORKSPACE_VIEW,
+      },
+      {
+        label: "Disiplin & Pemberhentian",
+        href: "/hr/discipline",
+        icon: ShieldAlert,
+        permission: PERMISSIONS.HR_DISCIPLINE_VIEW,
       },
       {
         label: "Karyawan",

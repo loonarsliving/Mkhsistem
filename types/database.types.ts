@@ -99,7 +99,9 @@ export type NotificationCategoryDb =
   // Automation self-monitoring (migration 0176)
   | "automation_dispatch_failed"
   | "automation_job_dead_letter"
-  | "automation_queue_stalled";
+  | "automation_queue_stalled"
+  | "disciplinary_warning"
+  | "employee_terminated";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -989,6 +991,57 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["voice_bridge_daily_digests"]["Insert"]>;
         Relationships: [];
+      };
+      hr_disciplinary_actions: {
+        Row: {
+          id: string;
+          employee_id: string;
+          branch_id: string | null;
+          action_type: string;
+          reason_category: string;
+          description: string;
+          evidence: Json;
+          effective_date: string;
+          last_working_date: string | null;
+          bypassed_ladder: boolean;
+          bypass_justification: string | null;
+          status: string;
+          revoked_by: string | null;
+          revoked_at: string | null;
+          revoke_reason: string | null;
+          issued_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          branch_id?: string | null;
+          action_type: string;
+          reason_category: string;
+          description: string;
+          evidence?: Json;
+          effective_date?: string;
+          last_working_date?: string | null;
+          bypassed_ladder?: boolean;
+          bypass_justification?: string | null;
+          status?: string;
+          revoked_by?: string | null;
+          revoked_at?: string | null;
+          revoke_reason?: string | null;
+          issued_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hr_disciplinary_actions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "hr_disciplinary_actions_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       assistant_followups: {
         Row: {
@@ -3542,6 +3595,22 @@ export interface Database {
       };
     };
     Functions: {
+      hr_discipline_evidence: { Args: { p_employee_id: string }; Returns: Json };
+      hr_issue_warning: {
+        Args: { p_employee_id: string; p_action_type: string; p_reason_category: string; p_description: string };
+        Returns: string;
+      };
+      hr_terminate_employee: {
+        Args: {
+          p_employee_id: string;
+          p_reason_category: string;
+          p_description: string;
+          p_last_working_date?: string | null;
+          p_bypass_justification?: string | null;
+        };
+        Returns: string;
+      };
+      hr_revoke_disciplinary_action: { Args: { p_id: string; p_reason: string }; Returns: undefined };
       app_current_role_key: { Args: Record<string, never>; Returns: string };
       app_current_branch_id: { Args: Record<string, never>; Returns: string };
       app_has_permission: { Args: { p_permission_key: string }; Returns: boolean };

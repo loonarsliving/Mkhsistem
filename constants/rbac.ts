@@ -142,6 +142,12 @@ export const PERMISSIONS = {
   ASSISTANT_WORKSPACE_VIEW: "assistant_workspace.view",
   /** Personal follow-up list on /asisten. Separate from the view permission so the page can be granted read-only to someone else later. */
   ASSISTANT_FOLLOWUP_MANAGE: "assistant_followup.manage",
+
+  /** Issue SP1/SP2/SP3 disciplinary letters. Distinct from SP1_WARNING_* which is sales performance, not conduct. */
+  HR_DISCIPLINE_WARN: "hr_discipline.warn",
+  /** Terminate an employee. Split from the warn permission so it can be withheld separately. */
+  HR_DISCIPLINE_TERMINATE: "hr_discipline.terminate",
+  HR_DISCIPLINE_VIEW: "hr_discipline.view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -197,6 +203,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Studio/Content Planner/Content Audit/Promo Broadcast) are
     // deliberately NOT granted here -- owner's call: only the Markom role,
     // Jogja's own Kepala Cabang, and Super Admin get Markom access for now.
+    PERMISSIONS.HR_DISCIPLINE_VIEW,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -232,6 +239,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SP1_WARNING_VIEW_ALL,
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
     // Markom pages deliberately NOT granted here -- see Direktur Utama note.
+    PERMISSIONS.HR_DISCIPLINE_VIEW,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -262,6 +270,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SP1_WARNING_MANAGE,
     PERMISSIONS.SP1_WARNING_VIEW_ALL,
     PERMISSIONS.HR_WORKSPACE_VIEW,
+    PERMISSIONS.HR_DISCIPLINE_WARN,
+    PERMISSIONS.HR_DISCIPLINE_TERMINATE,
+    PERMISSIONS.HR_DISCIPLINE_VIEW,
   ],
   [ROLE_KEYS.KEPALA_CABANG]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -392,6 +403,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Owner's call: the assistant sees payroll figures. Read-only -- the
     // run itself is still approved by someone holding payroll.manage.
     PERMISSIONS.PAYROLL_VIEW,
+    PERMISSIONS.HR_DISCIPLINE_VIEW,
     // Assists the Super Admin, so the automation/health alerts that land on
     // /monitoring are part of what they are expected to notice first.
     PERMISSIONS.SYSTEM_MONITORING_VIEW,
