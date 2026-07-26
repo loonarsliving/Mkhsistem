@@ -101,7 +101,8 @@ export type NotificationCategoryDb =
   | "automation_job_dead_letter"
   | "automation_queue_stalled"
   | "disciplinary_warning"
-  | "employee_terminated";
+  | "employee_terminated"
+  | "content_review_pending";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2796,6 +2797,7 @@ export interface Database {
           ig_media_id: string | null;
           published_at: string | null;
           reminder_sent_at: string | null;
+          verifier_notified_at: string | null;
           zernio_account_id: string | null;
           zernio_post_id: string | null;
           zernio_publish_status: string | null;
@@ -2829,6 +2831,7 @@ export interface Database {
           ig_media_id?: string | null;
           published_at?: string | null;
           reminder_sent_at?: string | null;
+          verifier_notified_at?: string | null;
           zernio_account_id?: string | null;
           zernio_post_id?: string | null;
           zernio_publish_status?: string | null;
@@ -3595,6 +3598,7 @@ export interface Database {
       };
     };
     Functions: {
+      markom_content_submitted: { Args: { p_submission_id: string }; Returns: Json };
       hr_discipline_evidence: { Args: { p_employee_id: string }; Returns: Json };
       hr_issue_warning: {
         Args: { p_employee_id: string; p_action_type: string; p_reason_category: string; p_description: string };

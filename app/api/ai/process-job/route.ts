@@ -300,6 +300,24 @@ async function processContentSubmissionReview(supabase: AdminClient, job: JobRow
     await scheduleContentSubmission(supabase, submission.id, target.toISOString(), submission.submitted_by);
   }
 
+  // Same tick-the-checklist-and-notify step the browser upload path runs
+  // (createContentSubmissionAction). KontenAI-sourced content has no session
+  // behind it, so this reaches markom_content_submitted as the service role --
+  // see 0179 for why the function accepts that caller.
+  //
+  // Non-fatal on purpose: the review is already saved by this point, and
+  // letting a notification failure fail the job would send it back through
+  // retry/backoff and re-run a Gemini call for work that is done.
+  const { error: notifyError } = await supabase.rpc("markom_content_submitted", {
+    p_submission_id: submission.id,
+  });
+  if (notifyError) {
+    logger.error("content submission review: failed to tick task / notify verifier", {
+      submissionId: submission.id,
+      error: notifyError.message,
+    });
+  }
+
   return { score: review.score, verdict: review.verdict };
 }
 

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { reviewContentSubmission } from "@/lib/ai/domains/markom";
+import { logger } from "@/lib/logger";
 import { requirePermission, requireSession } from "@/lib/rbac/session";
 import { createZernioPost, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
 import { createClient } from "@/lib/supabase/server";
@@ -141,7 +142,27 @@ export async function createContentSubmissionAction(input: CreateContentSubmissi
     updatedBy: session.userId,
   });
 
+  // Tick the checklist item and tell the branch verifier. Runs after the
+  // review so the notification can carry the AI score -- the score is the
+  // thing the Kepala Cabang is being asked to check.
+  //
+  // Deliberately not fatal: the content is saved and the AI review is done
+  // by this point, so a failure here must not surface as "gagal menyimpan
+  // konten" and push Markom into re-uploading. The task/notification state
+  // is recoverable (verifier_notified_at is still null, so calling the RPC
+  // again picks up where this left off); a duplicate upload is not.
+  const { error: notifyError } = await supabase.rpc("markom_content_submitted", {
+    p_submission_id: submissionId,
+  });
+  if (notifyError) {
+    logger.error("content submission: failed to tick task / notify verifier", {
+      submissionId,
+      error: notifyError.message,
+    });
+  }
+
   revalidatePath(CONTENT_STUDIO_PATH);
+  revalidatePath("/markom");
   return actionSuccess({ submissionId, aiReviewed });
 }
 
