@@ -64,14 +64,30 @@ async function processJob(jobId: string): Promise<void> {
     const assets = await listKontenAiAssetsByIds(supabase, [...new Set(assetIds)]);
     const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
-    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 10, stage: "Membuat voice over" });
+    // Production direction from the brief (0184). Before it existed the worker
+    // narrated every scene unconditionally and searched Freesound with the
+    // brief's big_idea -- i.e. queried an audio library with marketing copy.
+    // Both were direct contributors to content auditing at ~2/10.
+    const direction = (storyboard.creativeBrief?.production_direction ?? {}) as {
+      music?: { useMusic?: boolean; searchQuery?: string };
+      voiceOver?: { useVoiceOver?: boolean };
+    };
+    const useVoiceOver = direction.voiceOver?.useVoiceOver !== false;
+
+    await updateKontenAiRenderJobProgress(supabase, jobId, {
+      progress: 10,
+      stage: useVoiceOver ? "Membuat voice over" : "Menyiapkan scene (tanpa voice over)",
+    });
     const scenes: RenderScene[] = await Promise.all(
       storyboard.scenes.map(async (scene) => {
         const asset = assetById.get(scene.selectedAssetId!);
         if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
         const [source, voiceOverPcm] = await Promise.all([
           resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl }),
-          synthesizeVoiceOver(scene.voiceOver),
+          // A brief that decided this piece works better silent gets silence:
+          // narrating an aesthetic villa tour over music is exactly the kind of
+          // generic output the audit marks down.
+          useVoiceOver ? synthesizeVoiceOver(scene.voiceOver) : Promise.resolve(null),
         ]);
         return {
           assetUrl: source.url,
@@ -83,10 +99,22 @@ async function processJob(jobId: string): Promise<void> {
       }),
     );
 
-    await updateKontenAiRenderJobProgress(supabase, jobId, { progress: 18, stage: "Mencari background music" });
-    const musicQuery = storyboard.creativeBrief?.big_idea || storyboard.creativeBrief?.product_project || "cinematic background music";
-    const music = await fetchBackgroundMusic(musicQuery);
-    if (music) console.log(`[render-worker] job ${jobId} background music: "${music.name}" (${music.license})`);
+    // music.searchQuery is English audio vocabulary the Director wrote for
+    // exactly this lookup; big_idea is only a last-resort fallback for briefs
+    // created before 0184.
+    const wantsMusic = direction.music?.useMusic !== false;
+    const musicQuery =
+      direction.music?.searchQuery?.trim() ||
+      storyboard.creativeBrief?.big_idea ||
+      storyboard.creativeBrief?.product_project ||
+      "cinematic background music";
+
+    await updateKontenAiRenderJobProgress(supabase, jobId, {
+      progress: 18,
+      stage: wantsMusic ? "Mencari background music" : "Render tanpa background music",
+    });
+    const music = wantsMusic ? await fetchBackgroundMusic(musicQuery) : null;
+    if (music) console.log(`[render-worker] job ${jobId} background music: "${music.name}" (${music.license}) via query "${musicQuery}"`);
 
     const result = await renderStoryboardDraft(scenes, {
       targetPlatform: storyboard.creativeBrief?.platform,

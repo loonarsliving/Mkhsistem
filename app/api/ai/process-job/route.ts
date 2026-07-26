@@ -464,6 +464,7 @@ async function processKontenAiAutoProduce(supabase: AdminClient, job: JobRow) {
     targetEmotion: directorResult.targetEmotion,
     cta: directorResult.cta,
     contentAngle: directorResult.contentAngle,
+    productionDirection: directorResult.productionDirection,
     referencedAssetIds: assets.map((asset) => asset.id),
     createdBy,
     kpiTaskId: task.id,

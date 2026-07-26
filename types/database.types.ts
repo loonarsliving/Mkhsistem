@@ -3305,6 +3305,7 @@ export interface Database {
           cta: string;
           content_angle: string;
           referenced_asset_ids: string[];
+          production_direction: Json;
           content_focus: "leasehold_sales" | "occupancy" | "beauty" | null;
           created_by: string;
           created_at: string;
@@ -3324,6 +3325,7 @@ export interface Database {
           cta: string;
           content_angle: string;
           referenced_asset_ids?: string[];
+          production_direction?: Json;
           content_focus?: "leasehold_sales" | "occupancy" | "beauty" | null;
           created_by: string;
           created_at?: string;

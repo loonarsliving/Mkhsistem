@@ -88,6 +88,7 @@ export async function generateCreativeBriefAction(
       targetEmotion: result.targetEmotion,
       cta: result.cta,
       contentAngle: result.contentAngle,
+      productionDirection: result.productionDirection,
       referencedAssetIds: assets.map((asset) => asset.id),
       contentFocus: input.contentFocus,
       createdBy: session.userId,

@@ -1,3 +1,4 @@
+import type { ProductionDirection } from "@/lib/ai/domains/kontenai-director";
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { KontenAiCreativeBriefRow } from "@/types/domain";
 
@@ -26,6 +27,13 @@ export interface CreateKontenAiCreativeBriefInput {
   cta: string;
   contentAngle: string;
   referencedAssetIds: string[];
+  /**
+   * Full production direction from AI Director (0184). Optional so an older
+   * caller still compiles, but every real caller passes it -- the render
+   * worker reads music.searchQuery and voiceOver.useVoiceOver from here, and
+   * an empty object silently falls back to generic defaults.
+   */
+  productionDirection?: ProductionDirection;
   /** Which brand this brief is for -- set by cross-module bridges (e.g. Loonars Beauty's "Kirim ke KontenAI"); omitted for briefs made directly on the AI Director page, which isn't brand-scoped. */
   contentFocus?: KontenAiCreativeBriefContentFocus;
   createdBy: string;
@@ -52,6 +60,7 @@ export async function createKontenAiCreativeBrief(
       cta: input.cta,
       content_angle: input.contentAngle,
       referenced_asset_ids: input.referencedAssetIds,
+      production_direction: input.productionDirection ?? {},
       content_focus: input.contentFocus ?? null,
       created_by: input.createdBy,
       kpi_task_id: input.kpiTaskId ?? null,
