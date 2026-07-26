@@ -149,6 +149,18 @@ export const PERMISSIONS = {
   FRIDAY_RUN: "friday.run",
   FRIDAY_ACTION_DECIDE: "friday.action_decide",
 
+  /**
+   * Holding group view (/friday/holding) — FRIDAY reading every business unit
+   * at once. Separate from FRIDAY_VIEW because group performance is a
+   * different audience than one company's operations.
+   *
+   * HOLDING_MANAGE is split off deliberately: it edits connector_config, which
+   * decides what URL this server fetches on a schedule. That is a materially
+   * different power from reading the group report.
+   */
+  HOLDING_VIEW: "holding.view",
+  HOLDING_MANAGE: "holding.manage",
+
   /** Gates /hr — the HR control room (action queue + live attendance + compliance). */
   HR_WORKSPACE_VIEW: "hr_workspace.view",
   /** Gates /asisten — the private assistant's workspace. */
@@ -220,6 +232,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.FRIDAY_VIEW,
     PERMISSIONS.FRIDAY_RUN,
     PERMISSIONS.FRIDAY_ACTION_DECIDE,
+    PERMISSIONS.HOLDING_VIEW,
+    PERMISSIONS.HOLDING_MANAGE,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -259,6 +273,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.FRIDAY_VIEW,
     PERMISSIONS.FRIDAY_RUN,
     PERMISSIONS.FRIDAY_ACTION_DECIDE,
+    // Reads the group, does not re-wire it -- HOLDING_MANAGE edits connector
+    // endpoints and stays with Super Admin / Direktur Utama.
+    PERMISSIONS.HOLDING_VIEW,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -431,6 +448,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // absent: preparing a decision is the job, making it is not.
     PERMISSIONS.FRIDAY_VIEW,
     PERMISSIONS.FRIDAY_RUN,
+    PERMISSIONS.HOLDING_VIEW,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

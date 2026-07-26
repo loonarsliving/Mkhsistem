@@ -14,7 +14,9 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type FridayBriefingScopeDb = "company" | "branch";
+export type FridayBriefingScopeDb = "company" | "branch" | "business" | "holding";
+export type HoldingBusinessStatusDb = "active" | "inactive";
+export type HoldingConnectorKindDb = "internal_mkh" | "http";
 export type FridayBriefingStatusDb = "pending" | "ready" | "failed";
 export type FridayTriggerSourceDb = "scheduled" | "manual";
 export type FridaySeverityDb = "normal" | "perhatian" | "kritis";
@@ -1085,11 +1087,45 @@ export interface Database {
           },
         ];
       };
+      holding_businesses: {
+        Row: {
+          id: string;
+          key: string;
+          name: string;
+          business_type: string;
+          source_system: string | null;
+          status: HoldingBusinessStatusDb;
+          connector_kind: HoldingConnectorKindDb;
+          connector_config: Json;
+          display_order: number;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          name: string;
+          business_type: string;
+          source_system?: string | null;
+          status?: HoldingBusinessStatusDb;
+          connector_kind: HoldingConnectorKindDb;
+          connector_config?: Json;
+          display_order?: number;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["holding_businesses"]["Insert"]>;
+        Relationships: [];
+      };
       friday_briefings: {
         Row: {
           id: string;
           scope: FridayBriefingScopeDb;
           branch_id: string | null;
+          business_id: string | null;
+          business_health: Json;
           trigger_source: FridayTriggerSourceDb;
           requested_by: string | null;
           status: FridayBriefingStatusDb;
@@ -1112,6 +1148,8 @@ export interface Database {
           id?: string;
           scope?: FridayBriefingScopeDb;
           branch_id?: string | null;
+          business_id?: string | null;
+          business_health?: Json;
           trigger_source?: FridayTriggerSourceDb;
           requested_by?: string | null;
           status?: FridayBriefingStatusDb;
@@ -1142,6 +1180,12 @@ export interface Database {
             foreignKeyName: "friday_briefings_requested_by_fkey";
             columns: ["requested_by"];
             referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "friday_briefings_business_id_fkey";
+            columns: ["business_id"];
+            referencedRelation: "holding_businesses";
             referencedColumns: ["id"];
           },
         ];
@@ -2345,7 +2389,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -2357,7 +2401,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;

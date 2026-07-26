@@ -46,7 +46,7 @@ export class FridayAnalysisError extends Error {
   }
 }
 
-const SEVERITIES: readonly string[] = ["normal", "perhatian", "kritis"];
+export const SEVERITIES: readonly string[] = ["normal", "perhatian", "kritis"];
 const IMPACTS: readonly string[] = ["tinggi", "sedang", "rendah"];
 
 /**
@@ -56,7 +56,7 @@ const IMPACTS: readonly string[] = ["tinggi", "sedang", "rendah"];
  * around the object. Anything past that is a genuine malformation and should
  * fail loudly rather than be patched into something plausible.
  */
-function extractJsonObject(text: string): unknown {
+export function extractJsonObject(text: string): unknown {
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -79,18 +79,18 @@ function extractJsonObject(text: string): unknown {
   }
 }
 
-function readText(source: Record<string, unknown>, key: string): string {
+export function readText(source: Record<string, unknown>, key: string): string {
   const value = source[key];
   return typeof value === "string" ? value.trim() : "";
 }
 
-function requireText(source: Record<string, unknown>, key: string): string {
+export function requireText(source: Record<string, unknown>, key: string): string {
   const value = readText(source, key);
   if (!value) throw new FridayAnalysisError(`Briefing tidak lengkap: bagian "${key}" kosong`);
   return value;
 }
 
-function parseSolutions(raw: unknown, notes: string[]): FridaySolution[] {
+export function parseSolutions(raw: unknown, notes: string[]): FridaySolution[] {
   if (!Array.isArray(raw)) {
     notes.push('Bagian "solusi" tidak berupa daftar — dikosongkan.');
     return [];
@@ -133,7 +133,7 @@ function parseSolutions(raw: unknown, notes: string[]): FridaySolution[] {
  * cost the briefing — so it is filtered here, with a note, and the rest of the
  * analysis survives.
  */
-function parseActions(raw: unknown, notes: string[]): FridayProposedAction[] {
+export function parseActions(raw: unknown, notes: string[]): FridayProposedAction[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
     notes.push('Bagian "actions" tidak berupa daftar — diabaikan.');

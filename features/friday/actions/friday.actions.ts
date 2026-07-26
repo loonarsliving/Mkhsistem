@@ -75,6 +75,59 @@ export async function runFridayBriefingAction(input: RunBriefingInput): Promise<
   return actionSuccess({ briefingId: briefing.id });
 }
 
+/**
+ * On-demand group briefing.
+ *
+ * Same shape as runFridayBriefingAction, one scope wider. Gated on
+ * HOLDING_VIEW rather than FRIDAY_RUN: reading the group is what this
+ * produces, and the group audience is not necessarily the same people who run
+ * the company-level analysis.
+ */
+export async function runHoldingBriefingAction(input: RunBriefingInput): Promise<ActionResult<{ briefingId: string }>> {
+  const session = await requirePermission(PERMISSIONS.HOLDING_VIEW);
+  const parsed = runBriefingSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const question = parsed.data.question?.trim() || null;
+  const supabase = createAdminClient();
+
+  const { count: activeBusinesses } = await supabase.from("holding_businesses").select("id", { count: "exact", head: true }).eq("status", "active");
+  if (!activeBusinesses) {
+    return actionError("Belum ada unit bisnis aktif yang terdaftar di holding. Daftarkan minimal satu unit beserta connector-nya terlebih dahulu.");
+  }
+
+  const { data: recent } = await supabase
+    .from("friday_briefings")
+    .select("id")
+    .eq("scope", "holding")
+    .eq("requested_by", session.userId)
+    .eq("status", "pending")
+    .gte("created_at", new Date(Date.now() - MANUAL_RUN_COOLDOWN_MS).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (recent) return actionError("Analisa grup sebelumnya masih berjalan. Tunggu sebentar sampai hasilnya keluar.");
+
+  const { data: briefing, error: insertError } = await supabase
+    .from("friday_briefings")
+    .insert({ scope: "holding", trigger_source: "manual", status: "pending", requested_by: session.userId })
+    .select("id")
+    .single();
+  if (insertError || !briefing) {
+    return actionError(`Gagal membuat permintaan analisa grup: ${insertError?.message ?? "tidak diketahui"}`);
+  }
+
+  const { error: queueError } = await supabase
+    .from("ai_job_queue")
+    .insert({ job_type: "friday_holding_briefing", payload: { briefing_id: briefing.id, question } as never });
+  if (queueError) {
+    await supabase.from("friday_briefings").update({ status: "failed", error_detail: `Gagal masuk antrian: ${queueError.message}` }).eq("id", briefing.id);
+    return actionError(`Gagal menjalankan analisa grup: ${queueError.message}`);
+  }
+
+  revalidatePath("/friday/holding");
+  return actionSuccess({ briefingId: briefing.id });
+}
+
 export async function decideFridayActionAction(input: DecideActionInput): Promise<ActionResult<{ note: string }>> {
   const session = await requirePermission(PERMISSIONS.FRIDAY_ACTION_DECIDE);
   const parsed = decideActionSchema.safeParse(input);
