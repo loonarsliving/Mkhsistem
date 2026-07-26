@@ -72,9 +72,8 @@ const VISION_PER_RUN_LIMIT = 8;
  * Without this step Asset Selector ranks against listAnalyzedAssetLibrary,
  * which only returns ai_vision_status='completed' -- so freshly-synced Drive
  * footage was invisible to it, every scene fell through to Veo generation,
- * and the published result never used the real footage at all. That is a
- * large part of why audited content scored ~2 while the Drive library sat
- * untouched.
+ * and the published result never used the real footage at all -- the Drive
+ * library sat untouched while Veo invented substitutes for it.
  *
  * Never throws: a clip that cannot be read is recorded as failed by
  * runVisionAnalysisAndSave and simply does not join the pool. Producing a

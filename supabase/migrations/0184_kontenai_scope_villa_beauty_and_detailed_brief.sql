@@ -22,8 +22,9 @@
 --      and restores villa/beauty brief generation. There is no second switch
 --      to forget.
 --
---   3. The brief gains production_direction. Audited output currently scores
---      around 2/10, and the pipeline explains why: the render worker searched
+--   3. The brief gains production_direction. KontenAI exists to raise content
+--      quality (the low audit scores predate it), and two defects in this
+--      pipeline were working against that goal: the render worker searched
 --      Freesound using the brief's big_idea, so it was querying an audio
 --      library for phrases like "Villa Jogja passive income" and getting
 --      nothing usable, and every scene was narrated unconditionally because

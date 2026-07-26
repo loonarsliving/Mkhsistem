@@ -46,7 +46,7 @@ export interface CreativeBriefInput {
  * render worker feeds it straight to Freesound. It used to reuse the brief's
  * bigIdea, so Freesound was being searched for things like "Villa Jogja
  * passive income" -- a creative concept, not a sound. That returns noise or
- * nothing, which is a large part of why audited content scored ~2. It must
+ * nothing, so most renders got an unrelated music bed or none at all. It must
  * therefore be ENGLISH audio vocabulary (genre/mood/instrument/tempo), not
  * Indonesian marketing copy.
  */
