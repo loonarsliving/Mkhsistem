@@ -15,6 +15,7 @@ import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank"
 import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor-intelligence";
 import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
 import { processOccupancyIntelligenceRefreshJob } from "@/lib/ai/domains/occupancy-intelligence";
+import { processFridayExecutiveBriefing, type FridayBriefingJobPayload } from "@/lib/ai/friday/briefing";
 import { generateWeeklySalesTeaching } from "@/lib/ai/domains/sales-teaching";
 import { generateCashflowActionPlan } from "@/lib/ai/domains/cashflow-teaching";
 import { generateOccupancyTeaching, type OccupancyPropertySnapshot } from "@/lib/ai/domains/occupancy-teaching";
@@ -1883,7 +1884,9 @@ export async function POST(request: Request) {
                                                   ? await processKontenAiAutoBridgeToStudio(supabase, job)
                                                   : job.job_type === "zernio_publish_reconcile"
                                                     ? await processZernioPublishReconcile(supabase, job)
-                                                    : await processSocialWeeklyEvaluation(supabase);
+                                                    : job.job_type === "friday_executive_briefing"
+                                                      ? await processFridayExecutiveBriefing(job.payload as unknown as FridayBriefingJobPayload, job.id)
+                                                      : await processSocialWeeklyEvaluation(supabase);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

@@ -59,6 +59,9 @@ scripts/        Script operasional (seed demo user)
 - **Profile** — edit profil, foto, ganti password
 - **Search** — pencarian global (memo, pengumuman, karyawan)
 - **Settings** — profil perusahaan, jam kerja, lokasi kantor, radius absensi
+- **FRIDAY — Executive Intelligence Layer** (`/friday`) — lapisan analisa di atas seluruh modul. Setiap modul lain menjawab pertanyaan di dalam satu domain; FRIDAY membaca CRM, iklan Meta, keuangan cabang, HR/absensi, Markom, okupansi, dan kesehatan automation **sekaligus** lalu menghasilkan satu briefing eksekutif: situasi → analisa akar penyebab → risiko bila tidak bertindak → minimal 3 alternatif solusi beserta kerugian masing-masing → rekomendasi + alasan mengalahkan alternatif → hasil yang diharapkan. Angka lintas domain (mis. biaya iklan per lead, porsi prospek mangkrak) dihitung di kode, bukan oleh model — lihat `lib/ai/friday/signals.ts`. Berjalan otomatis tiap hari 06:30 WITA, dan bisa diminta on-demand dengan pertanyaan spesifik.
+
+  **FRIDAY mengusulkan, manusia memutuskan, sistem mengeksekusi.** Aksi yang diusulkan lahir dengan status `proposed` dan hanya berjalan setelah disetujui pemegang `friday.action_decide`; setiap aksi wajib menyebut key dari katalog di `lib/ai/friday/action-catalog.ts` (dijaga check constraint di migrasi `0179`), sehingga himpunan tindakan yang mungkin ditentukan engineer, bukan oleh prompt. Tidak ada aksi di katalog yang meluncurkan iklan, membelanjakan budget, mempublikasikan konten, atau mengirim pesan ke pelanggan. Peran `private_assistant` memegang `friday.view` + `friday.run` tapi **tidak** `friday.action_decide` — konsisten dengan prinsip di migrasi `0177`.
 
 ## Struktur Database
 
