@@ -66,6 +66,10 @@ export const NAV_GROUPS: NavGroup[] = [
       // numbers are, FRIDAY says what they mean. Reading them in that order is
       // the intended habit.
       { label: "FRIDAY", href: "/friday", icon: Radar, permission: PERMISSIONS.FRIDAY_VIEW },
+      // The group view sits next to the company view, not inside it: reading
+      // "how is the holding doing" and "how is this company doing" are
+      // different questions asked by the same person on different days.
+      { label: "Holding Group", href: "/friday/holding", icon: Building2, permission: PERMISSIONS.HOLDING_VIEW },
       {
         label: "Ruang Kerja Asisten",
         href: "/asisten",

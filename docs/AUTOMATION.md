@@ -36,11 +36,11 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
    maksimal 4 percobaan. Gagal non-transient (model tidak ada, foto belum
    diunggah, budget habis) → langsung `dead_letter` tanpa membuang retry.
 
-27 `job_type` terdaftar di constraint `ai_job_queue_job_type_check`.
+28 `job_type` terdaftar di constraint `ai_job_queue_job_type_check`.
 
 ---
 
-## 2. Inventaris `pg_cron` — 56 job (54 lama + 2 dari audit + 1 FRIDAY − 1 KontenAI yang dilepas)
+## 2. Inventaris `pg_cron` — 57 job (54 lama + 2 dari audit + 2 FRIDAY − 1 KontenAI yang dilepas)
 
 ### Platform & housekeeping
 
@@ -133,7 +133,8 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `ai-knowledge-bank-weekly-refresh` | `0 2 * * 1` | Sen 10:00 | Refresh knowledge bank |
 | `ai-occupancy-intelligence-weekly-refresh` | `20 2 * * 1` | Sen 10:20 | Refresh intelligence okupansi |
 | `mp-occupancy-teaching-biweekly` | `0 5 * * 3,5` | Rab/Jum 13:00 | Teaching engine okupansi |
-| `friday-executive-briefing-daily` | `30 22 * * *` | 06:30 | Briefing eksekutif lintas domain FRIDAY |
+| `friday-executive-briefing-daily` | `30 22 * * *` | 06:30 | Briefing eksekutif lintas domain FRIDAY (unit Developer) |
+| `friday-holding-briefing-daily` | `15 23 * * *` | 07:15 | Briefing eksekutif lintas **bisnis** (seluruh grup holding) |
 
 `friday-executive-briefing-daily` sengaja dijadwalkan **di luar** jendela burst
 Senin 01:00–02:00 UTC (temuan **T5** di bawah). Menaruh laporan yang paling

@@ -16,6 +16,7 @@ import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor
 import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
 import { processOccupancyIntelligenceRefreshJob } from "@/lib/ai/domains/occupancy-intelligence";
 import { processFridayExecutiveBriefing, type FridayBriefingJobPayload } from "@/lib/ai/friday/briefing";
+import { processFridayHoldingBriefing, type FridayHoldingBriefingJobPayload } from "@/lib/ai/friday/holding";
 import { generateWeeklySalesTeaching } from "@/lib/ai/domains/sales-teaching";
 import { generateCashflowActionPlan } from "@/lib/ai/domains/cashflow-teaching";
 import { generateOccupancyTeaching, type OccupancyPropertySnapshot } from "@/lib/ai/domains/occupancy-teaching";
@@ -1906,9 +1907,11 @@ export async function POST(request: Request) {
                                                     ? await processZernioPublishReconcile(supabase, job)
                                                     : job.job_type === "friday_executive_briefing"
                                                       ? await processFridayExecutiveBriefing(job.payload as unknown as FridayBriefingJobPayload, job.id)
-                                                      : job.job_type === "social_weekly_evaluation"
-                                                        ? await processSocialWeeklyEvaluation(supabase)
-                                                        : unknownJobType(job.job_type);
+                                                      : job.job_type === "friday_holding_briefing"
+                                                        ? await processFridayHoldingBriefing(job.payload as unknown as FridayHoldingBriefingJobPayload, job.id)
+                                                        : job.job_type === "social_weekly_evaluation"
+                                                          ? await processSocialWeeklyEvaluation(supabase)
+                                                          : unknownJobType(job.job_type);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
