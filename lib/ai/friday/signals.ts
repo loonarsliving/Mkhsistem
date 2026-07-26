@@ -30,6 +30,9 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  * is the kind of figure FRIDAY exists to act on.
  */
 
+/** A branch balance older than this is reported to the model as stale rather than as the branch's current cash position. */
+const STALE_BALANCE_DAYS = 3;
+
 export interface SignalSection<T> {
   data: T | null;
   /** Present when the collector failed; passed to the model verbatim so it can say "data tidak tersedia" instead of assuming zero. */
@@ -44,6 +47,14 @@ export interface CrmSignals {
   activeProspects: number;
   closings30d: number;
   closingsPrev30d: number;
+  /**
+   * Every closing ever recorded, not just the window. Zero here means the
+   * closing step has never been used, which is a data-completeness finding;
+   * zero in the window with a non-zero total is a performance finding. The
+   * first real briefing read "0 closing in 30 days" and called it a collapse
+   * when in fact no closing has ever been recorded against 489 prospects.
+   */
+  closingsAllTime: number;
 }
 
 export interface AdSignals {
@@ -139,6 +150,11 @@ async function collectCrm(supabase: AdminClient, branchId: string | null): Promi
   if (error) throw new Error(error.message);
   const rows = data ?? [];
 
+  // Deliberately not limited to the 90-day window above -- see closingsAllTime.
+  let allTimeQuery = supabase.from("prospects").select("id", { count: "exact", head: true }).is("deleted_at", null).eq("status", "closing");
+  if (branchId) allTimeQuery = allTimeQuery.eq("branch_id", branchId);
+  const { count: closingsAllTime } = await allTimeQuery;
+
   const now = Date.now();
   const d7 = now - 7 * 24 * 60 * 60 * 1000;
   const d14 = now - 14 * 24 * 60 * 60 * 1000;
@@ -162,6 +178,7 @@ async function collectCrm(supabase: AdminClient, branchId: string | null): Promi
     activeProspects: active.length,
     closings30d: rows.filter((r) => r.status === "closing" && (closedAt(r) ?? 0) >= d30).length,
     closingsPrev30d: rows.filter((r) => r.status === "closing" && (closedAt(r) ?? 0) >= d60 && (closedAt(r) ?? 0) < d30).length,
+    closingsAllTime: closingsAllTime ?? 0,
   };
 }
 
@@ -381,7 +398,11 @@ export function renderSnapshotForPrompt(snapshot: FridaySignalSnapshot): string 
       const statusLines = Object.entries(c.leadsByStatus)
         .map(([status, count]) => `${status}: ${count}`)
         .join(", ");
-      return `[CRM / Pipeline] Lead baru 7 hari terakhir: ${c.newLeads7d} (7 hari sebelumnya: ${c.newLeadsPrev7d}). Prospek aktif: ${c.activeProspects}, di antaranya ${c.stalledProspects} tidak di-follow-up 3 hari atau lebih. Closing 30 hari terakhir: ${c.closings30d} (30 hari sebelumnya: ${c.closingsPrev30d}). Sebaran status (90 hari): ${statusLines || "tidak ada data"}.`;
+      const closingNote =
+        c.closingsAllTime === 0
+          ? " CATATAN PENTING: belum pernah ada satu pun closing tercatat di sistem sepanjang waktu, bukan hanya di periode ini. Artinya kemungkinan besar tahap closing di CRM memang belum dipakai tim — perlakukan ini sebagai masalah kelengkapan data/adopsi sistem, BUKAN sebagai bukti penjualan anjlok."
+          : ` Total closing tercatat sepanjang waktu: ${c.closingsAllTime}.`;
+      return `[CRM / Pipeline] Lead baru 7 hari terakhir: ${c.newLeads7d} (7 hari sebelumnya: ${c.newLeadsPrev7d}). Prospek aktif: ${c.activeProspects}, di antaranya ${c.stalledProspects} tidak di-follow-up 3 hari atau lebih. Closing 30 hari terakhir: ${c.closings30d} (30 hari sebelumnya: ${c.closingsPrev30d}).${closingNote} Sebaran status (90 hari): ${statusLines || "tidak ada data"}.`;
     }),
   );
 
@@ -398,8 +419,27 @@ export function renderSnapshotForPrompt(snapshot: FridaySignalSnapshot): string 
 
   parts.push(
     sectionOrNote(snapshot.finance, "Keuangan", (f) => {
-      const lines = f.branches.map((b) => `  - ${b.branchName}: ${idr(b.saldoIdr)}`);
-      return `[Keuangan] Saldo kas per cabang:\n${lines.join("\n") || "  (tidak ada data saldo)"}\nPengajuan pengeluaran menunggu verifikasi: ${f.pendingExpenseApprovals}.`;
+      // Age is rendered per branch, not just captured, because these balances
+      // come from a sync that can silently stop. The first real briefing read
+      // "Makassar Rp0" and concluded the branch was out of cash; the row was
+      // 9.8 days stale, and the balance next to it (Kendari, Rp1.6 M) was one
+      // day old. Without the age on the line, the model has no way to tell a
+      // branch that spent its cash from a branch nobody has synced since last
+      // week -- and those two lead to opposite decisions.
+      const now = Date.now();
+      const lines = f.branches.map((b) => {
+        const ageDays = Math.round(((now - new Date(b.syncedAt).getTime()) / 86_400_000) * 10) / 10;
+        const staleWarning = ageDays >= STALE_BALANCE_DAYS ? "  ⚠️ DATA BASI — jangan diperlakukan sebagai kondisi kas hari ini" : "";
+        return `  - ${b.branchName}: ${idr(b.saldoIdr)} (sinkron terakhir ${ageDays} hari lalu)${staleWarning}`;
+      });
+
+      const stale = f.branches.filter((b) => (now - new Date(b.syncedAt).getTime()) / 86_400_000 >= STALE_BALANCE_DAYS);
+      const staleNote =
+        stale.length > 0
+          ? `\nPERINGATAN: saldo ${stale.map((b) => b.branchName).join(", ")} berumur ${STALE_BALANCE_DAYS} hari atau lebih. Angka itu TIDAK boleh dipakai untuk menyimpulkan kas cabang kosong atau menyusun peringatan krisis kas. Kalau ini relevan dengan temuan Anda, sebutkan bahwa sinkronisasi keuangannya tertinggal dan itu sendiri yang harus diperbaiki lebih dulu.`
+          : "";
+
+      return `[Keuangan] Saldo kas per cabang:\n${lines.join("\n") || "  (tidak ada data saldo)"}${staleNote}\nPengajuan pengeluaran menunggu verifikasi: ${f.pendingExpenseApprovals}.`;
     }),
   );
 
