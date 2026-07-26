@@ -15,6 +15,8 @@ import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank"
 import { processInvestorIntelligenceRefreshJob } from "@/lib/ai/domains/investor-intelligence";
 import { processCashflowIntelligenceRefreshJob } from "@/lib/ai/domains/cashflow-intelligence";
 import { processOccupancyIntelligenceRefreshJob } from "@/lib/ai/domains/occupancy-intelligence";
+import { processFridayExecutiveBriefing, type FridayBriefingJobPayload } from "@/lib/ai/friday/briefing";
+import { processFridayHoldingBriefing, type FridayHoldingBriefingJobPayload } from "@/lib/ai/friday/holding";
 import { generateWeeklySalesTeaching } from "@/lib/ai/domains/sales-teaching";
 import { generateCashflowActionPlan } from "@/lib/ai/domains/cashflow-teaching";
 import { generateOccupancyTeaching, type OccupancyPropertySnapshot } from "@/lib/ai/domains/occupancy-teaching";
@@ -155,6 +157,26 @@ class NonRetryableJobError extends Error {
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 type JobRow = { id: string; job_type: string; payload: unknown; attempt_count: number; max_attempts: number };
+
+/**
+ * The dispatch chain below used to end in a bare `: processSocialWeeklyEvaluation(...)`,
+ * which quietly made "social weekly evaluation" the handler for every job type
+ * this build does not recognize.
+ *
+ * That is a live hazard whenever the database learns a job type before the code
+ * does -- exactly what happens in the window between applying a migration and
+ * shipping the deploy that handles it. The queue row inserts fine (the check
+ * constraint already allows it), the insert trigger dispatches it here, the
+ * unknown type falls through, and the team receives a content-performance
+ * broadcast nobody asked for -- reported as `succeeded`, so nothing looks wrong.
+ *
+ * Dead-lettering instead is the honest outcome: the job is visibly stuck until
+ * the deploy that understands it lands, and no unrelated automation fires in
+ * the meantime.
+ */
+function unknownJobType(jobType: string): never {
+  throw new NonRetryableJobError(`Unknown job_type "${jobType}" -- this deployment has no handler for it (database is ahead of the deployed code?)`);
+}
 
 /** One Gemini attempt for a queued inbound WhatsApp question, replying and logging the conversation turn. */
 async function processWhatsAppAiReply(supabase: AdminClient, job: JobRow) {
@@ -1901,7 +1923,13 @@ export async function POST(request: Request) {
                                                   ? await processKontenAiAutoBridgeToStudio(supabase, job)
                                                   : job.job_type === "zernio_publish_reconcile"
                                                     ? await processZernioPublishReconcile(supabase, job)
-                                                    : await processSocialWeeklyEvaluation(supabase);
+                                                    : job.job_type === "friday_executive_briefing"
+                                                      ? await processFridayExecutiveBriefing(job.payload as unknown as FridayBriefingJobPayload, job.id)
+                                                      : job.job_type === "friday_holding_briefing"
+                                                        ? await processFridayHoldingBriefing(job.payload as unknown as FridayHoldingBriefingJobPayload, job.id)
+                                                        : job.job_type === "social_weekly_evaluation"
+                                                          ? await processSocialWeeklyEvaluation(supabase)
+                                                          : unknownJobType(job.job_type);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

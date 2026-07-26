@@ -136,6 +136,31 @@ export const PERMISSIONS = {
 
   KOS_OCCUPANCY_VIEW: "kos_occupancy.view",
 
+  /**
+   * FRIDAY — the executive intelligence layer (/friday).
+   *
+   * Three permissions rather than one, because reading FRIDAY's analysis,
+   * asking it a question, and authorizing it to act are genuinely different
+   * powers. Only the third one sends a WhatsApp message to a Kepala Cabang or
+   * queues a job, which is why private_assistant holds the first two and not
+   * the third (same reasoning as every other permission that role has).
+   */
+  FRIDAY_VIEW: "friday.view",
+  FRIDAY_RUN: "friday.run",
+  FRIDAY_ACTION_DECIDE: "friday.action_decide",
+
+  /**
+   * Holding group view (/friday/holding) — FRIDAY reading every business unit
+   * at once. Separate from FRIDAY_VIEW because group performance is a
+   * different audience than one company's operations.
+   *
+   * HOLDING_MANAGE is split off deliberately: it edits connector_config, which
+   * decides what URL this server fetches on a schedule. That is a materially
+   * different power from reading the group report.
+   */
+  HOLDING_VIEW: "holding.view",
+  HOLDING_MANAGE: "holding.manage",
+
   /** Gates /hr — the HR control room (action queue + live attendance + compliance). */
   HR_WORKSPACE_VIEW: "hr_workspace.view",
   /** Gates /asisten — the private assistant's workspace. */
@@ -204,6 +229,11 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // deliberately NOT granted here -- owner's call: only the Markom role,
     // Jogja's own Kepala Cabang, and Super Admin get Markom access for now.
     PERMISSIONS.HR_DISCIPLINE_VIEW,
+    PERMISSIONS.FRIDAY_VIEW,
+    PERMISSIONS.FRIDAY_RUN,
+    PERMISSIONS.FRIDAY_ACTION_DECIDE,
+    PERMISSIONS.HOLDING_VIEW,
+    PERMISSIONS.HOLDING_MANAGE,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -240,6 +270,12 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
     // Markom pages deliberately NOT granted here -- see Direktur Utama note.
     PERMISSIONS.HR_DISCIPLINE_VIEW,
+    PERMISSIONS.FRIDAY_VIEW,
+    PERMISSIONS.FRIDAY_RUN,
+    PERMISSIONS.FRIDAY_ACTION_DECIDE,
+    // Reads the group, does not re-wire it -- HOLDING_MANAGE edits connector
+    // endpoints and stays with Super Admin / Direktur Utama.
+    PERMISSIONS.HOLDING_VIEW,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -407,6 +443,12 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Assists the Super Admin, so the automation/health alerts that land on
     // /monitoring are part of what they are expected to notice first.
     PERMISSIONS.SYSTEM_MONITORING_VIEW,
+    // Reads FRIDAY's briefing and may ask it a question, so nothing reaches
+    // the principal's desk unread. FRIDAY_ACTION_DECIDE is deliberately
+    // absent: preparing a decision is the job, making it is not.
+    PERMISSIONS.FRIDAY_VIEW,
+    PERMISSIONS.FRIDAY_RUN,
+    PERMISSIONS.HOLDING_VIEW,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

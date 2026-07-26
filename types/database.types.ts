@@ -14,6 +14,15 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type FridayBriefingScopeDb = "company" | "branch" | "business" | "holding";
+export type HoldingBusinessStatusDb = "active" | "inactive";
+export type HoldingConnectorKindDb = "internal_mkh" | "http";
+export type FridayBriefingStatusDb = "pending" | "ready" | "failed";
+export type FridayTriggerSourceDb = "scheduled" | "manual";
+export type FridaySeverityDb = "normal" | "perhatian" | "kritis";
+export type FridayActionStatusDb = "proposed" | "approved" | "rejected" | "executed" | "failed";
+export type FridayRiskTierDb = "low" | "medium" | "high";
+
 export type AttendanceStatusDb = "hadir" | "terlambat" | "izin" | "sakit" | "alpha";
 export type LeaveTypeDb = "izin" | "sakit";
 export type LeaveStatusDb = "pending" | "approved" | "rejected";
@@ -1078,6 +1087,183 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      holding_businesses: {
+        Row: {
+          id: string;
+          key: string;
+          name: string;
+          business_type: string;
+          source_system: string | null;
+          status: HoldingBusinessStatusDb;
+          connector_kind: HoldingConnectorKindDb;
+          connector_config: Json;
+          display_order: number;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          name: string;
+          business_type: string;
+          source_system?: string | null;
+          status?: HoldingBusinessStatusDb;
+          connector_kind: HoldingConnectorKindDb;
+          connector_config?: Json;
+          display_order?: number;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["holding_businesses"]["Insert"]>;
+        Relationships: [];
+      };
+      friday_briefings: {
+        Row: {
+          id: string;
+          scope: FridayBriefingScopeDb;
+          branch_id: string | null;
+          business_id: string | null;
+          business_health: Json;
+          trigger_source: FridayTriggerSourceDb;
+          requested_by: string | null;
+          status: FridayBriefingStatusDb;
+          headline: string | null;
+          severity: FridaySeverityDb | null;
+          situasi: string | null;
+          analisa: string | null;
+          risiko: string | null;
+          solusi: Json;
+          rekomendasi: string | null;
+          hasil_diharapkan: string | null;
+          signals: Json;
+          model_note: string | null;
+          error_detail: string | null;
+          generated_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope?: FridayBriefingScopeDb;
+          branch_id?: string | null;
+          business_id?: string | null;
+          business_health?: Json;
+          trigger_source?: FridayTriggerSourceDb;
+          requested_by?: string | null;
+          status?: FridayBriefingStatusDb;
+          headline?: string | null;
+          severity?: FridaySeverityDb | null;
+          situasi?: string | null;
+          analisa?: string | null;
+          risiko?: string | null;
+          solusi?: Json;
+          rekomendasi?: string | null;
+          hasil_diharapkan?: string | null;
+          signals?: Json;
+          model_note?: string | null;
+          error_detail?: string | null;
+          generated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["friday_briefings"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "friday_briefings_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "friday_briefings_requested_by_fkey";
+            columns: ["requested_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "friday_briefings_business_id_fkey";
+            columns: ["business_id"];
+            referencedRelation: "holding_businesses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      friday_actions: {
+        Row: {
+          id: string;
+          briefing_id: string;
+          action_key: string;
+          title: string;
+          rationale: string;
+          risk_tier: FridayRiskTierDb;
+          payload: Json;
+          status: FridayActionStatusDb;
+          decided_by: string | null;
+          decided_at: string | null;
+          executed_at: string | null;
+          execution_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          briefing_id: string;
+          action_key: string;
+          title: string;
+          rationale: string;
+          risk_tier?: FridayRiskTierDb;
+          payload?: Json;
+          status?: FridayActionStatusDb;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          executed_at?: string | null;
+          execution_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["friday_actions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "friday_actions_briefing_id_fkey";
+            columns: ["briefing_id"];
+            referencedRelation: "friday_briefings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "friday_actions_decided_by_fkey";
+            columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** Migration 0176 (automation hardening). Service-role only — revoked from anon/authenticated. */
+      automation_dispatch_log: {
+        Row: {
+          id: string;
+          request_id: number;
+          path: string;
+          dispatched_at: string;
+          resolved_at: string | null;
+          status_code: number | null;
+          timed_out: boolean | null;
+          error_msg: string | null;
+        };
+        Insert: {
+          id?: string;
+          request_id: number;
+          path: string;
+          dispatched_at?: string;
+          resolved_at?: string | null;
+          status_code?: number | null;
+          timed_out?: boolean | null;
+          error_msg?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["automation_dispatch_log"]["Insert"]>;
+        Relationships: [];
       };
       crm_projects: {
         Row: {
@@ -2204,7 +2390,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -2216,7 +2402,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
