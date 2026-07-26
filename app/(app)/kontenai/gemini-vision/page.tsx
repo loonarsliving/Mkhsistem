@@ -46,15 +46,15 @@ export default async function GeminiVisionPage() {
     <div className="space-y-6">
       <PageHeader
         title="Gemini Vision"
-        description="Status analisis aset visual. Analisis berjalan otomatis di latar belakang setiap 5 menit — tidak perlu dijalankan manual."
+        description="Aset mana yang sudah pernah dianalisis Gemini Vision. Analisis berjalan sebagai bagian dari produksi video — Asset Selector memilih footage sesuai brief, lalu footage terpilih itulah yang dianalisis. Google Drive hanya penyimpanan."
       />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Kesiapan Asset Library</CardTitle>
           <CardDescription>
-            AI Director hanya bisa menyusun brief dari aset yang sudah dianalisis. Aset yang belum dianalisis tidak
-            ikut diperhitungkan sama sekali, jadi angka &quot;Selesai&quot; inilah yang menentukan kualitas brief.
+            Analisis Gemini Vision terjadi saat footage dipilih untuk sebuah video, bukan sebagai proses massal atas
+            seluruh isi Drive.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -84,8 +84,8 @@ export default async function GeminiVisionPage() {
         <CardHeader>
           <CardTitle className="text-base">Kesiapan per brand</CardTitle>
           <CardDescription>
-            Villa (occupancy) dan Beauty adalah dua lini yang diotomasi KontenAI — keduanya perlu aset yang sudah
-            dianalisis sebelum toggle otomasi dinyalakan.
+            Villa (occupancy) dan Beauty adalah dua lini yang diotomasi KontenAI. Angka ini menunjukkan footage yang
+            sudah pernah dipakai dan dianalisis, bukan target yang harus dipenuhi lebih dulu.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -108,11 +108,11 @@ export default async function GeminiVisionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Belum selesai</CardTitle>
+          <CardTitle className="text-base">Belum pernah dianalisis</CardTitle>
           <CardDescription>
-            Diproses 3 aset setiap 5 menit. Batasnya sengaja kecil: satu video bisa memakan sampai 8 panggilan Gemini,
-            dan menguras antrean sekaligus akan membuka circuit breaker yang dipakai bersama seluruh fitur AI. Aset
-            berstatus <strong>Gagal</strong> tidak dicoba ulang otomatis — ulangi lewat tombol per aset di{" "}
+            Ini <strong>bukan</strong> tumpukan pekerjaan. Aset baru dianalisis ketika Asset Selector memilihnya untuk
+            sebuah video, jadi wajar kalau sebagian besar footage di Drive belum pernah dianalisis. Aset berstatus{" "}
+            <strong>Gagal</strong> bisa diulangi lewat tombol per aset di{" "}
             <Link href="/kontenai/asset-library" className="underline underline-offset-2">
               Asset Library
             </Link>
@@ -123,8 +123,8 @@ export default async function GeminiVisionPage() {
           {outstanding.length === 0 ? (
             <EmptyState
               icon={CircleCheck}
-              title="Semua aset sudah dianalisis"
-              description="Asset Library siap dipakai AI Director."
+              title="Semua aset pernah dianalisis"
+              description="Setiap footage di Asset Library sudah pernah dipakai dalam produksi."
               className="py-8"
             />
           ) : (

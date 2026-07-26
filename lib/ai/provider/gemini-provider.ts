@@ -38,6 +38,9 @@ const HARM_CATEGORIES = [
  * there is no direct call anywhere that bypasses the retry layer.
  */
 export class GeminiProvider implements AIProvider {
+  /** Pause between the two health probes. Short on purpose: long enough to clear a one-off upstream 500, short enough that the Monitoring page still renders promptly. */
+  private static readonly HEALTH_RETRY_DELAY_MS = 1500;
+
   readonly name = "gemini" as const;
 
   constructor(
@@ -263,15 +266,28 @@ export class GeminiProvider implements AIProvider {
   }
 
   /**
-   * maxAttempts: 1 — a health probe is not worth a full 429/503 backoff
-   * sequence (up to 140s+); still goes through the same withGeminiRetry
-   * layer (via generate()), just configured for a single attempt. Caching
-   * successful results is the caller's job (lib/ai/service.ts's
+   * Each probe is still maxAttempts: 1 — a health probe is not worth a full
+   * 429/503 backoff sequence (up to 140s+); it goes through the same
+   * withGeminiRetry layer (via generate()), just configured for a single
+   * attempt. Caching successful results is the caller's job (lib/ai/service.ts's
    * aiHealthCheck()), not this method's — this always performs a real call
    * when invoked.
+   *
+   * But one attempt total was too brittle to be useful. Gemini returns an
+   * occasional HTTP 500 "Internal error encountered" that has nothing to do
+   * with this deployment's key, quota, or model, and a single-shot probe
+   * turned one of those into "AI connection dead" on the Monitoring page
+   * while every real (4-attempt) AI call in the system kept succeeding —
+   * observed in production 2026-07-26 17:20.
+   *
+   * So: probe, and on failure probe once more after a short fixed pause.
+   * Two fast attempts, deliberately NOT the exponential 20s/40s/80s ladder,
+   * so the page still renders quickly while a one-off upstream blip no
+   * longer reports the whole AI layer as down. Only a repeated failure is
+   * reported — that is the signal worth acting on.
    */
   async healthCheck(): Promise<{ ok: boolean; detail: string }> {
-    try {
+    const probe = async () => {
       const res = await this.generate({
         systemPrompt: "You are a health check probe. Reply with exactly one word.",
         userPrompt: "Reply with exactly: OK",
@@ -279,10 +295,24 @@ export class GeminiProvider implements AIProvider {
         temperature: 0,
         maxAttempts: 1,
       });
-      const ok = res.text.trim().length > 0;
-      return { ok, detail: `model=${this.options.model} responseTimeMs=${res.responseTimeMs} text="${res.text.trim().slice(0, 40)}"` };
-    } catch (err) {
-      return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: res.text.trim().length > 0,
+        detail: `model=${this.options.model} responseTimeMs=${res.responseTimeMs} text="${res.text.trim().slice(0, 40)}"`,
+      };
+    };
+
+    try {
+      return await probe();
+    } catch (firstError) {
+      await new Promise((resolve) => setTimeout(resolve, GeminiProvider.HEALTH_RETRY_DELAY_MS));
+      try {
+        const result = await probe();
+        return { ...result, detail: `${result.detail} (percobaan ke-2; percobaan pertama gagal sementara)` };
+      } catch (secondError) {
+        const first = firstError instanceof Error ? firstError.message : String(firstError);
+        const second = secondError instanceof Error ? secondError.message : String(secondError);
+        return { ok: false, detail: second === first ? second : `${second} (percobaan pertama: ${first})` };
+      }
     }
   }
 }

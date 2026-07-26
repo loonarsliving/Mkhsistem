@@ -42,7 +42,6 @@ import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webho
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
-import { getKontenAiAsset } from "@/repositories/kontenai-assets.repository";
 import { createContentSubmission, deleteSubmissionVideoFromStorage, reconcileZernioPublishStatus, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import { generateCreativeBrief, type DirectorObjective, type DirectorPlatform } from "@/lib/ai/domains/kontenai-director";
@@ -264,49 +263,6 @@ const CONTENT_REVIEW_MAX_VIDEO_BYTES = 50 * 1024 * 1024;
  * driveMediaUrl) instead of a plain public fetch, since a Drive file's
  * storage_path here is a Drive file id, not a Supabase Storage path.
  */
-/**
- * Gemini Vision for one Asset Library asset (0185).
- *
- * Vision used to run only on browser upload or a per-asset button click, so
- * the 32 Drive-synced assets in production sat unanalyzed and AI Director had
- * no real footage to reason over. This is the background path:
- * kontenai_vision_dispatch_pending() queues assets, this handler analyzes
- * them, and the queue's existing retry/backoff covers transient Gemini
- * failures.
- *
- * runVisionAnalysisAndSave is reused rather than reimplemented so the button
- * and the queue can never drift apart in what they store. It never throws --
- * it writes ai_vision_status='failed' with the message and returns the
- * outcome -- so a genuinely undecodable file is recorded and skipped by the
- * next sweep instead of retried forever.
- */
-async function processKontenAiAssetVision(supabase: AdminClient, job: JobRow) {
-  const payload = job.payload as unknown as { asset_id?: string };
-  if (!payload.asset_id) throw new NonRetryableJobError("payload.asset_id tidak ada");
-
-  const asset = await getKontenAiAsset(supabase, payload.asset_id);
-
-  // Imported lazily, not at module scope. The analysis chain reaches
-  // extractVideoKeyframes -> @ffmpeg-installer/ffmpeg, which resolves a
-  // platform-specific binary package the moment it is required. A static
-  // import made Next fail this route's build-time page-data collection
-  // outright ("Failed to collect page data for /api/ai/process-job"), since
-  // that step loads the module without ffmpeg present. Deferring it to the
-  // job body keeps the build clean and only pays the cost when a Vision job
-  // actually runs.
-  const { runVisionAnalysisAndSave } = await import("@/features/kontenai/asset-library/actions/gemini-vision.actions");
-  const outcome = await runVisionAnalysisAndSave(supabase, asset);
-
-  if (!outcome.success) {
-    // Already persisted as ai_vision_status='failed'. Surfacing it as a
-    // non-retryable job keeps the reason on the job row too, without the
-    // queue re-running an analysis the asset row already records as failed.
-    throw new NonRetryableJobError(outcome.error ?? "Gemini Vision gagal menganalisis aset");
-  }
-
-  return { assetId: asset.id, assetType: asset.asset_type };
-}
-
 async function processContentSubmissionReview(supabase: AdminClient, job: JobRow) {
   const payload = job.payload as unknown as ContentSubmissionReviewJobPayload;
 
@@ -1918,9 +1874,7 @@ export async function POST(request: Request) {
 
   try {
     const result =
-      job.job_type === "kontenai_asset_vision"
-        ? await processKontenAiAssetVision(supabase, job)
-        : job.job_type === "whatsapp_ai_reply"
+      job.job_type === "whatsapp_ai_reply"
         ? await processWhatsAppAiReply(supabase, job)
         : job.job_type === "crm_sp1_draft"
           ? await processCrmSp1Draft(supabase, job)
