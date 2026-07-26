@@ -61,3 +61,28 @@ describe("requireCronAuth", () => {
     expect(requireCronAuth(req({ "x-cron-secret": "s3cr3t" }))?.status).toBe(401);
   });
 });
+
+describe("requireCronAuth whitespace tolerance", () => {
+  // Regression: a secret pasted into the Vercel env-var field arrived with a
+  // trailing newline, which failed the length check and 401'd every
+  // automation in production even though the visible characters matched.
+  it("accepts a header whose value has surrounding whitespace", () => {
+    process.env.CRON_SECRET = "s3cr3t-value";
+    expect(requireCronAuth(req({ "x-cron-secret": "  s3cr3t-value  " }))).toBeNull();
+  });
+
+  it("accepts an env var stored with a trailing newline", () => {
+    process.env.CRON_SECRET = "s3cr3t-value\n";
+    expect(requireCronAuth(req({ "x-cron-secret": "s3cr3t-value" }))).toBeNull();
+  });
+
+  it("still rejects a genuinely different secret", () => {
+    process.env.CRON_SECRET = " s3cr3t-value ";
+    expect(requireCronAuth(req({ "x-cron-secret": "other-value" }))?.status).toBe(401);
+  });
+
+  it("treats a whitespace-only env var as unset (fails open, not 401)", () => {
+    process.env.CRON_SECRET = "   ";
+    expect(requireCronAuth(req())).toBeNull();
+  });
+});

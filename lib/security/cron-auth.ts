@@ -31,7 +31,12 @@ import { logger } from "@/lib/logger";
  * both sides can be configured in either order without an outage window.
  */
 export function requireCronAuth(request: Request): NextResponse | null {
-  const expected = process.env.CRON_SECRET ?? "";
+  // .trim() on both sides: pasting a secret into a dashboard env-var field
+  // very easily carries a trailing newline or space, and without trimming
+  // that produces a length mismatch and a 401 on every automation with no
+  // visible difference between the two values. Trimming cannot weaken the
+  // check -- a secret is never intended to have leading/trailing space.
+  const expected = (process.env.CRON_SECRET ?? "").trim();
 
   if (expected.length === 0) {
     logger.warn("cron auth: CRON_SECRET is not set, endpoint is unauthenticated", {
@@ -40,7 +45,7 @@ export function requireCronAuth(request: Request): NextResponse | null {
     return null;
   }
 
-  const provided = request.headers.get("x-cron-secret") ?? "";
+  const provided = (request.headers.get("x-cron-secret") ?? "").trim();
   if (!secretsMatch(provided, expected)) {
     logger.warn("cron auth: rejected request with missing or invalid x-cron-secret", {
       path: new URL(request.url).pathname,
