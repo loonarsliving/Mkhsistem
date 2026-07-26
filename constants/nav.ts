@@ -22,6 +22,7 @@ import {
   MessageCircle,
   Network,
   PieChart,
+  Radar,
   ReceiptText,
   Rocket,
   Settings,
@@ -61,6 +62,10 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Utama",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
+      // Directly under Dashboard on purpose: the dashboard says what the
+      // numbers are, FRIDAY says what they mean. Reading them in that order is
+      // the intended habit.
+      { label: "FRIDAY", href: "/friday", icon: Radar, permission: PERMISSIONS.FRIDAY_VIEW },
       {
         label: "Ruang Kerja Asisten",
         href: "/asisten",

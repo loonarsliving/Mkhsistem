@@ -36,11 +36,11 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
    maksimal 4 percobaan. Gagal non-transient (model tidak ada, foto belum
    diunggah, budget habis) → langsung `dead_letter` tanpa membuang retry.
 
-26 `job_type` terdaftar di constraint `ai_job_queue_job_type_check`.
+27 `job_type` terdaftar di constraint `ai_job_queue_job_type_check`.
 
 ---
 
-## 2. Inventaris `pg_cron` — 56 job (54 lama + 2 dari audit ini)
+## 2. Inventaris `pg_cron` — 56 job (54 lama + 2 dari audit + 1 FRIDAY − 1 KontenAI yang dilepas)
 
 ### Platform & housekeeping
 
@@ -94,7 +94,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `markom-ai-checklist-never-empty` | `0 */2 * * *` | tiap 2 jam | Jaga checklist Markom tidak kosong (AI) |
 | `markom-content-publish-worker` | `*/5 * * * *` | tiap 5 mnt | Publish ke IG/TikTok via Zernio |
 | `markom-reconcile-zernio-publish-status` | `*/5 * * * *` | tiap 5 mnt | Rekonsiliasi status publish |
-| `kontenai-automation-dispatch` | `*/5 * * * *` | tiap 5 mnt | Pipeline KontenAI (**flag mati**) |
+| ~~`kontenai-automation-dispatch`~~ | — | — | **Dilepas** (migrasi `0180`). Jadwalnya kini mengikuti `kontenai_automation_settings.enabled` — lihat T7. |
 | `markom-kepala-cabang-pending-reminder-3days` | `30 3 * * *` | 11:30 | Reminder checklist (nama menyesatkan: harian) |
 | `markom-checklist-reminder-afternoon` | `30 6 * * *` | 14:30 | Nudge kedua di hari yang sama |
 | `social-daily-snapshot-capture` | `0 23 * * *` | 07:00 | Snapshot metrik sosial |
@@ -133,6 +133,26 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `ai-knowledge-bank-weekly-refresh` | `0 2 * * 1` | Sen 10:00 | Refresh knowledge bank |
 | `ai-occupancy-intelligence-weekly-refresh` | `20 2 * * 1` | Sen 10:20 | Refresh intelligence okupansi |
 | `mp-occupancy-teaching-biweekly` | `0 5 * * 3,5` | Rab/Jum 13:00 | Teaching engine okupansi |
+| `friday-executive-briefing-daily` | `30 22 * * *` | 06:30 | Briefing eksekutif lintas domain FRIDAY — **`active = false` sampai kode ter-deploy** |
+
+`friday-executive-briefing-daily` sengaja dijadwalkan **di luar** jendela burst
+Senin 01:00–02:00 UTC (temuan **T5** di bawah). Menaruh laporan yang paling
+pertama dibaca pimpinan di dalam jendela yang paling padat justru menjadikannya
+laporan yang paling mungkin gagal. Job ini juga membuat baris
+`friday_briefings` berstatus `pending` **sebelum** mengantrikan job AI-nya, jadi
+job yang mati di `dead_letter` tetap terlihat sebagai briefing `failed` di
+`/friday` — bukan halaman kosong yang tidak bisa dibedakan dari "hari ini tidak
+ada temuan".
+
+> **Job ini sengaja dibuat `active = false` saat migrasi 0179 diterapkan.**
+> Skema sudah live, tapi handler `friday_executive_briefing` baru ada di kode
+> yang belum ter-deploy. Sebelum perbaikan di route (lihat di bawah), job type
+> yang tidak dikenal jatuh ke cabang terakhir rantai dispatch dan menjalankan
+> `processSocialWeeklyEvaluation` — artinya cron ini akan mengirim broadcast
+> evaluasi konten setiap pagi, dilaporkan `succeeded`. Aktifkan dengan
+> `select cron.alter_job((select jobid from cron.job where jobname =
+> 'friday-executive-briefing-daily'), active := true);` **setelah** deploy yang
+> memuat handler-nya naik ke produksi.
 
 ### Voice bridge
 
@@ -241,11 +261,33 @@ berarti `unschedule` + `schedule`; layak digabung ke perubahan terjadwal
 berikutnya.
 
 **T7 — Worker Railway menyala 24/7 untuk fitur yang dimatikan.** *(biaya)*
-`kontenai_automation_settings.enabled = false`, dan cron
-`kontenai-automation-dispatch` tetap jalan tiap 5 menit lalu langsung
-`return` (798 eksekusi dalam 7 hari). Kontainer render/Veo di Railway juga
-tetap hidup tanpa pekerjaan. Aman secara fungsional, tapi membayar compute
-untuk pipeline yang tidak aktif.
+✅ **Sisi database sudah diperbaiki (migrasi `0180`).** ⚠️ **Sisi Railway masih
+menunggu tindakan manual.**
+
+Kondisi saat audit ulang (26 Juli, dibaca langsung dari produksi):
+`kontenai_automation_settings.enabled = false` sejak 23 Juli, dan cron
+`kontenai-automation-dispatch` tetap jalan tiap 5 menit lalu langsung `return`
+— **851 eksekusi dalam 7 hari**, semuanya berstatus `succeeded`. Itulah sebabnya
+temuan ini tidak pernah muncul sebagai masalah: job yang tidak melakukan apa pun
+dengan sempurna terlihat persis seperti job yang bekerja.
+
+Perbaikannya **bukan** sekadar `cron.unschedule`. Toggle fitur ini ada di UI
+KontenAI, jadi orang berikutnya yang menyalakannya akan mendapat setelan
+bertuliskan "aktif", tanpa cron di belakangnya, dan tanpa error di mana pun —
+fitur yang diam-diam tidak berjalan, dengan penyebab yang ditulis berbulan-bulan
+sebelumnya. Karena itu `0180` menjadikan **jadwal sebagai konsekuensi dari
+setelan**: trigger pada `kontenai_automation_settings` menjadwalkan /
+melepas cron dalam transaksi yang sama dengan toggle-nya. Kini hanya ada satu
+saklar, dan saklar itu ada di UI. Diverifikasi dua arah di produksi (aktif →
+cron muncul, nonaktif → cron hilang), termasuk sebagai user Super Admin yang
+benar-benar login, lalu di-rollback.
+
+**Sisa yang di luar database:** kontainer render/Veo di Railway masih hidup 24/7.
+Per 26 Juli, seluruh tabel `kontenai_render_jobs` hanya berisi **2 baris**,
+terakhir 23 Juli, dan **nol** yang `pending`/`processing` — jadi kontainer itu
+memang menganggur, bukan sibuk. Mematikannya adalah tindakan di dashboard
+Railway. Konsekuensinya: render manual dari halaman KontenAI ikut mati sampai
+kontainer dinyalakan lagi.
 
 **T8 — Tiga job HR nonaktif secara permanen.**
 `ai-daily-motivation`, `attendance-checkin-reminder-daily`, dan
@@ -258,6 +300,31 @@ hidupkan kembali dengan cadence yang lebih jarang.
 Komentar di sana mencatat ini keputusan sadar yang sebelumnya disetujui
 (tidak ada jalur env var saat itu). Sekarang jalur env var jelas tersedia —
 layak dipindahkan ke Vercel Environment Variables saat ada kesempatan.
+
+**T10 — ~70 fungsi `SECURITY DEFINER` bisa dipanggil tanpa login.** *(keamanan)*
+*Temuan baru, 26 Juli, dari Supabase security advisor.*
+
+Postgres memberi `EXECUTE` ke `PUBLIC` secara default untuk setiap fungsi baru.
+Karena fungsi-fungsi ini ada di skema `public`, PostgREST mengeksposnya sebagai
+endpoint RPC — sehingga **permintaan anonim** ke
+`/rest/v1/rpc/<nama_fungsi>` dapat memicunya. Advisor menandai **72 fungsi**,
+di antaranya `ai_send_daily_report`, `ai_send_birthday_wishes`,
+`ai_send_sales_target_reminders`, `ai_job_dispatch_pending`, dan seluruh
+`ai_run_*_dispatch`. Praktisnya: siapa pun di internet berpotensi memicu
+broadcast WhatsApp dan mengantrikan job Gemini, satu request sekali jalan.
+
+Dua fungsi yang ditambahkan hari ini (`friday_enqueue_daily_briefing`,
+`kontenai_automation_sync_schedule`) **sudah ditutup** lewat migrasi `0181` —
+`revoke all ... from public, anon, authenticated`, `service_role` tetap
+dipertahankan. Sudah diverifikasi bahwa pencabutan ini tidak mematikan trigger
+KontenAI (Postgres memeriksa `EXECUTE` fungsi trigger saat `create trigger`,
+bukan saat trigger berjalan).
+
+Sisanya **sengaja belum disentuh**. Sebagian fungsi dalam daftar itu memang
+dipanggil lewat RPC oleh aplikasi (`approve_employee_registration` contoh yang
+paling jelas), jadi revoke serentak akan mematikan alur yang sah. Ini perlu
+ditelusuri satu per satu — bukan disapu sekaligus — dan layak jadi pekerjaan
+tersendiri.
 
 ---
 
