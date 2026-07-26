@@ -15,6 +15,16 @@ export const ROLE_KEYS = {
   SALES: "sales",
   FINANCE: "finance",
   MARKOM: "markom",
+  /**
+   * Private assistant to the Super Admin. Deliberately a *visibility* role,
+   * not an authority one: it can see everything the principal would see --
+   * including payroll figures -- but holds no approve, verify, manage, or
+   * publish permission anywhere. If an assistant could
+   * approve, the audit trail would record decisions under a principal who
+   * never saw them, which destroys the evidentiary value of every approval
+   * in the system.
+   */
+  PRIVATE_ASSISTANT: "private_assistant",
   /** Placeholder role for self-registered accounts awaiting approval — grants nothing. */
   PENDING: "pending",
 } as const;
@@ -91,6 +101,13 @@ export const PERMISSIONS = {
   KPI_TASK_VERIFY: "kpi_task.verify",
 
   PAYROLL_MANAGE: "payroll.manage",
+  /**
+   * Read payroll figures without the authority to approve a run.
+   * payroll.manage was the only payroll permission, so "let them see the
+   * numbers" and "let them approve the money" could not be separated --
+   * this splits them.
+   */
+  PAYROLL_VIEW: "payroll.view",
   HR_EXPENSE_CREATE: "hr_expense.create",
   HR_EXPENSE_APPROVE: "hr_expense.approve",
 
@@ -118,6 +135,13 @@ export const PERMISSIONS = {
   LOONARS_BEAUTY_MANAGE: "loonars_beauty.manage",
 
   KOS_OCCUPANCY_VIEW: "kos_occupancy.view",
+
+  /** Gates /hr — the HR control room (action queue + live attendance + compliance). */
+  HR_WORKSPACE_VIEW: "hr_workspace.view",
+  /** Gates /asisten — the private assistant's workspace. */
+  ASSISTANT_WORKSPACE_VIEW: "assistant_workspace.view",
+  /** Personal follow-up list on /asisten. Separate from the view permission so the page can be granted read-only to someone else later. */
+  ASSISTANT_FOLLOWUP_MANAGE: "assistant_followup.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -201,6 +225,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
     PERMISSIONS.PAYROLL_MANAGE,
+    PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
     PERMISSIONS.SP1_WARNING_MANAGE,
@@ -225,11 +250,18 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.ANNOUNCEMENT_MANAGE,
     PERMISSIONS.EMPLOYEE_VIEW_ALL,
     PERMISSIONS.EMPLOYEE_MANAGE,
+    // Approving a new hire is core HR work, but the original seed gave
+    // registration control only to Direktur Operasional and Kepala Cabang,
+    // so an HR account could create and manage employees yet not admit them.
+    PERMISSIONS.REGISTRATION_VIEW_ALL,
+    PERMISSIONS.REGISTRATION_MANAGE,
     PERMISSIONS.PAYROLL_MANAGE,
+    PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
     PERMISSIONS.SP1_WARNING_MANAGE,
     PERMISSIONS.SP1_WARNING_VIEW_ALL,
+    PERMISSIONS.HR_WORKSPACE_VIEW,
   ],
   [ROLE_KEYS.KEPALA_CABANG]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -304,6 +336,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_FINANCE_VERIFY,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
     PERMISSIONS.PAYROLL_MANAGE,
+    PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
   ],
@@ -320,6 +353,48 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
+  ],
+  /**
+   * Assists the Super Admin, so the visibility is the widest of any
+   * non-admin role -- the point of the role is that nothing reaches the
+   * principal's desk without the assistant having already seen it.
+   *
+   * Every entry below is a *_view / *_view_all permission. There is no
+   * manage, approve, verify, create, or send anywhere in this list, and
+   * that is the whole design: the assistant chases and prepares, the
+   * principal decides. Note memo/announcement creation is absent even
+   * though "drafting" was the intent -- memos publish the instant they are
+   * created (published_at defaults to now(), no draft state), so memo.create
+   * is a publish right today, not a drafting one. Adding a real draft state
+   * is the prerequisite for granting it.
+   */
+  [ROLE_KEYS.PRIVATE_ASSISTANT]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ASSISTANT_WORKSPACE_VIEW,
+    PERMISSIONS.ASSISTANT_FOLLOWUP_MANAGE,
+    PERMISSIONS.ATTENDANCE_VIEW_ALL,
+    PERMISSIONS.ATTENDANCE_EXPORT,
+    PERMISSIONS.MEMO_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.EMPLOYEE_VIEW_ALL,
+    PERMISSIONS.REGISTRATION_VIEW_ALL,
+    PERMISSIONS.PROSPECT_VIEW_ALL,
+    PERMISSIONS.SALES_TARGET_VIEW_ALL,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
+    PERMISSIONS.CRM_ANALYTICS_VIEW_EXECUTIVE,
+    PERMISSIONS.KPI_TASK_VIEW_ALL,
+    PERMISSIONS.SP1_WARNING_VIEW_ALL,
+    PERMISSIONS.AD_CAMPAIGN_VIEW,
+    PERMISSIONS.CONTENT_PLANNER_VIEW,
+    PERMISSIONS.PROMO_TEMPLATE_VIEW,
+    PERMISSIONS.LOONARS_BEAUTY_VIEW,
+    PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    // Owner's call: the assistant sees payroll figures. Read-only -- the
+    // run itself is still approved by someone holding payroll.manage.
+    PERMISSIONS.PAYROLL_VIEW,
+    // Assists the Super Admin, so the automation/health alerts that land on
+    // /monitoring are part of what they are expected to notice first.
+    PERMISSIONS.SYSTEM_MONITORING_VIEW,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

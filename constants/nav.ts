@@ -4,10 +4,12 @@ import {
   BarChart3,
   BedDouble,
   BrainCircuit,
+  BriefcaseBusiness,
   Building2,
   CalendarCheck,
   Clapperboard,
   ClipboardCheck,
+  ClipboardList,
   Database,
   FileWarning,
   Flower2,
@@ -58,6 +60,12 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Utama",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
+      {
+        label: "Ruang Kerja Asisten",
+        href: "/asisten",
+        icon: ClipboardList,
+        permission: PERMISSIONS.ASSISTANT_WORKSPACE_VIEW,
+      },
       {
         label: "Absensi",
         href: "/attendance",
@@ -165,6 +173,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Manajemen",
     items: [
+      {
+        label: "Ruang Kerja HR",
+        href: "/hr",
+        icon: BriefcaseBusiness,
+        permission: PERMISSIONS.HR_WORKSPACE_VIEW,
+      },
       {
         label: "Karyawan",
         href: "/employees",

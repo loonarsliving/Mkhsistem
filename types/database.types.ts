@@ -85,7 +85,21 @@ export type NotificationCategoryDb =
   | "branch_balance_alert"
   | "sales_coaching_tip"
   | "meta_ads_balance_low"
-  | "lead_wants_info";
+  | "lead_wants_info"
+  // Present in the live mkc_notifications_category_check but missing from
+  // this mirror until now -- added by migrations 0104/0106/0119/0120/0156
+  // and 0174 without this file being regenerated alongside them.
+  | "ad_lead_followup_reminder"
+  | "ad_lead_escalation_branch"
+  | "ad_lead_escalation_director"
+  | "whatsapp_webhook_silence_alert"
+  | "sales_conduct_warning"
+  | "database_followup_push"
+  | "loonars_fee_alert"
+  // Automation self-monitoring (migration 0176)
+  | "automation_dispatch_failed"
+  | "automation_job_dead_letter"
+  | "automation_queue_stalled";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -975,6 +989,41 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["voice_bridge_daily_digests"]["Insert"]>;
         Relationships: [];
+      };
+      assistant_followups: {
+        Row: {
+          id: string;
+          owner_id: string;
+          title: string;
+          notes: string | null;
+          assigned_to: string | null;
+          due_date: string | null;
+          status: string;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title: string;
+          notes?: string | null;
+          assigned_to?: string | null;
+          due_date?: string | null;
+          status?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["assistant_followups"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "assistant_followups_owner_id_fkey";
+            columns: ["owner_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       crm_projects: {
         Row: {

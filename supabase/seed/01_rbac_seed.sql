@@ -56,7 +56,11 @@ insert into public.permissions (key, description) values
   ('messaging.send', 'Send an ad-hoc WhatsApp message to any phone number via the MK Connect connector'),
   ('ai_module.manage', 'View and manage the AI module (knowledge base, behavior configuration)'),
   ('sp1_warning.manage', 'Review and approve/reject AI-drafted SP1 (sales performance warning) letters for own branch'),
-  ('sp1_warning.view_all', 'View and manage SP1 warnings across all branches, not just own')
+  ('sp1_warning.view_all', 'View and manage SP1 warnings across all branches, not just own'),
+  ('hr_workspace.view', 'View the HR control room (action queue, live attendance, compliance)'),
+  ('assistant_workspace.view', 'View the private assistant workspace'),
+  ('assistant_followup.manage', 'Create and complete personal follow-up items in the assistant workspace'),
+  ('payroll.view', 'View payroll runs and salary figures without the authority to approve a run')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -70,6 +74,7 @@ insert into public.roles (key, name, level, description, is_system) values
   ('sales', 'Sales', 90, 'Prospect intake, follow-up, and own CRM dashboard', true),
   ('markom', 'Markom', 90, 'Weekly checklist tasks and own KPI dashboard', true),
   ('staff', 'Staff', 100, 'Regular employee', true),
+  ('private_assistant', 'Asisten Pribadi', 12, 'Private assistant to the Super Admin -- company-wide visibility, no approval authority', true),
   ('pending', 'Pending Approval', 999, 'Self-registered account awaiting approval', true)
 on conflict (key) do nothing;
 
@@ -114,8 +119,10 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'memo.view', 'memo.create', 'memo.manage',
   'announcement.view', 'announcement.create', 'announcement.manage',
   'employee.view_all', 'employee.manage',
-  'payroll.manage', 'hr_expense.create', 'hr_expense.approve',
-  'sp1_warning.manage', 'sp1_warning.view_all'
+  'registration.view_all', 'registration.manage',
+  'payroll.manage', 'payroll.view', 'hr_expense.create', 'hr_expense.approve',
+  'sp1_warning.manage', 'sp1_warning.view_all',
+  'hr_workspace.view'
 ) where r.key = 'hr'
 on conflict do nothing;
 
@@ -172,4 +179,42 @@ insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view', 'hr_expense.create'
 ) where r.key = 'staff'
+on conflict do nothing;
+
+-- private_assistant: read-everything, decide-nothing. Every key below is a
+-- *_view / *_view_all -- see supabase/migrations/0177 for why the role holds
+-- no manage/approve/publish permission at all.
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in (
+  'dashboard.view',
+  'assistant_workspace.view', 'assistant_followup.manage',
+  'attendance.view_all', 'attendance.export',
+  'memo.view', 'announcement.view',
+  'employee.view_all',
+  'registration.view_all',
+  'prospect.view_all',
+  'sales_target.view_all',
+  'crm_analytics.view_all', 'crm_analytics.view_executive',
+  'kpi_task.view_all',
+  'sp1_warning.view_all',
+  'ad_campaign.view',
+  'content_planner.view',
+  'promo_template.view',
+  'loonars_beauty.view',
+  'kos_occupancy.view',
+  'payroll.view',
+  'system.monitoring_view'
+) where r.key = 'private_assistant'
+on conflict do nothing;
+
+-- Anyone who may approve payroll should also be able to read it.
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key = 'payroll.view'
+where r.key in ('super_admin', 'direktur_operasional', 'finance')
+on conflict do nothing;
+
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in (
+  'hr_workspace.view', 'assistant_workspace.view', 'assistant_followup.manage'
+) where r.key = 'super_admin'
 on conflict do nothing;
