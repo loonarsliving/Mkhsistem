@@ -113,12 +113,20 @@ begin
   -- Limit 2, against villa's 5: a beauty run analyzes up to 8 pieces of footage
   -- with Gemini Vision before it renders, and every AI feature in this system
   -- shares one circuit breaker.
+  --
+  -- The 2-day window is what stops the toggle from firing a backlog. Beauty
+  -- ideas are drafted daily and pile up unproduced -- six were waiting the day
+  -- this was written -- so without it, switching the pipeline on would produce
+  -- every stale idea at once, each one a full brief + storyboard + up to eight
+  -- Gemini Vision calls + a render. The intent is "today's idea becomes today's
+  -- video"; anything older is still one click away on the Loonars Beauty board.
   for v_row in
     select ci.id
     from public.loonars_content_items ci
     where ci.deleted_at is null
       and ci.kontenai_creative_brief_id is null
       and ci.status in ('idea', 'draft')
+      and ci.created_at >= now() - interval '2 days'
       and not exists (
         select 1 from public.ai_job_queue q
         where q.job_type = 'kontenai_auto_produce_beauty'
@@ -155,4 +163,4 @@ end;
 $$;
 
 comment on function public.kontenai_automation_dispatch is
-  'Every tick while kontenai_automation_settings.enabled: queues villa production from pending occupancy kpi_tasks, beauty production from loonars_content_items that have not been to KontenAI yet (0187 -- the 0184 beauty branch was unreachable, kpi_tasks.content_focus cannot hold ''beauty''), and bridges completed villa renders into Content Studio.';
+  'Every tick while kontenai_automation_settings.enabled: queues villa production from pending occupancy kpi_tasks, beauty production from loonars_content_items created in the last 2 days that have not been to KontenAI yet (0187 -- the 0184 beauty branch was unreachable, kpi_tasks.content_focus cannot hold ''beauty''), and bridges completed villa renders into Content Studio.';

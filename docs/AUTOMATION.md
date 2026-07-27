@@ -330,6 +330,56 @@ paling jelas), jadi revoke serentak akan mematikan alur yang sah. Ini perlu
 ditelusuri satu per satu — bukan disapu sekaligus — dan layak jadi pekerjaan
 tersendiri.
 
+**T11 — Beauty tidak pernah benar-benar masuk pipeline otomasi.** *(gap)*
+✅ **Diperbaiki (migrasi `0187`).**
+
+Migrasi `0184` menetapkan cakupan KontenAI = villa (occupancy) + beauty dengan
+menambahkan `'beauty'` ke filter `content_focus` di
+`kontenai_automation_dispatch`. Cabang itu **tidak pernah bisa cocok**:
+`kpi_tasks.content_focus` dibatasi `('leasehold_sales','occupancy','general')`
+oleh `0123`, dan tidak ada satu pun jalur yang membuat kpi_task beauty. Konten
+beauty hidup di tabel lain — `loonars_content_items` — tanpa task, cabang,
+maupun divisi.
+
+Artinya: jika toggle dinyalakan sebelum ini diperbaiki, villa berjalan penuh
+dan beauty tidak menghasilkan apa pun, tanpa error di mana pun. Satu-satunya
+jalan beauty ke KontenAI adalah tombol manual "Kirim ke KontenAI" per item.
+
+`0187` memberi beauty dispatch-nya sendiri dari `loonars_content_items`
+(job `kontenai_auto_produce_beauty`, maksimum 2 per tick karena satu run
+menganalisis hingga 8 footage dengan Gemini Vision lewat circuit breaker yang
+sama dengan seluruh fitur AI). Rantai yang dijalankan identik dengan villa dan
+sama persis dengan yang dijalankan tombol manual — toggle mengubah **siapa yang
+memulai** run, bukan apa isi run-nya.
+
+Dispatch beauty hanya mengambil item **berumur ≤ 2 hari**. Ide beauty dibuat
+harian dan menumpuk tanpa diproduksi — ada **6 yang menunggu** saat ini — jadi
+tanpa batas umur, menyalakan toggle akan langsung memproduksi semuanya
+sekaligus, masing-masing satu brief + storyboard + hingga delapan panggilan
+Gemini Vision + satu render. Niatnya "ide hari ini jadi video hari ini"; yang
+lebih lama tetap bisa dikirim manual satu klik dari papan Loonars Beauty.
+
+Dua perbedaan yang disengaja antara kedua jalur:
+
+* Villa lanjut ke Content Studio (`kontenai_auto_bridge_to_studio`) karena
+  kpi_task-nya memberi cabang, divisi, dan Kepala Cabang yang memverifikasi.
+  Item beauty tidak punya ketiganya, jadi beauty **berhenti di render jadi**,
+  yang muncul di papan Loonars Beauty pada item asalnya. Siapa yang mereview
+  dan mempublikasikan video beauty adalah keputusan yang belum diambil — bukan
+  sesuatu yang layak ditebak di sini.
+* Kolam kandidat Asset Selector kini **dibatasi per brand**.
+  `matchAssetsToScenes` selalu memilih peringkat teratas selama kolam tidak
+  kosong — walau skornya 0 — sehingga kolam tanpa batas brand membuat scene
+  beauty bisa terisi footage villa hanya karena tidak ada yang lebih baik
+  dimuat. Pembatasan per brand inilah gunanya folder Drive per brand.
+
+Dua cacat lain yang ikut ditemukan dan diperbaiki di commit yang sama:
+jalur otomasi tidak pernah menuliskan `content_focus` pada brief yang dibuatnya
+(sehingga setiap langkah ber-brand di hilir kehilangan brand-nya), dan langkah
+analisis Vision-di-dalam-produksi hanya ada di aksi interaktif — bukan di jalur
+cron, yang justru paling membutuhkannya karena tidak ada orang di sana untuk
+menyadari footage belum dianalisis.
+
 ---
 
 ## 5. Cara mengaktifkan autentikasi otomasi
