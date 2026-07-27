@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { matchAssetsToScenes } from "@/features/kontenai/asset-selector/lib/scene-asset-matching";
 import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 import { isVeoConfigured } from "@/lib/ai/veo/client";
+import { analyzeBrandFootageForRun } from "@/lib/kontenai/brand-footage-vision";
 import { createClient } from "@/lib/supabase/server";
-import { listAnalyzedAssetLibrary, listUnanalyzedAssetsByCompany, type KontenAiAnalyzedAsset } from "@/repositories/kontenai-assets.repository";
+import { listAnalyzedAssetLibrary, type KontenAiAnalyzedAsset } from "@/repositories/kontenai-assets.repository";
 import { getKontenAiStoryboard, updateKontenAiStoryboardScenes, type KontenAiStoryboardScene } from "@/repositories/kontenai-storyboards.repository";
 import { createKontenAiVideoGenerationJob } from "@/repositories/kontenai-video-generation.repository";
 import { actionError, actionSuccess, type ActionResult, type KontenAiStoryboardRow } from "@/types/domain";
@@ -39,9 +40,11 @@ export interface RunAssetSelectionActionResult {
 }
 
 /**
- * Asset Selector's core action: for every scene in the storyboard, ranks
- * the whole analyzed Asset Library against that scene's content using
- * Gemini Vision metadata (Sprint 2), auto-picks the best match, keeps the
+ * Asset Selector's core action: analyzes this brief's own brand footage
+ * (analyzeBrandFootageForRun -- Vision runs here, inside production, not as a
+ * sweep over storage), then for every scene in the storyboard ranks that
+ * brand's analyzed footage against the scene's content using Gemini Vision
+ * metadata (Sprint 2), auto-picks the best match, keeps the
  * top 5 as alternatives, then persists the result onto the storyboard's
  * scenes -- mirrors the "never throw, always return a clear ActionResult"
  * contract used across KontenAI. Scenes whose best match scores below
@@ -55,53 +58,6 @@ export interface RunAssetSelectionActionResult {
  * storyboard stuck forever waiting on a render that never gets queued (see
  * scripts/veo-worker.ts's auto-queue-on-completion logic).
  */
-/**
- * How many of the brief's brand folder we are willing to analyze inside one
- * production run. Deliberately bounded: this happens inside a user-triggered
- * action, so it has to finish, and it is not trying to work through the whole
- * library -- anything left over gets picked up by the next video's run.
- */
-const VISION_PER_RUN_LIMIT = 8;
-
-/**
- * Analyze the footage this brief's brand might use, right here in the
- * production run.
- *
- * This is where Vision belongs. Google Drive is storage; the per-brand
- * folders exist so a brief can be matched against its own brand's footage.
- * Without this step Asset Selector ranks against listAnalyzedAssetLibrary,
- * which only returns ai_vision_status='completed' -- so freshly-synced Drive
- * footage was invisible to it, every scene fell through to Veo generation,
- * and the published result never used the real footage at all -- the Drive
- * library sat untouched while Veo invented substitutes for it.
- *
- * Never throws: a clip that cannot be read is recorded as failed by
- * runVisionAnalysisAndSave and simply does not join the pool. Producing a
- * video with the footage that did analyze beats failing the whole run.
- */
-async function analyzeBrandFootageForRun(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  contentFocus: string | null,
-): Promise<{ analyzed: number; failed: number }> {
-  if (!contentFocus) return { analyzed: 0, failed: 0 };
-
-  const pending = await listUnanalyzedAssetsByCompany(supabase, contentFocus, VISION_PER_RUN_LIMIT);
-  if (pending.length === 0) return { analyzed: 0, failed: 0 };
-
-  const { runVisionAnalysisAndSave } = await import("@/features/kontenai/asset-library/actions/gemini-vision.actions");
-
-  let analyzed = 0;
-  let failed = 0;
-  for (const asset of pending) {
-    // Sequential, not Promise.all: these are Gemini vision calls sharing one
-    // circuit breaker with every other AI feature in the system.
-    const outcome = await runVisionAnalysisAndSave(supabase, asset);
-    if (outcome.success) analyzed += 1;
-    else failed += 1;
-  }
-  return { analyzed, failed };
-}
-
 export async function runAssetSelectionAction(storyboardId: string): Promise<ActionResult<RunAssetSelectionActionResult>> {
   const session = await requireKontenAiAccess();
   const supabase = await createClient();
@@ -110,11 +66,14 @@ export async function runAssetSelectionAction(storyboardId: string): Promise<Act
     const storyboard = await getKontenAiStoryboard(supabase, storyboardId);
     if (storyboard.scenes.length === 0) return actionError("Storyboard ini belum memiliki scene");
 
+    const contentFocus = storyboard.creativeBrief?.content_focus ?? null;
+
     // Analyze this brief's own brand footage first -- that is what makes the
     // Drive library usable by the ranking below.
-    const visionOutcome = await analyzeBrandFootageForRun(supabase, storyboard.creativeBrief?.content_focus ?? null);
+    const visionOutcome = await analyzeBrandFootageForRun(supabase, contentFocus);
 
-    const assetPool = await listAnalyzedAssetLibrary(supabase);
+    // Ranked against this brand's footage only (see listAnalyzedAssetLibrary).
+    const assetPool = await listAnalyzedAssetLibrary(supabase, { company: contentFocus });
     const matches = matchAssetsToScenes(storyboard.scenes, assetPool);
 
     const scenes = storyboard.scenes.map((scene, index) => ({

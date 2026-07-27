@@ -7,6 +7,7 @@ import { requireKontenAiAccess } from "@/features/kontenai/lib/access";
 import { analyzeAssetWithGeminiVision, analyzeVideoKeyframe, analyzeVideoWithoutFrames, combineVideoSceneAnalysis } from "@/lib/ai/domains/kontenai-vision";
 import { resolveAssetDownloadSource } from "@/lib/kontenai/asset-source";
 import { createClient } from "@/lib/supabase/server";
+import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import { extractVideoKeyframes } from "@/lib/video/extract-keyframes";
 import {
@@ -80,9 +81,14 @@ async function analyzeVideoAsset(asset: Pick<KontenAiAssetRow, "title" | "filena
  * never throws, always leaves the row in a clear terminal ai_vision_status
  * ('completed' or 'failed') so the UI can show what happened and the user
  * can retry on failure.
+ *
+ * Takes a plain TypedSupabaseClient rather than the request-scoped client, so
+ * the automation path (app/api/ai/process-job, service-role client, no
+ * session) can run the exact same analysis as the UI instead of a second
+ * near-copy of it.
  */
 export async function runVisionAnalysisAndSave(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: TypedSupabaseClient,
   asset: Pick<KontenAiAssetRow, "id" | "title" | "filename" | "asset_type" | "public_url" | "duration_seconds" | "storage_path" | "storage_provider">,
 ): Promise<{ success: boolean; error?: string }> {
   if (!isVisionEligibleAssetType(asset.asset_type as KontenAiAssetType)) {

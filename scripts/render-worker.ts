@@ -66,8 +66,8 @@ async function processJob(jobId: string): Promise<void> {
 
     // Production direction from the brief (0184). Before it existed the worker
     // narrated every scene unconditionally and searched Freesound with the
-    // brief's big_idea -- i.e. queried an audio library with marketing copy.
-    // Both were direct contributors to content auditing at ~2/10.
+    // brief's big_idea -- i.e. queried an audio library with marketing copy, so
+    // most renders got an unrelated music bed or none at all.
     const direction = (storyboard.creativeBrief?.production_direction ?? {}) as {
       music?: { useMusic?: boolean; searchQuery?: string };
       voiceOver?: { useVoiceOver?: boolean };

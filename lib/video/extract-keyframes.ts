@@ -10,13 +10,56 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
-import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import { logger } from "@/lib/logger";
 
 const execFileAsync = promisify(execFile);
 
-const FFMPEG_PATH = ffmpegInstaller.path;
 const FFMPEG_TIMEOUT_MS = 15_000;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
+
+/**
+ * Where ffmpeg actually is, resolved on first use rather than at import time.
+ *
+ * @ffmpeg-installer/ffmpeg ships a per-platform binary in an optional
+ * dependency, and importing it evaluates that lookup immediately. On hosts
+ * that carry the binary (the Railway worker image) that is fine; in the
+ * Vercel route-handler bundle the optional package is not traced in, so a
+ * static import threw "Cannot find module '@ffmpeg-installer/linux-x64/
+ * package.json'" at module load -- which took down the whole route, not just
+ * video analysis. Resolving lazily keeps that failure local to the one call
+ * that needs a frame, and lets a system ffmpeg on PATH stand in.
+ *
+ * null means "looked and found nothing" -- distinct from undefined
+ * ("haven't looked yet"), so the lookup is attempted exactly once.
+ */
+let cachedFfmpegPath: string | null | undefined;
+
+async function resolveFfmpegPath(): Promise<string | null> {
+  if (cachedFfmpegPath !== undefined) return cachedFfmpegPath;
+
+  try {
+    const installer = (await import("@ffmpeg-installer/ffmpeg")) as { default?: { path?: string }; path?: string };
+    const path = installer.default?.path ?? installer.path;
+    if (path) {
+      cachedFfmpegPath = path;
+      return cachedFfmpegPath;
+    }
+  } catch {
+    // Falls through to the PATH lookup below.
+  }
+
+  try {
+    await execFileAsync("ffmpeg", ["-version"], { timeout: 5_000 });
+    cachedFfmpegPath = "ffmpeg";
+  } catch {
+    cachedFfmpegPath = null;
+    logger.warn("ffmpeg is unavailable in this runtime -- video keyframe extraction will be skipped", {
+      hint: "@ffmpeg-installer/ffmpeg is not resolvable and no ffmpeg is on PATH",
+    });
+  }
+
+  return cachedFfmpegPath;
+}
 
 /** Hard cap on how much video this will download+process -- extraction runs inside a single serverless invocation (see maxDuration on the calling action), so very large files are rejected up front with a clear message instead of timing out silently. */
 export const MAX_VIDEO_ANALYSIS_SIZE_BYTES = 100 * 1024 * 1024;
@@ -65,9 +108,9 @@ async function downloadVideoToTemp(url: string, headers: Record<string, string>,
   }
 }
 
-async function extractSingleFrame(videoPath: string, timestampSeconds: number, outputPath: string): Promise<void> {
+async function extractSingleFrame(ffmpegPath: string, videoPath: string, timestampSeconds: number, outputPath: string): Promise<void> {
   await execFileAsync(
-    FFMPEG_PATH,
+    ffmpegPath,
     [
       "-ss", String(timestampSeconds),
       "-i", videoPath,
@@ -84,16 +127,24 @@ async function extractSingleFrame(videoPath: string, timestampSeconds: number, o
 /**
  * Downloads the video once to a temp file, then extracts up to `maxFrames`
  * JPEG keyframes via ffmpeg (@ffmpeg-installer/ffmpeg's bundled static
- * binary) -- one per computed timestamp. A single failed seek/decode
- * doesn't abort the batch (Promise.allSettled), so a partially corrupt or
- * unusually short video still yields whatever frames succeeded. Always
- * cleans up the temp directory, success or failure.
+ * binary, or a system ffmpeg) -- one per computed timestamp. A single failed
+ * seek/decode doesn't abort the batch (Promise.allSettled), so a partially
+ * corrupt or unusually short video still yields whatever frames succeeded.
+ * Always cleans up the temp directory, success or failure.
+ *
+ * Returns an empty array when this runtime has no ffmpeg at all, rather than
+ * throwing: callers already treat "no frames" as "analyze from filename and
+ * context instead" (see analyzeVideoAsset), so a host without the binary
+ * degrades to weaker metadata instead of failing the asset outright.
  */
 export async function extractVideoKeyframes(
   videoUrl: string,
   durationSeconds: number | null,
   options?: { maxFrames?: number; minIntervalSeconds?: number; headers?: Record<string, string> },
 ): Promise<VideoKeyframe[]> {
+  const ffmpegPath = await resolveFfmpegPath();
+  if (!ffmpegPath) return [];
+
   const timestamps = computeKeyframeTimestamps(durationSeconds ?? 20, options?.maxFrames ?? 8, options?.minIntervalSeconds ?? 5);
 
   const workDir = await mkdtemp(join(tmpdir(), "kontenai-video-"));
@@ -105,7 +156,7 @@ export async function extractVideoKeyframes(
     const results = await Promise.allSettled(
       timestamps.map(async (timestampSeconds, index) => {
         const framePath = join(workDir, `frame-${index}.jpg`);
-        await extractSingleFrame(videoPath, timestampSeconds, framePath);
+        await extractSingleFrame(ffmpegPath, videoPath, timestampSeconds, framePath);
         const buffer = await readFile(framePath);
         return { timestampSeconds, base64: buffer.toString("base64"), mimeType: "image/jpeg" } satisfies VideoKeyframe;
       }),

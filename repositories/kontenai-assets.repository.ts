@@ -302,20 +302,34 @@ export interface KontenAiAnalyzedAsset {
 }
 
 /**
- * Every image/video in the Asset Library with a completed Gemini Vision
- * analysis, used by Asset Selector (Sprint 5) as the full candidate pool to
- * rank against each storyboard scene. Capped at `limit` (default 300) --
- * generous for the current library size while still bounding the ranking
- * work done per scene.
+ * Images/videos in the Asset Library with a completed Gemini Vision analysis,
+ * used by Asset Selector (Sprint 5) as the candidate pool to rank against each
+ * storyboard scene. Capped at `limit` (default 300) -- generous for the current
+ * library size while still bounding the ranking work done per scene.
+ *
+ * `company` scopes the pool to one brand's footage, and every brief that knows
+ * its brand passes it. matchAssetsToScenes always picks the top-ranked asset
+ * when the pool is non-empty -- even at score 0 -- so an unscoped pool let a
+ * beauty scene be filled with villa footage purely because nothing better was
+ * loaded. Brand-scoping is what the per-brand Drive folders are for. Briefs
+ * with no brand (made directly on the AI Director page) still rank against
+ * everything, which is the only sensible pool for them.
  */
-export async function listAnalyzedAssetLibrary(supabase: TypedSupabaseClient, limit = 300): Promise<KontenAiAnalyzedAsset[]> {
-  const { data, error } = await supabase
+export async function listAnalyzedAssetLibrary(
+  supabase: TypedSupabaseClient,
+  options: { limit?: number; company?: string | null } = {},
+): Promise<KontenAiAnalyzedAsset[]> {
+  const limit = options.limit && options.limit > 0 ? options.limit : 300;
+
+  let query = supabase
     .from("kontenai_assets")
     .select("id, asset_type, title, public_url, file_type, ai_title, ai_description, ai_tags, ai_category, ai_mood, ai_detected_objects, ai_dominant_colors")
     .is("deleted_at", null)
-    .eq("ai_vision_status", "completed")
-    .order("ai_analyzed_at", { ascending: false })
-    .limit(limit);
+    .eq("ai_vision_status", "completed");
+
+  if (options.company) query = query.eq("company", options.company);
+
+  const { data, error } = await query.order("ai_analyzed_at", { ascending: false }).limit(limit);
   if (error) throw error;
 
   return (data ?? []).map((row) => ({

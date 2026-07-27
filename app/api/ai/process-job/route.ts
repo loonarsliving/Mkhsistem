@@ -51,6 +51,8 @@ import { listAnalyzedAssetLibrary, listAnalyzedAssetsForDirector } from "@/repos
 import { createKontenAiCreativeBrief } from "@/repositories/kontenai-creative-briefs.repository";
 import { createKontenAiStoryboard, updateKontenAiStoryboardScenes, type KontenAiStoryboardScene } from "@/repositories/kontenai-storyboards.repository";
 import { createKontenAiRenderJob } from "@/repositories/kontenai-render-jobs.repository";
+import { analyzeBrandFootageForRun } from "@/lib/kontenai/brand-footage-vision";
+import { BEAUTY_TARGET_AUDIENCE, beautyObjectiveForCategory, buildBeautyCampaignGoal } from "@/lib/kontenai/beauty-brief-input";
 import { moveRenderOutputToContentStudio } from "@/lib/kontenai/content-studio-bridge";
 import { getRecentInstagramMediaPerformance, isInstagramConfigured, summarizeBestPostingPattern, type InstagramMediaPerformance } from "@/lib/social/instagram";
 import { getZernioPostStatus, isZernioConfigured, listZernioAccounts, getRecentZernioMediaPerformance, type ZernioProduct } from "@/lib/social/zernio";
@@ -140,6 +142,10 @@ interface ContentSubmissionReviewJobPayload {
 
 interface KontenAiAutoProduceJobPayload {
   kpi_task_id: string;
+}
+
+interface KontenAiAutoProduceBeautyJobPayload {
+  content_item_id: string;
 }
 
 interface KontenAiAutoBridgeToStudioJobPayload {
@@ -466,6 +472,10 @@ async function processKontenAiAutoProduce(supabase: AdminClient, job: JobRow) {
     contentAngle: directorResult.contentAngle,
     productionDirection: directorResult.productionDirection,
     referencedAssetIds: assets.map((asset) => asset.id),
+    // Without this the brief lands with content_focus null, and every
+    // brand-scoped step downstream (footage analysis, the candidate pool,
+    // Content Studio's focus filter) silently loses the brand it was made for.
+    contentFocus,
     createdBy,
     kpiTaskId: task.id,
   });
@@ -496,7 +506,15 @@ async function processKontenAiAutoProduce(supabase: AdminClient, job: JobRow) {
     createdBy,
   });
 
-  const assetPool = await listAnalyzedAssetLibrary(supabase);
+  // Vision, inside the production run, on this brand's footage -- the same
+  // step runAssetSelectionAction does. The automation path needs it more than
+  // the UI does: nobody is here to notice unanalyzed footage and click
+  // "Analyze" first, so without it the pool below is whatever happened to be
+  // analyzed by hand and the run dies on the "not enough matching assets"
+  // guard while a full Drive folder sits there unread.
+  const visionOutcome = await analyzeBrandFootageForRun(supabase, contentFocus);
+
+  const assetPool = await listAnalyzedAssetLibrary(supabase, { company: contentFocus });
   const matches = matchAssetsToScenes(draftScenes, assetPool);
   const selectedScenes: KontenAiStoryboardScene[] = draftScenes.map((scene, index) => ({
     ...scene,
@@ -506,14 +524,186 @@ async function processKontenAiAutoProduce(supabase: AdminClient, job: JobRow) {
 
   if (!selectedScenes.every((scene) => scene.selectedAssetId)) {
     throw new NonRetryableJobError(
-      `Asset Library belum punya cukup aset yang cocok untuk brief "${task.title}" -- tambahkan lebih banyak footage lalu jalankan lagi manual, atau tunggu tick berikutnya setelah aset bertambah.`,
+      `Asset Library belum punya footage ${contentFocus} yang bisa dipakai untuk brief "${task.title}" (${visionOutcome.analyzed} dianalisis, ${visionOutcome.failed} gagal dibaca pada run ini) -- tambahkan footage ke folder brand ini lalu jalankan lagi.`,
     );
   }
 
   const updatedStoryboard = await updateKontenAiStoryboardScenes(supabase, storyboard.id, selectedScenes, createdBy);
   const renderJob = await createKontenAiRenderJob(supabase, { storyboardId: updatedStoryboard.id, createdBy });
 
-  return { creativeBriefId: brief.id, storyboardId: updatedStoryboard.id, renderJobId: renderJob.id };
+  return {
+    creativeBriefId: brief.id,
+    storyboardId: updatedStoryboard.id,
+    renderJobId: renderJob.id,
+    footageAnalyzed: visionOutcome.analyzed,
+    footageFailed: visionOutcome.failed,
+  };
+}
+
+/**
+ * Which employee owns the rows an automated run creates.
+ *
+ * kontenai_creative_briefs/storyboards/render_jobs.created_by is NOT NULL and
+ * references employees(id), but the rows the automation starts from often have
+ * no author: loonars_content_items drafted by the daily cron have created_by
+ * null. Falling back to Super Admin (who is the only role with KontenAI access
+ * -- see features/kontenai/lib/access.ts) keeps attribution honest rather than
+ * inventing an actor, and matches what the manual button would have recorded.
+ */
+async function resolveKontenAiAutomationActor(supabase: AdminClient, preferred: string | null): Promise<string> {
+  if (preferred) return preferred;
+
+  const { data: role } = await supabase.from("roles").select("id").eq("key", "super_admin").maybeSingle();
+  if (!role) throw new NonRetryableJobError("Role super_admin tidak ditemukan -- tidak ada aktor untuk atribusi baris KontenAI otomatis");
+
+  const { data: actor } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("role_id", role.id)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!actor) throw new NonRetryableJobError("Tidak ada karyawan Super Admin aktif -- tidak ada aktor untuk atribusi baris KontenAI otomatis");
+
+  return actor.id;
+}
+
+/**
+ * The beauty half of the automated pipeline: one loonars_content_items row
+ * (hook/caption/script_notes/cta, drafted daily by
+ * loonars_beauty_content_ideas_draft) through AI Director -> Storyboard Engine
+ * -> footage analysis + Asset Selector -> render job.
+ *
+ * Beauty needs its own handler because it has no kpi_task. 0184 scoped the
+ * pipeline to villa + beauty by adding 'beauty' to kontenai_automation_dispatch's
+ * content_focus filter, but kpi_tasks.content_focus only permits
+ * ('leasehold_sales','occupancy','general') (0123) -- so that branch could
+ * never match and beauty was automated in name only, reachable exclusively via
+ * the manual "Kirim ke KontenAI" button. Beauty content lives in
+ * loonars_content_items, which is what this dispatches from.
+ *
+ * Deliberately stops at the render job. Villa continues into Content Studio
+ * (kontenai_auto_bridge_to_studio) because a kpi_task gives it a branch, a
+ * division and a verifier; a beauty item has none of those, so who reviews and
+ * publishes a beauty video is an open decision -- the finished render shows up
+ * on the Loonars Beauty board against the item it came from, and a human takes
+ * it from there.
+ */
+async function processKontenAiAutoProduceBeauty(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as KontenAiAutoProduceBeautyJobPayload;
+
+  const { data: item, error: itemError } = await supabase
+    .from("loonars_content_items")
+    .select("id, category, platform, title, hook, caption, script_notes, cta, product_name, created_by, kontenai_creative_brief_id")
+    .eq("id", payload.content_item_id)
+    .is("deleted_at", null)
+    .single();
+  if (itemError || !item) throw new Error(`loonars_content_item ${payload.content_item_id} not found: ${itemError?.message}`);
+  if (item.kontenai_creative_brief_id) return { skipped: true, reason: "content item already sent to KontenAI" };
+
+  const createdBy = await resolveKontenAiAutomationActor(supabase, item.created_by);
+  const platform: DirectorPlatform = item.platform === "tiktok" ? "tiktok" : "instagram";
+  const objective: DirectorObjective = beautyObjectiveForCategory(item.category);
+  const performanceNote = await buildRecentPerformanceNote(supabase, "beauty");
+  const campaignGoal = `${buildBeautyCampaignGoal(item)}${performanceNote}`;
+
+  const assets = await listAnalyzedAssetsForDirector(supabase, { productProject: item.product_name, platform, limit: 20 });
+  const directorResult = await generateCreativeBrief({
+    objective,
+    platform,
+    targetAudience: BEAUTY_TARGET_AUDIENCE,
+    productProject: item.product_name,
+    campaignGoal,
+    assets: assets.map((asset) => ({
+      title: asset.title,
+      assetType: asset.assetType,
+      aiDescription: asset.aiDescription,
+      aiTags: asset.aiTags,
+      aiCategory: asset.aiCategory,
+      aiMood: asset.aiMood,
+    })),
+  });
+
+  const brief = await createKontenAiCreativeBrief(supabase, {
+    objective,
+    platform,
+    targetAudience: BEAUTY_TARGET_AUDIENCE,
+    productProject: item.product_name,
+    campaignGoal,
+    bigIdea: directorResult.bigIdea,
+    hook: directorResult.hook,
+    keyMessage: directorResult.keyMessage,
+    targetEmotion: directorResult.targetEmotion,
+    cta: directorResult.cta,
+    contentAngle: directorResult.contentAngle,
+    productionDirection: directorResult.productionDirection,
+    referencedAssetIds: assets.map((asset) => asset.id),
+    contentFocus: "beauty",
+    createdBy,
+  });
+
+  const sceneDrafts = await generateStoryboardFromBrief({
+    platform: brief.platform,
+    objective: brief.objective,
+    bigIdea: brief.big_idea,
+    hook: brief.hook,
+    keyMessage: brief.key_message,
+    targetEmotion: brief.target_emotion,
+    cta: brief.cta,
+    contentAngle: brief.content_angle,
+  });
+
+  const draftScenes: KontenAiStoryboardScene[] = sceneDrafts.map((draft, index) => ({
+    ...draft,
+    id: generateAutomationSceneId(),
+    order: index,
+    selectedAssetId: null,
+    assetMatches: [],
+  }));
+
+  const storyboard = await createKontenAiStoryboard(supabase, {
+    creativeBriefId: brief.id,
+    title: `Storyboard: ${item.title}`,
+    scenes: draftScenes,
+    createdBy,
+  });
+
+  const visionOutcome = await analyzeBrandFootageForRun(supabase, "beauty");
+
+  const assetPool = await listAnalyzedAssetLibrary(supabase, { company: "beauty" });
+  const matches = matchAssetsToScenes(draftScenes, assetPool);
+  const selectedScenes: KontenAiStoryboardScene[] = draftScenes.map((scene, index) => ({
+    ...scene,
+    selectedAssetId: matches[index].selectedAssetId,
+    assetMatches: matches[index].assetMatches,
+  }));
+
+  // The brief and storyboard are kept even when this throws: they are real work
+  // product, and the content item stays unlinked so the next tick retries from
+  // a clean state once footage exists.
+  if (!selectedScenes.every((scene) => scene.selectedAssetId)) {
+    throw new NonRetryableJobError(
+      `Asset Library belum punya footage beauty yang bisa dipakai untuk "${item.title}" (${visionOutcome.analyzed} dianalisis, ${visionOutcome.failed} gagal dibaca pada run ini) -- tambahkan footage ke folder beauty lalu jalankan lagi.`,
+    );
+  }
+
+  const updatedStoryboard = await updateKontenAiStoryboardScenes(supabase, storyboard.id, selectedScenes, createdBy);
+  const renderJob = await createKontenAiRenderJob(supabase, { storyboardId: updatedStoryboard.id, createdBy });
+
+  await supabase
+    .from("loonars_content_items")
+    .update({ kontenai_creative_brief_id: brief.id, status: "draft", updated_at: new Date().toISOString() })
+    .eq("id", item.id);
+
+  return {
+    contentItemId: item.id,
+    creativeBriefId: brief.id,
+    storyboardId: updatedStoryboard.id,
+    renderJobId: renderJob.id,
+    footageAnalyzed: visionOutcome.analyzed,
+    footageFailed: visionOutcome.failed,
+  };
 }
 
 /**
@@ -1920,6 +2110,8 @@ export async function POST(request: Request) {
                                               ? await processContentSubmissionReview(supabase, job)
                                               : job.job_type === "kontenai_auto_produce"
                                                 ? await processKontenAiAutoProduce(supabase, job)
+                                                : job.job_type === "kontenai_auto_produce_beauty"
+                                                ? await processKontenAiAutoProduceBeauty(supabase, job)
                                                 : job.job_type === "kontenai_auto_bridge_to_studio"
                                                   ? await processKontenAiAutoBridgeToStudio(supabase, job)
                                                   : job.job_type === "zernio_publish_reconcile"

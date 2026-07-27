@@ -583,7 +583,7 @@ export const voiceBridgeTools = {
       "Asset library KontenAI yang sudah dianalisis AI (vision: deskripsi, tag, mood, dll). limit opsional (default 300).",
     parametersSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 500 } }, additionalProperties: false },
     inputSchema: z.object({ limit: z.number().int().positive().max(500).optional() }).optional(),
-    handler: async (supabase, _session, input) => kontenaiAssetsRepo.listAnalyzedAssetLibrary(supabase, input?.limit ?? 300),
+    handler: async (supabase, _session, input) => kontenaiAssetsRepo.listAnalyzedAssetLibrary(supabase, { limit: input?.limit ?? 300 }),
   },
   kontenai_assets_search: {
     description: "Cari/daftar asset KontenAI mentah dengan filter (search, assetType, company, project, campaign, platform, contentType, status, tags, dll).",
