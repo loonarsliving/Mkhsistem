@@ -6,7 +6,7 @@ export async function listAnnouncements(supabase: TypedSupabaseClient, page = 1,
 
   let query = supabase
     .from("announcements")
-    .select("*, announcement_categories(name, color), created_by_employee:created_by(full_name, avatar_url)", {
+    .select("*, announcement_categories(name, color), created_by_employee:employees!created_by(full_name, avatar_url)", {
       count: "exact",
     })
     .is("deleted_at", null)
@@ -36,7 +36,7 @@ export async function getAnnouncementById(supabase: TypedSupabaseClient, id: str
   const { data, error } = await supabase
     .from("announcements")
     .select(
-      "*, announcement_categories(name, color), created_by_employee:created_by(full_name, avatar_url), announcement_attachments(*), announcement_targets(*)",
+      "*, announcement_categories(name, color), created_by_employee:employees!created_by(full_name, avatar_url), announcement_attachments(*), announcement_targets(*)",
     )
     .eq("id", id)
     .is("deleted_at", null)

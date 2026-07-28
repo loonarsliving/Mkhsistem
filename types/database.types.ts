@@ -2994,6 +2994,7 @@ export interface Database {
           updated_at: string;
           created_by: string | null;
           updated_by: string | null;
+          is_automation_generated: boolean;
         };
         Insert: {
           id?: string;
@@ -3004,6 +3005,7 @@ export interface Database {
           content_focus: "leasehold_sales" | "occupancy" | "beauty";
           platform?: "instagram" | "tiktok";
           submitted_by: string;
+          is_automation_generated?: boolean;
           media_type: "image" | "video";
           storage_path: string;
           public_url: string;

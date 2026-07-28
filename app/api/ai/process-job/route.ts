@@ -781,6 +781,7 @@ async function processKontenAiAutoBridgeToStudio(supabase: AdminClient, job: Job
     public_url: moved.publicUrl,
     caption,
     created_by: createdBy,
+    is_automation_generated: true,
   });
 
   await supabase.from("ai_job_queue").insert({ job_type: "content_submission_review", payload: { submission_id: submission.id } });
