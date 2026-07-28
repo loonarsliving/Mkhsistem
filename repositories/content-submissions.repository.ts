@@ -52,6 +52,8 @@ export interface CreateContentSubmissionInput {
   extra_photos?: { storage_path: string; public_url: string }[];
   caption: string | null;
   created_by: string;
+  /** True only for the KontenAI Content Studio bridge (processContentStudioBridge) -- see 0188. Governs the one-submission-per-task uniqueness guard, which must never apply to Markom's own manual uploads (multiple attempts for the same brief, e.g. after needs_revision, are normal there). Defaults to false. */
+  is_automation_generated?: boolean;
 }
 
 export async function createContentSubmission(supabase: TypedSupabaseClient, input: CreateContentSubmissionInput) {
