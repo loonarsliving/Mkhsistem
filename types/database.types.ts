@@ -3157,6 +3157,41 @@ export interface Database {
           },
         ];
       };
+      loonars_fee_wa_requests: {
+        Row: {
+          fee_id: number;
+          proyek: string | null;
+          unit: string | null;
+          buyer: string | null;
+          marketing: string | null;
+          fee_amount: number | null;
+          requested_at: string;
+          decided: boolean;
+          decided_at: string | null;
+          decided_by: string | null;
+        };
+        Insert: {
+          fee_id: number;
+          proyek?: string | null;
+          unit?: string | null;
+          buyer?: string | null;
+          marketing?: string | null;
+          fee_amount?: number | null;
+          requested_at?: string;
+          decided?: boolean;
+          decided_at?: string | null;
+          decided_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_fee_wa_requests"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_fee_wa_requests_decided_by_fkey";
+            columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       finance_branch_balances: {
         Row: {
           id: string;
