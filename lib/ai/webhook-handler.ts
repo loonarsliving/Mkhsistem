@@ -9,6 +9,7 @@ import {
   tryNotifySalesLeadWantsInfo,
   tryReassignAdLeadFollowUp,
 } from "./domains/ad-lead-routing";
+import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -191,6 +192,27 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling");
       const roleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${roleKey ?? "null"}`);
+
+      // TEMPORARY: Super Admin approving a loonars fee claim by replying
+      // "ya"/"setuju" instead of using MKH Property's /verifikasi.html CFO
+      // page (see lib/ai/domains/loonars-fee-approval.ts). Must run before
+      // the general AI pipeline; only short-circuits when a fee is actually
+      // pending, so it never hijacks an unrelated "ya" reply.
+      if (roleKey === "super_admin") {
+        trace.push("tryApproveLoonarsFeeViaWhatsApp:calling");
+        const feeApprovalResult = await tryApproveLoonarsFeeViaWhatsApp(employee.id, employee.full_name, inbound.content.text);
+        trace.push(`tryApproveLoonarsFeeViaWhatsApp:${feeApprovalResult.outcome}`);
+        if (feeApprovalResult.outcome === "approved") {
+          const replyText = `✅ Fee unit ${feeApprovalResult.unit ?? "-"} (${feeApprovalResult.buyer ?? "-"}) disetujui via WhatsApp.\n💰 Nilai fee: Rp ${(feeApprovalResult.feeAmount ?? 0).toLocaleString("id-ID")}`;
+          trace.push("sendWhatsAppText:calling(fee-approval)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+
       if (roleKey === "kepala_cabang" && employee.branch_id) {
         // "LEMPAR SEMUA <nama sales>" -- bulk-reassigns every unfollowed lead
         // belonging to one sales rep at once (crm_run_sales_conduct_monitoring,
