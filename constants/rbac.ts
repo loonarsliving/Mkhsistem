@@ -173,6 +173,16 @@ export const PERMISSIONS = {
   /** Terminate an employee. Split from the warn permission so it can be withheld separately. */
   HR_DISCIPLINE_TERMINATE: "hr_discipline.terminate",
   HR_DISCIPLINE_VIEW: "hr_discipline.view",
+
+  /**
+   * Input a single employee's salary + bank account, which sends them a
+   * payslip notification and asks Super Admin to transfer the money.
+   * Distinct from PAYROLL_MANAGE (the batch payroll_runs module): this is
+   * the one-employee-at-a-time path a Kepala Cabang uses directly.
+   */
+  SALARY_INPUT_SUBMIT: "salary_input.submit",
+  /** See salary submissions awaiting transfer and mark them transferred. */
+  SALARY_INPUT_TRANSFER: "salary_input.transfer",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -276,6 +286,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Reads the group, does not re-wire it -- HOLDING_MANAGE edits connector
     // endpoints and stays with Super Admin / Direktur Utama.
     PERMISSIONS.HOLDING_VIEW,
+    PERMISSIONS.SALARY_INPUT_SUBMIT,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -309,6 +320,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.HR_DISCIPLINE_WARN,
     PERMISSIONS.HR_DISCIPLINE_TERMINATE,
     PERMISSIONS.HR_DISCIPLINE_VIEW,
+    PERMISSIONS.SALARY_INPUT_SUBMIT,
   ],
   [ROLE_KEYS.KEPALA_CABANG]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -341,6 +353,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CONTENT_PLANNER_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
+    PERMISSIONS.SALARY_INPUT_SUBMIT,
     // kos_occupancy.view is deliberately NOT granted here -- every branch
     // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the
     // Management Property branch specifically. That branch's Kepala Cabang
@@ -386,6 +399,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
+    PERMISSIONS.SALARY_INPUT_TRANSFER,
   ],
   [ROLE_KEYS.MARKOM]: [
     PERMISSIONS.DASHBOARD_VIEW,

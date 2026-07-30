@@ -123,6 +123,8 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   maintenance: "Pemeliharaan Sistem",
   version_update: "Update Versi",
   emergency_notice: "Pemberitahuan Darurat",
+  salary_transfer_request: "Permintaan Transfer Gaji",
+  salary_transferred: "Gaji Ditransfer",
 };
 
 export const PROSPECT_STATUS = {
