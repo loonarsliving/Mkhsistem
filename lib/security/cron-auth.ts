@@ -60,8 +60,10 @@ export function requireCronAuth(request: Request): NextResponse | null {
  * Constant-time comparison. timingSafeEqual throws on length mismatch --
  * which would itself leak the expected length -- so both sides are hashed
  * to a fixed width first via a length-independent encoding.
+ * Exported for lib/security/bridge-auth.ts (file hub bridge), which needs
+ * the identical comparison but a fail-closed policy this guard doesn't have.
  */
-function secretsMatch(provided: string, expected: string): boolean {
+export function secretsMatch(provided: string, expected: string): boolean {
   const a = Buffer.from(provided, "utf8");
   const b = Buffer.from(expected, "utf8");
   if (a.length !== b.length) {
