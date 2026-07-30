@@ -105,6 +105,10 @@ alter table public.mkc_notifications add constraint mkc_notifications_category_c
     'ad_lead_followup_reminder', 'ad_lead_escalation_branch', 'ad_lead_escalation_director',
     'whatsapp_webhook_silence_alert',
     'finance_expense_pending_verification',
+    'sales_conduct_warning', 'meta_ads_balance_low', 'content_publish_failed', 'database_followup_push',
+    'lead_wants_info', 'loonars_fee_alert',
+    'automation_dispatch_failed', 'automation_job_dead_letter', 'automation_queue_stalled',
+    'disciplinary_warning', 'employee_terminated', 'content_review_pending',
     -- This migration
     'salary_transfer_request', 'salary_transferred'
   ]));
