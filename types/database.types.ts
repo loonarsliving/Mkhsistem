@@ -111,7 +111,10 @@ export type NotificationCategoryDb =
   | "automation_queue_stalled"
   | "disciplinary_warning"
   | "employee_terminated"
-  | "content_review_pending";
+  | "content_review_pending"
+  // Kepala Cabang single-employee salary input (migration 0189)
+  | "salary_transfer_request"
+  | "salary_transferred";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2340,6 +2343,57 @@ export interface Database {
           },
         ];
       };
+      employee_salary_submissions: {
+        Row: {
+          id: string;
+          employee_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          amount: number;
+          bank_name: string | null;
+          bank_account_number: string;
+          bank_account_holder: string | null;
+          note: string | null;
+          status: "pending_transfer" | "transferred";
+          submitted_by: string | null;
+          transferred_by: string | null;
+          transferred_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          branch_id: string;
+          period_month: number;
+          period_year: number;
+          amount: number;
+          bank_name?: string | null;
+          bank_account_number: string;
+          bank_account_holder?: string | null;
+          note?: string | null;
+          status?: "pending_transfer" | "transferred";
+          submitted_by?: string | null;
+          transferred_by?: string | null;
+          transferred_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["employee_salary_submissions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "employee_salary_submissions_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "employee_salary_submissions_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       hr_expenses: {
         Row: {
           id: string;
@@ -3979,6 +4033,20 @@ export interface Database {
         Returns: string;
       };
       approve_payroll_run: { Args: { p_payroll_run_id: string; p_items: Json }; Returns: undefined };
+      submit_employee_salary: {
+        Args: {
+          p_employee_id: string;
+          p_period_month: number;
+          p_period_year: number;
+          p_amount: number;
+          p_bank_name: string | null;
+          p_bank_account_number: string;
+          p_bank_account_holder: string | null;
+          p_note?: string | null;
+        };
+        Returns: string;
+      };
+      mark_salary_transferred: { Args: { p_id: string }; Returns: undefined };
       create_hr_expense: {
         Args: {
           p_expense_type: string;

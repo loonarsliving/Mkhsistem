@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Banknote,
   BarChart3,
   BedDouble,
   BrainCircuit,
@@ -210,6 +211,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/hr/finance-sync",
         icon: Wallet,
         permission: [PERMISSIONS.PAYROLL_MANAGE, PERMISSIONS.HR_EXPENSE_CREATE, PERMISSIONS.HR_EXPENSE_APPROVE],
+      },
+      {
+        label: "Input Gaji Karyawan",
+        href: "/hr/salary",
+        icon: Banknote,
+        permission: [PERMISSIONS.SALARY_INPUT_SUBMIT, PERMISSIONS.SALARY_INPUT_TRANSFER],
       },
       { label: "Okupansi Kos", href: "/kos-occupancy", icon: BedDouble, permission: PERMISSIONS.KOS_OCCUPANCY_VIEW },
     ],

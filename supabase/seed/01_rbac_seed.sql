@@ -60,7 +60,9 @@ insert into public.permissions (key, description) values
   ('hr_workspace.view', 'View the HR control room (action queue, live attendance, compliance)'),
   ('assistant_workspace.view', 'View the private assistant workspace'),
   ('assistant_followup.manage', 'Create and complete personal follow-up items in the assistant workspace'),
-  ('payroll.view', 'View payroll runs and salary figures without the authority to approve a run')
+  ('payroll.view', 'View payroll runs and salary figures without the authority to approve a run'),
+  ('salary_input.submit', 'Input an individual employee''s salary and bank account, sending them a payslip notification and Super Admin a transfer request'),
+  ('salary_input.transfer', 'See salary submissions awaiting transfer and mark them as transferred')
 on conflict (key) do nothing;
 
 insert into public.roles (key, name, level, description, is_system) values
@@ -108,7 +110,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'registration.view_all', 'registration.manage',
   'prospect.view_all', 'sales_target.view_all', 'sales_target.manage', 'crm_analytics.view_all', 'crm_project.manage',
   'kpi_task.view_all', 'kpi_task.assign', 'kpi_task.verify', 'payroll.manage', 'hr_expense.create', 'hr_expense.approve',
-  'sp1_warning.manage', 'sp1_warning.view_all'
+  'sp1_warning.manage', 'sp1_warning.view_all', 'salary_input.submit'
 ) where r.key = 'direktur_operasional'
 on conflict do nothing;
 
@@ -122,7 +124,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'registration.view_all', 'registration.manage',
   'payroll.manage', 'payroll.view', 'hr_expense.create', 'hr_expense.approve',
   'sp1_warning.manage', 'sp1_warning.view_all',
-  'hr_workspace.view'
+  'hr_workspace.view', 'salary_input.submit'
 ) where r.key = 'hr'
 on conflict do nothing;
 
@@ -136,7 +138,7 @@ select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'registration.view_branch', 'registration.manage',
   'prospect.view_branch', 'prospect.follow_up_create', 'sales_target.view_branch', 'crm_analytics.view_branch',
   'kpi_task.view_branch', 'kpi_task.assign', 'kpi_task.verify', 'hr_expense.create',
-  'sp1_warning.manage'
+  'sp1_warning.manage', 'salary_input.submit'
 ) where r.key = 'kepala_cabang'
 on conflict do nothing;
 
@@ -160,7 +162,7 @@ insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'dashboard.view', 'attendance.view_own', 'memo.view', 'announcement.view',
   'prospect.view_all', 'prospect.finance_verify', 'crm_analytics.view_all',
-  'payroll.manage', 'hr_expense.create', 'hr_expense.approve'
+  'payroll.manage', 'hr_expense.create', 'hr_expense.approve', 'salary_input.transfer'
 ) where r.key = 'finance'
 on conflict do nothing;
 
@@ -217,4 +219,11 @@ insert into public.role_permissions (role_id, permission_id)
 select r.id, p.id from public.roles r join public.permissions p on p.key in (
   'hr_workspace.view', 'assistant_workspace.view', 'assistant_followup.manage'
 ) where r.key = 'super_admin'
+on conflict do nothing;
+
+-- super_admin already gets every permission via the cross-join above, but
+-- kept explicit here for readability alongside the rest of this module.
+insert into public.role_permissions (role_id, permission_id)
+select r.id, p.id from public.roles r join public.permissions p on p.key in ('salary_input.submit', 'salary_input.transfer')
+where r.key = 'super_admin'
 on conflict do nothing;
