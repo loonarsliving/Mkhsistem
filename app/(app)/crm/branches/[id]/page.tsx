@@ -85,7 +85,10 @@ export default async function CrmBranchDetailPage({ params }: { params: Promise<
             <StatTile icon={Trophy} label="Ranking" value={`#${rank} dari ${branchRanking.length} cabang`} tone="success" />
           )}
           <RevenueTile icon={Wallet} label="Target Revenue" value={formatCurrency(branchStats.target_revenue)} />
-          <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(branchStats.collection)} tone="success" />
+          {/* Collection is the real Rupiah value of this branch's closings -- Super Admin/CFO
+              territory only. crm_branch_stats already nulls it for a canViewOwnBranch-only
+              caller (Kepala Cabang), so this simply won't render for them. */}
+          {canViewAll && <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(branchStats.collection)} tone="success" />}
         </div>
       )}
 
@@ -113,7 +116,7 @@ export default async function CrmBranchDetailPage({ params }: { params: Promise<
                     <TableHead className="text-right">Target</TableHead>
                     <TableHead className="text-right">Closing</TableHead>
                     <TableHead className="text-right">Achievement</TableHead>
-                    <TableHead className="text-right">Collection</TableHead>
+                    {canViewAll && <TableHead className="text-right">Collection</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -128,7 +131,7 @@ export default async function CrmBranchDetailPage({ params }: { params: Promise<
                       <TableCell className="text-right tabular-nums">{row.target_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.closing_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.achievement_percent}%</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>
+                      {canViewAll && <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>}
                     </TableRow>
                   ))}
                 </TableBody>

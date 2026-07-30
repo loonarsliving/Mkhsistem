@@ -11,6 +11,12 @@ import type { branchStatsAction } from "../actions/crm-query.actions";
  * (crm_branch_stats), never per-sales data. This is the Branch Manager's
  * core responsibility (managing branch sales performance), so it renders
  * first, above the Markom Team widget.
+ *
+ * Deliberately never shows Collection: that's the actual Rupiah value of
+ * closings/fees, which is Super Admin/CFO territory, not Kepala Cabang's --
+ * this card is only ever reached via the branch-scoped permission (see
+ * crm_branch_stats, which also nulls `collection` server-side for this same
+ * caller as defense-in-depth).
  */
 export function BranchPerformanceCard({ stats }: { stats: Awaited<ReturnType<typeof branchStatsAction>> }) {
   if (!stats) return null;
@@ -26,7 +32,6 @@ export function BranchPerformanceCard({ stats }: { stats: Awaited<ReturnType<typ
           <StatTile icon={CheckCircle2} label="Closing Unit Cabang" value={String(stats.closing_units)} tone="success" />
           <StatTile icon={TrendingUp} label="Achievement Cabang" value={`${stats.achievement_percent}%`} tone="success" />
           <RevenueTile icon={Wallet} label="Target Revenue Cabang" value={formatCurrency(stats.target_revenue)} />
-          <RevenueTile icon={Wallet} label="Collection Cabang" value={formatCurrency(stats.collection)} tone="success" />
         </div>
       </CardContent>
     </Card>

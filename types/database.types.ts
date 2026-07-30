@@ -4050,9 +4050,9 @@ export interface Database {
           closing_units: number;
           achievement_percent: number;
           remaining_target: number;
-          collection: number;
-          estimated_commission: number;
-          verified_commission: number;
+          collection: number | null;
+          estimated_commission: number | null;
+          verified_commission: number | null;
           prospects_red: number;
           prospects_yellow: number;
           prospects_green: number;
@@ -4072,7 +4072,7 @@ export interface Database {
           target_revenue: number;
           closing_units: number;
           achievement_percent: number;
-          collection: number;
+          collection: number | null;
           active_sales_count: number;
           pending_finance_verification: number;
           prospects_red: number;
@@ -4114,7 +4114,7 @@ export interface Database {
           target_units: number;
           closing_units: number;
           achievement_percent: number;
-          collection: number;
+          collection: number | null;
         }[];
       };
       crm_conversion_analytics: {
@@ -4136,7 +4136,7 @@ export interface Database {
           target_units: number;
           closing_units: number;
           achievement_percent: number;
-          collection: number;
+          collection: number | null;
         }[];
       };
       kpi_assign_tasks: {

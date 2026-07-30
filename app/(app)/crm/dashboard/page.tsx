@@ -104,7 +104,7 @@ export default async function CrmDashboardPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <MonthlyTrendChart data={trend} />
+        <MonthlyTrendChart data={trend} showCollection={canViewAll} />
         <LeadSourceChart data={(conversion?.lead_source_performance ?? []) as never} />
       </div>
 
@@ -148,6 +148,8 @@ export default async function CrmDashboardPage() {
         </Card>
       )}
 
+      {/* Never shown to Direktur/Finance (canViewAll) -- this table only renders for Kepala Cabang,
+          who must not see closing/fee monetary values, so no Collection column here. */}
       {!canViewAll && (salesPerformance as SalesPerformanceRow[]).length > 0 && (
         <Card>
           <CardHeader>
@@ -163,7 +165,6 @@ export default async function CrmDashboardPage() {
                     <TableHead className="text-right">Target</TableHead>
                     <TableHead className="text-right">Closing</TableHead>
                     <TableHead className="text-right">Achievement</TableHead>
-                    <TableHead className="text-right">Collection</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -178,7 +179,6 @@ export default async function CrmDashboardPage() {
                       <TableCell className="text-right tabular-nums">{row.target_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.closing_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.achievement_percent}%</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

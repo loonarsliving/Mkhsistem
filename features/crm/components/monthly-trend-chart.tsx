@@ -13,14 +13,23 @@ interface MonthlyTrendRow {
   target_units: number;
   closing_units: number;
   achievement_percent: number;
-  collection: number;
+  collection: number | null;
 }
 
-export function MonthlyTrendChart({ data }: { data: MonthlyTrendRow[] }) {
+/**
+ * `showCollection` must be false for any caller only holding a branch-scoped
+ * permission (Kepala Cabang) -- the actual Rupiah value of closings is Super
+ * Admin/CFO territory, not theirs to see. The RPC backing this chart already
+ * nulls `collection` server-side for that same caller as defense-in-depth,
+ * so this defaults to hiding the line/axis whenever the data doesn't carry
+ * real numbers rather than trusting the caller to pass the right flag.
+ */
+export function MonthlyTrendChart({ data, showCollection = true }: { data: MonthlyTrendRow[]; showCollection?: boolean }) {
+  const canShowCollection = showCollection && data.every((row) => row.collection !== null);
   const chartData = data.map((row) => ({
     name: `${MONTH_LABEL[row.period_month - 1]} ${String(row.period_year).slice(2)}`,
     achievement: row.achievement_percent,
-    collection: row.collection,
+    collection: row.collection ?? 0,
     closing: row.closing_units,
     target: row.target_units,
   }));
@@ -40,12 +49,16 @@ export function MonthlyTrendChart({ data }: { data: MonthlyTrendRow[] }) {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis yAxisId="left" fontSize={12} unit="%" />
-                <YAxis yAxisId="right" orientation="right" fontSize={11} tickFormatter={(v: number) => formatCurrency(v)} width={130} />
+                {canShowCollection && (
+                  <YAxis yAxisId="right" orientation="right" fontSize={11} tickFormatter={(v: number) => formatCurrency(v)} width={130} />
+                )}
                 <Tooltip
                   formatter={(value: number, key: string) => (key === "collection" ? formatCurrency(value) : `${value}%`)}
                 />
                 <Line yAxisId="left" type="monotone" dataKey="achievement" name="Achievement" stroke="hsl(221 83% 60%)" strokeWidth={2} dot={{ r: 3 }} />
-                <Line yAxisId="right" type="monotone" dataKey="collection" name="Collection" stroke="hsl(142 71% 35%)" strokeWidth={2} dot={{ r: 3 }} />
+                {canShowCollection && (
+                  <Line yAxisId="right" type="monotone" dataKey="collection" name="Collection" stroke="hsl(142 71% 35%)" strokeWidth={2} dot={{ r: 3 }} />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>

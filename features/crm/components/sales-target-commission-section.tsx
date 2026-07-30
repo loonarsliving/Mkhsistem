@@ -25,7 +25,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function SalesTargetCommissionSection({ stats }: { stats: Awaited<ReturnType<typeof salesStatsAction>> }) {
   if (!stats) return null;
 
-  const pendingCommission = Math.max(stats.estimated_commission - stats.verified_commission, 0);
+  // Always the caller's own stats (Sales Home Dashboard, own userId) -- crm_sales_stats
+  // only nulls these when viewing someone *else's* numbers via the branch-scoped
+  // permission, which never applies here. The `?? 0` just satisfies the nullable type.
+  const pendingCommission = Math.max((stats.estimated_commission ?? 0) - (stats.verified_commission ?? 0), 0);
 
   return (
     <Card className="border-primary/30">

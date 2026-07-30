@@ -68,6 +68,13 @@ export default async function CrmSalesDetailPage({ params }: { params: Promise<{
     redirect("/dashboard?error=forbidden");
   }
 
+  // Collection is the real Rupiah value of this Sales rep's closings -- Super
+  // Admin/CFO territory only. A Kepala Cabang viewing a branch employee via
+  // canViewOwnBranch must not see it; salesStatsAction/monthlyTrendAction
+  // already null the figure server-side for that same caller as
+  // defense-in-depth, this just keeps the UI from rendering an empty tile/column.
+  const canSeeCollection = isSelf || canViewAll;
+
   const [salesStats, prospects, followUps, monthlyTrend] = await Promise.all([
     salesStatsAction(id),
     listProspectsAction({ salesId: id, page: 1, pageSize: 10 }),
@@ -95,7 +102,7 @@ export default async function CrmSalesDetailPage({ params }: { params: Promise<{
             <StatTile icon={Target} label="Target Unit" value={String(salesStats.target_units)} />
             <StatTile icon={CheckCircle2} label="Closing Unit" value={String(salesStats.closing_units)} tone="success" />
             <StatTile icon={Target} label="Achievement" value={`${salesStats.achievement_percent}%`} tone="success" />
-            <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(salesStats.collection)} tone="success" />
+            {canSeeCollection && <RevenueTile icon={Wallet} label="Collection" value={formatCurrency(salesStats.collection)} tone="success" />}
           </div>
 
           <div className="flex flex-wrap gap-2 text-xs">
@@ -204,7 +211,7 @@ export default async function CrmSalesDetailPage({ params }: { params: Promise<{
                     <TableHead className="text-right">Target</TableHead>
                     <TableHead className="text-right">Closing</TableHead>
                     <TableHead className="text-right">Achievement</TableHead>
-                    <TableHead className="text-right">Collection</TableHead>
+                    {canSeeCollection && <TableHead className="text-right">Collection</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -219,7 +226,7 @@ export default async function CrmSalesDetailPage({ params }: { params: Promise<{
                       <TableCell className="text-right tabular-nums">{row.target_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.closing_units}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.achievement_percent}%</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>
+                      {canSeeCollection && <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>}
                     </TableRow>
                   ))}
                 </TableBody>

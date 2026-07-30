@@ -10,7 +10,12 @@ import { formatCurrency } from "@/lib/utils";
 
 import { salesRankingAction } from "../actions/crm-query.actions";
 
-export function RankingTable() {
+/**
+ * `showCollection` must be false for a Kepala Cabang caller (crm_analytics.view_branch
+ * only) -- Collection is the real Rupiah value of closings, Super Admin/CFO territory.
+ * crm_sales_ranking already nulls it server-side for that caller as defense-in-depth.
+ */
+export function RankingTable({ showCollection = true }: { showCollection?: boolean }) {
   const { data, isLoading } = useQuery({ queryKey: ["crm-ranking"], queryFn: () => salesRankingAction() });
   const items = data ?? [];
 
@@ -33,7 +38,7 @@ export function RankingTable() {
                   <TableHead className="text-right">Target</TableHead>
                   <TableHead className="text-right">Closing</TableHead>
                   <TableHead className="text-right">Achievement</TableHead>
-                  <TableHead className="text-right">Collection</TableHead>
+                  {showCollection && <TableHead className="text-right">Collection</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -45,7 +50,7 @@ export function RankingTable() {
                     <TableCell className="text-right tabular-nums">{row.target_units}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.closing_units}</TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{row.achievement_percent}%</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>
+                    {showCollection && <TableCell className="text-right tabular-nums">{formatCurrency(row.collection)}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
