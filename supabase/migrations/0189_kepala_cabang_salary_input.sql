@@ -113,11 +113,18 @@ alter table public.mkc_notifications add constraint mkc_notifications_category_c
     'salary_transfer_request', 'salary_transferred'
   ]));
 
+-- IMPORTANT: this function was authenticated-dispatch (automation_post(),
+-- migration 0176) before this migration. An earlier version of this file
+-- mistakenly restated the old pre-0176 body (bare net.http_post with no
+-- x-cron-secret header), which silently 401'd every WhatsApp relay in
+-- production for ~1 hour until caught and fixed live. Restated here
+-- verbatim from 0183 (the latest version at the time this migration was
+-- written) plus this migration's one addition.
 create or replace function public.mkc_notifications_whatsapp_trigger()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if new.category = any (array[
@@ -139,16 +146,17 @@ begin
     'ad_lead_followup_reminder', 'ad_lead_escalation_branch', 'ad_lead_escalation_director',
     'whatsapp_webhook_silence_alert',
     'finance_expense_pending_verification',
+    'sales_conduct_warning',
+    'meta_ads_balance_low',
+    'lead_wants_info',
+    'loonars_fee_alert',
+    'automation_dispatch_failed', 'automation_job_dead_letter', 'automation_queue_stalled',
+    'content_review_pending',
     -- This migration -- Super Admin needs to hear about a transfer request
     -- immediately, same urgency as finance_expense_pending_verification.
     'salary_transfer_request'
   ]) then
-    perform net.http_post(
-      url := 'https://mkh.haluoleo.id/api/ai/whatsapp-relay',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
-      body := jsonb_build_object('notification_id', new.id),
-      timeout_milliseconds := 5000
-    );
+    perform public.automation_post('/api/ai/whatsapp-relay', jsonb_build_object('notification_id', new.id), 5000);
   end if;
   return new;
 end;
