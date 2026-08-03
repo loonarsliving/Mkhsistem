@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,7 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [bankAccountHolder, setBankAccountHolder] = useState("");
   const [note, setNote] = useState("");
+  const [separateSchedule, setSeparateSchedule] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function reset() {
@@ -39,6 +41,12 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
     setBankAccountNumber("");
     setBankAccountHolder("");
     setNote("");
+    setSeparateSchedule(false);
+  }
+
+  function handleEmployeeChange(id: string) {
+    setEmployeeId(id);
+    setSeparateSchedule(candidates.find((c) => c.id === id)?.separateSchedule ?? false);
   }
 
   function handleSubmit() {
@@ -66,6 +74,7 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
         bankAccountNumber,
         bankAccountHolder,
         note,
+        separateSchedule,
       });
 
       if (!result.success) {
@@ -93,7 +102,7 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-1">
             <Label>Karyawan</Label>
-            <Select value={employeeId} onValueChange={setEmployeeId} disabled={isPending}>
+            <Select value={employeeId} onValueChange={handleEmployeeChange} disabled={isPending}>
               <SelectTrigger>
                 <SelectValue placeholder="Pilih karyawan" />
               </SelectTrigger>
@@ -101,6 +110,7 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
                 {candidates.map((person) => (
                   <SelectItem key={person.id} value={person.id}>
                     {person.fullName} ({person.employeeCode})
+                    {person.separateSchedule ? " — jadwal terpisah" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -191,6 +201,19 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
             rows={2}
             disabled={isPending}
           />
+        </div>
+
+        <div className="flex items-start gap-2">
+          <Checkbox
+            id="separateSchedule"
+            checked={separateSchedule}
+            onCheckedChange={(checked) => setSeparateSchedule(checked === true)}
+            disabled={isPending}
+          />
+          <Label htmlFor="separateSchedule" className="font-normal leading-snug text-muted-foreground">
+            Karyawan ini gajian di jadwal terpisah dari cabang (mis. tanggal beda) -- jangan tunggu dia untuk kirim ringkasan
+            otomatis ke Super Admin.
+          </Label>
         </div>
 
         <Button onClick={handleSubmit} disabled={isPending || !employeeId}>

@@ -12,13 +12,16 @@ export interface SalaryCandidate {
   fullName: string;
   employeeCode: string;
   branchName: string;
+  /** Paid on a different schedule than the rest of their branch (0192) -- doesn't block the branch's auto-summary. */
+  separateSchedule: boolean;
 }
 
-/** Active employees a Kepala Cabang can submit a salary for -- their own branch only, scoped by RLS on v_employee_directory. */
+/** Active employees a Kepala Cabang can submit a salary for -- their own branch only, scoped by RLS. Queries employees directly (not v_employee_directory) since that view doesn't carry salary_separate_schedule. */
 export async function listSalaryCandidates(supabase: TypedSupabaseClient, branchId?: string | null): Promise<SalaryCandidate[]> {
   let query = supabase
-    .from("v_employee_directory")
-    .select("id, full_name, employee_code, branch_name, branch_id")
+    .from("employees")
+    .select("id, full_name, employee_code, salary_separate_schedule, branch:branch_id(name)")
+    .is("deleted_at", null)
     .eq("employment_status", "active")
     .order("full_name", { ascending: true });
 
@@ -31,7 +34,8 @@ export async function listSalaryCandidates(supabase: TypedSupabaseClient, branch
     id: row.id,
     fullName: row.full_name,
     employeeCode: row.employee_code ?? "-",
-    branchName: row.branch_name ?? "-",
+    branchName: (row.branch as unknown as { name: string } | null)?.name ?? "-",
+    separateSchedule: row.salary_separate_schedule,
   }));
 }
 
