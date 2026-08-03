@@ -51,6 +51,7 @@ export interface SalarySubmission {
   submittedByName: string | null;
   transferredByName: string | null;
   transferredAt: string | null;
+  summarySentAt: string | null;
   createdAt: string;
 }
 
@@ -66,6 +67,7 @@ interface RawRow {
   note: string | null;
   status: "pending_transfer" | "transferred";
   transferred_at: string | null;
+  summary_sent_at: string | null;
   created_at: string;
   employee: { full_name: string } | null;
   branch: { name: string } | null;
@@ -90,12 +92,13 @@ function mapRow(row: RawRow): SalarySubmission {
     submittedByName: row.submitter?.full_name ?? null,
     transferredByName: row.transferrer?.full_name ?? null,
     transferredAt: row.transferred_at,
+    summarySentAt: row.summary_sent_at,
     createdAt: row.created_at,
   };
 }
 
 const SELECT =
-  "id, employee_id, period_month, period_year, amount, bank_name, bank_account_number, bank_account_holder, note, status, transferred_at, created_at, employee:employee_id(full_name), branch:branch_id(name), submitter:submitted_by(full_name), transferrer:transferred_by(full_name)";
+  "id, employee_id, period_month, period_year, amount, bank_name, bank_account_number, bank_account_holder, note, status, transferred_at, summary_sent_at, created_at, employee:employee_id(full_name), branch:branch_id(name), submitter:submitted_by(full_name), transferrer:transferred_by(full_name)";
 
 /** History for the current session -- RLS scopes it to own branch / self / salary_input.transfer holders. */
 export async function listSalarySubmissions(supabase: TypedSupabaseClient, limit = 50): Promise<SalarySubmission[]> {
@@ -114,6 +117,19 @@ export async function listPendingSalaryTransfers(supabase: TypedSupabaseClient):
     .from("employee_salary_submissions")
     .select(SELECT)
     .eq("status", "pending_transfer")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as unknown as RawRow[]).map(mapRow);
+}
+
+/** Submitted but not yet folded into a "Kirim Ringkasan" WhatsApp message to Super Admin -- powers the send-summary button's count/preview for one branch. */
+export async function listUnsummarizedSalarySubmissions(supabase: TypedSupabaseClient, branchId: string): Promise<SalarySubmission[]> {
+  const { data, error } = await supabase
+    .from("employee_salary_submissions")
+    .select(SELECT)
+    .eq("branch_id", branchId)
+    .eq("status", "pending_transfer")
+    .is("summary_sent_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data as unknown as RawRow[]).map(mapRow);

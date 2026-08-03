@@ -114,7 +114,9 @@ export type NotificationCategoryDb =
   | "content_review_pending"
   // Kepala Cabang single-employee salary input (migration 0189)
   | "salary_transfer_request"
-  | "salary_transferred";
+  | "salary_transferred"
+  // Consolidated per-branch salary transfer digest (migration 0190)
+  | "salary_transfer_summary";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2359,6 +2361,7 @@ export interface Database {
           submitted_by: string | null;
           transferred_by: string | null;
           transferred_at: string | null;
+          summary_sent_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -2376,6 +2379,7 @@ export interface Database {
           submitted_by?: string | null;
           transferred_by?: string | null;
           transferred_at?: string | null;
+          summary_sent_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["employee_salary_submissions"]["Insert"]>;
@@ -4047,6 +4051,7 @@ export interface Database {
         Returns: string;
       };
       mark_salary_transferred: { Args: { p_id: string }; Returns: undefined };
+      send_salary_transfer_summary: { Args: { p_branch_id?: string | null }; Returns: number };
       create_hr_expense: {
         Args: {
           p_expense_type: string;

@@ -21,3 +21,8 @@ export const markSalaryTransferredSchema = z.object({
   id: z.string().uuid(),
 });
 export type MarkSalaryTransferredInput = z.infer<typeof markSalaryTransferredSchema>;
+
+export const sendSalarySummarySchema = z.object({
+  branchId: z.string().uuid().optional(),
+});
+export type SendSalarySummaryInput = z.infer<typeof sendSalarySummarySchema>;

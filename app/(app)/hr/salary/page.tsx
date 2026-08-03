@@ -9,12 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/constants/rbac";
 import { SalaryInputForm } from "@/features/salary-input/components/salary-input-form";
+import { SalarySummarySendPanel } from "@/features/salary-input/components/salary-summary-send-panel";
 import { SalaryTransferQueue } from "@/features/salary-input/components/salary-transfer-queue";
 import { MONTH_LABELS } from "@/features/salary-input/schemas/salary-input.schema";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
-import { listPendingSalaryTransfers, listSalaryCandidates, listSalarySubmissions } from "@/repositories/salary-input.repository";
+import {
+  listPendingSalaryTransfers,
+  listSalaryCandidates,
+  listSalarySubmissions,
+  listUnsummarizedSalarySubmissions,
+} from "@/repositories/salary-input.repository";
 
 export const metadata: Metadata = { title: "Input Gaji Karyawan" };
 
@@ -27,18 +33,23 @@ export default async function SalaryInputPage() {
 
   const supabase = await createClient();
 
-  const [candidates, submissions, pendingTransfers] = await Promise.all([
+  const [candidates, submissions, pendingTransfers, unsummarized] = await Promise.all([
     canSubmit ? listSalaryCandidates(supabase, session.employee.branch_id) : Promise.resolve([]),
     listSalarySubmissions(supabase),
     canTransfer ? listPendingSalaryTransfers(supabase) : Promise.resolve([]),
+    canSubmit ? listUnsummarizedSalarySubmissions(supabase, session.employee.branch_id) : Promise.resolve([]),
   ]);
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Input Gaji Karyawan"
-        description="Kepala Cabang input gaji dan nomor rekening karyawannya di sini. Slip gaji otomatis terkirim ke karyawan, dan Super Admin mendapat notifikasi untuk mentransfer."
+        description="Kepala Cabang input gaji dan nomor rekening karyawannya di sini. Slip gaji otomatis terkirim ke karyawan. Setelah selesai input semua, kirim satu ringkasan WhatsApp ke Super Admin untuk transfer."
       />
+
+      {canSubmit && (
+        <SalarySummarySendPanel branchName={session.employee.branch_name ?? "-"} items={unsummarized} />
+      )}
 
       {canSubmit && <SalaryInputForm candidates={candidates} />}
 
