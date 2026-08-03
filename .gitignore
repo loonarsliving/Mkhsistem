@@ -47,5 +47,16 @@ supabase/.branches
 !.vscode/extensions.json
 .idea
 
-# Claude Code agent worktrees (local tooling state, not project files)
-.claude/
+# Claude Code agent worktrees (local tooling state, not project files).
+# Un-ignoring a nested path requires un-ignoring every ancestor directory
+# too (git can't re-include a file whose parent dir is excluded) -- hence
+# the ladder below instead of a single "!" line.
+.claude/*
+!.claude/skills
+.claude/skills/*
+!.claude/skills/ui-ux-pro-max
+# Exception: the UI/UX Pro Max skill is shared project tooling (design
+# reference data + search script, MIT licensed), not session-local state --
+# kept available across sessions instead of being reinstalled every time.
+__pycache__/
+*.pyc
