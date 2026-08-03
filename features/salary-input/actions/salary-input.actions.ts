@@ -8,8 +8,10 @@ import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
   markSalaryTransferredSchema,
+  sendSalarySummarySchema,
   submitEmployeeSalarySchema,
   type MarkSalaryTransferredInput,
+  type SendSalarySummaryInput,
   type SubmitEmployeeSalaryInput,
 } from "../schemas/salary-input.schema";
 
@@ -52,4 +54,19 @@ export async function markSalaryTransferredAction(input: MarkSalaryTransferredIn
 
   revalidatePath("/hr/salary");
   return actionSuccess();
+}
+
+export async function sendSalarySummaryAction(input: SendSalarySummaryInput): Promise<ActionResult<{ count: number }>> {
+  await requireSession();
+  const parsed = sendSalarySummarySchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("send_salary_transfer_summary", {
+    p_branch_id: parsed.data.branchId ?? null,
+  });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/hr/salary");
+  return actionSuccess({ count: data as number });
 }
