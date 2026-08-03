@@ -320,6 +320,7 @@ export interface Database {
           rejected_at: string | null;
           rejection_reason: string | null;
           ads_lead_routing_paused: boolean;
+          salary_separate_schedule: boolean;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -351,6 +352,7 @@ export interface Database {
           rejected_at?: string | null;
           rejection_reason?: string | null;
           ads_lead_routing_paused?: boolean;
+          salary_separate_schedule?: boolean;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -4047,6 +4049,7 @@ export interface Database {
           p_bank_account_number: string;
           p_bank_account_holder: string | null;
           p_note?: string | null;
+          p_separate_schedule?: boolean | null;
         };
         Returns: string;
       };

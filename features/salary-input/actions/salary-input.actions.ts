@@ -36,6 +36,7 @@ export async function submitEmployeeSalaryAction(input: SubmitEmployeeSalaryInpu
     p_bank_account_number: parsed.data.bankAccountNumber,
     p_bank_account_holder: parsed.data.bankAccountHolder || null,
     p_note: parsed.data.note || null,
+    p_separate_schedule: parsed.data.separateSchedule ?? null,
   });
   if (error) return actionError(error.message);
 

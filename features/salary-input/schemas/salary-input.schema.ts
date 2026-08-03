@@ -14,6 +14,8 @@ export const submitEmployeeSalarySchema = z.object({
   bankAccountNumber: z.string().trim().min(4, "Nomor rekening minimal 4 digit").max(50),
   bankAccountHolder: z.string().trim().max(150).optional().or(z.literal("")),
   note: z.string().trim().max(1000).optional().or(z.literal("")),
+  /** Undefined = leave the employee's existing flag as-is; true/false explicitly sets it. */
+  separateSchedule: z.boolean().optional(),
 });
 export type SubmitEmployeeSalaryInput = z.infer<typeof submitEmployeeSalarySchema>;
 
