@@ -14,7 +14,7 @@ export function Topnav({ session }: { session: CurrentSession }) {
         <Breadcrumb />
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <GlobalSearch />
+        <GlobalSearch permissions={session.permissions} />
         <NotificationBell userId={session.userId} />
         <ThemeToggle />
         <UserMenu session={session} />
