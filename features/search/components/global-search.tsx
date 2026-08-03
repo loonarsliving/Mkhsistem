@@ -3,11 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Megaphone, Search, User } from "lucide-react";
+import { FileText, Megaphone, Search, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { NAV_GROUPS } from "@/constants/nav";
+import type { PermissionKey } from "@/constants/rbac";
 import { useDebounce } from "@/hooks/use-debounce";
 import { getInitials } from "@/lib/utils";
 
@@ -16,7 +24,11 @@ import type { GlobalSearchResults } from "@/repositories/search.repository";
 
 const EMPTY: GlobalSearchResults = { memos: [], announcements: [], employees: [] };
 
-export function GlobalSearch() {
+/** Every nav item across every group, flattened once at module scope -- static data, no need to recompute per render. */
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
+
+/** ⌘K command palette: jump to any page you have permission for, or search live data (karyawan/memo/pengumuman). Built on shadcn's Command (cmdk) instead of a hand-rolled list so arrow-key navigation and selection come for free. */
+export function GlobalSearch({ permissions }: { permissions: PermissionKey[] }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -52,7 +64,20 @@ export function GlobalSearch() {
     router.push(href);
   }
 
-  const hasResults = results.memos.length + results.announcements.length + results.employees.length > 0;
+  const navMatches = React.useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (needle.length === 0) return [];
+    return ALL_NAV_ITEMS.filter((item) => {
+      if (!item.label.toLowerCase().includes(needle)) return false;
+      if (!item.permission) return true;
+      const required = Array.isArray(item.permission) ? item.permission : [item.permission];
+      return required.some((key) => permissions.includes(key));
+    }).slice(0, 6);
+  }, [query, permissions]);
+
+  const hasDataResults =
+    results.memos.length + results.announcements.length + results.employees.length > 0;
+  const hasAnyResults = hasDataResults || navMatches.length > 0;
 
   return (
     <>
@@ -62,95 +87,97 @@ export function GlobalSearch() {
         onClick={() => setOpen(true)}
       >
         <Search className="h-4 w-4" />
-        <span className="hidden sm:inline">Cari memo, pengumuman, karyawan...</span>
+        <span className="hidden sm:inline">Cari atau lompat ke halaman...</span>
         <span className="sm:hidden">Cari...</span>
-        <kbd className="ml-auto hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs sm:inline">⌘K</kbd>
+        <kbd className="ml-auto hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs sm:inline">
+          ⌘K
+        </kbd>
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="top-24 max-w-xl translate-y-0 p-0">
-          <DialogTitle className="sr-only">Pencarian Global</DialogTitle>
-          <div className="flex items-center gap-2 border-b border-border px-4">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <Input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-              className="border-0 shadow-none focus-visible:ring-0"
-            />
-            {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
-          </div>
-          <div className="max-h-96 overflow-y-auto p-2">
-            {query.trim().length < 2 && (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">Ketik minimal 2 karakter</p>
-            )}
-            {query.trim().length >= 2 && !loading && !hasResults && (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">Tidak ada hasil ditemukan</p>
-            )}
-            {results.employees.length > 0 && (
-              <SearchGroup label="Karyawan">
-                {results.employees.map((e) => (
-                  <button
-                    key={e.id}
-                    onClick={() => navigate(`/employees/${e.id}`)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                      {getInitials(e.full_name)}
-                    </span>
-                    {e.full_name}
-                    <span className="ml-auto text-xs text-muted-foreground">{e.employee_code}</span>
-                  </button>
-                ))}
-              </SearchGroup>
-            )}
-            {results.memos.length > 0 && (
-              <SearchGroup label="Memo">
-                {results.memos.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => navigate(`/memo/${m.id}`)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
-                  >
-                    <FileText className="h-4 w-4 text-muted-foreground" /> {m.title}
-                  </button>
-                ))}
-              </SearchGroup>
-            )}
-            {results.announcements.length > 0 && (
-              <SearchGroup label="Pengumuman">
-                {results.announcements.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => navigate(`/announcements/${a.id}`)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
-                  >
-                    <Megaphone className="h-4 w-4 text-muted-foreground" /> {a.title}
-                  </button>
-                ))}
-              </SearchGroup>
-            )}
-          </div>
-          {query.trim().length >= 2 && (
-            <Link
-              href={`/search?q=${encodeURIComponent(query)}`}
-              onClick={() => setOpen(false)}
-              className="flex items-center justify-center gap-2 border-t border-border py-2.5 text-sm text-primary hover:underline"
-            >
-              <User className="h-3.5 w-3.5" /> Lihat semua hasil untuk &ldquo;{query}&rdquo;
-            </Link>
+      <CommandDialog open={open} onOpenChange={setOpen} shouldFilter={false}>
+        <CommandInput
+          autoFocus
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Ketik nama halaman, memo, karyawan..."
+          loading={loading}
+        />
+        <CommandList>
+          {query.trim().length < 2 && <CommandEmpty>Ketik minimal 2 karakter</CommandEmpty>}
+          {query.trim().length >= 2 && !loading && !hasAnyResults && (
+            <CommandEmpty>Tidak ada hasil ditemukan</CommandEmpty>
           )}
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
-function SearchGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-2">
-      <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      {children}
-    </div>
+          {navMatches.length > 0 && (
+            <CommandGroup heading="Halaman">
+              {navMatches.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <CommandItem
+                    key={item.href}
+                    value={`nav-${item.href}`}
+                    onSelect={() => navigate(item.href)}
+                  >
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    {item.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          )}
+          {results.employees.length > 0 && (
+            <CommandGroup heading="Karyawan">
+              {results.employees.map((e) => (
+                <CommandItem
+                  key={e.id}
+                  value={`emp-${e.id}`}
+                  onSelect={() => navigate(`/employees/${e.id}`)}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    {getInitials(e.full_name)}
+                  </span>
+                  {e.full_name}
+                  <span className="ml-auto text-xs text-muted-foreground">{e.employee_code}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {results.memos.length > 0 && (
+            <CommandGroup heading="Memo">
+              {results.memos.map((m) => (
+                <CommandItem
+                  key={m.id}
+                  value={`memo-${m.id}`}
+                  onSelect={() => navigate(`/memo/${m.id}`)}
+                >
+                  <FileText className="h-4 w-4 text-muted-foreground" /> {m.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {results.announcements.length > 0 && (
+            <CommandGroup heading="Pengumuman">
+              {results.announcements.map((a) => (
+                <CommandItem
+                  key={a.id}
+                  value={`ann-${a.id}`}
+                  onSelect={() => navigate(`/announcements/${a.id}`)}
+                >
+                  <Megaphone className="h-4 w-4 text-muted-foreground" /> {a.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+        {query.trim().length >= 2 && (
+          <Link
+            href={`/search?q=${encodeURIComponent(query)}`}
+            onClick={() => setOpen(false)}
+            className="flex items-center justify-center gap-2 border-t border-border py-2.5 text-sm text-primary hover:underline"
+          >
+            <User className="h-3.5 w-3.5" /> Lihat semua hasil untuk &ldquo;{query}&rdquo;
+          </Link>
+        )}
+      </CommandDialog>
+    </>
   );
 }
