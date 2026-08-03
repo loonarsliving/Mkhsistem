@@ -44,7 +44,7 @@ export default async function SalaryInputPage() {
     <div className="space-y-8">
       <PageHeader
         title="Input Gaji Karyawan"
-        description="Kepala Cabang input gaji dan nomor rekening karyawannya di sini. Slip gaji otomatis terkirim ke karyawan. Setelah selesai input semua, kirim satu ringkasan WhatsApp ke Super Admin untuk transfer."
+        description="Kepala Cabang input gaji dan nomor rekening karyawannya di sini. Slip gaji otomatis terkirim ke karyawan. Setelah SEMUA karyawan aktif di cabang sudah diinput, sistem otomatis mengirim satu ringkasan WhatsApp ke Super Admin — atau kirim manual kapan saja lewat tombol di bawah."
       />
 
       {canSubmit && (

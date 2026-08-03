@@ -50,8 +50,9 @@ export function SalarySummarySendPanel({ branchName, items }: SalarySummarySendP
           Kirim Ringkasan ke Super Admin
         </CardTitle>
         <CardDescription>
-          {items.length} karyawan cabang {branchName} sudah diinput tapi belum dikirim ke Super Admin. Tekan tombol di bawah untuk
-          mengirim <strong>1 pesan WhatsApp</strong> berisi semua nama dan nomor rekeningnya sekaligus.
+          {items.length} karyawan cabang {branchName} sudah diinput tapi belum dikirim ke Super Admin. Ini otomatis terkirim begitu
+          semua karyawan aktif di cabang sudah diinput -- kalau belum semua, atau ingin kirim sebagian sekarang, tekan tombol di bawah
+          untuk mengirim <strong>1 pesan WhatsApp</strong> berisi semua nama dan nomor rekeningnya sekaligus.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
