@@ -16,8 +16,18 @@ const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
 );
 TableHeader.displayName = "TableHeader";
 
+const STAGGER_ROW_CLASSES =
+  "[&_tr]:animate-stagger-fade-in " +
+  "[&_tr:nth-child(1)]:[animation-delay:0ms] [&_tr:nth-child(2)]:[animation-delay:30ms] " +
+  "[&_tr:nth-child(3)]:[animation-delay:60ms] [&_tr:nth-child(4)]:[animation-delay:90ms] " +
+  "[&_tr:nth-child(5)]:[animation-delay:120ms] [&_tr:nth-child(6)]:[animation-delay:150ms] " +
+  "[&_tr:nth-child(7)]:[animation-delay:180ms] [&_tr:nth-child(8)]:[animation-delay:210ms] " +
+  "[&_tr:nth-child(n+9)]:[animation-delay:240ms]";
+
 const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => <tbody ref={ref} className={cn("[&_tr:last-child]:border-0", className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <tbody ref={ref} className={cn("[&_tr:last-child]:border-0", STAGGER_ROW_CLASSES, className)} {...props} />
+  ),
 );
 TableBody.displayName = "TableBody";
 
