@@ -8,7 +8,7 @@ import type { CurrentSession } from "@/types/domain";
 
 export function Topnav({ session }: { session: CurrentSession }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-lg backdrop-saturate-150 supports-[backdrop-filter]:bg-background/70 sm:px-6">
       <MobileSidebar permissions={session.permissions} />
       <div className="hidden lg:block">
         <Breadcrumb />

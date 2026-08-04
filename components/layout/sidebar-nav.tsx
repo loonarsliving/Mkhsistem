@@ -11,7 +11,7 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
+    <nav className="relative flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
       {NAV_GROUPS.map((group) => {
         const items = group.items.filter((item) => {
           if (!item.permission) return true;
@@ -29,8 +29,9 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
               const active = !item.external && (pathname === item.href || pathname.startsWith(`${item.href}/`));
               const Icon = item.icon;
               const linkClassName = cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                active && "bg-sidebar-accent text-sidebar-foreground",
+                "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-all duration-150 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                active &&
+                  "bg-gradient-to-r from-primary/25 to-transparent text-sidebar-foreground before:absolute before:-left-1 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-primary before:shadow-[0_0_8px_hsl(var(--primary)/0.8)] [&_svg]:text-primary [&_svg]:drop-shadow-[0_0_4px_hsl(var(--primary)/0.6)]",
               );
               if (item.external) {
                 return (

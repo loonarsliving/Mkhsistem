@@ -102,6 +102,39 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    position: relative;
+  }
+  /* Soft fixed gradient mesh for depth -- low-opacity, decorative only,
+     sits behind all content (z-index -1) so it never affects layout or
+     interaction. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 100% -10%, hsl(var(--primary) / 0.08), transparent 60%),
+      radial-gradient(50rem 35rem at -10% 100%, hsl(var(--primary) / 0.06), transparent 55%);
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.25);
+    border-radius: 999px;
+    border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.45);
   }
 }
 
