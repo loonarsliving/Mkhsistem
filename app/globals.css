@@ -2,28 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Teal Property palette (UI Pro Max: "Real Estate/Property" product type)
+ * -- replaces the previous generic blue. Deliberate choice for a property/
+ * villa/kos/CRM company: teal signals trust without being another
+ * interchangeable SaaS blue. --accent stays a subtle neutral hover tint
+ * (shadcn convention -- it's not a second brand color), just teal-shifted
+ * for cohesion instead of the old blue-gray.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 170 20% 98%;
+    --foreground: 200 30% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 200 30% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 200 30% 12%;
 
-    --primary: 221 83% 40%;
+    --primary: 175 77% 26%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 172 35% 95%;
+    --secondary-foreground: 200 30% 15%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 172 30% 95%;
+    --muted-foreground: 200 12% 45%;
 
-    --accent: 210 40% 94%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 172 40% 92%;
+    --accent-foreground: 200 30% 15%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -34,39 +42,39 @@
     --warning: 38 92% 45%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 40%;
+    --border: 172 30% 88%;
+    --input: 172 30% 88%;
+    --ring: 175 77% 26%;
 
-    --sidebar: 222 47% 11%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-border: 222 40% 18%;
-    --sidebar-accent: 222 40% 18%;
+    --sidebar: 176 45% 10%;
+    --sidebar-foreground: 170 25% 92%;
+    --sidebar-border: 176 35% 16%;
+    --sidebar-accent: 176 35% 18%;
 
     --radius: 0.625rem;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
+    --background: 180 25% 6%;
+    --foreground: 166 25% 95%;
 
-    --card: 222 44% 10%;
-    --card-foreground: 210 40% 98%;
+    --card: 178 22% 9%;
+    --card-foreground: 166 25% 95%;
 
-    --popover: 222 44% 10%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 178 22% 9%;
+    --popover-foreground: 166 25% 95%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 7%;
+    --primary: 173 65% 45%;
+    --primary-foreground: 180 25% 6%;
 
-    --secondary: 222 30% 16%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 178 18% 15%;
+    --secondary-foreground: 166 25% 95%;
 
-    --muted: 222 30% 16%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 178 18% 15%;
+    --muted-foreground: 172 12% 62%;
 
-    --accent: 222 30% 18%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 178 18% 18%;
+    --accent-foreground: 166 25% 95%;
 
     --destructive: 0 63% 50%;
     --destructive-foreground: 0 0% 100%;
@@ -75,16 +83,16 @@
     --success-foreground: 0 0% 100%;
 
     --warning: 38 85% 50%;
-    --warning-foreground: 222 47% 7%;
+    --warning-foreground: 180 25% 6%;
 
-    --border: 222 30% 18%;
-    --input: 222 30% 18%;
-    --ring: 217 91% 60%;
+    --border: 178 18% 17%;
+    --input: 178 18% 17%;
+    --ring: 173 65% 45%;
 
-    --sidebar: 222 47% 5%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-border: 222 30% 14%;
-    --sidebar-accent: 222 30% 14%;
+    --sidebar: 180 30% 4%;
+    --sidebar-foreground: 166 20% 90%;
+    --sidebar-border: 178 22% 11%;
+    --sidebar-accent: 178 22% 13%;
   }
 }
 

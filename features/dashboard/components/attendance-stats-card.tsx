@@ -9,7 +9,7 @@ import type { AttendanceMonthlyStats } from "@/types/domain";
 const COLORS = {
   hadir: "hsl(142 71% 35%)",
   terlambat: "hsl(38 92% 45%)",
-  izin: "hsl(221 83% 60%)",
+  izin: "hsl(175 77% 26%)",
   sakit: "hsl(262 60% 60%)",
   alpha: "hsl(0 72% 51%)",
 };
