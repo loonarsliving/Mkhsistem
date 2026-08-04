@@ -14,7 +14,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="space-y-2 text-center lg:text-left">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-bold text-primary-foreground lg:mx-0">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-lg font-bold text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.45)] lg:mx-0">
               MK
             </div>
             <h1 className="text-xl font-semibold">{APP_NAME}</h1>
@@ -25,6 +25,23 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
       <div className="relative hidden overflow-hidden bg-sidebar lg:block">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-sidebar to-sidebar" />
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              "linear-gradient(hsl(var(--primary) / 0.15) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary) / 0.15) 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+            maskImage: "radial-gradient(ellipse 60% 60% at 50% 40%, black, transparent)",
+          }}
+        />
+        <div
+          className="absolute -right-24 -top-24 h-96 w-96 rounded-full opacity-50 blur-3xl"
+          style={{ background: "hsl(var(--primary) / 0.5)" }}
+        />
+        <div
+          className="absolute -bottom-24 -left-24 h-80 w-80 rounded-full opacity-40 blur-3xl"
+          style={{ background: "hsl(var(--primary) / 0.4)" }}
+        />
         <div className="relative flex h-full flex-col items-center justify-center gap-6 p-12 text-center text-sidebar-foreground">
           <Image
             src="/images/office-illustration.svg"
