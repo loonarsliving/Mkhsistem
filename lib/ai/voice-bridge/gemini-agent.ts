@@ -8,10 +8,10 @@ import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { CurrentSession } from "@/types/domain";
 
 /**
- * The conversational half of the voice bridge: Ultron sends the operator's
- * spoken text here, Gemini decides (via native function calling) which
- * voice-bridge tool(s) to call to answer it, and this loop executes them
- * in-process (not over HTTP, unlike the raw /voice-bridge route) before
+ * The conversational half of the voice bridge: Ultron/FRIDAY sends the
+ * operator's spoken text here, Gemini decides (via native function calling)
+ * which voice-bridge tool(s) to call to answer it, and this loop executes
+ * them in-process (not over HTTP, unlike the raw /voice-bridge route) before
  * asking Gemini for a final natural-language answer to speak back.
  *
  * Deliberately reuses AI_CONFIG (the same GEMINI_API_KEY already configured
@@ -24,13 +24,19 @@ import type { CurrentSession } from "@/types/domain";
 
 const MAX_TOOL_ROUNDS = 5;
 
-const SYSTEM_PROMPT = `Kamu adalah Ultron, asisten suara internal PT Maha Karya Haluoleo, berbicara dengan Super Admin lewat mikrofon.
+const BASE_SYSTEM_PROMPT = `Kamu berbicara dengan Super Admin PT Maha Karya Haluoleo lewat mikrofon, lewat asisten suara klien mereka.
 Jawabanmu akan dibacakan lewat text-to-speech, jadi:
 - Selalu ringkas (1-4 kalimat), bahasa Indonesia natural, tanpa markdown/bullet/simbol.
-- Sebutkan angka atau nama yang relevan langsung, jangan mendaftar mentah data JSON.
-- Kalau kamu punya tool untuk menjawab pertanyaan tentang MK Connect (absensi, memo, pengumuman, karyawan, cabang, notifikasi, CRM, dll), selalu pakai tool itu dulu daripada menebak.
+- Sebutkan angka atau nama yang relevan langsung, jangan mendaftar mentah data JSON.`;
+
+const COMPANY_ACCESS_PROMPT = `
+- Kamu punya tool untuk menjawab pertanyaan tentang MK Connect (absensi, memo, pengumuman, karyawan, cabang, notifikasi, CRM, dll) -- selalu pakai tool itu dulu daripada menebak.
 - Kalau sebuah aksi butuh data yang tidak kamu punya (misalnya id spesifik), coba cari lewat tool pencarian/list dulu sebelum menyerah.
 - Kalau memang tidak ada tool yang cocok atau terjadi error, katakan dengan singkat dan jujur, jangan mengarang data.`;
+
+const NO_COMPANY_ACCESS_PROMPT = `
+- Kamu TIDAK punya akses ke data MK Connect pada giliran ini (tidak ada tool tersedia) -- jawab murni dari pengetahuan umummu (sains, geografi, definisi, hitungan, rekomendasi, dst), seperti asisten pengetahuan umum biasa.
+- JANGAN PERNAH mengarang atau menebak data perusahaan (absensi, memo, karyawan, angka bisnis, dll) pada giliran ini. Kalau pertanyaannya jelas soal data MK Connect, katakan operator perlu mengucapkan "cek perusahaan" dulu untuk membuka akses itu, jangan berpura-pura tahu.`;
 
 export interface VoiceTurn {
   role: "user" | "assistant";
@@ -42,17 +48,23 @@ export async function converseWithVoiceAssistant(
   session: CurrentSession,
   message: string,
   history: VoiceTurn[],
+  companyAccessEnabled: boolean,
 ): Promise<string> {
   if (!isGeminiConfigured()) {
     return "Aku belum tersambung ke otak utama -- GEMINI_API_KEY belum disetel di server.";
   }
 
   const client = new GoogleGenAI({ apiKey: AI_CONFIG.geminiApiKey });
-  const functionDeclarations = listToolDefinitions().map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    parametersJsonSchema: tool.parametersSchema,
-  }));
+  const functionDeclarations = companyAccessEnabled
+    ? listToolDefinitions().map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parametersJsonSchema: tool.parametersSchema,
+      }))
+    : [];
+
+  const systemInstruction =
+    BASE_SYSTEM_PROMPT + (companyAccessEnabled ? COMPANY_ACCESS_PROMPT : NO_COMPANY_ACCESS_PROMPT);
 
   const contents: Content[] = [
     ...history
@@ -66,10 +78,10 @@ export async function converseWithVoiceAssistant(
       model: AI_CONFIG.geminiModel,
       contents,
       config: {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction,
         temperature: AI_CONFIG.temperature,
         maxOutputTokens: AI_CONFIG.maxOutputTokens,
-        tools: [{ functionDeclarations }],
+        ...(functionDeclarations.length > 0 ? { tools: [{ functionDeclarations }] } : {}),
       },
     });
 
