@@ -48,10 +48,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "invalid JSON body" }, { status: 400 });
   }
 
-  const phone = typeof body.phone === "string" ? body.phone : "";
-  const message = typeof body.message === "string" ? body.message : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!phone || !message) {
     return NextResponse.json({ success: false, error: "phone and message are required" }, { status: 400 });
+  }
+  // Whacenter's /send takes plain text; 4096 mirrors WhatsApp's own message
+  // cap so an oversized payload fails loudly here instead of silently
+  // truncating downstream.
+  if (message.length > 4096) {
+    return NextResponse.json({ success: false, error: "message exceeds 4096 characters" }, { status: 400 });
   }
 
   const result = await sendWhatsAppText(phone, message);
