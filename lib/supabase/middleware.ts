@@ -58,6 +58,11 @@ const PUBLIC_PATHS = [
   // (VOICE_BRIDGE_ALLOWED_ORIGIN) independently -- see lib/ai/voice-bridge/.
   "/api/ai/voice-bridge",
   "/api/ai/voice-assistant",
+  // Called server-to-server by the Villa app's villa-api Supabase Edge
+  // Function (no browser session) -- enforces its own shared-secret check
+  // (x-internal-secret compared against VILLA_BRIDGE_SECRET) in the route
+  // handler itself, see app/api/wa/send/route.ts.
+  "/api/wa/send",
 ];
 
 function isPublicPath(pathname: string) {
