@@ -27,15 +27,19 @@ jobs:
       - name: Call POST /api/wa/send
         run: |
           echo "::add-mask::${{ inputs.secret }}"
-          http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST \
+          http_status=$(curl -sS -D headers.txt -o response.json -w "%{http_code}" -X POST \
             https://mkh.haluoleo.id/api/wa/send \
             -H "Content-Type: application/json" \
             -H "x-internal-secret: ${{ inputs.secret }}" \
             -d "{\"phone\":\"${{ inputs.phone }}\",\"message\":\"${{ inputs.message }}\"}")
           echo "HTTP status: $http_status"
+          echo "Response headers:"
+          cat headers.txt
           echo "Response body:"
           cat response.json
           echo ""
+          echo "--- also probing debug endpoint ---"
+          curl -sS -D - https://mkh.haluoleo.id/api/debug/whatsapp-config || true
           if [ "$http_status" -ne 200 ]; then
             echo "::error::wa/send returned HTTP $http_status"
             exit 1
