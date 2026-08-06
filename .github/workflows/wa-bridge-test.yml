@@ -1,0 +1,42 @@
+name: WA Bridge Test
+
+# Manual diagnostic for the villa -> mkhsistem WhatsApp bridge
+# (app/api/wa/send/route.ts). Runs on GitHub's own runner instead of a
+# network-restricted sandbox, since the runner has ordinary internet
+# access to mkh.haluoleo.id. Not part of the app itself -- safe to remove
+# once the bridge is confirmed working end to end.
+on:
+  workflow_dispatch:
+    inputs:
+      phone:
+        description: "Target phone (international format, digits only)"
+        required: true
+        default: "6285872222777"
+      message:
+        description: "Test message text"
+        required: true
+        default: "Test bridge villa -> mkhsistem (CI)"
+      secret:
+        description: "x-internal-secret value to send (matches VILLA_BRIDGE_SECRET)"
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call POST /api/wa/send
+        run: |
+          echo "::add-mask::${{ inputs.secret }}"
+          http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST \
+            https://mkh.haluoleo.id/api/wa/send \
+            -H "Content-Type: application/json" \
+            -H "x-internal-secret: ${{ inputs.secret }}" \
+            -d "{\"phone\":\"${{ inputs.phone }}\",\"message\":\"${{ inputs.message }}\"}")
+          echo "HTTP status: $http_status"
+          echo "Response body:"
+          cat response.json
+          echo ""
+          if [ "$http_status" -ne 200 ]; then
+            echo "::error::wa/send returned HTTP $http_status"
+            exit 1
+          fi
