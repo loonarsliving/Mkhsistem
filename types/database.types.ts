@@ -2400,6 +2400,125 @@ export interface Database {
           },
         ];
       };
+      construction_projects: {
+        Row: {
+          id: string;
+          branch_id: string;
+          name: string;
+          total_budget: number;
+          status: "active" | "completed" | "cancelled";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          name: string;
+          total_budget: number;
+          status?: "active" | "completed" | "cancelled";
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_projects"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_projects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      construction_fund_transfers: {
+        Row: {
+          id: string;
+          project_id: string;
+          branch_id: string;
+          amount: number;
+          transfer_date: string;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          branch_id: string;
+          amount: number;
+          transfer_date?: string;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_fund_transfers"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_fund_transfers_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "construction_fund_transfers_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      construction_expenses: {
+        Row: {
+          id: string;
+          project_id: string;
+          branch_id: string;
+          expense_type: "gaji_tukang" | "pembelian_material";
+          party_name: string;
+          description: string | null;
+          amount: number;
+          payment_method: "cash" | "utang";
+          is_settled: boolean;
+          settled_at: string | null;
+          settled_by: string | null;
+          expense_date: string;
+          photo_url: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          branch_id: string;
+          expense_type: "gaji_tukang" | "pembelian_material";
+          party_name: string;
+          description?: string | null;
+          amount: number;
+          payment_method: "cash" | "utang";
+          is_settled?: boolean;
+          settled_at?: string | null;
+          settled_by?: string | null;
+          expense_date?: string;
+          photo_url?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_expenses"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_expenses_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "construction_expenses_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       hr_expenses: {
         Row: {
           id: string;
@@ -4055,6 +4174,28 @@ export interface Database {
       };
       mark_salary_transferred: { Args: { p_id: string }; Returns: undefined };
       send_salary_transfer_summary: { Args: { p_branch_id?: string | null }; Returns: number };
+      construction_submit_expense: {
+        Args: {
+          p_project_id: string;
+          p_expense_type: string;
+          p_party_name: string;
+          p_amount: number;
+          p_description?: string | null;
+          p_expense_date?: string;
+          p_photo_url?: string | null;
+        };
+        Returns: string;
+      };
+      construction_settle_expense: { Args: { p_id: string }; Returns: undefined };
+      construction_record_fund_transfer: {
+        Args: {
+          p_project_id: string;
+          p_amount: number;
+          p_transfer_date?: string;
+          p_note?: string | null;
+        };
+        Returns: string;
+      };
       create_hr_expense: {
         Args: {
           p_expense_type: string;
