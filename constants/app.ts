@@ -307,3 +307,12 @@ export const MANAGEMENT_PROPERTY_BRANCH_ID = "4d61f863-3358-4068-b80e-9770e88282
  * branch head. See getCurrentSession() in lib/rbac/session.ts.
  */
 export const JOGJA_BRANCH_ID = "fdeb7f3a-e211-4e6d-a2a6-35162378e3ae";
+
+/**
+ * The Kendari branch (code KDI). Construction project finance (dana proyek
+ * pembangunan -- gaji tukang / pembelian material) is currently a
+ * Kendari-only feature, gated the same way as JOGJA_BRANCH_ID above: every
+ * branch shares the "Kepala Cabang" role, so getCurrentSession() strips the
+ * permission back out for any Kepala Cabang whose branch isn't Kendari.
+ */
+export const KENDARI_BRANCH_ID = "61a95bc6-23b0-408d-8439-f821251c56d4";

@@ -2,8 +2,15 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { JOGJA_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
-import { MARKOM_KEPALA_CABANG_PERMISSIONS, PERMISSIONS, ROLE_KEYS, type PermissionKey, type RoleKey } from "@/constants/rbac";
+import { JOGJA_BRANCH_ID, KENDARI_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
+import {
+  CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS,
+  MARKOM_KEPALA_CABANG_PERMISSIONS,
+  PERMISSIONS,
+  ROLE_KEYS,
+  type PermissionKey,
+  type RoleKey,
+} from "@/constants/rbac";
 import type { CurrentSession } from "@/types/domain";
 
 /**
@@ -56,6 +63,12 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
   // Jogja's head doesn't affect anyone else's data.
   if (employee.role_key === ROLE_KEYS.KEPALA_CABANG && employee.branch_id !== JOGJA_BRANCH_ID) {
     permissions = permissions.filter((key) => !(MARKOM_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
+  }
+
+  // Construction project finance (dana proyek pembangunan) is currently
+  // Kendari-only -- same reasoning as the Markom strip above.
+  if (employee.role_key === ROLE_KEYS.KEPALA_CABANG && employee.branch_id !== KENDARI_BRANCH_ID) {
+    permissions = permissions.filter((key) => !(CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 
   // Siteplan Loonars Villa (loonars-sales) is a Jogja-only project -- Jogja

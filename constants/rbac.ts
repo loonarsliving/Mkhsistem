@@ -183,6 +183,16 @@ export const PERMISSIONS = {
   SALARY_INPUT_SUBMIT: "salary_input.submit",
   /** See salary submissions awaiting transfer and mark them transferred. */
   SALARY_INPUT_TRANSFER: "salary_input.transfer",
+
+  /**
+   * Construction project finance (dana proyek pembangunan) -- currently
+   * Kendari-only, see KENDARI_BRANCH_ID / getCurrentSession(). A Kepala
+   * Cabang inputs gaji tukang / pembelian material (always utang toko);
+   * Super Admin/Finance allocate dana and settle utang.
+   */
+  CONSTRUCTION_FINANCE_VIEW_OWN: "construction_finance.view_own",
+  CONSTRUCTION_FINANCE_SUBMIT: "construction_finance.submit",
+  CONSTRUCTION_FINANCE_MANAGE: "construction_finance.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -202,6 +212,17 @@ export const MARKOM_KEPALA_CABANG_PERMISSIONS = [
   "kpi_task.verify",
   "content_planner.view",
   "content_planner.manage",
+] as const satisfies readonly PermissionKey[];
+
+/**
+ * Same pattern as MARKOM_KEPALA_CABANG_PERMISSIONS above, but for
+ * construction project finance -- granted at the role level (every branch
+ * shares "Kepala Cabang"), stripped back out in getCurrentSession() for any
+ * Kepala Cabang whose branch isn't Kendari (KENDARI_BRANCH_ID).
+ */
+export const CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS = [
+  "construction_finance.view_own",
+  "construction_finance.submit",
 ] as const satisfies readonly PermissionKey[];
 
 /** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
@@ -287,6 +308,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // endpoints and stays with Super Admin / Direktur Utama.
     PERMISSIONS.HOLDING_VIEW,
     PERMISSIONS.SALARY_INPUT_SUBMIT,
+    PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
+    PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -354,6 +377,12 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
     PERMISSIONS.SALARY_INPUT_SUBMIT,
+    // construction_finance.* stays granted at the role level for the same
+    // reason as kpi_task/content_planner above -- see
+    // CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS -- and is stripped back
+    // out in getCurrentSession() for any branch that isn't Kendari.
+    PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
+    PERMISSIONS.CONSTRUCTION_FINANCE_SUBMIT,
     // kos_occupancy.view is deliberately NOT granted here -- every branch
     // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the
     // Management Property branch specifically. That branch's Kepala Cabang
@@ -400,6 +429,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.HR_EXPENSE_CREATE,
     PERMISSIONS.HR_EXPENSE_APPROVE,
     PERMISSIONS.SALARY_INPUT_TRANSFER,
+    PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
+    PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE,
   ],
   [ROLE_KEYS.MARKOM]: [
     PERMISSIONS.DASHBOARD_VIEW,
