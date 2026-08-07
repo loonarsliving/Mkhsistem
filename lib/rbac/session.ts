@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { JOGJA_BRANCH_ID, KENDARI_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
 import {
   CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS,
+  KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS,
   MARKOM_KEPALA_CABANG_PERMISSIONS,
   PERMISSIONS,
   ROLE_KEYS,
@@ -65,9 +66,15 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     permissions = permissions.filter((key) => !(MARKOM_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 
-  // Construction project finance (dana proyek pembangunan) is currently
-  // Kendari-only -- same reasoning as the Markom strip above.
-  if (employee.role_key === ROLE_KEYS.KEPALA_CABANG && employee.branch_id !== KENDARI_BRANCH_ID) {
+  if (employee.role_key === ROLE_KEYS.KEPALA_CABANG && employee.branch_id === KENDARI_BRANCH_ID) {
+    // Owner's explicit call: Kendari's Kepala Cabang doesn't get the normal
+    // full facility set -- reduced down to just the dashboard and the
+    // construction project finance input/saldo page (see
+    // KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS).
+    permissions = permissions.filter((key) => (KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS as readonly string[]).includes(key));
+  } else if (employee.role_key === ROLE_KEYS.KEPALA_CABANG) {
+    // Construction project finance (dana proyek pembangunan) is currently
+    // Kendari-only -- same reasoning as the Markom strip above.
     permissions = permissions.filter((key) => !(CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 

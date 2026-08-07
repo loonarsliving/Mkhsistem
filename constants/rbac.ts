@@ -225,6 +225,22 @@ export const CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS = [
   "construction_finance.submit",
 ] as const satisfies readonly PermissionKey[];
 
+/**
+ * Owner's explicit call: Kendari's Kepala Cabang (currently Fasly) should
+ * NOT get the normal full Kepala Cabang facility set -- only the dashboard
+ * and the construction project finance input/saldo page. getCurrentSession()
+ * reduces the session down to exactly this allow-list for any Kepala Cabang
+ * whose branch is Kendari, instead of the usual strip-list approach used
+ * elsewhere in this file. If Kendari's scope is ever meant to grow back
+ * toward the normal Kepala Cabang set, widen this list -- don't special-case
+ * around it.
+ */
+export const KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS = [
+  "dashboard.view",
+  "construction_finance.view_own",
+  "construction_finance.submit",
+] as const satisfies readonly PermissionKey[];
+
 /** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
 export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
   [ROLE_KEYS.SUPER_ADMIN]: Object.values(PERMISSIONS),

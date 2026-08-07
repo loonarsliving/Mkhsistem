@@ -9,6 +9,7 @@ import {
   tryNotifySalesLeadWantsInfo,
   tryReassignAdLeadFollowUp,
 } from "./domains/ad-lead-routing";
+import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { sendWhatsAppText } from "./notifications/engine";
@@ -152,12 +153,31 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       await stagePendingPhoto(inbound.sender, employee.id, inbound.content.url, inbound.content.caption);
       trace.push("stagePendingPhoto:done");
 
+      // Auto-route: a Kepala Cabang with an active construction project
+      // (Kendari today) has every photo they send forwarded straight to
+      // every Super Admin as a progress update -- no "kirim ke ..."
+      // instruction needed. Runs unconditionally, independent of the
+      // explicit relay-by-name check below.
+      trace.push("getRoleKey:calling(image)");
+      const imageRoleKey = await getRoleKey(employee.role_id);
+      trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+      trace.push("tryRouteConstructionPhotoReport:calling");
+      const constructionRoute = await tryRouteConstructionPhotoReport(
+        { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id, role_key: imageRoleKey },
+        inbound.content.url,
+        inbound.content.caption,
+      );
+      trace.push(`tryRouteConstructionPhotoReport:${constructionRoute.outcome}`);
+
       if (inbound.content.caption) {
         trace.push("tryRelayToEmployees:calling(image)");
         const relayResult = await tryRelayToEmployees({ id: employee.id, name: employee.full_name }, inbound.sender, inbound.content.caption);
         trace.push(`tryRelayToEmployees:${relayResult.outcome}`);
         if (relayResult.outcome !== "not_a_relay_request") {
-          const replyText = formatRelayReply(relayResult);
+          let replyText = formatRelayReply(relayResult);
+          if (constructionRoute.outcome === "routed") {
+            replyText += "\n\n✅ Foto ini juga otomatis dikirim ke Super Admin sebagai update progress pembangunan.";
+          }
           trace.push("sendWhatsAppText:calling(image-relay)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
@@ -171,7 +191,10 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // once per batch (not on every single photo) so sending several
       // photos in a row doesn't spam the same reminder each time.
       if (!alreadyHasPending) {
-        const replyText = 'Foto diterima. Kalau ingin saya teruskan ke seseorang, kirim foto lain (kalau ada) lalu ketik/tulis di keterangan siapa penerimanya (mis. "untuk Vando").';
+        const replyText =
+          constructionRoute.outcome === "routed"
+            ? "✅ Foto diterima dan sudah dikirim ke Super Admin sebagai update progress pembangunan."
+            : 'Foto diterima. Kalau ingin saya teruskan ke seseorang, kirim foto lain (kalau ada) lalu ketik/tulis di keterangan siapa penerimanya (mis. "untuk Vando").';
         trace.push("sendWhatsAppText:calling(image-no-caption)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
