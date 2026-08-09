@@ -69,6 +69,9 @@ const PUBLIC_PATHS = [
   // Own shared-secret check (x-internal-secret against VILLA_DEPLOY_SECRET),
   // see app/api/villa/deploy/route.ts.
   "/api/villa/deploy",
+  // Same pattern, for setting Supabase Edge Function secrets instead of
+  // deploying code -- see app/api/villa/secrets/route.ts.
+  "/api/villa/secrets",
 ];
 
 function isPublicPath(pathname: string) {
