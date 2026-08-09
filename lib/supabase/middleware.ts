@@ -72,6 +72,10 @@ const PUBLIC_PATHS = [
   // Same pattern, for setting Supabase Edge Function secrets instead of
   // deploying code -- see app/api/villa/secrets/route.ts.
   "/api/villa/secrets",
+  // pg_cron-triggered (construction_run_tukang_teaching_check, 0196) via
+  // automation_post/pg_net -- no browser session, same class of bug as
+  // crm-promo-sends-worker above. Own auth: requireCronAuth (x-cron-secret).
+  "/api/automation/construction-tukang-tip",
 ];
 
 function isPublicPath(pathname: string) {
