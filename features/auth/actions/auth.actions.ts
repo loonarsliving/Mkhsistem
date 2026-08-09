@@ -40,14 +40,10 @@ export async function loginAction(input: LoginInput): Promise<ActionResult> {
   await supabase.rpc("record_login_attempt", { p_email: parsed.data.email, p_success: !error, p_ip_address: ip });
 
   if (error) {
-    console.error("[loginAction] signInWithPassword failed", { status: error.status, code: error.code, message: error.message, email: parsed.data.email });
     if (error.message.toLowerCase().includes("invalid login credentials")) {
       return actionError("Email atau password salah");
     }
-    // TEMPORARY: surfacing the raw auth error to diagnose a persistent
-    // login failure for one account where credentials are confirmed
-    // correct server-side. Revert to the generic message once resolved.
-    return actionError(`Gagal masuk (${error.status ?? "?"} ${error.code ?? "?"}): ${error.message}`);
+    return actionError("Gagal masuk. Silakan coba lagi.");
   }
 
   // Valid Supabase Auth credentials aren't enough for a self-registered
