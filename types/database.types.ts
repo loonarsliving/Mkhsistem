@@ -2519,6 +2519,65 @@ export interface Database {
           },
         ];
       };
+      construction_targets: {
+        Row: {
+          id: string;
+          branch_id: string;
+          project_name: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          value_per_unit: number;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          project_name: string;
+          period_month: number;
+          period_year: number;
+          target_units: number;
+          value_per_unit: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_targets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_targets_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      construction_target_reminder_log: {
+        Row: { id: string; target_id: string; sent_at: string };
+        Insert: { id?: string; target_id: string; sent_at?: string };
+        Update: Partial<Database["public"]["Tables"]["construction_target_reminder_log"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_target_reminder_log_target_id_fkey";
+            columns: ["target_id"];
+            referencedRelation: "construction_targets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      construction_tukang_teaching_log: {
+        Row: { id: string; branch_id: string; sent_at: string };
+        Insert: { id?: string; branch_id: string; sent_at?: string };
+        Update: Partial<Database["public"]["Tables"]["construction_tukang_teaching_log"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_tukang_teaching_log_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       hr_expenses: {
         Row: {
           id: string;

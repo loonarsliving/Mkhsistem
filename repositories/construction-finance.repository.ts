@@ -148,3 +148,41 @@ export async function listUnsettledUtang(supabase: TypedSupabaseClient): Promise
   if (error) throw error;
   return (data as unknown as RawExpenseRow[]).map(mapExpenseRow);
 }
+
+export interface ConstructionTarget {
+  id: string;
+  branchId: string;
+  projectName: string;
+  periodMonth: number;
+  periodYear: number;
+  targetUnits: number;
+  valuePerUnit: number;
+  totalValue: number;
+}
+
+/** The current/upcoming unit-sales target for a branch (0196) -- not tied to CRM, just a standalone target row. Picks the target whose period hasn't ended yet, soonest first. */
+export async function getActiveConstructionTarget(supabase: TypedSupabaseClient, branchId: string): Promise<ConstructionTarget | null> {
+  const { data, error } = await supabase
+    .from("construction_targets")
+    .select("id, branch_id, project_name, period_month, period_year, target_units, value_per_unit")
+    .eq("branch_id", branchId)
+    .order("period_year", { ascending: true })
+    .order("period_month", { ascending: true });
+  if (error) throw error;
+
+  const now = new Date();
+  const currentPeriod = now.getFullYear() * 12 + now.getMonth();
+  const target = (data ?? []).find((row) => row.period_year * 12 + (row.period_month - 1) >= currentPeriod);
+  if (!target) return null;
+
+  return {
+    id: target.id,
+    branchId: target.branch_id,
+    projectName: target.project_name,
+    periodMonth: target.period_month,
+    periodYear: target.period_year,
+    targetUnits: target.target_units,
+    valuePerUnit: Number(target.value_per_unit),
+    totalValue: target.target_units * Number(target.value_per_unit),
+  };
+}

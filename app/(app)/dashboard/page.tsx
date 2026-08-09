@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
 import { ConstructionSaldoCard } from "@/features/construction-finance/components/construction-saldo-card";
+import { ConstructionTargetCard } from "@/features/construction-finance/components/construction-target-card";
 import { LoonarsFeeCard } from "@/features/dashboard/components/loonars-fee-card";
 import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summary-card";
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
@@ -30,7 +31,7 @@ import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyStats, getTodayAttendance } from "@/repositories/attendance.repository";
 import { listRecentAnnouncements } from "@/repositories/announcement.repository";
-import { getActiveConstructionProject } from "@/repositories/construction-finance.repository";
+import { getActiveConstructionProject, getActiveConstructionTarget } from "@/repositories/construction-finance.repository";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
 import { listRecentMemos } from "@/repositories/memo.repository";
 
@@ -82,7 +83,7 @@ export default async function DashboardPage() {
   // else on this page for that account.
   const canViewConstructionFinance = hasPermission(session, PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN);
 
-  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount, constructionProject] = await Promise.all([
+  const [attendance, monthlyStats, memos, announcements, pendingRegistrationCount, constructionProject, constructionTarget] = await Promise.all([
     getTodayAttendance(supabase, session.userId),
     getMonthlyStats(supabase, session.userId, new Date()),
     listRecentMemos(supabase, 5),
@@ -90,6 +91,9 @@ export default async function DashboardPage() {
     canReviewRegistrations ? countPendingRegistrations(supabase) : Promise.resolve(0),
     canViewConstructionFinance && session.employee.branch_id
       ? getActiveConstructionProject(supabase, session.employee.branch_id)
+      : Promise.resolve(null),
+    canViewConstructionFinance && session.employee.branch_id
+      ? getActiveConstructionTarget(supabase, session.employee.branch_id)
       : Promise.resolve(null),
   ]);
 
@@ -100,6 +104,8 @@ export default async function DashboardPage() {
       <ProfileSummaryCard employee={session.employee} />
 
       {constructionProject && <ConstructionSaldoCard project={constructionProject} />}
+
+      {constructionTarget && <ConstructionTargetCard target={constructionTarget} />}
 
       <LoonarsFeeCard />
 
