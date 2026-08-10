@@ -1898,6 +1898,36 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["construction_progress_photos"]["Insert"]>;
         Relationships: [];
       };
+      approval_requests: {
+        Row: {
+          id: string;
+          code: string;
+          requester_employee_id: string;
+          branch_id: string | null;
+          request_text: string | null;
+          image_url: string | null;
+          status: "pending" | "approved" | "rejected";
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code?: string;
+          requester_employee_id: string;
+          branch_id?: string | null;
+          request_text?: string | null;
+          image_url?: string | null;
+          status?: "pending" | "approved" | "rejected";
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["approval_requests"]["Insert"]>;
+        Relationships: [];
+      };
       ai_knowledge_bank: {
         Row: {
           id: string;

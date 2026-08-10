@@ -225,6 +225,12 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: HardHat,
         permission: [PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN, PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE],
       },
+      {
+        label: "Approval WA",
+        href: "/approval",
+        icon: ClipboardCheck,
+        permission: [PERMISSIONS.APPROVAL_REQUEST_VIEW_OWN, PERMISSIONS.APPROVAL_REQUEST_MANAGE],
+      },
       { label: "Okupansi Kos", href: "/kos-occupancy", icon: BedDouble, permission: PERMISSIONS.KOS_OCCUPANCY_VIEW },
     ],
   },

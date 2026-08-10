@@ -9,6 +9,7 @@ import {
   tryNotifySalesLeadWantsInfo,
   tryReassignAdLeadFollowUp,
 } from "./domains/ad-lead-routing";
+import { tryHandleApprovalDecision, tryHandleApprovalSubmission } from "./domains/approval-requests";
 import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
@@ -163,6 +164,30 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling(image)");
       const imageRoleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+
+      // Approval requests (0201): "AJUKAN ..." in the caption, from a Kepala
+      // Cabang, is a submission (pricelist photo, anything) -- short-circuits
+      // everything else below, since this photo's purpose is the approval
+      // request itself, not a progress/relay photo.
+      if (imageRoleKey === "kepala_cabang") {
+        trace.push("tryHandleApprovalSubmission:calling(image)");
+        const approvalSubmit = await tryHandleApprovalSubmission(
+          { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id },
+          inbound.content.caption,
+          inbound.content.url,
+        );
+        trace.push(`tryHandleApprovalSubmission:${approvalSubmit.outcome}`);
+        if (approvalSubmit.outcome === "submitted") {
+          const replyText = `📋 Pengajuan *${approvalSubmit.code}* terkirim ke Super Admin. Anda akan diberi tahu WA begitu sudah diputuskan.`;
+          trace.push("sendWhatsAppText:calling(approval-submit-image)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[image]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+
       trace.push("tryRouteConstructionPhotoReport:calling");
       const constructionRoute = await tryRouteConstructionPhotoReport(
         { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id, role_key: imageRoleKey },
@@ -276,6 +301,53 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         if (feeApprovalResult.outcome === "approved") {
           const replyText = `✅ Fee unit ${feeApprovalResult.unit ?? "-"} (${feeApprovalResult.buyer ?? "-"}) disetujui via WhatsApp.\n💰 Nilai fee: Rp ${(feeApprovalResult.feeAmount ?? 0).toLocaleString("id-ID")}`;
           trace.push("sendWhatsAppText:calling(fee-approval)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Approval requests (0201): Super Admin deciding a pending request
+        // by replying "SETUJU"/"TOLAK" (optionally with the code). Must run
+        // after the fee-approval check above for the same "ya"/"setuju"
+        // ambiguity reason -- only short-circuits on a real match.
+        trace.push("tryHandleApprovalDecision:calling");
+        const approvalDecision = await tryHandleApprovalDecision({ id: employee.id, full_name: employee.full_name }, inbound.content.text);
+        trace.push(`tryHandleApprovalDecision:${approvalDecision.outcome}`);
+        if (approvalDecision.outcome !== "not_a_decision") {
+          const replyText =
+            approvalDecision.outcome === "decided"
+              ? `✅ Pengajuan ${approvalDecision.code} sudah ${approvalDecision.approved ? "disetujui" : "ditolak"}. Pemohon sudah diberi tahu via WA.`
+              : approvalDecision.outcome === "ambiguous"
+                ? "Ada lebih dari satu pengajuan yang masih pending. Sebutkan kodenya, mis. \"SETUJU AP-0003\"."
+                : approvalDecision.outcome === "already_decided"
+                  ? `Pengajuan ${approvalDecision.code} sudah diputuskan sebelumnya.`
+                  : "Tidak ada pengajuan approval dengan kode itu, atau tidak ada yang sedang pending saat ini.";
+          trace.push("sendWhatsAppText:calling(approval-decision)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+
+      // Approval requests (0201): Kepala Cabang submitting "AJUKAN ..." as
+      // plain text (no photo). Must run before the bulk-reassign/reassign
+      // "lempar" checks below since both are role-gated the same way, but
+      // "ajukan" never collides with "lempar".
+      if (roleKey === "kepala_cabang") {
+        trace.push("tryHandleApprovalSubmission:calling(text)");
+        const approvalSubmit = await tryHandleApprovalSubmission(
+          { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id },
+          inbound.content.text,
+          undefined,
+        );
+        trace.push(`tryHandleApprovalSubmission:${approvalSubmit.outcome}`);
+        if (approvalSubmit.outcome === "submitted") {
+          const replyText = `📋 Pengajuan *${approvalSubmit.code}* terkirim ke Super Admin. Anda akan diberi tahu WA begitu sudah diputuskan.`;
+          trace.push("sendWhatsAppText:calling(approval-submit-text)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);

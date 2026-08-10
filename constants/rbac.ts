@@ -193,6 +193,15 @@ export const PERMISSIONS = {
   CONSTRUCTION_FINANCE_VIEW_OWN: "construction_finance.view_own",
   CONSTRUCTION_FINANCE_SUBMIT: "construction_finance.submit",
   CONSTRUCTION_FINANCE_MANAGE: "construction_finance.manage",
+
+  /**
+   * WhatsApp-only approval requests (0201) -- Kepala Cabang submits
+   * ("AJUKAN ...", text/photo), Super Admin decides by replying
+   * SETUJU/TOLAK. This page is read-only history/status; the actual
+   * submit/decide actions happen over WA, not here.
+   */
+  APPROVAL_REQUEST_VIEW_OWN: "approval_request.view_own",
+  APPROVAL_REQUEST_MANAGE: "approval_request.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -399,6 +408,10 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // out in getCurrentSession() for any branch that isn't Kendari.
     PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
     PERMISSIONS.CONSTRUCTION_FINANCE_SUBMIT,
+    // Unlike construction_finance.*, approval_request.view_own applies to
+    // every branch's Kepala Cabang -- the WA submission flow (0201) isn't
+    // Kendari-specific.
+    PERMISSIONS.APPROVAL_REQUEST_VIEW_OWN,
     // kos_occupancy.view is deliberately NOT granted here -- every branch
     // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the
     // Management Property branch specifically. That branch's Kepala Cabang
