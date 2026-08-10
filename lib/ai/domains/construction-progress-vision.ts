@@ -78,7 +78,11 @@ Balas HANYA dengan JSON object:
     userPrompt,
     image: { data: input.imageBase64, mimeType: input.imageMimeType },
     responseFormat: "json",
-    maxOutputTokens: 512,
+    // 512 truncated the response mid-JSON once the two extra plan/material
+    // fields were added (confirmed against production: a successful, fast
+    // Gemini call whose text failed to JSON.parse) -- room for a fuller
+    // notes/concerns/plan/material set of fields.
+    maxOutputTokens: 1024,
   });
   return parseAssessment(response.text);
 }
