@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { assessConstructionProgress, fetchImageAsBase64 } from "./construction-progress-vision";
 
-export type ProgressTrackOutcome = "tracked" | "block_unknown" | "not_applicable" | "assessment_failed";
+export type ProgressTrackOutcome = "tracked" | "block_unknown" | "not_applicable" | "assessment_failed" | "daily_limit_reached";
 
 export interface ProgressTrackResult {
   outcome: ProgressTrackOutcome;
@@ -17,6 +17,12 @@ export interface ProgressTrackResult {
 
 // Loonars Living's fixed block list (owner-provided, 0199) -- A1-A5, B1-B4, C1-C4.
 const KNOWN_BLOCKS = ["A1", "A2", "A3", "A4", "A5", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4"];
+
+// Owner's routine (0200): 3 photos per building each afternoon -- a 4th+
+// photo for the same block on the same WIB day is capped rather than
+// tracked, so the day's assessment/plan-material note stays anchored to
+// that one batch instead of drifting across an unbounded number of sends.
+const DAILY_PHOTOS_PER_BLOCK_LIMIT = 3;
 
 /** Matches a block code as a whole token (not a substring of a longer word/number) anywhere in the caption, case-insensitive. */
 function extractBlockCode(caption: string | undefined): string | null {
@@ -55,6 +61,19 @@ export async function tryTrackConstructionProgressPhoto(
   const { data: block } = await supabase.from("construction_blocks").select("id").eq("code", blockCode).maybeSingle();
   if (!block) {
     return { outcome: "block_unknown" };
+  }
+
+  // WIB calendar date, matching construction_progress_photos.report_date's
+  // DB default (now() at time zone 'Asia/Jakarta') -- WIB has no DST, so a
+  // fixed +7h offset before reading the UTC date components is exact.
+  const todayWib = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { count: todaysCount } = await supabase
+    .from("construction_progress_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("block_id", block.id)
+    .eq("report_date", todayWib);
+  if ((todaysCount ?? 0) >= DAILY_PHOTOS_PER_BLOCK_LIMIT) {
+    return { outcome: "daily_limit_reached", blockCode };
   }
 
   const image = await fetchImageAsBase64(imageUrl);
