@@ -58,8 +58,15 @@ export async function tryTrackConstructionProgressPhoto(
   }
 
   const image = await fetchImageAsBase64(imageUrl);
-  if (!image) {
-    await supabase.from("construction_progress_photos").insert({ employee_id: employee.id, block_id: block.id, image_url: imageUrl, caption: caption ?? null });
+  if (!image || image.fetchError) {
+    await supabase.from("construction_progress_photos").insert({
+      employee_id: employee.id,
+      block_id: block.id,
+      image_url: imageUrl,
+      caption: caption ?? null,
+      // TEMPORARY debug channel, see fetchImageAsBase64 -- remove once root-caused.
+      ai_notes: image?.fetchError ? `Gagal ambil foto: ${image.fetchError}` : "Gagal ambil foto: unknown",
+    });
     return { outcome: "assessment_failed", blockCode };
   }
 

@@ -90,16 +90,28 @@ Balas HANYA dengan JSON object:
   return parseAssessment(response.text);
 }
 
-/** Fetches a WhatsApp media URL's bytes and base64-encodes them for Gemini Vision -- no existing helper does this from a remote URL (kontenai-vision.ts's callers all start from an already-uploaded file). */
-export async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+export interface FetchImageResult {
+  data: string;
+  mimeType: string;
+  /** TEMPORARY debug channel -- set only on failure, so the caller can persist *why* the fetch failed (this branch previously discarded that entirely, the reason a whole round of debugging looked like a Gemini/JSON-parsing bug when it was actually the image fetch failing). Remove once root-caused. */
+  fetchError?: string;
+}
+
+/** Fetches a WhatsApp media URL's bytes and base64-encodes them for Gemini Vision -- no existing helper does this from a remote URL (kontenai-vision.ts's callers all start from an already-uploaded file). Returns null only on a thrown exception; an HTTP error response is reported via fetchError on a dummy object so the reason is visible. */
+export async function fetchImageAsBase64(url: string): Promise<FetchImageResult | null> {
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { data: "", mimeType: "", fetchError: `HTTP ${res.status} ${res.statusText}` };
+    }
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const mimeType = contentType.split(";")[0].trim() || "image/jpeg";
     const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length === 0) {
+      return { data: "", mimeType: "", fetchError: "empty response body" };
+    }
     return { data: buffer.toString("base64"), mimeType };
-  } catch {
-    return null;
+  } catch (err) {
+    return { data: "", mimeType: "", fetchError: err instanceof Error ? err.message : String(err) };
   }
 }
