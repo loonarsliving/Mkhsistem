@@ -245,13 +245,22 @@ export class WhatsAppConnector {
     // proves the shape wrong" situation) -- tries the field names Whacenter
     // most plausibly uses, and falls through to text/raw if none match
     // rather than crashing on an unexpected shape.
-    const mediaRaw = payload.media;
+    //
+    // Deliberately treated as one generic "attachment URL" regardless of
+    // whether it's a photo or a document (PDF, etc.) -- Whacenter's own
+    // /send API attaches any file type the same way (see dispatch() above),
+    // and this codebase has no reason to branch on mime type on the way in
+    // either; every caller that cares (e.g. approval-requests.ts) just
+    // forwards the URL as-is. Also checks top-level document/file keys in
+    // case Whacenter puts document attachments in a different field than
+    // photos -- unverified, same as the rest of this shape.
+    const mediaRaw = payload.media ?? payload.document ?? payload.file;
     let imageUrl: string | null = null;
     if (typeof mediaRaw === "string" && mediaRaw.length > 0) {
       imageUrl = mediaRaw;
     } else {
       const mediaRecord = asRecord(mediaRaw);
-      const candidate = mediaRecord?.url ?? mediaRecord?.link ?? mediaRecord?.mediaUrl ?? mediaRecord?.file;
+      const candidate = mediaRecord?.url ?? mediaRecord?.link ?? mediaRecord?.mediaUrl ?? mediaRecord?.file ?? mediaRecord?.documentUrl ?? mediaRecord?.fileUrl;
       if (typeof candidate === "string" && candidate.length > 0) imageUrl = candidate;
     }
 
