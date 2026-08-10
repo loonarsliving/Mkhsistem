@@ -25,10 +25,7 @@ function parseAssessment(text: string): ConstructionProgressAssessment {
   try {
     parsed = JSON.parse(cleaned) as Record<string, unknown>;
   } catch {
-    // TEMPORARY: include the raw text (truncated) so tryTrackConstructionProgressPhoto's
-    // catch block can persist it into ai_notes for production debugging --
-    // remove once the root cause of any future parse failure is confirmed.
-    throw new Error(`Respons Gemini Vision bukan JSON yang valid. Raw: ${cleaned.slice(0, 300) || "(empty)"}`);
+    throw new Error("Respons Gemini Vision bukan JSON yang valid");
   }
 
   const progressPct = typeof parsed.progressPct === "number" && Number.isFinite(parsed.progressPct) ? Math.max(0, Math.min(100, Math.round(parsed.progressPct))) : 0;
@@ -93,11 +90,11 @@ Balas HANYA dengan JSON object:
 export interface FetchImageResult {
   data: string;
   mimeType: string;
-  /** TEMPORARY debug channel -- set only on failure, so the caller can persist *why* the fetch failed (this branch previously discarded that entirely, the reason a whole round of debugging looked like a Gemini/JSON-parsing bug when it was actually the image fetch failing). Remove once root-caused. */
+  /** Set only when the fetch failed (non-2xx response, empty body, or a thrown exception) -- e.g. an expired WhatsApp media URL or a rejected thumbnail size, so the caller can record *why* a photo never got assessed instead of a silent null. */
   fetchError?: string;
 }
 
-/** Fetches a WhatsApp media URL's bytes and base64-encodes them for Gemini Vision -- no existing helper does this from a remote URL (kontenai-vision.ts's callers all start from an already-uploaded file). Returns null only on a thrown exception; an HTTP error response is reported via fetchError on a dummy object so the reason is visible. */
+/** Fetches a WhatsApp media URL's bytes and base64-encodes them for Gemini Vision -- no existing helper does this from a remote URL (kontenai-vision.ts's callers all start from an already-uploaded file). */
 export async function fetchImageAsBase64(url: string): Promise<FetchImageResult | null> {
   try {
     const res = await fetch(url);

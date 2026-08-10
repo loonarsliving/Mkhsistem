@@ -64,7 +64,6 @@ export async function tryTrackConstructionProgressPhoto(
       block_id: block.id,
       image_url: imageUrl,
       caption: caption ?? null,
-      // TEMPORARY debug channel, see fetchImageAsBase64 -- remove once root-caused.
       ai_notes: image?.fetchError ? `Gagal ambil foto: ${image.fetchError}` : "Gagal ambil foto: unknown",
     });
     return { outcome: "assessment_failed", blockCode };
@@ -93,11 +92,8 @@ export async function tryTrackConstructionProgressPhoto(
       materialsNeededTomorrow: assessment.materialsNeededTomorrow,
     };
   } catch (err) {
-    // TEMPORARY: persist the raw-response debug message (see
-    // parseAssessment) into ai_notes so a production parse failure is
-    // inspectable via SQL instead of silently losing the Gemini output.
-    const debugNote = err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500);
-    await supabase.from("construction_progress_photos").insert({ employee_id: employee.id, block_id: block.id, image_url: imageUrl, caption: caption ?? null, ai_notes: debugNote });
+    const failureNote = err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500);
+    await supabase.from("construction_progress_photos").insert({ employee_id: employee.id, block_id: block.id, image_url: imageUrl, caption: caption ?? null, ai_notes: failureNote });
     return { outcome: "assessment_failed", blockCode };
   }
 }
