@@ -1848,6 +1848,50 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["photo_auto_forward_log"]["Insert"]>;
         Relationships: [];
       };
+      construction_blocks: {
+        Row: {
+          id: string;
+          project_code: string;
+          code: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_code?: string;
+          code: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_blocks"]["Insert"]>;
+        Relationships: [];
+      };
+      construction_progress_photos: {
+        Row: {
+          id: string;
+          employee_id: string;
+          block_id: string;
+          image_url: string;
+          caption: string | null;
+          ai_stage: string | null;
+          ai_progress_pct: number | null;
+          ai_notes: string | null;
+          ai_concerns: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          block_id: string;
+          image_url: string;
+          caption?: string | null;
+          ai_stage?: string | null;
+          ai_progress_pct?: number | null;
+          ai_notes?: string | null;
+          ai_concerns?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_progress_photos"]["Insert"]>;
+        Relationships: [];
+      };
       ai_knowledge_bank: {
         Row: {
           id: string;

@@ -12,6 +12,7 @@ import {
 import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
+import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -177,6 +178,14 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       const autoForward = await tryAutoForwardPhoto({ id: employee.id, full_name: employee.full_name }, inbound.content.url, inbound.content.caption);
       trace.push(`tryAutoForwardPhoto:${autoForward.outcome}`);
 
+      // Endy's progress tracking (0199) -- vision-assesses the photo against
+      // its captioned block code for the Saturday 13:00 report. Runs
+      // independently of the forwarding above (different concern: is this
+      // block's payroll assessment data, not who receives the photo).
+      trace.push("tryTrackConstructionProgressPhoto:calling");
+      const progressTrack = await tryTrackConstructionProgressPhoto({ id: employee.id, full_name: employee.full_name }, inbound.content.url, inbound.content.caption);
+      trace.push(`tryTrackConstructionProgressPhoto:${progressTrack.outcome}`);
+
       if (inbound.content.caption) {
         trace.push("tryRelayToEmployees:calling(image)");
         const relayResult = await tryRelayToEmployees({ id: employee.id, name: employee.full_name }, inbound.sender, inbound.content.caption);
@@ -196,6 +205,26 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+      }
+
+      // Endy's progress-tracking reply always fires per photo (block
+      // correlation matters per photo, unlike the generic relay reminder
+      // below which only prompts once per batch) -- either confirms the AI
+      // assessment or asks which block this photo belongs to. No-op
+      // (outcome "not_applicable") for every other sender.
+      if (progressTrack.outcome !== "not_applicable") {
+        const replyText =
+          progressTrack.outcome === "block_unknown"
+            ? "📋 Foto ini untuk blok yang mana? Balas dengan kode bloknya di keterangan foto (A1-A5, B1-B4, C1-C4) supaya progresnya bisa dicatat untuk laporan Sabtu."
+            : progressTrack.outcome === "tracked"
+              ? `✅ Foto blok ${progressTrack.blockCode} diterima${autoForward.outcome === "routed" ? ` dan diteruskan ke ${autoForward.recipientNames.join(" & ")}` : ""}. Progres tercatat: ${progressTrack.stage} (~${progressTrack.progressPct}%).`
+              : `✅ Foto blok ${progressTrack.blockCode} diterima${autoForward.outcome === "routed" ? ` dan diteruskan ke ${autoForward.recipientNames.join(" & ")}` : ""}, tapi penilaian progres otomatis gagal -- tetap masuk laporan dengan catatan foto saja.`;
+        trace.push("sendWhatsAppText:calling(image-progress-track)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[image]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
 
       // No caption, or caption wasn't a relay instruction -- only prompt
