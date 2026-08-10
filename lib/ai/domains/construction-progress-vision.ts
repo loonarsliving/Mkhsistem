@@ -25,7 +25,10 @@ function parseAssessment(text: string): ConstructionProgressAssessment {
   try {
     parsed = JSON.parse(cleaned) as Record<string, unknown>;
   } catch {
-    throw new Error("Respons Gemini Vision bukan JSON yang valid");
+    // TEMPORARY: include the raw text (truncated) so tryTrackConstructionProgressPhoto's
+    // catch block can persist it into ai_notes for production debugging --
+    // remove once the root cause of any future parse failure is confirmed.
+    throw new Error(`Respons Gemini Vision bukan JSON yang valid. Raw: ${cleaned.slice(0, 300) || "(empty)"}`);
   }
 
   const progressPct = typeof parsed.progressPct === "number" && Number.isFinite(parsed.progressPct) ? Math.max(0, Math.min(100, Math.round(parsed.progressPct))) : 0;
