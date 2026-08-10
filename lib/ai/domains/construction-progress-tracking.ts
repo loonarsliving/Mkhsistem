@@ -11,6 +11,8 @@ export interface ProgressTrackResult {
   blockCode?: string;
   stage?: string;
   progressPct?: number;
+  plannedWorkTomorrow?: string | null;
+  materialsNeededTomorrow?: string | null;
 }
 
 // Loonars Living's fixed block list (owner-provided, 0199) -- A1-A5, B1-B4, C1-C4.
@@ -62,7 +64,7 @@ export async function tryTrackConstructionProgressPhoto(
   }
 
   try {
-    const assessment = await assessConstructionProgress({ blockCode, imageBase64: image.data, imageMimeType: image.mimeType });
+    const assessment = await assessConstructionProgress({ blockCode, caption, imageBase64: image.data, imageMimeType: image.mimeType });
     await supabase.from("construction_progress_photos").insert({
       employee_id: employee.id,
       block_id: block.id,
@@ -72,8 +74,17 @@ export async function tryTrackConstructionProgressPhoto(
       ai_progress_pct: assessment.progressPct,
       ai_notes: assessment.notes,
       ai_concerns: assessment.concerns.join("; ") || null,
+      planned_work_tomorrow: assessment.plannedWorkTomorrow,
+      materials_needed_tomorrow: assessment.materialsNeededTomorrow,
     });
-    return { outcome: "tracked", blockCode, stage: assessment.stage, progressPct: assessment.progressPct };
+    return {
+      outcome: "tracked",
+      blockCode,
+      stage: assessment.stage,
+      progressPct: assessment.progressPct,
+      plannedWorkTomorrow: assessment.plannedWorkTomorrow,
+      materialsNeededTomorrow: assessment.materialsNeededTomorrow,
+    };
   } catch {
     await supabase.from("construction_progress_photos").insert({ employee_id: employee.id, block_id: block.id, image_url: imageUrl, caption: caption ?? null });
     return { outcome: "assessment_failed", blockCode };

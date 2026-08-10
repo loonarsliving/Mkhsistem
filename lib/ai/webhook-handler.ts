@@ -215,9 +215,13 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       if (progressTrack.outcome !== "not_applicable") {
         const replyText =
           progressTrack.outcome === "block_unknown"
-            ? "📋 Foto ini untuk blok yang mana? Balas dengan kode bloknya di keterangan foto (A1-A5, B1-B4, C1-C4) supaya progresnya bisa dicatat untuk laporan Sabtu."
+            ? "📋 Foto ini untuk blok yang mana? Balas dengan kode bloknya di keterangan foto (A1-A5, B1-B4, C1-C4), sertakan juga rencana kerja besok dan bahan yang dibutuhkan, supaya progresnya bisa dicatat untuk laporan Sabtu dan jadi dasar pengajuan belanja besok pagi."
             : progressTrack.outcome === "tracked"
-              ? `✅ Foto blok ${progressTrack.blockCode} diterima${autoForward.outcome === "routed" ? ` dan diteruskan ke ${autoForward.recipientNames.join(" & ")}` : ""}. Progres tercatat: ${progressTrack.stage} (~${progressTrack.progressPct}%).`
+              ? `✅ Foto blok ${progressTrack.blockCode} diterima${autoForward.outcome === "routed" ? ` dan diteruskan ke ${autoForward.recipientNames.join(" & ")}` : ""}. Progres tercatat: ${progressTrack.stage} (~${progressTrack.progressPct}%).${
+                  progressTrack.plannedWorkTomorrow || progressTrack.materialsNeededTomorrow
+                    ? `\n📌 Rencana besok: ${progressTrack.plannedWorkTomorrow ?? "-"}\n🧱 Bahan dibutuhkan: ${progressTrack.materialsNeededTomorrow ?? "-"}`
+                    : "\n(Belum ada rencana kerja/bahan besok yang tercatat dari keterangan foto ini.)"
+                }`
               : `✅ Foto blok ${progressTrack.blockCode} diterima${autoForward.outcome === "routed" ? ` dan diteruskan ke ${autoForward.recipientNames.join(" & ")}` : ""}, tapi penilaian progres otomatis gagal -- tetap masuk laporan dengan catatan foto saja.`;
         trace.push("sendWhatsAppText:calling(image-progress-track)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);

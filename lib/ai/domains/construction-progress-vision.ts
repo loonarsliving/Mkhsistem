@@ -10,6 +10,8 @@ export interface ConstructionProgressAssessment {
   progressPct: number;
   notes: string;
   concerns: string[];
+  plannedWorkTomorrow: string | null;
+  materialsNeededTomorrow: string | null;
 }
 
 function parseAssessment(text: string): ConstructionProgressAssessment {
@@ -38,21 +40,38 @@ function parseAssessment(text: string): ConstructionProgressAssessment {
           .map((c) => c.trim().slice(0, 150))
           .slice(0, 5)
       : [],
+    plannedWorkTomorrow: typeof parsed.plannedWorkTomorrow === "string" && parsed.plannedWorkTomorrow.trim() ? parsed.plannedWorkTomorrow.trim().slice(0, 300) : null,
+    materialsNeededTomorrow:
+      typeof parsed.materialsNeededTomorrow === "string" && parsed.materialsNeededTomorrow.trim() ? parsed.materialsNeededTomorrow.trim().slice(0, 300) : null,
   };
 }
 
-/** Real Gemini Vision call -- Gemini actually looks at the photo (AIGenerateRequest.image), same mechanism as analyzeAssetWithGeminiVision (kontenai-vision.ts). */
-export async function assessConstructionProgress(input: { blockCode: string; imageBase64: string; imageMimeType: string }): Promise<ConstructionProgressAssessment> {
-  const userPrompt = `Ini adalah foto lokasi pembangunan blok ${input.blockCode} (proyek villa Loonars Living). Lihat langsung isi foto ini dan nilai progres pekerjaan konstruksinya.
+/**
+ * Real Gemini Vision call -- Gemini actually looks at the photo
+ * (AIGenerateRequest.image), same mechanism as analyzeAssetWithGeminiVision
+ * (kontenai-vision.ts). Endy's routine (owner's clarification): every
+ * afternoon, 3 photos per building with a caption stating tomorrow's
+ * planned work and material needs -- that caption is what he bases
+ * tomorrow morning's pengajuan on, and it's also useful context for the
+ * vision assessment itself (e.g. "if he said pengecoran was planned today,
+ * does the photo show it happened"), so it's passed alongside the image
+ * rather than parsed separately.
+ */
+export async function assessConstructionProgress(input: { blockCode: string; caption?: string; imageBase64: string; imageMimeType: string }): Promise<ConstructionProgressAssessment> {
+  const captionLine = input.caption ? `\n\nKeterangan yang ditulis pengawas saat mengirim foto ini: "${input.caption}"` : "";
+
+  const userPrompt = `Ini adalah foto sore hari lokasi pembangunan blok ${input.blockCode} (proyek villa Loonars Living). Lihat langsung isi foto ini dan nilai progres pekerjaan konstruksinya.${captionLine}
 
 Hasilkan:
 - stage: tahap pekerjaan yang terlihat (misal: "Pondasi", "Struktur/Dinding", "Atap", "Finishing", "Selesai")
 - progressPct: perkiraan persentase progres keseluruhan bangunan (0-100), berdasarkan HANYA apa yang terlihat di foto ini
-- notes: catatan singkat 1-2 kalimat tentang apa yang terlihat di foto
-- concerns: daftar hal yang perlu diperhatikan (kalau ada) -- misal pekerjaan terlihat lambat/tidak rapi -- array kosong kalau tidak ada
+- notes: catatan singkat 1-2 kalimat tentang apa yang terlihat di foto, termasuk apakah sesuai dengan keterangan pengawas (kalau ada keterangan)
+- concerns: daftar hal yang perlu diperhatikan (kalau ada) -- misal pekerjaan terlihat lambat/tidak rapi/tidak sesuai keterangan -- array kosong kalau tidak ada
+- plannedWorkTomorrow: kalau keterangan pengawas menyebutkan rencana pekerjaan besok, tuliskan ringkas di sini -- null kalau tidak disebutkan
+- materialsNeededTomorrow: kalau keterangan pengawas menyebutkan bahan yang dibutuhkan besok, tuliskan ringkas di sini -- null kalau tidak disebutkan
 
 Balas HANYA dengan JSON object:
-{"stage": "...", "progressPct": 0, "notes": "...", "concerns": []}`;
+{"stage": "...", "progressPct": 0, "notes": "...", "concerns": [], "plannedWorkTomorrow": null, "materialsNeededTomorrow": null}`;
 
   const response = await generateAIText({
     systemPrompt: SYSTEM_PROMPT,

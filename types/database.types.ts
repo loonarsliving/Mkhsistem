@@ -1875,6 +1875,9 @@ export interface Database {
           ai_progress_pct: number | null;
           ai_notes: string | null;
           ai_concerns: string | null;
+          planned_work_tomorrow: string | null;
+          materials_needed_tomorrow: string | null;
+          report_date: string;
           created_at: string;
         };
         Insert: {
@@ -1887,6 +1890,9 @@ export interface Database {
           ai_progress_pct?: number | null;
           ai_notes?: string | null;
           ai_concerns?: string | null;
+          planned_work_tomorrow?: string | null;
+          materials_needed_tomorrow?: string | null;
+          report_date?: string;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["construction_progress_photos"]["Insert"]>;
