@@ -74,5 +74,11 @@ export async function tryAutoForwardPhoto(
   }
 
   if (notifiedCount === 0) return { outcome: "send_failed", notifiedCount: 0, recipientNames: [] };
+
+  // Receipt for sync_inbound (0198, mkh-properti's finance_expense_submitted
+  // handler) to check "did this sender recently send a justification photo"
+  // before asking them to fill in pekerjaan/blok on a bahan pengajuan.
+  await supabase.from("photo_auto_forward_log").insert({ employee_id: employee.id });
+
   return { outcome: "routed", notifiedCount, recipientNames };
 }

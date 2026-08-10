@@ -1834,6 +1834,20 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["photo_auto_forward_rules"]["Insert"]>;
         Relationships: [];
       };
+      photo_auto_forward_log: {
+        Row: {
+          id: string;
+          employee_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["photo_auto_forward_log"]["Insert"]>;
+        Relationships: [];
+      };
       ai_knowledge_bank: {
         Row: {
           id: string;
