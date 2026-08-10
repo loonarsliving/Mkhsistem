@@ -1812,6 +1812,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["wa_pending_media_relay"]["Insert"]>;
         Relationships: [];
       };
+      photo_auto_forward_rules: {
+        Row: {
+          id: string;
+          sender_employee_id: string;
+          recipient_employee_id: string | null;
+          recipient_role: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sender_employee_id: string;
+          recipient_employee_id?: string | null;
+          recipient_role?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["photo_auto_forward_rules"]["Insert"]>;
+        Relationships: [];
+      };
       ai_knowledge_bank: {
         Row: {
           id: string;

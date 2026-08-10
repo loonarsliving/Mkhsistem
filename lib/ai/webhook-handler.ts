@@ -12,6 +12,7 @@ import {
 import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
+import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -169,6 +170,13 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       );
       trace.push(`tryRouteConstructionPhotoReport:${constructionRoute.outcome}`);
 
+      // Table-driven auto-forward (0197) -- e.g. Endy's material-purchase
+      // photos to Vando + every Super Admin. Independent of the
+      // construction route above (different table, different senders).
+      trace.push("tryAutoForwardPhoto:calling");
+      const autoForward = await tryAutoForwardPhoto({ id: employee.id, full_name: employee.full_name }, inbound.content.url, inbound.content.caption);
+      trace.push(`tryAutoForwardPhoto:${autoForward.outcome}`);
+
       if (inbound.content.caption) {
         trace.push("tryRelayToEmployees:calling(image)");
         const relayResult = await tryRelayToEmployees({ id: employee.id, name: employee.full_name }, inbound.sender, inbound.content.caption);
@@ -177,6 +185,9 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           let replyText = formatRelayReply(relayResult);
           if (constructionRoute.outcome === "routed") {
             replyText += "\n\n✅ Foto ini juga otomatis dikirim ke Super Admin sebagai update progress pembangunan.";
+          }
+          if (autoForward.outcome === "routed") {
+            replyText += `\n\n✅ Foto ini juga otomatis diteruskan ke ${autoForward.recipientNames.join(" & ")}.`;
           }
           trace.push("sendWhatsAppText:calling(image-relay)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
@@ -194,7 +205,9 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         const replyText =
           constructionRoute.outcome === "routed"
             ? "✅ Foto diterima dan sudah dikirim ke Super Admin sebagai update progress pembangunan."
-            : 'Foto diterima. Kalau ingin saya teruskan ke seseorang, kirim foto lain (kalau ada) lalu ketik/tulis di keterangan siapa penerimanya (mis. "untuk Vando").';
+            : autoForward.outcome === "routed"
+              ? `✅ Foto diterima dan sudah otomatis diteruskan ke ${autoForward.recipientNames.join(" & ")}.`
+              : 'Foto diterima. Kalau ingin saya teruskan ke seseorang, kirim foto lain (kalau ada) lalu ketik/tulis di keterangan siapa penerimanya (mis. "untuk Vando").';
         trace.push("sendWhatsAppText:calling(image-no-caption)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
