@@ -3542,6 +3542,8 @@ export interface Database {
           harga: number | null;
           luas: number | null;
           status: "tersedia" | "dp" | "verifikasi" | "terjual";
+          row_label: string | null;
+          sort_order: number;
           created_at: string;
           updated_at: string;
         };
@@ -3553,6 +3555,8 @@ export interface Database {
           harga?: number | null;
           luas?: number | null;
           status?: "tersedia" | "dp" | "verifikasi" | "terjual";
+          row_label?: string | null;
+          sort_order?: number;
           created_at?: string;
           updated_at?: string;
         };

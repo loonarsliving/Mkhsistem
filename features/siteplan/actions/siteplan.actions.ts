@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
-import { getPublicUrl } from "@/services/storage.service";
 import {
+  assignSiteplanUnitToRow,
   createSiteplanProject,
   createSiteplanUnit,
+  deleteSiteplanRow,
   deleteSiteplanUnit,
-  getSiteplanImage,
   getSiteplanProject,
   getSiteplanPurchaseForUnit,
   listMySiteplanFeeRequests,
@@ -18,8 +18,7 @@ import {
   listPendingSiteplanPurchases,
   listSiteplanProjects,
   listSiteplanUnits,
-  listUnitPositions,
-  listUnpositionedUnits,
+  saveSiteplanRowOrdering,
   updateSiteplanProject,
   updateSiteplanUnit,
 } from "@/repositories/loonars-siteplan.repository";
@@ -42,32 +41,20 @@ export async function listSiteplanProjectsAction() {
   return listSiteplanProjects(supabase);
 }
 
-/** Everything the viewer needs for one project: the project itself, its units, the background image (if any), and every placed hotspot. */
+/** Everything the grid viewer needs for one project: the project itself and its units, already ordered by row_label/sort_order/blok. */
 export async function getSiteplanViewerDataAction(projectId: string) {
   await requireSession();
   const supabase = await createClient();
-  const [project, units, image, positions] = await Promise.all([
-    getSiteplanProject(supabase, projectId),
-    listSiteplanUnits(supabase, projectId),
-    getSiteplanImage(supabase, projectId),
-    listUnitPositions(supabase, projectId),
-  ]);
-  const imageUrl = image ? await getPublicUrl("siteplan-images", image.image_path) : null;
-  return { project, units, image: image ? { ...image, imageUrl } : null, positions };
+  const [project, units] = await Promise.all([getSiteplanProject(supabase, projectId), listSiteplanUnits(supabase, projectId)]);
+  return { project, units };
 }
 
-/** Everything the admin position editor needs: units, image, placed positions, and the unplaced-units sidebar list. */
+/** Everything the admin row/order editor needs: every unit in the project, ordered by row_label/sort_order/blok. */
 export async function getSiteplanEditorDataAction(projectId: string) {
   await requirePermission("siteplan.manage");
   const supabase = await createClient();
-  const [units, image, positions, unpositioned] = await Promise.all([
-    listSiteplanUnits(supabase, projectId),
-    getSiteplanImage(supabase, projectId),
-    listUnitPositions(supabase, projectId),
-    listUnpositionedUnits(supabase, projectId),
-  ]);
-  const imageUrl = image ? await getPublicUrl("siteplan-images", image.image_path) : null;
-  return { units, image: image ? { ...image, imageUrl } : null, positions, unpositioned };
+  const units = await listSiteplanUnits(supabase, projectId);
+  return { units };
 }
 
 export async function listSiteplanUnitsAction(projectId: string) {
@@ -258,33 +245,73 @@ export async function deleteSiteplanUnitAction(id: string): Promise<ActionResult
   return actionSuccess();
 }
 
-/** Called after the client has already uploaded the file to the siteplan-images bucket via uploadEntityFile -- this just persists the resulting path + natural dimensions. */
-export async function saveSiteplanImageAction(
-  projectId: string,
-  imagePath: string,
-  imageWidth?: number,
-  imageHeight?: number,
-): Promise<ActionResult> {
+/**
+ * Saves one row's full membership + order, given as an ordered array of blok codes (parsed client-side
+ * from a comma-separated text field -- same UX as the original loonars-sales admin's row editor). Any
+ * code that doesn't match a unit in this project is reported back as an error instead of silently
+ * dropped. Units previously in this row but left out of `blokCodes` are moved to "Belum dikelompokkan".
+ */
+export async function saveSiteplanRowOrderingAction(projectId: string, rowLabel: string, blokCodes: string[]): Promise<ActionResult> {
   await requirePermission("siteplan.manage");
+  const trimmedLabel = rowLabel.trim();
+  if (!trimmedLabel) return actionError("Nama baris tidak boleh kosong");
+
   const supabase = await createClient();
-  const { error } = await supabase.rpc("loonars_siteplan_image_save", {
-    p_project_id: projectId,
-    p_image_path: imagePath,
-    p_image_width: imageWidth ?? null,
-    p_image_height: imageHeight ?? null,
-  });
-  if (error) return actionError(error.message);
+  try {
+    const units = await listSiteplanUnits(supabase, projectId);
+    const unitByBlok = new Map(units.map((u) => [u.blok.trim().toLowerCase(), u.id]));
+
+    const unitIds: string[] = [];
+    const unknown: string[] = [];
+    for (const raw of blokCodes) {
+      const code = raw.trim();
+      if (!code) continue;
+      const id = unitByBlok.get(code.toLowerCase());
+      if (!id) {
+        unknown.push(code);
+      } else {
+        unitIds.push(id);
+      }
+    }
+    if (unknown.length > 0) return actionError(`Unit tidak ditemukan di project ini: ${unknown.join(", ")}`);
+
+    await saveSiteplanRowOrdering(supabase, projectId, trimmedLabel, unitIds);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan urutan baris");
+  }
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(VIEWER_PATH);
   return actionSuccess();
 }
 
-export async function upsertUnitPositionAction(unitId: string, xPct: number, yPct: number): Promise<ActionResult> {
+/** Deletes a row entirely, moving every unit in it back to "Belum dikelompokkan". */
+export async function deleteSiteplanRowAction(projectId: string, rowLabel: string): Promise<ActionResult> {
   await requirePermission("siteplan.manage");
   const supabase = await createClient();
-  const { error } = await supabase.rpc("loonars_unit_position_upsert", { p_unit_id: unitId, p_x_pct: xPct, p_y_pct: yPct });
-  if (error) return actionError(error.message);
+  try {
+    await deleteSiteplanRow(supabase, projectId, rowLabel);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menghapus baris");
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(VIEWER_PATH);
+  return actionSuccess();
+}
+
+/** Quick reassignment of one ungrouped (or misplaced) unit into an existing row, appended to its end. */
+export async function assignSiteplanUnitToRowAction(unitId: string, rowLabel: string): Promise<ActionResult> {
+  await requirePermission("siteplan.manage");
+  const trimmedLabel = rowLabel.trim();
+  if (!trimmedLabel) return actionError("Nama baris tidak boleh kosong");
+
+  const supabase = await createClient();
+  try {
+    await assignSiteplanUnitToRow(supabase, unitId, trimmedLabel);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal memindahkan unit");
+  }
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(VIEWER_PATH);

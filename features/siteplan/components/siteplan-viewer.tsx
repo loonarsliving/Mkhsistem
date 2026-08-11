@@ -4,7 +4,6 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, MapPin } from "lucide-react";
 
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SITEPLAN_UNIT_STATUS_LABEL, type SiteplanUnitStatus } from "@/constants/app";
 import { cn } from "@/lib/utils";
@@ -13,16 +12,43 @@ import { getSiteplanViewerDataAction } from "../actions/siteplan.actions";
 import { UnitDetailModal } from "./unit-detail-modal";
 import { UnitPurchaseForm } from "./unit-purchase-form";
 
-/** Same four-state palette/tokens as SiteplanUnitStatusBadge (components/shared/status-badge.tsx) -- markers use the raw bg-* tokens directly instead of the pill Badge component since they're circular map pins, not inline text badges. */
-const MARKER_CLASS: Record<SiteplanUnitStatus, string> = {
-  tersedia: "bg-success text-success-foreground",
-  dp: "bg-primary text-primary-foreground",
-  verifikasi: "bg-warning text-warning-foreground",
-  terjual: "bg-destructive text-destructive-foreground",
+/** Same four-state palette/tokens as SiteplanUnitStatusBadge (components/shared/status-badge.tsx) -- grid boxes use the raw bg-* tokens directly instead of the pill Badge component so the status color fills the whole tap target. */
+const BOX_CLASS: Record<SiteplanUnitStatus, string> = {
+  tersedia: "border-success/40 bg-success text-success-foreground hover:bg-success/90",
+  dp: "border-primary/40 bg-primary text-primary-foreground hover:bg-primary/90",
+  verifikasi: "border-warning/40 bg-warning text-warning-foreground hover:bg-warning/90",
+  terjual: "border-destructive/40 bg-destructive text-destructive-foreground hover:bg-destructive/90",
 };
+
+const UNGROUPED_LABEL = "Belum dikelompokkan";
+
+interface SiteplanUnit {
+  id: string;
+  blok: string;
+  status: string;
+  row_label: string | null;
+}
 
 interface SiteplanViewerProps {
   projectId: string;
+}
+
+/** Groups already-ordered units (row_label asc nulls-last, sort_order, blok) into named row sections, keeping the query's row order and putting null row_label units into a trailing "Belum dikelompokkan" bucket. */
+function groupByRow(units: SiteplanUnit[]) {
+  const groups = new Map<string, SiteplanUnit[]>();
+  for (const unit of units) {
+    const key = unit.row_label ?? UNGROUPED_LABEL;
+    const list = groups.get(key);
+    if (list) list.push(unit);
+    else groups.set(key, [unit]);
+  }
+  // Ensure the ungrouped bucket always renders last, even if some units happened to sort before it.
+  const ungrouped = groups.get(UNGROUPED_LABEL);
+  if (ungrouped) {
+    groups.delete(UNGROUPED_LABEL);
+    groups.set(UNGROUPED_LABEL, ungrouped);
+  }
+  return Array.from(groups.entries());
 }
 
 export function SiteplanViewer({ projectId }: SiteplanViewerProps) {
@@ -46,45 +72,33 @@ export function SiteplanViewer({ projectId }: SiteplanViewerProps) {
     );
   }
 
-  const image = data?.image;
   const units = data?.units ?? [];
-  const positions = data?.positions ?? [];
-  const positionByUnitId = new Map(positions.map((p) => [p.unit_id, p]));
 
-  if (!image?.imageUrl) {
-    return (
-      <EmptyState
-        icon={MapPin}
-        title="Siteplan belum tersedia"
-        description="Admin belum mengunggah gambar siteplan untuk project ini."
-      />
-    );
+  if (units.length === 0) {
+    return <EmptyState icon={MapPin} title="Belum ada unit" description="Admin belum menambahkan unit untuk project ini." />;
   }
 
-  const aspectRatio = image.image_width && image.image_height ? image.image_width / image.image_height : 16 / 9;
+  const rows = groupByRow(units);
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="p-3">
-          {/* Aspect-ratio wrapper keeps the image + its overlaid hotspots aligned regardless of rendered width (desktop full-width vs. a scaled-down phone screen). */}
-          <div className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-md border bg-muted" style={{ aspectRatio }}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- external/storage-hosted image, next/image's remote-pattern allowlist isn't set up for the siteplan-images bucket */}
-            <img src={image.imageUrl} alt="Siteplan" className="absolute inset-0 h-full w-full object-contain" />
-            {units.map((unit) => {
-              const pos = positionByUnitId.get(unit.id);
-              if (!pos) return null;
+    <div className="space-y-6">
+      {rows.map(([rowLabel, rowUnits]) => (
+        <div key={rowLabel} className="space-y-2">
+          <h3 className={cn("text-sm font-semibold", rowLabel === UNGROUPED_LABEL ? "text-muted-foreground" : "text-foreground")}>
+            {rowLabel}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {rowUnits.map((unit) => {
               const status = unit.status as SiteplanUnitStatus;
               return (
                 <button
                   key={unit.id}
                   type="button"
                   className={cn(
-                    // min ~28px tap target for touch usability (this app also ships as a Capacitor mobile app)
-                    "absolute flex h-8 min-w-[2rem] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white px-1.5 text-[11px] font-bold leading-none shadow-md transition-transform hover:z-10 hover:scale-110",
-                    MARKER_CLASS[status],
+                    // min 3.25rem square-ish tap target for touch usability (this app also ships as a Capacitor mobile app)
+                    "flex min-h-[3.25rem] min-w-[3.25rem] flex-col items-center justify-center rounded-md border-2 px-3 py-2 text-sm font-bold shadow-sm transition-colors",
+                    BOX_CLASS[status],
                   )}
-                  style={{ left: `${pos.x_pct}%`, top: `${pos.y_pct}%` }}
                   title={`Unit ${unit.blok} — ${SITEPLAN_UNIT_STATUS_LABEL[status]}`}
                   onClick={() => {
                     if (status === "tersedia") {
@@ -99,13 +113,13 @@ export function SiteplanViewer({ projectId }: SiteplanViewerProps) {
               );
             })}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      ))}
 
-      <div className="flex flex-wrap gap-4 text-sm">
+      <div className="flex flex-wrap gap-4 border-t pt-4 text-sm">
         {(Object.entries(SITEPLAN_UNIT_STATUS_LABEL) as [SiteplanUnitStatus, string][]).map(([status, label]) => (
           <div key={status} className="flex items-center gap-2">
-            <span className={cn("inline-block h-3.5 w-3.5 rounded-full", MARKER_CLASS[status])} />
+            <span className={cn("inline-block h-3.5 w-3.5 rounded-sm border", BOX_CLASS[status])} />
             {label}
           </div>
         ))}

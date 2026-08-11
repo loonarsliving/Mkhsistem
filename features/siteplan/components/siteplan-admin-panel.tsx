@@ -17,8 +17,8 @@ import type { SiteplanUnitStatus } from "@/constants/app";
 
 import { deleteSiteplanUnitAction, listSiteplanProjectsAction, listSiteplanUnitsAction } from "../actions/siteplan.actions";
 import { SiteplanFeeQueue } from "./siteplan-fee-queue";
-import { SiteplanPositionEditor } from "./siteplan-position-editor";
 import { SiteplanProjectFormDialog } from "./siteplan-project-form-dialog";
+import { SiteplanRowEditor } from "./siteplan-row-editor";
 import { SiteplanUnitFormDialog } from "./siteplan-unit-form-dialog";
 
 export function SiteplanAdminPanel() {
@@ -114,7 +114,7 @@ export function SiteplanAdminPanel() {
 
       {projectId && (
         <>
-          <SiteplanPositionEditor projectId={projectId} />
+          <SiteplanRowEditor projectId={projectId} />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
