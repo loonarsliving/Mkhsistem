@@ -2,13 +2,14 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { JOGJA_BRANCH_ID, KENDARI_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
+import { JOGJA_BRANCH_ID, KENDARI_BRANCH_ID, MAKASSAR_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
 import {
   CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS,
   KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS,
   MARKOM_KEPALA_CABANG_PERMISSIONS,
   PERMISSIONS,
   ROLE_KEYS,
+  SITEPLAN_MAKASSAR_ONLY_PERMISSIONS,
   type PermissionKey,
   type RoleKey,
 } from "@/constants/rbac";
@@ -76,6 +77,22 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     // Construction project finance (dana proyek pembangunan) is currently
     // Kendari-only -- same reasoning as the Markom strip above.
     permissions = permissions.filter((key) => !(CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
+  }
+
+  // Native Siteplan viewer (0202/0203) is currently a Makassar-only project
+  // -- every branch shares the "Kepala Cabang" and "Sales" roles, so any
+  // employee in one of those roles whose branch isn't Makassar has
+  // siteplan.view stripped back out here (see
+  // SITEPLAN_MAKASSAR_ONLY_PERMISSIONS). Super Admin and the Direktur roles
+  // are untouched -- they keep siteplan.view everywhere via their own
+  // ROLE_PERMISSIONS_SEED grant, not this branch check. siteplan.manage
+  // (admin CRUD) isn't touched here either -- it's Super Admin only at the
+  // role_permissions level now, nothing to strip.
+  if (
+    (employee.role_key === ROLE_KEYS.KEPALA_CABANG || employee.role_key === ROLE_KEYS.SALES) &&
+    employee.branch_id !== MAKASSAR_BRANCH_ID
+  ) {
+    permissions = permissions.filter((key) => !(SITEPLAN_MAKASSAR_ONLY_PERMISSIONS as readonly string[]).includes(key));
   }
 
   // Siteplan Loonars Villa (loonars-sales) is a Jogja-only project -- Jogja
