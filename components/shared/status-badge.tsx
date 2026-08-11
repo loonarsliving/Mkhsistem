@@ -5,6 +5,7 @@ import {
   PAYMENT_STATUS_LABEL,
   PROJECT_STATUS_LABEL,
   PROSPECT_STATUS_LABEL,
+  SITEPLAN_UNIT_STATUS_LABEL,
   type AttendanceStatus,
   type EmploymentStatus,
   type KpiTaskStatus,
@@ -13,6 +14,7 @@ import {
   type PaymentStatus,
   type ProjectStatus,
   type ProspectStatus,
+  type SiteplanUnitStatus,
 } from "@/constants/app";
 
 const ATTENDANCE_VARIANT: Record<AttendanceStatus, BadgeProps["variant"]> = {
@@ -116,4 +118,16 @@ const KPI_TASK_STATUS_VARIANT: Record<KpiTaskStatus, BadgeProps["variant"]> = {
 
 export function KpiTaskStatusBadge({ status }: { status: KpiTaskStatus }) {
   return <Badge variant={KPI_TASK_STATUS_VARIANT[status]}>{KPI_TASK_STATUS_LABEL[status]}</Badge>;
+}
+
+/** tersedia=green, dp=blue(ish primary), verifikasi=amber, terjual=red -- same four-state palette used for the siteplan viewer's hotspot markers (see siteplan-viewer.tsx's SITEPLAN_MARKER_VARIANT). */
+const SITEPLAN_UNIT_STATUS_VARIANT: Record<SiteplanUnitStatus, BadgeProps["variant"]> = {
+  tersedia: "success",
+  dp: "default",
+  verifikasi: "warning",
+  terjual: "destructive",
+};
+
+export function SiteplanUnitStatusBadge({ status }: { status: SiteplanUnitStatus }) {
+  return <Badge variant={SITEPLAN_UNIT_STATUS_VARIANT[status]}>{SITEPLAN_UNIT_STATUS_LABEL[status]}</Badge>;
 }

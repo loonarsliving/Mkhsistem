@@ -286,7 +286,52 @@ export const STORAGE_BUCKETS = {
   ANNOUNCEMENT_ATTACHMENTS: "announcement-attachments",
   COMPANY_ASSETS: "company-assets",
   LEAVE_ATTACHMENTS: "leave-attachments",
+  SITEPLAN_IMAGES: "siteplan-images",
 } as const;
+
+/** loonars_units.status -- see supabase/migrations/0202_siteplan_native_feature.sql. */
+export const SITEPLAN_UNIT_STATUS = {
+  TERSEDIA: "tersedia",
+  DP: "dp",
+  VERIFIKASI: "verifikasi",
+  TERJUAL: "terjual",
+} as const;
+export type SiteplanUnitStatus = (typeof SITEPLAN_UNIT_STATUS)[keyof typeof SITEPLAN_UNIT_STATUS];
+
+export const SITEPLAN_UNIT_STATUS_LABEL: Record<SiteplanUnitStatus, string> = {
+  tersedia: "Tersedia",
+  dp: "DP",
+  verifikasi: "Menunggu Verifikasi",
+  terjual: "Terjual",
+};
+
+/** loonars_unit_purchases.transaction_type. */
+export const SITEPLAN_TRANSACTION_TYPE = {
+  BOOKING: "booking",
+  DP: "dp",
+  AKAD: "akad",
+} as const;
+export type SiteplanTransactionType = (typeof SITEPLAN_TRANSACTION_TYPE)[keyof typeof SITEPLAN_TRANSACTION_TYPE];
+
+export const SITEPLAN_TRANSACTION_TYPE_LABEL: Record<SiteplanTransactionType, string> = {
+  booking: "Booking Fee",
+  dp: "Down Payment",
+  akad: "Akad / Lunas",
+};
+
+/** loonars_unit_purchases.payment_method -- new field, not present in the original loonars-sales app. */
+export const SITEPLAN_PAYMENT_METHOD = {
+  CASH: "cash",
+  KPR: "kpr",
+  BOTH: "both",
+} as const;
+export type SiteplanPaymentMethod = (typeof SITEPLAN_PAYMENT_METHOD)[keyof typeof SITEPLAN_PAYMENT_METHOD];
+
+export const SITEPLAN_PAYMENT_METHOD_LABEL: Record<SiteplanPaymentMethod, string> = {
+  cash: "Cash",
+  kpr: "KPR",
+  both: "Cash + KPR",
+};
 
 export const DEFAULT_PAGE_SIZE = 10;
 export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
