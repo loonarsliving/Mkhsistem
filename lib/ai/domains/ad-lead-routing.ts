@@ -46,7 +46,7 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
 
   const { data: campaign } = await supabase
     .from("meta_ad_campaigns")
-    .select("id, name, headline, project_id, branch_id, project:project_id(name, city, project_type)")
+    .select("id, name, headline, project_id, branch_id, project:project_id(name, city, project_type), branch:branch_id(ad_lead_override_employee_id)")
     .or(`meta_ad_id.eq.${adReferral.sourceId},meta_adset_id.eq.${adReferral.sourceId},meta_creative_id.eq.${adReferral.sourceId}`)
     .limit(1)
     .maybeSingle();
@@ -122,9 +122,28 @@ export async function routeAdDrivenLead(sender: string, senderName: string | und
     return { outcome: "freelance_existing_lead_notified" };
   }
 
-  const { data: picked } = await supabase
-    .rpc("crm_pick_round_robin_sales_or_freelance", { p_branch_id: campaign.branch_id, p_project_id: campaign.project_id })
-    .maybeSingle();
+  // A branch can be pinned to a single fixed employee instead of the normal
+  // round robin (see 0202_ad_lead_branch_override.sql) -- e.g. Makassar's
+  // ads all go to Muhammad Syafiq specifically, not the round-robin Sales
+  // pool. Only affects brand-new leads; the existing-prospect and
+  // prior-freelance-delivery branches above already keep a repeat lead with
+  // whoever already owns it regardless of this override.
+  const overrideEmployeeId = (campaign.branch as { ad_lead_override_employee_id: string | null } | null)?.ad_lead_override_employee_id;
+  let picked: { recipient_type: string; recipient_id: string; full_name: string | null; phone: string | null } | null = null;
+
+  if (overrideEmployeeId) {
+    const { data: overrideEmployee } = await supabase.from("employees").select("id, full_name, phone").eq("id", overrideEmployeeId).maybeSingle();
+    if (overrideEmployee) {
+      picked = { recipient_type: "sales", recipient_id: overrideEmployee.id, full_name: overrideEmployee.full_name, phone: overrideEmployee.phone };
+    }
+  }
+
+  if (!picked) {
+    const { data: rrPicked } = await supabase
+      .rpc("crm_pick_round_robin_sales_or_freelance", { p_branch_id: campaign.branch_id, p_project_id: campaign.project_id })
+      .maybeSingle();
+    picked = rrPicked;
+  }
 
   if (!picked) {
     logger.info("routeAdDrivenLead: no active sales or freelance recipient in branch", { branchId: campaign.branch_id });

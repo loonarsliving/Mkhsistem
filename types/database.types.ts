@@ -200,6 +200,7 @@ export interface Database {
           phone: string | null;
           is_head_office: boolean;
           is_active: boolean;
+          ad_lead_override_employee_id: string | null;
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
@@ -218,6 +219,7 @@ export interface Database {
           phone?: string | null;
           is_head_office?: boolean;
           is_active?: boolean;
+          ad_lead_override_employee_id?: string | null;
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -225,7 +227,15 @@ export interface Database {
           updated_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["branches"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "branches_ad_lead_override_employee_id_fkey";
+            columns: ["ad_lead_override_employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       divisions: {
         Row: {
