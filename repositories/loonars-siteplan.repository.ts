@@ -42,12 +42,19 @@ export async function updateSiteplanProject(
 // Units
 // ----------------------------------------------------------------------------
 
-/** All units for a project, ordered by blok code -- feeds both the viewer and the admin position editor's sidebar list. */
+/**
+ * All units for a project, ordered by row_label (nulls last, i.e. "Belum dikelompokkan" sorts to the
+ * end), then sort_order, then blok as the final tiebreaker -- feeds the grid viewer, the admin row
+ * ordering editor, and the admin CRUD table. Never sort/parse the numeric part of blok: real unit
+ * numbering skips codes (e.g. C7, C11 intentionally missing), so row_label+sort_order is authoritative.
+ */
 export async function listSiteplanUnits(supabase: TypedSupabaseClient, projectId: string) {
   const { data, error } = await supabase
     .from("loonars_units")
     .select("*")
     .eq("project_id", projectId)
+    .order("row_label", { ascending: true, nullsFirst: false })
+    .order("sort_order", { ascending: true })
     .order("blok", { ascending: true });
   if (error) throw error;
   return data ?? [];
@@ -78,7 +85,89 @@ export async function deleteSiteplanUnit(supabase: TypedSupabaseClient, id: stri
 }
 
 // ----------------------------------------------------------------------------
-// Siteplan image + unit positions (hotspots)
+// Grid row/order (0203) -- replaces the image+hotspot placement below as the
+// default siteplan layout: each unit belongs to a named row_label (e.g.
+// "Atas"/"Bawah", null = "Belum dikelompokkan") and has a sort_order within
+// that row. Gated by the same loonars_units_update RLS policy (siteplan.manage).
+// ----------------------------------------------------------------------------
+
+/**
+ * Sets row_label + sort_order (1-based, by array position) for the given units, then moves any other
+ * unit in the project that currently belongs to that row_label but was left out of `unitIds` back to
+ * "Belum dikelompokkan" (row_label null, sort_order 0) -- the ordered id list is authoritative for the
+ * row's full membership, matching the original loonars-sales admin's comma-list-per-row behavior.
+ */
+export async function saveSiteplanRowOrdering(
+  supabase: TypedSupabaseClient,
+  projectId: string,
+  rowLabel: string,
+  unitIds: string[],
+) {
+  await Promise.all(
+    unitIds.map((id, index) =>
+      supabase
+        .from("loonars_units")
+        .update({ row_label: rowLabel, sort_order: index + 1 })
+        .eq("id", id)
+        .eq("project_id", projectId)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    ),
+  );
+
+  const keep = new Set(unitIds);
+  const { data: currentRowUnits, error: fetchError } = await supabase
+    .from("loonars_units")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("row_label", rowLabel);
+  if (fetchError) throw fetchError;
+
+  const toUnassign = (currentRowUnits ?? []).map((u) => u.id).filter((id) => !keep.has(id));
+  if (toUnassign.length > 0) {
+    const { error } = await supabase
+      .from("loonars_units")
+      .update({ row_label: null, sort_order: 0 })
+      .in("id", toUnassign);
+    if (error) throw error;
+  }
+}
+
+/** Deletes a row entirely, moving every unit in it back to "Belum dikelompokkan". */
+export async function deleteSiteplanRow(supabase: TypedSupabaseClient, projectId: string, rowLabel: string) {
+  const { error } = await supabase
+    .from("loonars_units")
+    .update({ row_label: null, sort_order: 0 })
+    .eq("project_id", projectId)
+    .eq("row_label", rowLabel);
+  if (error) throw error;
+}
+
+/** Quick single-unit assignment (e.g. moving one ungrouped unit into an existing row) -- appends to the end of that row. */
+export async function assignSiteplanUnitToRow(supabase: TypedSupabaseClient, unitId: string, rowLabel: string) {
+  const { data: unit, error: unitError } = await supabase.from("loonars_units").select("project_id").eq("id", unitId).single();
+  if (unitError) throw unitError;
+
+  const { data: rowUnits, error: rowError } = await supabase
+    .from("loonars_units")
+    .select("sort_order")
+    .eq("project_id", unit.project_id)
+    .eq("row_label", rowLabel)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (rowError) throw rowError;
+
+  const nextSortOrder = (rowUnits?.[0]?.sort_order ?? 0) + 1;
+  const { error } = await supabase.from("loonars_units").update({ row_label: rowLabel, sort_order: nextSortOrder }).eq("id", unitId);
+  if (error) throw error;
+}
+
+// ----------------------------------------------------------------------------
+// Siteplan image + unit positions (hotspots) -- legacy image-map mode from
+// 0202. No longer used by the default grid viewer/editor (see the row/order
+// section above), left in place in case a future project wants an image-map
+// mode again.
 // ----------------------------------------------------------------------------
 
 /** The project's background siteplan image config, if one has been uploaded yet. */

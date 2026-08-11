@@ -13,7 +13,7 @@ export default async function SiteplanAdminPage() {
     <div className="space-y-6">
       <PageHeader
         title="Kelola Siteplan"
-        description="Kelola project, unit, gambar siteplan, posisi hotspot unit, dan pengajuan fee."
+        description="Kelola project, unit, urutan baris grid siteplan, dan pengajuan fee."
       />
       <SiteplanAdminPanel />
     </div>
