@@ -3511,6 +3511,263 @@ export interface Database {
           },
         ];
       };
+      loonars_projects: {
+        Row: {
+          id: string;
+          kode: string;
+          nama: string;
+          lokasi: string | null;
+          warna: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          kode: string;
+          nama: string;
+          lokasi?: string | null;
+          warna?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_projects"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_units: {
+        Row: {
+          id: string;
+          project_id: string;
+          blok: string;
+          tipe: string | null;
+          harga: number | null;
+          luas: number | null;
+          status: "tersedia" | "dp" | "verifikasi" | "terjual";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          blok: string;
+          tipe?: string | null;
+          harga?: number | null;
+          luas?: number | null;
+          status?: "tersedia" | "dp" | "verifikasi" | "terjual";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_units"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_units_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "loonars_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_siteplan_layouts: {
+        Row: {
+          id: string;
+          project_id: string;
+          image_path: string;
+          image_width: number | null;
+          image_height: number | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          image_path: string;
+          image_width?: number | null;
+          image_height?: number | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_siteplan_layouts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_siteplan_layouts_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "loonars_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_siteplan_layouts_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_unit_positions: {
+        Row: {
+          id: string;
+          unit_id: string;
+          x_pct: number;
+          y_pct: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          unit_id: string;
+          x_pct: number;
+          y_pct: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_unit_positions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_unit_positions_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_unit_purchases: {
+        Row: {
+          id: string;
+          unit_id: string;
+          buyer_name: string;
+          nik: string | null;
+          phone: string | null;
+          address: string | null;
+          transaction_type: "booking" | "dp" | "akad";
+          payment_method: "cash" | "kpr" | "both";
+          price: number | null;
+          booking_fee: number | null;
+          dp_amount: number | null;
+          pelunasan_amount: number | null;
+          transaction_date: string;
+          handover_date: string | null;
+          spi_no: string | null;
+          marketing_employee_id: string;
+          branch_id: string | null;
+          status: "pending_verification" | "verified" | "rejected";
+          verified_by: string | null;
+          verified_at: string | null;
+          reject_reason: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          unit_id: string;
+          buyer_name: string;
+          nik?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          transaction_type: "booking" | "dp" | "akad";
+          payment_method?: "cash" | "kpr" | "both";
+          price?: number | null;
+          booking_fee?: number | null;
+          dp_amount?: number | null;
+          pelunasan_amount?: number | null;
+          transaction_date?: string;
+          handover_date?: string | null;
+          spi_no?: string | null;
+          marketing_employee_id: string;
+          branch_id?: string | null;
+          status?: "pending_verification" | "verified" | "rejected";
+          verified_by?: string | null;
+          verified_at?: string | null;
+          reject_reason?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_unit_purchases"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_unit_purchases_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_purchases_marketing_employee_id_fkey";
+            columns: ["marketing_employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_purchases_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_purchases_verified_by_fkey";
+            columns: ["verified_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_unit_fee_requests: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          unit_id: string;
+          marketing_employee_id: string;
+          fee_amount: number;
+          phone: string | null;
+          status: "pending" | "approved" | "rejected";
+          decided_by: string | null;
+          decided_at: string | null;
+          reject_reason: string | null;
+          requested_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          unit_id: string;
+          marketing_employee_id: string;
+          fee_amount: number;
+          phone?: string | null;
+          status?: "pending" | "approved" | "rejected";
+          decided_by?: string | null;
+          decided_at?: string | null;
+          reject_reason?: string | null;
+          requested_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_unit_fee_requests"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_unit_fee_requests_purchase_id_fkey";
+            columns: ["purchase_id"];
+            referencedRelation: "loonars_unit_purchases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_fee_requests_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_fee_requests_marketing_employee_id_fkey";
+            columns: ["marketing_employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_fee_requests_decided_by_fkey";
+            columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       loonars_fee_wa_requests: {
         Row: {
           fee_id: number;
@@ -4319,6 +4576,33 @@ export interface Database {
       loonars_closing_verify: { Args: { p_id: string }; Returns: undefined };
       loonars_closing_reject: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
       loonars_fee_request: { Args: { p_id: string; p_fee_amount: number }; Returns: undefined };
+      loonars_unit_purchase_submit: {
+        Args: {
+          p_unit_id: string;
+          p_buyer_name: string;
+          p_nik?: string | null;
+          p_phone?: string | null;
+          p_address?: string | null;
+          p_transaction_type?: string;
+          p_payment_method?: string;
+          p_price?: number | null;
+          p_booking_fee?: number | null;
+          p_dp_amount?: number | null;
+          p_pelunasan_amount?: number | null;
+          p_handover_date?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      loonars_unit_purchase_verify: { Args: { p_id: string }; Returns: undefined };
+      loonars_unit_purchase_reject: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
+      loonars_unit_fee_request: { Args: { p_purchase_id: string; p_fee_amount: number; p_phone?: string | null }; Returns: string };
+      loonars_unit_fee_decide: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
+      loonars_siteplan_image_save: {
+        Args: { p_project_id: string; p_image_path: string; p_image_width?: number | null; p_image_height?: number | null };
+        Returns: string;
+      };
+      loonars_unit_position_upsert: { Args: { p_unit_id: string; p_x_pct: number; p_y_pct: number }; Returns: string };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };

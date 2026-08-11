@@ -202,6 +202,16 @@ export const PERMISSIONS = {
    */
   APPROVAL_REQUEST_VIEW_OWN: "approval_request.view_own",
   APPROVAL_REQUEST_MANAGE: "approval_request.manage",
+
+  /**
+   * Native Siteplan feature (0202) -- MK Connect's own units/siteplan/
+   * purchase/fee tables, distinct from the loonars_closings sync-receiver
+   * flow. VIEW covers the unit grid + submitting/tracking own purchases and
+   * fee claims; MANAGE covers admin CRUD of projects/units/layout and
+   * deciding pending fee claim requests.
+   */
+  SITEPLAN_VIEW: "siteplan.view",
+  SITEPLAN_MANAGE: "siteplan.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -280,6 +290,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    PERMISSIONS.SITEPLAN_VIEW,
+    PERMISSIONS.SITEPLAN_MANAGE,
     // Markom pages (Checklist/Assign/Ranking/Foto Project/Content
     // Studio/Content Planner/Content Audit/Promo Broadcast) are
     // deliberately NOT granted here -- owner's call: only the Markom role,
@@ -317,6 +329,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CRM_PROJECT_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
+    PERMISSIONS.SITEPLAN_VIEW,
+    PERMISSIONS.SITEPLAN_MANAGE,
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
@@ -417,6 +431,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Management Property branch specifically. That branch's Kepala Cabang
     // gets it via a branch-based check in getCurrentSession(), not this role
     // grant, so other branches' heads don't see it.
+    PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.MANAGER]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -426,6 +441,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.ANNOUNCEMENT_VIEW,
     PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
     PERMISSIONS.HR_EXPENSE_CREATE,
+    PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.STAFF]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -444,6 +460,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
     PERMISSIONS.SALES_TARGET_VIEW_OWN,
     PERMISSIONS.HR_EXPENSE_CREATE,
+    PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.FINANCE]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -453,6 +470,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_VIEW_ALL,
     PERMISSIONS.PROSPECT_FINANCE_VERIFY,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
+    PERMISSIONS.SITEPLAN_VIEW,
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
