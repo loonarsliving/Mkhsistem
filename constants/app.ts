@@ -361,3 +361,12 @@ export const JOGJA_BRANCH_ID = "fdeb7f3a-e211-4e6d-a2a6-35162378e3ae";
  * permission back out for any Kepala Cabang whose branch isn't Kendari.
  */
 export const KENDARI_BRANCH_ID = "61a95bc6-23b0-408d-8439-f821251c56d4";
+
+/**
+ * The Makassar branch. Owner's explicit call: the native Siteplan viewer
+ * (0202/0203) is currently a Makassar-only project -- every branch shares
+ * the "Kepala Cabang" and "Sales" roles, so getCurrentSession() strips
+ * siteplan.view back out for any Kepala Cabang/Sales employee whose branch
+ * isn't Makassar. Super Admin and the Direktur roles keep it everywhere.
+ */
+export const MAKASSAR_BRANCH_ID = "40cdf547-d9cb-4d59-aba3-265a2ba04da8";

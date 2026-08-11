@@ -260,6 +260,16 @@ export const KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS = [
   "construction_finance.submit",
 ] as const satisfies readonly PermissionKey[];
 
+/**
+ * Same pattern as MARKOM_KEPALA_CABANG_PERMISSIONS above, but for the native
+ * Siteplan viewer -- granted at the role level to both Kepala Cabang and
+ * Sales (every branch shares those roles), stripped back out in
+ * getCurrentSession() for anyone whose branch isn't Makassar
+ * (MAKASSAR_BRANCH_ID). Super Admin and the Direktur roles are unaffected --
+ * they keep siteplan.view everywhere.
+ */
+export const SITEPLAN_MAKASSAR_ONLY_PERMISSIONS = ["siteplan.view"] as const satisfies readonly PermissionKey[];
+
 /** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
 export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
   [ROLE_KEYS.SUPER_ADMIN]: Object.values(PERMISSIONS),
@@ -290,8 +300,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
     PERMISSIONS.KOS_OCCUPANCY_VIEW,
+    // siteplan.manage is deliberately Super Admin only now (owner's call) --
+    // Direktur Utama keeps siteplan.view for oversight, just not admin CRUD.
     PERMISSIONS.SITEPLAN_VIEW,
-    PERMISSIONS.SITEPLAN_MANAGE,
     // Markom pages (Checklist/Assign/Ranking/Foto Project/Content
     // Studio/Content Planner/Content Audit/Promo Broadcast) are
     // deliberately NOT granted here -- owner's call: only the Markom role,
@@ -329,8 +340,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.CRM_PROJECT_MANAGE,
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
+    // siteplan.manage is deliberately Super Admin only now (owner's call) --
+    // Direktur Operasional keeps siteplan.view for oversight, just not admin CRUD.
     PERMISSIONS.SITEPLAN_VIEW,
-    PERMISSIONS.SITEPLAN_MANAGE,
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
@@ -431,6 +443,11 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // Management Property branch specifically. That branch's Kepala Cabang
     // gets it via a branch-based check in getCurrentSession(), not this role
     // grant, so other branches' heads don't see it.
+    //
+    // siteplan.view stays granted at the role level for the same reason as
+    // kpi_task/content_planner/construction_finance above -- see
+    // SITEPLAN_MAKASSAR_ONLY_PERMISSIONS -- and is stripped back out in
+    // getCurrentSession() for any Kepala Cabang whose branch isn't Makassar.
     PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.MANAGER]: [
@@ -441,7 +458,6 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.ANNOUNCEMENT_VIEW,
     PERMISSIONS.EMPLOYEE_VIEW_BRANCH,
     PERMISSIONS.HR_EXPENSE_CREATE,
-    PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.STAFF]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -460,6 +476,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_FOLLOW_UP_CREATE,
     PERMISSIONS.SALES_TARGET_VIEW_OWN,
     PERMISSIONS.HR_EXPENSE_CREATE,
+    // siteplan.view stays granted at the role level -- every branch shares
+    // the "Sales" role. getCurrentSession() strips it back out for any Sales
+    // employee whose branch isn't Makassar (SITEPLAN_MAKASSAR_ONLY_PERMISSIONS).
     PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.FINANCE]: [
@@ -470,7 +489,6 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.PROSPECT_VIEW_ALL,
     PERMISSIONS.PROSPECT_FINANCE_VERIFY,
     PERMISSIONS.CRM_ANALYTICS_VIEW_ALL,
-    PERMISSIONS.SITEPLAN_VIEW,
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.HR_EXPENSE_CREATE,
