@@ -21,6 +21,7 @@ import {
 } from "@/features/dashboard/components/sections/executive-dashboard-sections";
 import { MarkomDashboardSection } from "@/features/dashboard/components/sections/markom-dashboard-section";
 import { SalesDashboardSection } from "@/features/dashboard/components/sections/sales-dashboard-section";
+import { SiteplanFeeCard } from "@/features/siteplan/components/unit-fee-card";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-status-card";
 import { MetaHealthStatusCard } from "@/features/monitoring/components/meta-health-status-card";
@@ -108,6 +109,8 @@ export default async function DashboardPage() {
       {constructionTarget && <ConstructionTargetCard target={constructionTarget} />}
 
       <LoonarsFeeCard />
+
+      <SiteplanFeeCard />
 
       {isSuperAdmin && (
         <div className="space-y-2">

@@ -126,6 +126,8 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.LOONARS_SALES_VIEW,
         external: true,
       },
+      { label: "Siteplan", href: "/siteplan", icon: MapPinned, permission: PERMISSIONS.SITEPLAN_VIEW },
+      { label: "Kelola Siteplan", href: "/siteplan/admin", icon: MapPinned, permission: PERMISSIONS.SITEPLAN_MANAGE },
     ],
   },
   {
