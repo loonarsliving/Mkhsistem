@@ -28,6 +28,11 @@ const PUBLIC_PATHS = [
   // to /login.
   "/privacy-policy",
   "/terms-of-service",
+  // Read-only siteplan share link for external agencies -- no login, no
+  // click/tap interaction, service-role-fetched (see app/siteplan-preview/
+  // page.tsx). Deliberately public so it can be pasted straight into a
+  // browser without a session.
+  "/siteplan-preview",
   "/api/health",
   "/api/push/send",
   "/api/ai/whatsapp-relay",
