@@ -24,7 +24,7 @@ import {
 export const metadata: Metadata = { title: "Keuangan Proyek" };
 
 function SummaryCard({ project }: { project: ConstructionProject }) {
-  const sisaDana = project.danaMasuk - project.totalGajiTukang;
+  const sisaDana = project.danaMasuk - project.totalGajiTukang - project.totalMaterialTunai;
   return (
     <Card>
       <CardHeader>
@@ -161,7 +161,9 @@ export default async function ConstructionFinancePage() {
                 <TableBody>
                   {expenses.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell>{item.expenseType === "gaji_tukang" ? "Gaji Tukang" : "Material"}</TableCell>
+                      <TableCell>
+                        {item.expenseType === "gaji_tukang" ? "Gaji Tukang" : item.expenseType === "material_tunai" ? "Material (Tunai)" : "Material (Utang)"}
+                      </TableCell>
                       <TableCell>{item.partyName}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(item.amount)}</TableCell>
                       <TableCell className="whitespace-nowrap">{item.expenseDate}</TableCell>

@@ -51,6 +51,8 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
 
   const expenseType = watch("expenseType");
   const isGajiTukang = expenseType === "gaji_tukang";
+  const isMaterialTunai = expenseType === "material_tunai";
+  const isMaterialUtang = expenseType === "pembelian_material";
 
   async function onSubmit(values: SubmitConstructionExpenseInput) {
     const result = await submitConstructionExpenseAction(values);
@@ -58,7 +60,13 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
       toast.error(result.error ?? "Gagal menyimpan input");
       return;
     }
-    toast.success(isGajiTukang ? "Gaji tukang tercatat" : "Pembelian material (utang) tercatat, Super Admin diberi notifikasi");
+    toast.success(
+      isGajiTukang
+        ? "Gaji tukang tercatat"
+        : isMaterialTunai
+          ? "Pembelian material (tunai) tercatat, Super Admin diberi notifikasi"
+          : "Pembelian material (utang) tercatat, Super Admin diberi notifikasi",
+    );
     reset({ projectId, expenseType, partyName: "", amount: undefined, description: "", expenseDate: today() });
   }
 
@@ -70,13 +78,13 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
           Input Keuangan Proyek
         </CardTitle>
         <CardDescription>
-          Catat gaji tukang (dibayar tunai dari dana proyek) atau pembelian material (selalu dicatat sebagai utang ke toko bangunan).
-          Super Admin menerima notifikasi setiap kali Anda menginput.
+          Catat gaji tukang (tunai dari dana proyek), material yang tidak bisa diutang (tunai dari dana proyek), atau pembelian material yang bisa
+          diutang ke toko bangunan. Super Admin menerima notifikasi setiap kali Anda menginput.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Controller
               control={control}
               name="expenseType"
@@ -97,6 +105,18 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
                   <button
                     type="button"
                     disabled={isSubmitting}
+                    onClick={() => field.onChange("material_tunai")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                      field.value === "material_tunai" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    Material (Tidak Bisa Diutang)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
                     onClick={() => field.onChange("pembelian_material")}
                     className={cn(
                       "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
@@ -113,7 +133,7 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>{isGajiTukang ? "Nama Tukang" : "Nama Toko Bangunan"}</Label>
+              <Label>{isGajiTukang ? "Nama Tukang" : "Nama Toko/Supplier"}</Label>
               <Input
                 placeholder={isGajiTukang ? "contoh: Pak Amir" : "contoh: Toko Bangunan Sinar Jaya"}
                 disabled={isSubmitting}
@@ -138,7 +158,10 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
               )}
             />
             <FieldError message={errors.amount?.message} />
-            {!isGajiTukang && <p className="text-xs text-muted-foreground">Nominal ini otomatis dicatat sebagai utang ke toko, bukan mengurangi dana tunai proyek.</p>}
+            {isMaterialUtang && (
+              <p className="text-xs text-muted-foreground">Nominal ini otomatis dicatat sebagai utang ke toko, bukan mengurangi dana tunai proyek.</p>
+            )}
+            {isMaterialTunai && <p className="text-xs text-muted-foreground">Nominal ini langsung mengurangi dana tunai proyek, sama seperti gaji tukang.</p>}
           </div>
 
           <div className="space-y-1.5">

@@ -16,6 +16,7 @@ export interface ConstructionProject {
   status: "active" | "completed" | "cancelled";
   danaMasuk: number;
   totalGajiTukang: number;
+  totalMaterialTunai: number;
   totalUtangBelumLunas: number;
   totalUtangLunas: number;
 }
@@ -42,6 +43,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
 
   const danaMasuk = (transfers ?? []).reduce((sum, t) => sum + Number(t.amount), 0);
   const totalGajiTukang = (expenses ?? []).filter((e) => e.expense_type === "gaji_tukang").reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalMaterialTunai = (expenses ?? []).filter((e) => e.expense_type === "material_tunai").reduce((sum, e) => sum + Number(e.amount), 0);
   const utang = (expenses ?? []).filter((e) => e.payment_method === "utang");
   const totalUtangBelumLunas = utang.filter((e) => !e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
   const totalUtangLunas = utang.filter((e) => e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
@@ -55,6 +57,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
     status: project.status,
     danaMasuk,
     totalGajiTukang,
+    totalMaterialTunai,
     totalUtangBelumLunas,
     totalUtangLunas,
   };
@@ -78,7 +81,7 @@ export interface ConstructionExpense {
   id: string;
   projectId: string;
   branchName: string | null;
-  expenseType: "gaji_tukang" | "pembelian_material";
+  expenseType: "gaji_tukang" | "pembelian_material" | "material_tunai";
   partyName: string;
   description: string | null;
   amount: number;
@@ -92,7 +95,7 @@ export interface ConstructionExpense {
 interface RawExpenseRow {
   id: string;
   project_id: string;
-  expense_type: "gaji_tukang" | "pembelian_material";
+  expense_type: "gaji_tukang" | "pembelian_material" | "material_tunai";
   party_name: string;
   description: string | null;
   amount: number;

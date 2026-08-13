@@ -2599,7 +2599,7 @@ export interface Database {
           id: string;
           project_id: string;
           branch_id: string;
-          expense_type: "gaji_tukang" | "pembelian_material";
+          expense_type: "gaji_tukang" | "pembelian_material" | "material_tunai";
           party_name: string;
           description: string | null;
           amount: number;
@@ -2616,7 +2616,7 @@ export interface Database {
           id?: string;
           project_id: string;
           branch_id: string;
-          expense_type: "gaji_tukang" | "pembelian_material";
+          expense_type: "gaji_tukang" | "pembelian_material" | "material_tunai";
           party_name: string;
           description?: string | null;
           amount: number;

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const submitConstructionExpenseSchema = z.object({
   projectId: z.string().uuid("Proyek tidak valid"),
-  expenseType: z.enum(["gaji_tukang", "pembelian_material"]),
+  expenseType: z.enum(["gaji_tukang", "pembelian_material", "material_tunai"]),
   partyName: z.string().trim().min(2, "Wajib diisi").max(150),
   amount: z.number().positive("Nominal harus lebih dari 0"),
   description: z.string().trim().max(1000).optional().or(z.literal("")),
