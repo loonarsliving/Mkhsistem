@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HardHat, Loader2, ShoppingBag, Users } from "lucide-react";
+import { Coins, HardHat, Loader2, PackageOpen, ShoppingBag, Users } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -20,6 +20,27 @@ interface ConstructionExpenseFormProps {
   projectId: string;
 }
 
+type ExpenseType = SubmitConstructionExpenseInput["expenseType"];
+type Category = "gaji_tukang" | "material" | "lain_lain";
+
+/**
+ * Category (what) x payment method (how it's paid) -- gaji_tukang has no
+ * payment choice (always cash), material and lain_lain each have a cash and
+ * an utang variant. Kept as a lookup instead of branching everywhere the
+ * final expenseType is needed.
+ */
+const CATEGORY_TO_EXPENSE_TYPE: Record<Category, { cash: ExpenseType; utang: ExpenseType }> = {
+  gaji_tukang: { cash: "gaji_tukang", utang: "gaji_tukang" },
+  material: { cash: "material_tunai", utang: "pembelian_material" },
+  lain_lain: { cash: "lain_lain_tunai", utang: "pembelian_lain_lain" },
+};
+
+function expenseTypeToCategory(type: ExpenseType): Category {
+  if (type === "gaji_tukang") return "gaji_tukang";
+  if (type === "material_tunai" || type === "pembelian_material") return "material";
+  return "lain_lain";
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -28,6 +49,14 @@ function FieldError({ message }: { message: string | undefined }) {
   if (!message) return null;
   return <p className="text-sm text-destructive">{message}</p>;
 }
+
+const TOAST_MESSAGE: Record<ExpenseType, string> = {
+  gaji_tukang: "Gaji tukang tercatat",
+  material_tunai: "Pembelian material (tunai) tercatat, Super Admin diberi notifikasi",
+  pembelian_material: "Pembelian material (utang) tercatat, Super Admin diberi notifikasi",
+  lain_lain_tunai: "Pembelian lain-lain (tunai) tercatat, Super Admin diberi notifikasi",
+  pembelian_lain_lain: "Pembelian lain-lain (utang) tercatat, Super Admin diberi notifikasi",
+};
 
 export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormProps) {
   const {
@@ -50,9 +79,9 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
   });
 
   const expenseType = watch("expenseType");
-  const isGajiTukang = expenseType === "gaji_tukang";
-  const isMaterialTunai = expenseType === "material_tunai";
-  const isMaterialUtang = expenseType === "pembelian_material";
+  const category = expenseTypeToCategory(expenseType);
+  const isGajiTukang = category === "gaji_tukang";
+  const isCash = expenseType === "gaji_tukang" || expenseType === "material_tunai" || expenseType === "lain_lain_tunai";
 
   async function onSubmit(values: SubmitConstructionExpenseInput) {
     const result = await submitConstructionExpenseAction(values);
@@ -60,13 +89,7 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
       toast.error(result.error ?? "Gagal menyimpan input");
       return;
     }
-    toast.success(
-      isGajiTukang
-        ? "Gaji tukang tercatat"
-        : isMaterialTunai
-          ? "Pembelian material (tunai) tercatat, Super Admin diberi notifikasi"
-          : "Pembelian material (utang) tercatat, Super Admin diberi notifikasi",
-    );
+    toast.success(TOAST_MESSAGE[values.expenseType]);
     reset({ projectId, expenseType, partyName: "", amount: undefined, description: "", expenseDate: today() });
   }
 
@@ -78,62 +101,106 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
           Input Keuangan Proyek
         </CardTitle>
         <CardDescription>
-          Catat gaji tukang (tunai dari dana proyek), material yang tidak bisa diutang (tunai dari dana proyek), atau pembelian material yang bisa
-          diutang ke toko bangunan. Super Admin menerima notifikasi setiap kali Anda menginput.
+          Catat gaji tukang, pembelian material, atau pembelian lain-lain (mis. notaris) -- pilih tunai (langsung potong dana proyek) atau utang (masuk
+          daftar utang toko) untuk material/lain-lain. Super Admin menerima notifikasi setiap kali Anda menginput.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <Controller
-              control={control}
-              name="expenseType"
-              render={({ field }) => (
+          <Controller
+            control={control}
+            name="expenseType"
+            render={({ field }) => {
+              function setCategory(next: Category) {
+                field.onChange(CATEGORY_TO_EXPENSE_TYPE[next][isCash ? "cash" : "utang"]);
+              }
+              function setPayment(payment: "cash" | "utang") {
+                field.onChange(CATEGORY_TO_EXPENSE_TYPE[category][payment]);
+              }
+
+              return (
                 <>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => field.onChange("gaji_tukang")}
-                    className={cn(
-                      "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                      field.value === "gaji_tukang" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <Users className="h-4 w-4" />
-                    Gaji Tukang
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => field.onChange("material_tunai")}
-                    className={cn(
-                      "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                      field.value === "material_tunai" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    Material (Tidak Bisa Diutang)
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => field.onChange("pembelian_material")}
-                    className={cn(
-                      "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                      field.value === "pembelian_material" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    Pembelian Material (Utang Toko)
-                  </button>
+                  <div className="space-y-1.5">
+                    <Label>Jenis Pengeluaran</Label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setCategory("gaji_tukang")}
+                        className={cn(
+                          "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                          category === "gaji_tukang" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        <Users className="h-4 w-4" />
+                        Gaji Tukang
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setCategory("material")}
+                        className={cn(
+                          "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                          category === "material" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        <ShoppingBag className="h-4 w-4" />
+                        Material
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setCategory("lain_lain")}
+                        className={cn(
+                          "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                          category === "lain_lain" ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        <PackageOpen className="h-4 w-4" />
+                        Lain-lain
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isGajiTukang && (
+                    <div className="space-y-1.5">
+                      <Label>Pembayaran</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => setPayment("cash")}
+                          className={cn(
+                            "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                            isCash ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                          )}
+                        >
+                          <Coins className="h-4 w-4" />
+                          Tunai
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => setPayment("utang")}
+                          className={cn(
+                            "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                            !isCash ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground hover:bg-accent",
+                          )}
+                        >
+                          <ShoppingBag className="h-4 w-4" />
+                          Utang Toko
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
-              )}
-            />
-          </div>
+              );
+            }}
+          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>{isGajiTukang ? "Nama Tukang" : "Nama Toko/Supplier"}</Label>
+              <Label>{isGajiTukang ? "Nama Tukang" : "Nama Toko/Pihak"}</Label>
               <Input
                 placeholder={isGajiTukang ? "contoh: Pak Amir" : "contoh: Toko Bangunan Sinar Jaya"}
                 disabled={isSubmitting}
@@ -158,10 +225,12 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
               )}
             />
             <FieldError message={errors.amount?.message} />
-            {isMaterialUtang && (
-              <p className="text-xs text-muted-foreground">Nominal ini otomatis dicatat sebagai utang ke toko, bukan mengurangi dana tunai proyek.</p>
-            )}
-            {isMaterialTunai && <p className="text-xs text-muted-foreground">Nominal ini langsung mengurangi dana tunai proyek, sama seperti gaji tukang.</p>}
+            {!isGajiTukang &&
+              (isCash ? (
+                <p className="text-xs text-muted-foreground">Nominal ini langsung mengurangi dana tunai proyek, sama seperti gaji tukang.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nominal ini otomatis dicatat sebagai utang ke toko, bukan mengurangi dana tunai proyek.</p>
+              ))}
           </div>
 
           <div className="space-y-1.5">

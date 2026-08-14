@@ -15,8 +15,7 @@ export interface ConstructionProject {
   totalBudget: number;
   status: "active" | "completed" | "cancelled";
   danaMasuk: number;
-  totalGajiTukang: number;
-  totalMaterialTunai: number;
+  totalCashOut: number;
   totalUtangBelumLunas: number;
   totalUtangLunas: number;
 }
@@ -42,8 +41,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
   if (expensesError) throw expensesError;
 
   const danaMasuk = (transfers ?? []).reduce((sum, t) => sum + Number(t.amount), 0);
-  const totalGajiTukang = (expenses ?? []).filter((e) => e.expense_type === "gaji_tukang").reduce((sum, e) => sum + Number(e.amount), 0);
-  const totalMaterialTunai = (expenses ?? []).filter((e) => e.expense_type === "material_tunai").reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalCashOut = (expenses ?? []).filter((e) => e.payment_method === "cash").reduce((sum, e) => sum + Number(e.amount), 0);
   const utang = (expenses ?? []).filter((e) => e.payment_method === "utang");
   const totalUtangBelumLunas = utang.filter((e) => !e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
   const totalUtangLunas = utang.filter((e) => e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
@@ -56,8 +54,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
     totalBudget: Number(project.total_budget),
     status: project.status,
     danaMasuk,
-    totalGajiTukang,
-    totalMaterialTunai,
+    totalCashOut,
     totalUtangBelumLunas,
     totalUtangLunas,
   };
@@ -81,7 +78,7 @@ export interface ConstructionExpense {
   id: string;
   projectId: string;
   branchName: string | null;
-  expenseType: "gaji_tukang" | "pembelian_material" | "material_tunai";
+  expenseType: "gaji_tukang" | "pembelian_material" | "material_tunai" | "pembelian_lain_lain" | "lain_lain_tunai";
   partyName: string;
   description: string | null;
   amount: number;
@@ -95,7 +92,7 @@ export interface ConstructionExpense {
 interface RawExpenseRow {
   id: string;
   project_id: string;
-  expense_type: "gaji_tukang" | "pembelian_material" | "material_tunai";
+  expense_type: "gaji_tukang" | "pembelian_material" | "material_tunai" | "pembelian_lain_lain" | "lain_lain_tunai";
   party_name: string;
   description: string | null;
   amount: number;

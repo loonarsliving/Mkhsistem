@@ -16,7 +16,7 @@ interface ConstructionSaldoCardProps {
  * front and center on Home, not only inside the Keuangan Proyek page.
  */
 export function ConstructionSaldoCard({ project }: ConstructionSaldoCardProps) {
-  const sisaDana = project.danaMasuk - project.totalGajiTukang - project.totalMaterialTunai;
+  const sisaDana = project.danaMasuk - project.totalCashOut;
 
   return (
     <Card>
