@@ -2787,6 +2787,137 @@ export interface Database {
           },
         ];
       };
+      cm_boq_templates: {
+        Row: { id: string; name: string; unit_type: string | null; version: string; description: string | null; is_active: boolean; created_by: string | null; created_at: string };
+        Insert: {
+          id?: string;
+          name: string;
+          unit_type?: string | null;
+          version?: string;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_boq_templates"]["Insert"]>;
+        Relationships: [];
+      };
+      cm_boq_template_items: {
+        Row: {
+          id: string;
+          template_id: string;
+          category: "material" | "labor" | "equipment" | "other";
+          material_id: string | null;
+          description: string;
+          quantity: number;
+          unit: string;
+          unit_price: number;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          category: "material" | "labor" | "equipment" | "other";
+          material_id?: string | null;
+          description: string;
+          quantity: number;
+          unit: string;
+          unit_price: number;
+          sort_order?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_boq_template_items"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_boq_template_items_template_id_fkey";
+            columns: ["template_id"];
+            referencedRelation: "cm_boq_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_project_boq: {
+        Row: {
+          id: string;
+          project_id: string;
+          unit_id: string | null;
+          project_wbs_id: string | null;
+          category: "material" | "labor" | "equipment" | "other";
+          material_id: string | null;
+          description: string;
+          quantity: number;
+          unit: string;
+          unit_price: number;
+          budget: number;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          unit_id?: string | null;
+          project_wbs_id?: string | null;
+          category: "material" | "labor" | "equipment" | "other";
+          material_id?: string | null;
+          description: string;
+          quantity: number;
+          unit: string;
+          unit_price: number;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_project_boq"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_project_boq_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_purchase_requests: {
+        Row: {
+          id: string;
+          project_id: string;
+          material_id: string;
+          requested_quantity: number;
+          suggested_quantity: number | null;
+          reason: string | null;
+          status: "pending" | "approved" | "rejected" | "fulfilled";
+          requested_by: string | null;
+          requested_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          reject_reason: string | null;
+          fulfilled_expense_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          material_id: string;
+          requested_quantity: number;
+          suggested_quantity?: number | null;
+          reason?: string | null;
+          status?: "pending" | "approved" | "rejected" | "fulfilled";
+          requested_by?: string | null;
+          requested_at?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          reject_reason?: string | null;
+          fulfilled_expense_id?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_purchase_requests"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_purchase_requests_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       cm_materials: {
         Row: {
           id: string;
@@ -4904,6 +5035,7 @@ export interface Database {
           p_photo_url?: string | null;
           p_material_id?: string | null;
           p_quantity?: number | null;
+          p_fulfills_pr_id?: string | null;
         };
         Returns: string;
       };
@@ -4915,6 +5047,29 @@ export interface Database {
       };
       cm_decide_wbs_progress: { Args: { p_log_id: string; p_approve: boolean; p_reject_reason?: string | null }; Returns: undefined };
       cm_project_overall_progress: { Args: { p_project_id: string }; Returns: number };
+      cm_seed_project_boq: { Args: { p_project_id: string; p_template_id: string; p_unit_id?: string | null }; Returns: undefined };
+      cm_adjust_boq_line: { Args: { p_line_id: string; p_quantity: number; p_unit_price: number }; Returns: undefined };
+      cm_boq_summary: { Args: { p_project_id: string }; Returns: { category: string; total_budget: number }[] };
+      cm_material_requirement: {
+        Args: { p_project_id: string };
+        Returns: {
+          material_id: string;
+          material_name: string;
+          unit_satuan: string;
+          boq_quantity: number;
+          wbs_name: string | null;
+          wbs_progress_pct: number;
+          required_quantity: number;
+          stock_quantity: number;
+          coverage_pct: number | null;
+          status: "belum_perlu" | "shortage" | "normal" | "overstock_risk" | "excessive";
+        }[];
+      };
+      cm_submit_purchase_request: {
+        Args: { p_project_id: string; p_material_id: string; p_requested_quantity: number; p_reason?: string | null };
+        Returns: string;
+      };
+      cm_decide_purchase_request: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
       construction_record_fund_transfer: {
         Args: {
           p_project_id: string;
