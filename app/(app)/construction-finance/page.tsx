@@ -14,9 +14,11 @@ import { CmMaterialRequirementCard } from "@/features/construction-finance/compo
 import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
 import { ConstructionSettleUtangButton } from "@/features/construction-finance/components/construction-settle-utang-button";
+import { CreateConstructionProjectDialog } from "@/features/construction-finance/components/create-construction-project-dialog";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { listBranches } from "@/repositories/branch.repository";
 import { getProjectCostControl, type ProjectCostControl } from "@/repositories/cm-cost-control.repository";
 import { listActiveContractors, listPendingLaborPayments, listProjectLaborContracts, listProjectWbsOptions } from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
@@ -110,6 +112,7 @@ export default async function ConstructionFinancePage() {
     pendingLaborPayments,
     costControl,
     allProjectsCostControl,
+    branches,
   ] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
@@ -128,17 +131,34 @@ export default async function ConstructionFinancePage() {
     canManage && projects.length > 1
       ? Promise.all(projects.map(async (p) => ({ project: p, cost: await getProjectCostControl(supabase, p.id) })))
       : Promise.resolve([]),
+    canManage ? listBranches(supabase, false) : Promise.resolve([]),
   ]);
+
+  const branchesWithoutProject = branches.filter((b) => !projects.some((p) => p.branchId === b.id)).map((b) => ({ id: b.id, name: b.name }));
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Keuangan Proyek"
-        description="Input gaji tukang dan pembelian material (utang toko bangunan) untuk proyek pembangunan cabang."
+        description="Input gaji tukang, pembelian material, dan kelola pembangunan untuk proyek cabang mana pun -- tidak dibatasi satu cabang."
       />
 
+      {canManage && branchesWithoutProject.length > 0 && (
+        <div className="flex justify-end">
+          <CreateConstructionProjectDialog branches={branchesWithoutProject} />
+        </div>
+      )}
+
       {projects.length === 0 && (
-        <EmptyState icon={Wallet} title="Belum ada proyek aktif" description="Belum ada dana proyek pembangunan yang dialokasikan untuk cabang Anda." />
+        <EmptyState
+          icon={Wallet}
+          title="Belum ada proyek aktif"
+          description={
+            canManage
+              ? "Belum ada proyek pembangunan. Buat proyek baru untuk cabang yang membutuhkan."
+              : "Belum ada dana proyek pembangunan yang dialokasikan untuk cabang Anda."
+          }
+        />
       )}
 
       {projects.map((project) => (

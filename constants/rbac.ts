@@ -234,17 +234,6 @@ export const MARKOM_KEPALA_CABANG_PERMISSIONS = [
 ] as const satisfies readonly PermissionKey[];
 
 /**
- * Same pattern as MARKOM_KEPALA_CABANG_PERMISSIONS above, but for
- * construction project finance -- granted at the role level (every branch
- * shares "Kepala Cabang"), stripped back out in getCurrentSession() for any
- * Kepala Cabang whose branch isn't Kendari (KENDARI_BRANCH_ID).
- */
-export const CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS = [
-  "construction_finance.view_own",
-  "construction_finance.submit",
-] as const satisfies readonly PermissionKey[];
-
-/**
  * Owner's explicit call: Kendari's Kepala Cabang (currently Fasly) should
  * NOT get the normal full Kepala Cabang facility set -- only the dashboard
  * and the construction project finance input/saldo page. getCurrentSession()
@@ -428,15 +417,15 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.LOONARS_BEAUTY_VIEW,
     PERMISSIONS.LOONARS_BEAUTY_MANAGE,
     PERMISSIONS.SALARY_INPUT_SUBMIT,
-    // construction_finance.* stays granted at the role level for the same
-    // reason as kpi_task/content_planner above -- see
-    // CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS -- and is stripped back
-    // out in getCurrentSession() for any branch that isn't Kendari.
+    // construction_finance.* used to be stripped back out in
+    // getCurrentSession() for any branch that wasn't Kendari -- the owner
+    // explicitly asked for the Construction Management module to work for
+    // every branch, so as of the multi-branch rollout it's granted here with
+    // no branch restriction, same as approval_request.view_own below. Each
+    // branch's Kepala Cabang is scoped to their own branch's project(s) by
+    // the RPCs/RLS, not by this permission grant.
     PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
     PERMISSIONS.CONSTRUCTION_FINANCE_SUBMIT,
-    // Unlike construction_finance.*, approval_request.view_own applies to
-    // every branch's Kepala Cabang -- the WA submission flow (0201) isn't
-    // Kendari-specific.
     PERMISSIONS.APPROVAL_REQUEST_VIEW_OWN,
     // kos_occupancy.view is deliberately NOT granted here -- every branch
     // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the

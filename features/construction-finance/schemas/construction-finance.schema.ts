@@ -22,6 +22,13 @@ export const settleConstructionExpenseSchema = z.object({
 });
 export type SettleConstructionExpenseInput = z.infer<typeof settleConstructionExpenseSchema>;
 
+export const createConstructionProjectSchema = z.object({
+  branchId: z.string().uuid("Pilih cabang"),
+  name: z.string().trim().min(3, "Nama proyek wajib diisi").max(200),
+  totalBudget: z.number().positive("Anggaran harus lebih dari 0"),
+});
+export type CreateConstructionProjectInput = z.infer<typeof createConstructionProjectSchema>;
+
 export const recordConstructionFundTransferSchema = z.object({
   projectId: z.string().uuid(),
   amount: z.number().positive("Nominal harus lebih dari 0"),

@@ -7,9 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
+  createConstructionProjectSchema,
   recordConstructionFundTransferSchema,
   settleConstructionExpenseSchema,
   submitConstructionExpenseSchema,
+  type CreateConstructionProjectInput,
   type RecordConstructionFundTransferInput,
   type SettleConstructionExpenseInput,
   type SubmitConstructionExpenseInput,
@@ -36,6 +38,23 @@ export async function submitConstructionExpenseAction(input: SubmitConstructionE
     p_expense_date: parsed.data.expenseDate,
     p_material_id: parsed.data.materialId || null,
     p_quantity: parsed.data.quantity ?? null,
+  });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/construction-finance");
+  return actionSuccess({ id: data as string });
+}
+
+export async function createConstructionProjectAction(input: CreateConstructionProjectInput): Promise<ActionResult<{ id: string }>> {
+  await requireSession();
+  const parsed = createConstructionProjectSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("construction_create_project", {
+    p_branch_id: parsed.data.branchId,
+    p_name: parsed.data.name,
+    p_total_budget: parsed.data.totalBudget,
   });
   if (error) return actionError(error.message);
 

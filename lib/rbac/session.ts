@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { JOGJA_BRANCH_ID, KENDARI_BRANCH_ID, MAKASSAR_BRANCH_ID, MANAGEMENT_PROPERTY_BRANCH_ID } from "@/constants/app";
 import {
-  CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS,
   KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS,
   MARKOM_KEPALA_CABANG_PERMISSIONS,
   PERMISSIONS,
@@ -71,12 +70,12 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     // Owner's explicit call: Kendari's Kepala Cabang doesn't get the normal
     // full facility set -- reduced down to just the dashboard and the
     // construction project finance input/saldo page (see
-    // KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS).
+    // KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS). This is Kendari-specific
+    // and unrelated to which branches can USE Construction Management --
+    // construction_finance.* is granted at the role level for every branch's
+    // Kepala Cabang (see ROLE_PERMISSIONS_SEED), no strip needed for other
+    // branches anymore.
     permissions = permissions.filter((key) => (KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS as readonly string[]).includes(key));
-  } else if (employee.role_key === ROLE_KEYS.KEPALA_CABANG) {
-    // Construction project finance (dana proyek pembangunan) is currently
-    // Kendari-only -- same reasoning as the Markom strip above.
-    permissions = permissions.filter((key) => !(CONSTRUCTION_FINANCE_KEPALA_CABANG_PERMISSIONS as readonly string[]).includes(key));
   }
 
   // Native Siteplan viewer (0202/0203) is currently a Makassar-only project

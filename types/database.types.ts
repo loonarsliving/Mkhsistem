@@ -5290,6 +5290,7 @@ export interface Database {
         };
         Returns: string;
       };
+      construction_create_project: { Args: { p_branch_id: string; p_name: string; p_total_budget: number }; Returns: string };
       create_hr_expense: {
         Args: {
           p_expense_type: string;
