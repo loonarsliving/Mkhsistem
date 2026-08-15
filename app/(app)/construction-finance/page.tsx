@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { History, Wallet } from "lucide-react";
+import { History, PackageSearch, Wallet } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,6 +13,7 @@ import { ConstructionSettleUtangButton } from "@/features/construction-finance/c
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
 import {
   getActiveConstructionProject,
   listActiveConstructionProjects,
@@ -85,9 +86,11 @@ export default async function ConstructionFinancePage() {
 
   const ownProject = projects.find((p) => p.branchId === session.employee.branch_id) ?? projects[0] ?? null;
 
-  const [expenses, unsettledUtang] = await Promise.all([
+  const [expenses, unsettledUtang, materials, materialStock] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
+    canSubmit ? listActiveMaterials(supabase) : Promise.resolve([]),
+    ownProject ? listMaterialStock(supabase, ownProject.id) : Promise.resolve([]),
   ]);
 
   return (
@@ -105,7 +108,46 @@ export default async function ConstructionFinancePage() {
         <SummaryCard key={project.id} project={project} />
       ))}
 
-      {canSubmit && ownProject && <ConstructionExpenseForm projectId={ownProject.id} />}
+      {canSubmit && ownProject && <ConstructionExpenseForm projectId={ownProject.id} materials={materials} />}
+
+      {ownProject && materialStock.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PackageSearch className="h-4 w-4" />
+              Stok Material
+            </CardTitle>
+            <CardDescription>Otomatis bertambah setiap kali pembelian material diinput dengan material + jumlah dipilih.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead className="text-right">Stok</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {materialStock.map((row) => (
+                    <TableRow key={row.materialId}>
+                      <TableCell>{row.materialName}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.quantity} {row.unitSatuan}
+                        {row.quantity < row.minStock && (
+                          <Badge variant="destructive" className="ml-2">
+                            Rendah
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {canManage && unsettledUtang.length > 0 && (
         <Card>

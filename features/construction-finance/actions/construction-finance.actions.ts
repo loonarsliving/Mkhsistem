@@ -34,6 +34,8 @@ export async function submitConstructionExpenseAction(input: SubmitConstructionE
     p_amount: parsed.data.amount,
     p_description: parsed.data.description || null,
     p_expense_date: parsed.data.expenseDate,
+    p_material_id: parsed.data.materialId || null,
+    p_quantity: parsed.data.quantity ?? null,
   });
   if (error) return actionError(error.message);
 

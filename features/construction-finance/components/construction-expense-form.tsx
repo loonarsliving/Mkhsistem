@@ -10,14 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import type { MaterialCatalogItem } from "@/repositories/cm-material.repository";
 
 import { submitConstructionExpenseAction } from "../actions/construction-finance.actions";
 import { submitConstructionExpenseSchema, type SubmitConstructionExpenseInput } from "../schemas/construction-finance.schema";
 
 interface ConstructionExpenseFormProps {
   projectId: string;
+  materials: MaterialCatalogItem[];
 }
 
 type ExpenseType = SubmitConstructionExpenseInput["expenseType"];
@@ -58,13 +61,14 @@ const TOAST_MESSAGE: Record<ExpenseType, string> = {
   pembelian_lain_lain: "Pembelian lain-lain (utang) tercatat, Super Admin diberi notifikasi",
 };
 
-export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormProps) {
+export function ConstructionExpenseForm({ projectId, materials }: ConstructionExpenseFormProps) {
   const {
     register,
     handleSubmit,
     control,
     watch,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SubmitConstructionExpenseInput>({
     resolver: zodResolver(submitConstructionExpenseSchema),
@@ -75,13 +79,18 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
       amount: undefined,
       description: "",
       expenseDate: today(),
+      materialId: "",
+      quantity: undefined,
     },
   });
 
   const expenseType = watch("expenseType");
+  const materialId = watch("materialId");
   const category = expenseTypeToCategory(expenseType);
   const isGajiTukang = category === "gaji_tukang";
+  const isMaterial = category === "material";
   const isCash = expenseType === "gaji_tukang" || expenseType === "material_tunai" || expenseType === "lain_lain_tunai";
+  const selectedMaterial = materials.find((m) => m.id === materialId);
 
   async function onSubmit(values: SubmitConstructionExpenseInput) {
     const result = await submitConstructionExpenseAction(values);
@@ -89,8 +98,12 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
       toast.error(result.error ?? "Gagal menyimpan input");
       return;
     }
-    toast.success(TOAST_MESSAGE[values.expenseType]);
-    reset({ projectId, expenseType, partyName: "", amount: undefined, description: "", expenseDate: today() });
+    toast.success(
+      values.materialId && values.quantity
+        ? `${TOAST_MESSAGE[values.expenseType]} -- stok ${selectedMaterial?.name ?? "material"} bertambah ${values.quantity} ${selectedMaterial?.unitSatuan ?? ""}`
+        : TOAST_MESSAGE[values.expenseType],
+    );
+    reset({ projectId, expenseType, partyName: "", amount: undefined, description: "", expenseDate: today(), materialId: "", quantity: undefined });
   }
 
   return (
@@ -113,6 +126,10 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
             render={({ field }) => {
               function setCategory(next: Category) {
                 field.onChange(CATEGORY_TO_EXPENSE_TYPE[next][isCash ? "cash" : "utang"]);
+                if (next !== "material") {
+                  setValue("materialId", "");
+                  setValue("quantity", undefined);
+                }
               }
               function setPayment(payment: "cash" | "utang") {
                 field.onChange(CATEGORY_TO_EXPENSE_TYPE[category][payment]);
@@ -232,6 +249,57 @@ export function ConstructionExpenseForm({ projectId }: ConstructionExpenseFormPr
                 <p className="text-xs text-muted-foreground">Nominal ini otomatis dicatat sebagai utang ke toko, bukan mengurangi dana tunai proyek.</p>
               ))}
           </div>
+
+          {isMaterial && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Material (opsional)</Label>
+                <Controller
+                  control={control}
+                  name="materialId"
+                  render={({ field }) => (
+                    <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih material -- supaya stok otomatis tercatat" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {materials.map((material) => (
+                          <SelectItem key={material.id} value={material.id}>
+                            {material.name} ({material.unitSatuan})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldError message={errors.materialId?.message} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Jumlah{selectedMaterial ? ` (${selectedMaterial.unitSatuan})` : ""}</Label>
+                <Controller
+                  control={control}
+                  name="quantity"
+                  render={({ field }) => (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={selectedMaterial ? `contoh: 20 ${selectedMaterial.unitSatuan}` : "pilih material dulu"}
+                      disabled={isSubmitting || !materialId}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                    />
+                  )}
+                />
+                <FieldError message={errors.quantity?.message} />
+              </div>
+              {materialId && (
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  Stok {selectedMaterial?.name} di proyek ini akan otomatis bertambah begitu disimpan.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Catatan (opsional)</Label>

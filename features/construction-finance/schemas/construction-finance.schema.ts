@@ -1,13 +1,20 @@
 import { z } from "zod";
 
-export const submitConstructionExpenseSchema = z.object({
-  projectId: z.string().uuid("Proyek tidak valid"),
-  expenseType: z.enum(["gaji_tukang", "pembelian_material", "material_tunai", "pembelian_lain_lain", "lain_lain_tunai"]),
-  partyName: z.string().trim().min(2, "Wajib diisi").max(150),
-  amount: z.number().positive("Nominal harus lebih dari 0"),
-  description: z.string().trim().max(1000).optional().or(z.literal("")),
-  expenseDate: z.string().min(1, "Tanggal wajib diisi"),
-});
+export const submitConstructionExpenseSchema = z
+  .object({
+    projectId: z.string().uuid("Proyek tidak valid"),
+    expenseType: z.enum(["gaji_tukang", "pembelian_material", "material_tunai", "pembelian_lain_lain", "lain_lain_tunai"]),
+    partyName: z.string().trim().min(2, "Wajib diisi").max(150),
+    amount: z.number().positive("Nominal harus lebih dari 0"),
+    description: z.string().trim().max(1000).optional().or(z.literal("")),
+    expenseDate: z.string().min(1, "Tanggal wajib diisi"),
+    materialId: z.string().uuid().optional().or(z.literal("")),
+    quantity: z.number().positive("Jumlah harus lebih dari 0").optional(),
+  })
+  .refine((data) => !data.materialId || (data.quantity !== undefined && data.quantity > 0), {
+    message: "Jumlah wajib diisi kalau memilih material",
+    path: ["quantity"],
+  });
 export type SubmitConstructionExpenseInput = z.infer<typeof submitConstructionExpenseSchema>;
 
 export const settleConstructionExpenseSchema = z.object({

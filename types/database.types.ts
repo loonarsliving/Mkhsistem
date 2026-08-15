@@ -2611,6 +2611,8 @@ export interface Database {
           photo_url: string | null;
           created_by: string | null;
           created_at: string;
+          material_id: string | null;
+          quantity: number | null;
         };
         Insert: {
           id?: string;
@@ -2628,6 +2630,8 @@ export interface Database {
           photo_url?: string | null;
           created_by?: string | null;
           created_at?: string;
+          material_id?: string | null;
+          quantity?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["construction_expenses"]["Insert"]>;
         Relationships: [
@@ -2641,6 +2645,116 @@ export interface Database {
             foreignKeyName: "construction_expenses_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "construction_expenses_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_materials: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          category: string;
+          unit_satuan: string;
+          standard_price: number | null;
+          min_stock: number;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          name: string;
+          category: string;
+          unit_satuan: string;
+          standard_price?: number | null;
+          min_stock?: number;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_materials"]["Insert"]>;
+        Relationships: [];
+      };
+      cm_material_stock: {
+        Row: {
+          id: string;
+          project_id: string;
+          material_id: string;
+          quantity: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          material_id: string;
+          quantity?: number;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_material_stock"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_material_stock_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_material_stock_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_stock_movements: {
+        Row: {
+          id: string;
+          project_id: string;
+          material_id: string;
+          direction: "in" | "out";
+          quantity: number;
+          source_type: "purchase" | "consumption" | "adjustment" | "waste";
+          source_expense_id: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          material_id: string;
+          direction: "in" | "out";
+          quantity: number;
+          source_type: "purchase" | "consumption" | "adjustment" | "waste";
+          source_expense_id?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_stock_movements"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_stock_movements_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_stock_movements_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_stock_movements_source_expense_id_fkey";
+            columns: ["source_expense_id"];
+            referencedRelation: "construction_expenses";
             referencedColumns: ["id"];
           },
         ];
@@ -4656,6 +4770,8 @@ export interface Database {
           p_description?: string | null;
           p_expense_date?: string;
           p_photo_url?: string | null;
+          p_material_id?: string | null;
+          p_quantity?: number | null;
         };
         Returns: string;
       };
