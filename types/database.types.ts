@@ -2655,6 +2655,138 @@ export interface Database {
           },
         ];
       };
+      cm_units: {
+        Row: {
+          id: string;
+          project_id: string;
+          code: string;
+          unit_type: string | null;
+          construction_budget: number | null;
+          labor_budget: number | null;
+          material_budget: number | null;
+          other_budget: number | null;
+          target_completion: string | null;
+          status: "planning" | "in_progress" | "completed" | "on_hold";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          code: string;
+          unit_type?: string | null;
+          construction_budget?: number | null;
+          labor_budget?: number | null;
+          material_budget?: number | null;
+          other_budget?: number | null;
+          target_completion?: string | null;
+          status?: "planning" | "in_progress" | "completed" | "on_hold";
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_units"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "cm_units_project_id_fkey"; columns: ["project_id"]; referencedRelation: "construction_projects"; referencedColumns: ["id"] },
+        ];
+      };
+      cm_wbs_templates: {
+        Row: { id: string; name: string; is_default: boolean; created_at: string };
+        Insert: { id?: string; name: string; is_default?: boolean; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["cm_wbs_templates"]["Insert"]>;
+        Relationships: [];
+      };
+      cm_wbs_template_items: {
+        Row: { id: string; template_id: string; code: string; name: string; weight: number; sort_order: number };
+        Insert: { id?: string; template_id: string; code: string; name: string; weight: number; sort_order?: number };
+        Update: Partial<Database["public"]["Tables"]["cm_wbs_template_items"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_wbs_template_items_template_id_fkey";
+            columns: ["template_id"];
+            referencedRelation: "cm_wbs_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_project_wbs: {
+        Row: {
+          id: string;
+          project_id: string;
+          unit_id: string | null;
+          code: string;
+          name: string;
+          weight: number;
+          budget: number | null;
+          progress_pct: number;
+          status: "not_started" | "in_progress" | "completed";
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          unit_id?: string | null;
+          code: string;
+          name: string;
+          weight: number;
+          budget?: number | null;
+          progress_pct?: number;
+          status?: "not_started" | "in_progress" | "completed";
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_project_wbs"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_project_wbs_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          { foreignKeyName: "cm_project_wbs_unit_id_fkey"; columns: ["unit_id"]; referencedRelation: "cm_units"; referencedColumns: ["id"] },
+        ];
+      };
+      cm_wbs_progress_log: {
+        Row: {
+          id: string;
+          project_wbs_id: string;
+          progress_pct: number;
+          photo_url: string | null;
+          note: string | null;
+          status: "submitted" | "approved" | "rejected";
+          submitted_by: string | null;
+          submitted_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          reject_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_wbs_id: string;
+          progress_pct: number;
+          photo_url?: string | null;
+          note?: string | null;
+          status?: "submitted" | "approved" | "rejected";
+          submitted_by?: string | null;
+          submitted_at?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          reject_reason?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_wbs_progress_log"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_wbs_progress_log_project_wbs_id_fkey";
+            columns: ["project_wbs_id"];
+            referencedRelation: "cm_project_wbs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       cm_materials: {
         Row: {
           id: string;
@@ -4776,6 +4908,13 @@ export interface Database {
         Returns: string;
       };
       construction_settle_expense: { Args: { p_id: string }; Returns: undefined };
+      cm_seed_project_wbs: { Args: { p_project_id: string; p_template_id: string; p_unit_id?: string | null }; Returns: undefined };
+      cm_submit_wbs_progress: {
+        Args: { p_project_wbs_id: string; p_progress_pct: number; p_photo_url?: string | null; p_note?: string | null };
+        Returns: string;
+      };
+      cm_decide_wbs_progress: { Args: { p_log_id: string; p_approve: boolean; p_reject_reason?: string | null }; Returns: undefined };
+      cm_project_overall_progress: { Args: { p_project_id: string }; Returns: number };
       construction_record_fund_transfer: {
         Args: {
           p_project_id: string;

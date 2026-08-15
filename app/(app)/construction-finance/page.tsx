@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/constants/rbac";
+import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
 import { ConstructionSettleUtangButton } from "@/features/construction-finance/components/construction-settle-utang-button";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
+import { getProjectOverallProgress, listPendingWbsProgressLogs, listProjectWbs } from "@/repositories/cm-wbs.repository";
 import {
   getActiveConstructionProject,
   listActiveConstructionProjects,
@@ -86,11 +88,14 @@ export default async function ConstructionFinancePage() {
 
   const ownProject = projects.find((p) => p.branchId === session.employee.branch_id) ?? projects[0] ?? null;
 
-  const [expenses, unsettledUtang, materials, materialStock] = await Promise.all([
+  const [expenses, unsettledUtang, materials, materialStock, wbsItems, overallProgress, pendingWbsLogs] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
     canSubmit ? listActiveMaterials(supabase) : Promise.resolve([]),
     ownProject ? listMaterialStock(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject ? listProjectWbs(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject ? getProjectOverallProgress(supabase, ownProject.id) : Promise.resolve(0),
+    canManage ? listPendingWbsProgressLogs(supabase) : Promise.resolve([]),
   ]);
 
   return (
@@ -107,6 +112,16 @@ export default async function ConstructionFinancePage() {
       {projects.map((project) => (
         <SummaryCard key={project.id} project={project} />
       ))}
+
+      {ownProject && wbsItems.length > 0 && (
+        <CmWbsProgressCard
+          overallProgress={overallProgress}
+          items={wbsItems}
+          pendingLogs={pendingWbsLogs}
+          canSubmit={canSubmit}
+          canApprove={canManage}
+        />
+      )}
 
       {canSubmit && ownProject && <ConstructionExpenseForm projectId={ownProject.id} materials={materials} />}
 

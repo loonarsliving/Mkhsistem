@@ -287,6 +287,7 @@ export const STORAGE_BUCKETS = {
   COMPANY_ASSETS: "company-assets",
   LEAVE_ATTACHMENTS: "leave-attachments",
   SITEPLAN_IMAGES: "siteplan-images",
+  PROJECT_PHOTOS: "project-photos",
 } as const;
 
 /** loonars_units.status -- see supabase/migrations/0202_siteplan_native_feature.sql. */
