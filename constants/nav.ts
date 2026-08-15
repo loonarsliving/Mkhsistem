@@ -222,7 +222,7 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: [PERMISSIONS.SALARY_INPUT_SUBMIT, PERMISSIONS.SALARY_INPUT_TRANSFER],
       },
       {
-        label: "Keuangan Proyek Kendari",
+        label: "Keuangan Proyek Pembangunan",
         href: "/construction-finance",
         icon: HardHat,
         permission: [PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN, PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE],
