@@ -3031,6 +3031,11 @@ export interface Database {
           approved_by: string | null;
           approved_at: string | null;
           reject_reason: string | null;
+          ai_reviewed_at: string | null;
+          ai_verdict: "sesuai" | "perlu_dicek" | "tidak_sesuai" | null;
+          ai_summary: string | null;
+          ai_concerns: string[];
+          ai_photo_count: number;
         };
         Insert: {
           id?: string;
@@ -3051,6 +3056,11 @@ export interface Database {
           approved_by?: string | null;
           approved_at?: string | null;
           reject_reason?: string | null;
+          ai_reviewed_at?: string | null;
+          ai_verdict?: "sesuai" | "perlu_dicek" | "tidak_sesuai" | null;
+          ai_summary?: string | null;
+          ai_concerns?: string[];
+          ai_photo_count?: number;
         };
         Update: Partial<Database["public"]["Tables"]["cm_labor_payments"]["Insert"]>;
         Relationships: [
@@ -5282,6 +5292,11 @@ export interface Database {
         }[];
       };
       cm_reject_labor_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
+      cm_labor_payment_ai_context: { Args: { p_payment_id: string }; Returns: Json };
+      cm_save_labor_payment_ai_review: {
+        Args: { p_payment_id: string; p_verdict: string; p_summary: string; p_concerns: string[]; p_photo_count: number };
+        Returns: undefined;
+      };
       construction_record_fund_transfer: {
         Args: {
           p_project_id: string;

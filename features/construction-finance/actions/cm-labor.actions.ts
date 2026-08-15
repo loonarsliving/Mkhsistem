@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { reviewLaborPayment, type PaymentAiReview, type PaymentReviewPhoto, type PaymentReviewWbsLine } from "@/lib/ai/domains/construction-payment-review";
 import { requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
@@ -13,6 +14,7 @@ import {
   createLaborContractSchema,
   decideLaborPaymentSchema,
   generateLaborPaymentSchema,
+  reviewLaborPaymentSchema,
   setLaborContractWeightsSchema,
   type AddLaborDeductionInput,
   type ApplyLaborAdvanceInput,
@@ -20,6 +22,7 @@ import {
   type CreateLaborContractInput,
   type DecideLaborPaymentInput,
   type GenerateLaborPaymentInput,
+  type ReviewLaborPaymentInput,
   type SetLaborContractWeightsInput,
 } from "../schemas/cm-labor.schema";
 
@@ -147,4 +150,74 @@ export async function decideLaborPaymentAction(input: DecideLaborPaymentInput): 
 
   revalidatePath("/construction-finance");
   return actionSuccess();
+}
+
+/**
+ * Gathers WBS-claim + already-assessed daily-photo evidence for this
+ * payment (cm_labor_payment_ai_context, 0219), asks the AI domain to
+ * synthesize a verdict, then persists it (cm_save_labor_payment_ai_review)
+ * so it survives a page refresh and shows up next to the payment for
+ * whoever approves it.
+ */
+export async function reviewLaborPaymentAction(input: ReviewLaborPaymentInput): Promise<ActionResult<PaymentAiReview & { photoCount: number }>> {
+  await requireSession();
+  const parsed = reviewLaborPaymentSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data: context, error: contextError } = await supabase.rpc("cm_labor_payment_ai_context", { p_payment_id: parsed.data.paymentId });
+  if (contextError) return actionError(contextError.message);
+
+  const ctx = context as {
+    contractor_name: string;
+    project_name: string;
+    period_start: string;
+    period_end: string;
+    gross_earned: number;
+    wbs_breakdown: { name: string; weight_pct: number; progress_pct: number; last_paid_progress_pct: number }[];
+    photos: { report_date: string; employee_name: string; caption: string | null; ai_stage: string | null; ai_progress_pct: number | null; ai_notes: string | null; ai_concerns: string | null }[];
+  };
+
+  const wbsBreakdown: PaymentReviewWbsLine[] = ctx.wbs_breakdown.map((w) => ({
+    name: w.name,
+    weightPct: Number(w.weight_pct),
+    progressPct: Number(w.progress_pct),
+    lastPaidProgressPct: Number(w.last_paid_progress_pct),
+  }));
+  const photos: PaymentReviewPhoto[] = ctx.photos.map((p) => ({
+    reportDate: p.report_date,
+    employeeName: p.employee_name,
+    caption: p.caption,
+    aiStage: p.ai_stage,
+    aiProgressPct: p.ai_progress_pct,
+    aiNotes: p.ai_notes,
+    aiConcerns: p.ai_concerns,
+  }));
+
+  let review: PaymentAiReview;
+  try {
+    review = await reviewLaborPayment({
+      contractorName: ctx.contractor_name,
+      projectName: ctx.project_name,
+      periodStart: ctx.period_start,
+      periodEnd: ctx.period_end,
+      grossEarned: Number(ctx.gross_earned),
+      wbsBreakdown,
+      photos,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Analisa AI gagal");
+  }
+
+  const { error: saveError } = await supabase.rpc("cm_save_labor_payment_ai_review", {
+    p_payment_id: parsed.data.paymentId,
+    p_verdict: review.verdict,
+    p_summary: review.summary,
+    p_concerns: review.concerns,
+    p_photo_count: photos.length,
+  });
+  if (saveError) return actionError(saveError.message);
+
+  revalidatePath("/construction-finance");
+  return actionSuccess({ ...review, photoCount: photos.length });
 }

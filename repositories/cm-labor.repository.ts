@@ -94,13 +94,18 @@ export interface LaborPaymentItem {
   advanceRecoveryAmount: number;
   netPayable: number;
   status: "draft" | "approved" | "rejected";
+  aiVerdict: "sesuai" | "perlu_dicek" | "tidak_sesuai" | null;
+  aiSummary: string | null;
+  aiConcerns: string[];
+  aiPhotoCount: number;
+  aiReviewedAt: string | null;
 }
 
 export async function listPendingLaborPayments(supabase: TypedSupabaseClient): Promise<LaborPaymentItem[]> {
   const { data, error } = await supabase
     .from("cm_labor_payments")
     .select(
-      "id, contract_id, period_start, period_end, gross_earned, retention_amount, deduction_amount, advance_recovery_amount, net_payable, status, contract:contract_id(contractor:contractor_id(full_name))",
+      "id, contract_id, period_start, period_end, gross_earned, retention_amount, deduction_amount, advance_recovery_amount, net_payable, status, ai_verdict, ai_summary, ai_concerns, ai_photo_count, ai_reviewed_at, contract:contract_id(contractor:contractor_id(full_name))",
     )
     .eq("status", "draft")
     .order("created_at", { ascending: true });
@@ -119,6 +124,11 @@ export async function listPendingLaborPayments(supabase: TypedSupabaseClient): P
       advanceRecoveryAmount: Number(row.advance_recovery_amount),
       netPayable: Number(row.net_payable),
       status: row.status,
+      aiVerdict: row.ai_verdict,
+      aiSummary: row.ai_summary,
+      aiConcerns: row.ai_concerns ?? [],
+      aiPhotoCount: row.ai_photo_count ?? 0,
+      aiReviewedAt: row.ai_reviewed_at,
     };
   });
 }

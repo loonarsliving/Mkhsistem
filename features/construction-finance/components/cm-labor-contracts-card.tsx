@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertTriangle, HardHat, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, HardHat, Loader2, Plus, Sparkles } from "lucide-react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -26,6 +26,7 @@ import {
   createLaborContractAction,
   decideLaborPaymentAction,
   generateLaborPaymentAction,
+  reviewLaborPaymentAction,
   setLaborContractWeightsAction,
 } from "../actions/cm-labor.actions";
 import {
@@ -388,11 +389,33 @@ function ApplyAdvanceDialog({ contract }: { contract: LaborContractWithSummary }
   );
 }
 
+const AI_VERDICT_LABEL: Record<NonNullable<LaborPaymentItem["aiVerdict"]>, { label: string; className: string }> = {
+  sesuai: { label: "AI: Sesuai Bukti Foto", className: "border-green-600/40 bg-green-600/10 text-green-700 dark:text-green-400" },
+  perlu_dicek: { label: "AI: Perlu Dicek", className: "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400" },
+  tidak_sesuai: { label: "AI: Tidak Sesuai Bukti Foto", className: "border-destructive/40 bg-destructive/10 text-destructive" },
+};
+
 function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
   const [busy, setBusy] = React.useState(false);
   const [showDeduction, setShowDeduction] = React.useState(false);
   const [deductionAmount, setDeductionAmount] = React.useState("");
   const [deductionReason, setDeductionReason] = React.useState("");
+  const [aiBusy, setAiBusy] = React.useState(false);
+  const [ai, setAi] = React.useState<{ verdict: LaborPaymentItem["aiVerdict"]; summary: string | null; concerns: string[]; photoCount: number } | null>(
+    payment.aiVerdict ? { verdict: payment.aiVerdict, summary: payment.aiSummary, concerns: payment.aiConcerns, photoCount: payment.aiPhotoCount } : null,
+  );
+
+  async function runAiReview() {
+    setAiBusy(true);
+    const result = await reviewLaborPaymentAction({ paymentId: payment.id });
+    setAiBusy(false);
+    if (!result.success || !result.data) {
+      toast.error(result.error ?? "Analisa AI gagal");
+      return;
+    }
+    setAi({ verdict: result.data.verdict, summary: result.data.summary, concerns: result.data.concerns, photoCount: result.data.photoCount });
+    toast.success("Analisa AI selesai");
+  }
 
   async function decide(approve: boolean) {
     setBusy(true);
@@ -436,8 +459,17 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
             Gross {formatCurrency(payment.grossEarned)} · Retention {formatCurrency(payment.retentionAmount)} · Potongan{" "}
             {formatCurrency(payment.deductionAmount)}
           </p>
+          {ai?.verdict && (
+            <Badge variant="outline" className={cn("mt-1", AI_VERDICT_LABEL[ai.verdict].className)}>
+              {AI_VERDICT_LABEL[ai.verdict].label}
+            </Badge>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" disabled={aiBusy || busy} onClick={runAiReview}>
+            {aiBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
+            {ai ? "Analisa Ulang AI" : "Analisa AI"}
+          </Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setShowDeduction((v) => !v)}>
             + Potongan
           </Button>
@@ -449,6 +481,21 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
           </Button>
         </div>
       </div>
+      {ai && (
+        <div className="rounded-md border bg-muted/30 p-2 text-xs">
+          <p className="text-muted-foreground">
+            Berdasarkan {ai.photoCount} foto progres lapangan pada periode ini{ai.photoCount === 0 && " (tidak ada foto -- rekomendasi cek manual)"}.
+          </p>
+          {ai.summary && <p className="mt-1">{ai.summary}</p>}
+          {ai.concerns.length > 0 && (
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-700 dark:text-amber-400">
+              {ai.concerns.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {showDeduction && (
         <div className="flex flex-wrap items-end gap-2 border-t pt-2">
           <div className="space-y-1">

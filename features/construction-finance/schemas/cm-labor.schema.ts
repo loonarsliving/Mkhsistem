@@ -52,3 +52,8 @@ export const decideLaborPaymentSchema = z.object({
   reason: z.string().trim().max(500).optional().or(z.literal("")),
 });
 export type DecideLaborPaymentInput = z.infer<typeof decideLaborPaymentSchema>;
+
+export const reviewLaborPaymentSchema = z.object({
+  paymentId: z.string().uuid(),
+});
+export type ReviewLaborPaymentInput = z.infer<typeof reviewLaborPaymentSchema>;
