@@ -1,10 +1,11 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
-/** Reads for Construction Management's cost control (0215). Pure aggregation, no writes. */
+/** Reads for Construction Management's cost control (0215/0218). Pure aggregation, no writes. */
 
 export interface ProjectCostControl {
   budget: number;
   boqCommitted: number;
+  laborCommitted: number;
   actualTotal: number;
   actualMaterial: number;
   actualLabor: number;
@@ -22,6 +23,7 @@ export async function getProjectCostControl(supabase: TypedSupabaseClient, proje
   return {
     budget: Number(row.budget),
     boqCommitted: Number(row.boq_committed),
+    laborCommitted: Number(row.labor_committed),
     actualTotal: Number(row.actual_total),
     actualMaterial: Number(row.actual_material),
     actualLabor: Number(row.actual_labor),

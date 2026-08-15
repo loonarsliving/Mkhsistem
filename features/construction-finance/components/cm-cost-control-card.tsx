@@ -43,7 +43,7 @@ export function CmCostControlCard({ cost }: { cost: ProjectCostControl }) {
             <p className="font-semibold tabular-nums">{cost.progressPct}%</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">BOQ (Committed)</p>
+            <p className="text-xs text-muted-foreground">BOQ Material (Committed)</p>
             <p className="font-semibold tabular-nums">{formatCurrency(cost.boqCommitted)}</p>
           </div>
         </div>
@@ -53,8 +53,11 @@ export function CmCostControlCard({ cost }: { cost: ProjectCostControl }) {
             <p className="tabular-nums">{formatCurrency(cost.actualMaterial)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Tenaga Kerja</p>
+            <p className="text-xs text-muted-foreground">Tenaga Kerja (Borongan)</p>
             <p className="tabular-nums">{formatCurrency(cost.actualLabor)}</p>
+            {cost.laborCommitted > 0 && (
+              <p className="text-xs text-muted-foreground">dari {formatCurrency(cost.laborCommitted)} nilai kontrak aktif</p>
+            )}
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Lain-lain</p>

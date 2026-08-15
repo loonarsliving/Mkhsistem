@@ -5271,6 +5271,7 @@ export interface Database {
         Returns: {
           budget: number;
           boq_committed: number;
+          labor_committed: number;
           actual_total: number;
           actual_material: number;
           actual_labor: number;

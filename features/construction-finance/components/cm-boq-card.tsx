@@ -33,6 +33,12 @@ const CATEGORY_LABEL: Record<AddBoqLineInput["category"], string> = {
   other: "Lain-lain",
 };
 
+// Gaji tukang selalu borongan (dibayar mingguan sesuai bobot pekerjaan x
+// progress), tidak pernah angka tetap seperti baris BOQ lain -- jadi
+// "Tenaga Kerja" sengaja tidak bisa dipilih di sini, itu diatur lewat
+// kartu Kontrak Borongan di bawah, bukan diketik manual di BOQ.
+const ADDABLE_CATEGORIES = (["material", "equipment", "other"] as const) satisfies readonly AddBoqLineInput["category"][];
+
 function AddBoqLineForm({ projectId, materials }: { projectId: string; materials: MaterialCatalogItem[] }) {
   const {
     register,
@@ -79,9 +85,9 @@ function AddBoqLineForm({ projectId, materials }: { projectId: string; materials
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
+                  {ADDABLE_CATEGORIES.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      {CATEGORY_LABEL[value]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -210,6 +216,10 @@ export function CmBoqCard({ projectId, lines, materials }: CmBoqCardProps) {
         <CardDescription>Dasar perhitungan kebutuhan material dan cost control -- isi item per item sesuai kondisi proyek ini.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Gaji tukang tidak diisi di sini -- selalu borongan, dibayar mingguan sesuai bobot pekerjaan x progress lewat kartu &quot;Kontrak Borongan /
+          Kontraktor&quot; di bawah.
+        </p>
         <AddBoqLineForm projectId={projectId} materials={materials} />
 
         {lines.length > 0 && (
