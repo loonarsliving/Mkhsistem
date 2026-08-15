@@ -2918,6 +2918,169 @@ export interface Database {
           },
         ];
       };
+      cm_contractors: {
+        Row: {
+          id: string;
+          full_name: string;
+          contractor_type: "tukang" | "mandor" | "subcontractor";
+          phone: string | null;
+          bank_account: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          contractor_type?: "tukang" | "mandor" | "subcontractor";
+          phone?: string | null;
+          bank_account?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_contractors"]["Insert"]>;
+        Relationships: [];
+      };
+      cm_labor_contracts: {
+        Row: {
+          id: string;
+          project_id: string;
+          unit_id: string | null;
+          contractor_id: string;
+          contract_value: number;
+          retention_pct: number;
+          outstanding_advance: number;
+          start_date: string;
+          target_completion: string | null;
+          attachment_url: string | null;
+          notes: string | null;
+          status: "active" | "completed" | "cancelled";
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          unit_id?: string | null;
+          contractor_id: string;
+          contract_value: number;
+          retention_pct?: number;
+          outstanding_advance?: number;
+          start_date?: string;
+          target_completion?: string | null;
+          attachment_url?: string | null;
+          notes?: string | null;
+          status?: "active" | "completed" | "cancelled";
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_contracts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_labor_contracts_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          { foreignKeyName: "cm_labor_contracts_contractor_id_fkey"; columns: ["contractor_id"]; referencedRelation: "cm_contractors"; referencedColumns: ["id"] },
+        ];
+      };
+      cm_labor_contract_weights: {
+        Row: { id: string; contract_id: string; project_wbs_id: string; weight_pct: number; last_paid_progress_pct: number };
+        Insert: { id?: string; contract_id: string; project_wbs_id: string; weight_pct: number; last_paid_progress_pct?: number };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_contract_weights"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_labor_contract_weights_contract_id_fkey";
+            columns: ["contract_id"];
+            referencedRelation: "cm_labor_contracts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_labor_contract_weights_project_wbs_id_fkey";
+            columns: ["project_wbs_id"];
+            referencedRelation: "cm_project_wbs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_labor_advances: {
+        Row: { id: string; contract_id: string; amount: number; note: string | null; created_by: string | null; created_at: string };
+        Insert: { id?: string; contract_id: string; amount: number; note?: string | null; created_by?: string | null; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_advances"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "cm_labor_advances_contract_id_fkey"; columns: ["contract_id"]; referencedRelation: "cm_labor_contracts"; referencedColumns: ["id"] },
+        ];
+      };
+      cm_labor_payments: {
+        Row: {
+          id: string;
+          contract_id: string;
+          period_start: string;
+          period_end: string;
+          gross_earned: number;
+          retention_amount: number;
+          deduction_amount: number;
+          advance_recovery_amount: number;
+          net_payable: number;
+          cumulative_earned_before: number;
+          cumulative_paid_before: number;
+          status: "draft" | "approved" | "rejected";
+          linked_expense_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          approved_by: string | null;
+          approved_at: string | null;
+          reject_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          contract_id: string;
+          period_start: string;
+          period_end: string;
+          gross_earned?: number;
+          retention_amount?: number;
+          deduction_amount?: number;
+          advance_recovery_amount?: number;
+          net_payable?: number;
+          cumulative_earned_before?: number;
+          cumulative_paid_before?: number;
+          status?: "draft" | "approved" | "rejected";
+          linked_expense_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          reject_reason?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_payments"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "cm_labor_payments_contract_id_fkey"; columns: ["contract_id"]; referencedRelation: "cm_labor_contracts"; referencedColumns: ["id"] },
+        ];
+      };
+      cm_labor_deductions: {
+        Row: {
+          id: string;
+          payment_id: string;
+          amount: number;
+          category: "damage" | "rework" | "penalty" | "other";
+          reason: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          amount: number;
+          category: "damage" | "rework" | "penalty" | "other";
+          reason: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_deductions"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "cm_labor_deductions_payment_id_fkey"; columns: ["payment_id"]; referencedRelation: "cm_labor_payments"; referencedColumns: ["id"] },
+        ];
+      };
       cm_materials: {
         Row: {
           id: string;
@@ -5070,6 +5233,40 @@ export interface Database {
         Returns: string;
       };
       cm_decide_purchase_request: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
+      cm_create_contractor: {
+        Args: { p_full_name: string; p_contractor_type?: string; p_phone?: string | null; p_bank_account?: string | null };
+        Returns: string;
+      };
+      cm_create_labor_contract: {
+        Args: {
+          p_project_id: string;
+          p_contractor_id: string;
+          p_contract_value: number;
+          p_retention_pct?: number;
+          p_start_date?: string;
+          p_target_completion?: string | null;
+          p_notes?: string | null;
+          p_attachment_url?: string | null;
+        };
+        Returns: string;
+      };
+      cm_set_labor_contract_weights: { Args: { p_contract_id: string; p_weights: Json }; Returns: undefined };
+      cm_labor_contract_summary: {
+        Args: { p_contract_id: string };
+        Returns: {
+          contract_value: number;
+          cumulative_earned: number;
+          cumulative_paid: number;
+          payable: number;
+          outstanding_advance: number;
+          status: "normal" | "overpayment";
+        }[];
+      };
+      cm_generate_labor_payment: { Args: { p_contract_id: string; p_period_start: string; p_period_end: string }; Returns: string };
+      cm_add_labor_deduction: { Args: { p_payment_id: string; p_amount: number; p_category: string; p_reason: string }; Returns: undefined };
+      cm_apply_labor_advance: { Args: { p_contract_id: string; p_amount: number; p_note?: string | null }; Returns: string };
+      cm_approve_labor_payment: { Args: { p_payment_id: string }; Returns: string };
+      cm_reject_labor_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       construction_record_fund_transfer: {
         Args: {
           p_project_id: string;

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/constants/rbac";
+import { CmLaborContractsCard } from "@/features/construction-finance/components/cm-labor-contracts-card";
 import { CmMaterialRequirementCard } from "@/features/construction-finance/components/cm-material-requirement-card";
 import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
@@ -15,6 +16,7 @@ import { ConstructionSettleUtangButton } from "@/features/construction-finance/c
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { listActiveContractors, listPendingLaborPayments, listProjectLaborContracts, listProjectWbsOptions } from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
 import { listMaterialRequirement, listPendingPurchaseRequests } from "@/repositories/cm-procurement.repository";
 import { getProjectOverallProgress, listPendingWbsProgressLogs, listProjectWbs } from "@/repositories/cm-wbs.repository";
@@ -90,18 +92,35 @@ export default async function ConstructionFinancePage() {
 
   const ownProject = projects.find((p) => p.branchId === session.employee.branch_id) ?? projects[0] ?? null;
 
-  const [expenses, unsettledUtang, materials, materialStock, wbsItems, overallProgress, pendingWbsLogs, materialRequirement, pendingPr] =
-    await Promise.all([
-      ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
-      canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
-      canSubmit ? listActiveMaterials(supabase) : Promise.resolve([]),
-      ownProject ? listMaterialStock(supabase, ownProject.id) : Promise.resolve([]),
-      ownProject ? listProjectWbs(supabase, ownProject.id) : Promise.resolve([]),
-      ownProject ? getProjectOverallProgress(supabase, ownProject.id) : Promise.resolve(0),
-      canManage ? listPendingWbsProgressLogs(supabase) : Promise.resolve([]),
-      ownProject ? listMaterialRequirement(supabase, ownProject.id) : Promise.resolve([]),
-      canManage ? listPendingPurchaseRequests(supabase) : Promise.resolve([]),
-    ]);
+  const [
+    expenses,
+    unsettledUtang,
+    materials,
+    materialStock,
+    wbsItems,
+    overallProgress,
+    pendingWbsLogs,
+    materialRequirement,
+    pendingPr,
+    laborContracts,
+    contractors,
+    wbsOptions,
+    pendingLaborPayments,
+  ] = await Promise.all([
+    ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
+    canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
+    canSubmit ? listActiveMaterials(supabase) : Promise.resolve([]),
+    ownProject ? listMaterialStock(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject ? listProjectWbs(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject ? getProjectOverallProgress(supabase, ownProject.id) : Promise.resolve(0),
+    canManage ? listPendingWbsProgressLogs(supabase) : Promise.resolve([]),
+    ownProject ? listMaterialRequirement(supabase, ownProject.id) : Promise.resolve([]),
+    canManage ? listPendingPurchaseRequests(supabase) : Promise.resolve([]),
+    ownProject && canManage ? listProjectLaborContracts(supabase, ownProject.id) : Promise.resolve([]),
+    canManage ? listActiveContractors(supabase) : Promise.resolve([]),
+    ownProject ? listProjectWbsOptions(supabase, ownProject.id) : Promise.resolve([]),
+    canManage ? listPendingLaborPayments(supabase) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -136,6 +155,17 @@ export default async function ConstructionFinancePage() {
           materials={materials}
           canSubmit={canSubmit}
           canApprove={canManage}
+        />
+      )}
+
+      {ownProject && canManage && (
+        <CmLaborContractsCard
+          projectId={ownProject.id}
+          contracts={laborContracts}
+          contractors={contractors}
+          wbsOptions={wbsOptions}
+          pendingPayments={pendingLaborPayments}
+          canManage={canManage}
         />
       )}
 
