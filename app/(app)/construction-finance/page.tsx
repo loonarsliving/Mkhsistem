@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/constants/rbac";
+import { CmCostControlCard } from "@/features/construction-finance/components/cm-cost-control-card";
 import { CmLaborContractsCard } from "@/features/construction-finance/components/cm-labor-contracts-card";
 import { CmMaterialRequirementCard } from "@/features/construction-finance/components/cm-material-requirement-card";
 import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
@@ -16,6 +17,7 @@ import { ConstructionSettleUtangButton } from "@/features/construction-finance/c
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { getProjectCostControl, type ProjectCostControl } from "@/repositories/cm-cost-control.repository";
 import { listActiveContractors, listPendingLaborPayments, listProjectLaborContracts, listProjectWbsOptions } from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
 import { listMaterialRequirement, listPendingPurchaseRequests } from "@/repositories/cm-procurement.repository";
@@ -106,6 +108,8 @@ export default async function ConstructionFinancePage() {
     contractors,
     wbsOptions,
     pendingLaborPayments,
+    costControl,
+    allProjectsCostControl,
   ] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
@@ -120,6 +124,10 @@ export default async function ConstructionFinancePage() {
     canManage ? listActiveContractors(supabase) : Promise.resolve([]),
     ownProject ? listProjectWbsOptions(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listPendingLaborPayments(supabase) : Promise.resolve([]),
+    ownProject ? getProjectCostControl(supabase, ownProject.id) : Promise.resolve(null),
+    canManage && projects.length > 1
+      ? Promise.all(projects.map(async (p) => ({ project: p, cost: await getProjectCostControl(supabase, p.id) })))
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -136,6 +144,48 @@ export default async function ConstructionFinancePage() {
       {projects.map((project) => (
         <SummaryCard key={project.id} project={project} />
       ))}
+
+      {allProjectsCostControl.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Perbandingan Antar Cabang</CardTitle>
+            <CardDescription>Progress vs realisasi biaya, semua proyek pembangunan aktif.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cabang</TableHead>
+                    <TableHead>Proyek</TableHead>
+                    <TableHead className="text-right">Progress</TableHead>
+                    <TableHead className="text-right">Realisasi Biaya</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allProjectsCostControl.map(({ project, cost }: { project: ConstructionProject; cost: ProjectCostControl | null }) => (
+                    <TableRow key={project.id}>
+                      <TableCell>{project.branchName ?? "-"}</TableCell>
+                      <TableCell>{project.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{cost?.progressPct ?? 0}%</TableCell>
+                      <TableCell className="text-right tabular-nums">{cost?.costPct ?? "-"}%</TableCell>
+                      <TableCell>
+                        {cost?.status === "cost_ahead" && <Badge variant="destructive">Biaya Lebih Cepat</Badge>}
+                        {cost?.status === "good" && <Badge>Progress Lebih Cepat</Badge>}
+                        {cost?.status === "balanced" && <Badge variant="secondary">Seimbang</Badge>}
+                        {(!cost || cost.status === "unknown") && <Badge variant="outline">-</Badge>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {costControl && <CmCostControlCard cost={costControl} />}
 
       {ownProject && wbsItems.length > 0 && (
         <CmWbsProgressCard

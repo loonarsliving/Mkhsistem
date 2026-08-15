@@ -5266,6 +5266,20 @@ export interface Database {
       cm_add_labor_deduction: { Args: { p_payment_id: string; p_amount: number; p_category: string; p_reason: string }; Returns: undefined };
       cm_apply_labor_advance: { Args: { p_contract_id: string; p_amount: number; p_note?: string | null }; Returns: string };
       cm_approve_labor_payment: { Args: { p_payment_id: string }; Returns: string };
+      cm_project_cost_control: {
+        Args: { p_project_id: string };
+        Returns: {
+          budget: number;
+          boq_committed: number;
+          actual_total: number;
+          actual_material: number;
+          actual_labor: number;
+          actual_other: number;
+          progress_pct: number;
+          cost_pct: number | null;
+          cost_vs_progress_status: "unknown" | "cost_ahead" | "good" | "balanced";
+        }[];
+      };
       cm_reject_labor_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       construction_record_fund_transfer: {
         Args: {
