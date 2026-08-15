@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/constants/rbac";
+import { CmBoqCard } from "@/features/construction-finance/components/cm-boq-card";
 import { CmCostControlCard } from "@/features/construction-finance/components/cm-cost-control-card";
 import { CmLaborContractsCard } from "@/features/construction-finance/components/cm-labor-contracts-card";
 import { CmMaterialRequirementCard } from "@/features/construction-finance/components/cm-material-requirement-card";
@@ -19,6 +20,7 @@ import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 import { listBranches } from "@/repositories/branch.repository";
+import { listProjectBoqLines } from "@/repositories/cm-boq.repository";
 import { getProjectCostControl, type ProjectCostControl } from "@/repositories/cm-cost-control.repository";
 import { listActiveContractors, listPendingLaborPayments, listProjectLaborContracts, listProjectWbsOptions } from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
@@ -113,10 +115,11 @@ export default async function ConstructionFinancePage() {
     costControl,
     allProjectsCostControl,
     branches,
+    boqLines,
   ] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
-    canSubmit ? listActiveMaterials(supabase) : Promise.resolve([]),
+    canSubmit || canManage ? listActiveMaterials(supabase) : Promise.resolve([]),
     ownProject ? listMaterialStock(supabase, ownProject.id) : Promise.resolve([]),
     ownProject ? listProjectWbs(supabase, ownProject.id) : Promise.resolve([]),
     ownProject ? getProjectOverallProgress(supabase, ownProject.id) : Promise.resolve(0),
@@ -132,6 +135,7 @@ export default async function ConstructionFinancePage() {
       ? Promise.all(projects.map(async (p) => ({ project: p, cost: await getProjectCostControl(supabase, p.id) })))
       : Promise.resolve([]),
     canManage ? listBranches(supabase, false) : Promise.resolve([]),
+    ownProject && canManage ? listProjectBoqLines(supabase, ownProject.id) : Promise.resolve([]),
   ]);
 
   const branchesWithoutProject = branches.filter((b) => !projects.some((p) => p.branchId === b.id)).map((b) => ({ id: b.id, name: b.name }));
@@ -206,6 +210,8 @@ export default async function ConstructionFinancePage() {
       )}
 
       {costControl && <CmCostControlCard cost={costControl} />}
+
+      {ownProject && canManage && <CmBoqCard projectId={ownProject.id} lines={boqLines} materials={materials} />}
 
       {ownProject && wbsItems.length > 0 && (
         <CmWbsProgressCard

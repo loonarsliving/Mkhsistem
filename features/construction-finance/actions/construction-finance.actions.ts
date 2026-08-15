@@ -7,11 +7,15 @@ import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
+  addBoqLineSchema,
   createConstructionProjectSchema,
+  deleteBoqLineSchema,
   recordConstructionFundTransferSchema,
   settleConstructionExpenseSchema,
   submitConstructionExpenseSchema,
+  type AddBoqLineInput,
   type CreateConstructionProjectInput,
+  type DeleteBoqLineInput,
   type RecordConstructionFundTransferInput,
   type SettleConstructionExpenseInput,
   type SubmitConstructionExpenseInput,
@@ -54,12 +58,47 @@ export async function createConstructionProjectAction(input: CreateConstructionP
   const { data, error } = await supabase.rpc("construction_create_project", {
     p_branch_id: parsed.data.branchId,
     p_name: parsed.data.name,
-    p_total_budget: parsed.data.totalBudget,
+    p_budget_per_unit: parsed.data.budgetPerUnit,
+    p_total_units: parsed.data.totalUnits,
   });
   if (error) return actionError(error.message);
 
   revalidatePath("/construction-finance");
   return actionSuccess({ id: data as string });
+}
+
+export async function addBoqLineAction(input: AddBoqLineInput): Promise<ActionResult<{ id: string }>> {
+  await requireSession();
+  const parsed = addBoqLineSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("cm_add_project_boq_line", {
+    p_project_id: parsed.data.projectId,
+    p_category: parsed.data.category,
+    p_description: parsed.data.description,
+    p_quantity: parsed.data.quantity,
+    p_unit: parsed.data.unit,
+    p_unit_price: parsed.data.unitPrice,
+    p_material_id: parsed.data.materialId || null,
+  });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/construction-finance");
+  return actionSuccess({ id: data as string });
+}
+
+export async function deleteBoqLineAction(input: DeleteBoqLineInput): Promise<ActionResult> {
+  await requireSession();
+  const parsed = deleteBoqLineSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cm_delete_project_boq_line", { p_line_id: parsed.data.id });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/construction-finance");
+  return actionSuccess();
 }
 
 export async function settleConstructionExpenseAction(input: SettleConstructionExpenseInput): Promise<ActionResult> {

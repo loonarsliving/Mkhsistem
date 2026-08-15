@@ -25,9 +25,24 @@ export type SettleConstructionExpenseInput = z.infer<typeof settleConstructionEx
 export const createConstructionProjectSchema = z.object({
   branchId: z.string().uuid("Pilih cabang"),
   name: z.string().trim().min(3, "Nama proyek wajib diisi").max(200),
-  totalBudget: z.number().positive("Anggaran harus lebih dari 0"),
+  budgetPerUnit: z.number().positive("Anggaran per unit harus lebih dari 0"),
+  totalUnits: z.number().int().positive("Jumlah unit harus lebih dari 0"),
 });
 export type CreateConstructionProjectInput = z.infer<typeof createConstructionProjectSchema>;
+
+export const addBoqLineSchema = z.object({
+  projectId: z.string().uuid(),
+  category: z.enum(["material", "labor", "equipment", "other"]),
+  materialId: z.string().uuid().optional().or(z.literal("")),
+  description: z.string().trim().min(2, "Wajib diisi").max(300),
+  quantity: z.number().positive("Quantity harus lebih dari 0"),
+  unit: z.string().trim().min(1, "Satuan wajib diisi").max(30),
+  unitPrice: z.number().min(0, "Harga tidak boleh negatif"),
+});
+export type AddBoqLineInput = z.infer<typeof addBoqLineSchema>;
+
+export const deleteBoqLineSchema = z.object({ id: z.string().uuid() });
+export type DeleteBoqLineInput = z.infer<typeof deleteBoqLineSchema>;
 
 export const recordConstructionFundTransferSchema = z.object({
   projectId: z.string().uuid(),

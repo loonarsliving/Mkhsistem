@@ -5290,7 +5290,25 @@ export interface Database {
         };
         Returns: string;
       };
-      construction_create_project: { Args: { p_branch_id: string; p_name: string; p_total_budget: number }; Returns: string };
+      construction_create_project: {
+        Args: { p_branch_id: string; p_name: string; p_budget_per_unit: number; p_total_units: number };
+        Returns: string;
+      };
+      cm_add_project_boq_line: {
+        Args: {
+          p_project_id: string;
+          p_category: string;
+          p_description: string;
+          p_quantity: number;
+          p_unit: string;
+          p_unit_price: number;
+          p_material_id?: string | null;
+          p_project_wbs_id?: string | null;
+          p_unit_id?: string | null;
+        };
+        Returns: string;
+      };
+      cm_delete_project_boq_line: { Args: { p_line_id: string }; Returns: undefined };
       create_hr_expense: {
         Args: {
           p_expense_type: string;
