@@ -186,3 +186,32 @@ export async function getActiveConstructionTarget(supabase: TypedSupabaseClient,
     totalValue: target.target_units * Number(target.value_per_unit),
   };
 }
+
+export interface ConstructionProgressAssessment {
+  projectCode: string;
+  assessedAt: string;
+  overallProgressPct: number;
+  summary: string;
+  concerns: string[];
+  blockCount: number;
+  blockCountWithPhotos: number;
+  blockSnapshot: { code: string; aiStage: string | null; aiProgressPct: number | null; photoCount7d: number; lastPhotoAt: string | null }[];
+}
+
+/** Latest weekly AI overall-progress synthesis for a project (0227) -- overwritten every Saturday, not a history log. Null if no assessment has run yet. */
+export async function getConstructionProgressAssessment(supabase: TypedSupabaseClient, projectCode: string): Promise<ConstructionProgressAssessment | null> {
+  const { data, error } = await supabase.from("construction_progress_assessments").select("*").eq("project_code", projectCode).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    projectCode: data.project_code,
+    assessedAt: data.assessed_at,
+    overallProgressPct: data.overall_progress_pct,
+    summary: data.summary,
+    concerns: data.concerns,
+    blockCount: data.block_count,
+    blockCountWithPhotos: data.block_count_with_photos,
+    blockSnapshot: (data.block_snapshot as ConstructionProgressAssessment["blockSnapshot"]) ?? [],
+  };
+}

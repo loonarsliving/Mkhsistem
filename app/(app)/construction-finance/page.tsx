@@ -14,6 +14,7 @@ import { CmLaborContractsCard } from "@/features/construction-finance/components
 import { CmMaterialRequirementCard } from "@/features/construction-finance/components/cm-material-requirement-card";
 import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
+import { ConstructionProgressAssessmentCard } from "@/features/construction-finance/components/construction-progress-assessment-card";
 import { ConstructionSettleUtangButton } from "@/features/construction-finance/components/construction-settle-utang-button";
 import { CreateConstructionProjectDialog } from "@/features/construction-finance/components/create-construction-project-dialog";
 import { TukangBorongonSyncCard } from "@/features/construction-finance/components/tukang-borongan-sync-card";
@@ -36,6 +37,7 @@ import { listMaterialRequirement, listPendingPurchaseRequests } from "@/reposito
 import { getProjectOverallProgress, listPendingWbsProgressLogs, listProjectWbs } from "@/repositories/cm-wbs.repository";
 import {
   getActiveConstructionProject,
+  getConstructionProgressAssessment,
   listActiveConstructionProjects,
   listConstructionExpenses,
   listUnsettledUtang,
@@ -129,6 +131,7 @@ export default async function ConstructionFinancePage() {
     allProjectsCostControl,
     branches,
     boqLines,
+    progressAssessment,
   ] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
@@ -151,6 +154,7 @@ export default async function ConstructionFinancePage() {
       : Promise.resolve([]),
     canManage ? listBranches(supabase, false) : Promise.resolve([]),
     ownProject && canManage ? listProjectBoqLines(supabase, ownProject.id) : Promise.resolve([]),
+    canManage ? getConstructionProgressAssessment(supabase, "LL") : Promise.resolve(null),
   ]);
 
   const branchesWithoutProject = branches.filter((b) => !projects.some((p) => p.branchId === b.id)).map((b) => ({ id: b.id, name: b.name }));
@@ -185,6 +189,8 @@ export default async function ConstructionFinancePage() {
       ))}
 
       {canManage && <TukangBorongonSyncCard />}
+
+      {canManage && progressAssessment && <ConstructionProgressAssessmentCard assessment={progressAssessment} projectName="Loonars Living Villa" />}
 
       {allProjectsCostControl.length > 1 && (
         <Card>

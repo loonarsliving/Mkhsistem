@@ -3583,6 +3583,30 @@ export interface Database {
           { foreignKeyName: "finance_pending_transfers_confirmed_by_fkey"; columns: ["confirmed_by"]; referencedRelation: "employees"; referencedColumns: ["id"] },
         ];
       };
+      construction_progress_assessments: {
+        Row: {
+          project_code: string;
+          assessed_at: string;
+          overall_progress_pct: number;
+          summary: string;
+          concerns: string[];
+          block_count: number;
+          block_count_with_photos: number;
+          block_snapshot: Json;
+        };
+        Insert: {
+          project_code: string;
+          assessed_at?: string;
+          overall_progress_pct: number;
+          summary?: string;
+          concerns?: string[];
+          block_count?: number;
+          block_count_with_photos?: number;
+          block_snapshot?: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_progress_assessments"]["Insert"]>;
+        Relationships: [];
+      };
       sync_log: {
         Row: {
           id: string;
