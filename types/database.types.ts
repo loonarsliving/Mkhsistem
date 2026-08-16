@@ -3040,6 +3040,7 @@ export interface Database {
           kc_decided_by: string | null;
           kc_decided_at: string | null;
           kc_reject_reason: string | null;
+          notified_kc_at: string | null;
         };
         Insert: {
           id?: string;
@@ -3068,6 +3069,7 @@ export interface Database {
           kc_decided_by?: string | null;
           kc_decided_at?: string | null;
           kc_reject_reason?: string | null;
+          notified_kc_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["cm_labor_payments"]["Insert"]>;
         Relationships: [
