@@ -51,3 +51,24 @@ export const recordConstructionFundTransferSchema = z.object({
   note: z.string().trim().max(500).optional().or(z.literal("")),
 });
 export type RecordConstructionFundTransferInput = z.infer<typeof recordConstructionFundTransferSchema>;
+
+/**
+ * For projects already running on mkh-properti's own gaji-tukang/borongan
+ * flow (currently just Jogja Loonars) -- owner types in each blok's
+ * current sisa kontrak by hand, this pushes it one-way into mkh-properti's
+ * tukang_borongan table (sync_inbound's tukang_borongan_sisa_upsert
+ * branch, migration 0019 there). Not tied to a construction_projects row.
+ */
+export const syncTukangBorongonSchema = z.object({
+  proyek: z.enum(["LL", "AFP", "IH", "GCI", "GCR"], { errorMap: () => ({ message: "Pilih proyek" }) }),
+  blok: z.string().trim().max(30).optional().or(z.literal("")),
+  nama: z.string().trim().min(2, "Nama tukang wajib diisi").max(150),
+  item: z.string().trim().max(200).optional().or(z.literal("")),
+  nilaiKontrak: z.number().min(0, "Tidak boleh negatif"),
+  terbayar: z.number().min(0, "Tidak boleh negatif"),
+  totalUnit: z.number().positive().optional(),
+  hargaPerUnit: z.number().positive().optional(),
+  unitSelesai: z.number().min(0).optional(),
+  ket: z.string().trim().max(500).optional().or(z.literal("")),
+});
+export type SyncTukangBorongonInput = z.infer<typeof syncTukangBorongonSchema>;

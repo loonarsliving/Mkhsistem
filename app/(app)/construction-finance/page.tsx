@@ -16,6 +16,7 @@ import { CmWbsProgressCard } from "@/features/construction-finance/components/cm
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
 import { ConstructionSettleUtangButton } from "@/features/construction-finance/components/construction-settle-utang-button";
 import { CreateConstructionProjectDialog } from "@/features/construction-finance/components/create-construction-project-dialog";
+import { TukangBorongonSyncCard } from "@/features/construction-finance/components/tukang-borongan-sync-card";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
@@ -182,6 +183,8 @@ export default async function ConstructionFinancePage() {
       {projects.map((project) => (
         <SummaryCard key={project.id} project={project} />
       ))}
+
+      {canManage && <TukangBorongonSyncCard />}
 
       {allProjectsCostControl.length > 1 && (
         <Card>

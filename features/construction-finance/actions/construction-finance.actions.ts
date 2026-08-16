@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireSession } from "@/lib/rbac/session";
+import { PERMISSIONS } from "@/constants/rbac";
+import { hasPermission, requireSession } from "@/lib/rbac/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
@@ -13,12 +15,14 @@ import {
   recordConstructionFundTransferSchema,
   settleConstructionExpenseSchema,
   submitConstructionExpenseSchema,
+  syncTukangBorongonSchema,
   type AddBoqLineInput,
   type CreateConstructionProjectInput,
   type DeleteBoqLineInput,
   type RecordConstructionFundTransferInput,
   type SettleConstructionExpenseInput,
   type SubmitConstructionExpenseInput,
+  type SyncTukangBorongonInput,
 } from "../schemas/construction-finance.schema";
 
 /**
@@ -86,6 +90,50 @@ export async function addBoqLineAction(input: AddBoqLineInput): Promise<ActionRe
 
   revalidatePath("/construction-finance");
   return actionSuccess({ id: data as string });
+}
+
+/**
+ * Jogja's running Loonars project (and any other branch's currently-running
+ * project) is still tracked in mkh-properti's own tukang_borongan table --
+ * not a construction_projects row here. The owner types in each blok's
+ * current sisa kontrak by hand and this pushes it one-way to mkh-properti
+ * via sync_log (dispatched by sync_dispatch_pending, applied there by
+ * sync_inbound's tukang_borongan_sisa_upsert branch, migration 0019).
+ * sync_log has no RLS policies (deny-all for regular clients), so this
+ * checks the permission explicitly and writes with the service role.
+ */
+export async function syncTukangBorongonAction(input: SyncTukangBorongonInput): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!hasPermission(session, PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE)) {
+    return actionError("Anda tidak punya izin untuk ini");
+  }
+  const parsed = syncTukangBorongonSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+  const d = parsed.data;
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("sync_log").insert({
+    direction: "outbound",
+    event_type: "tukang_borongan_sisa_upsert",
+    source_table: "manual_input",
+    source_id: `${d.proyek}-${d.blok || "-"}-${d.nama}`,
+    idempotency_key: `tukang-sisa-${crypto.randomUUID()}`,
+    payload: {
+      proyek: d.proyek,
+      blok: d.blok || null,
+      nama: d.nama,
+      item: d.item || null,
+      nilai_kontrak: d.nilaiKontrak,
+      terbayar: d.terbayar,
+      total_unit: d.totalUnit ?? null,
+      harga_per_unit: d.hargaPerUnit ?? null,
+      unit_selesai: d.unitSelesai ?? null,
+      ket: d.ket || null,
+    },
+  });
+  if (error) return actionError(error.message);
+
+  return actionSuccess();
 }
 
 export async function deleteBoqLineAction(input: DeleteBoqLineInput): Promise<ActionResult> {
