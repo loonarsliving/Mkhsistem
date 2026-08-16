@@ -15,7 +15,8 @@ import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval"
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
-import { sendWhatsAppText } from "./notifications/engine";
+import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
+import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
 export interface WhatsAppWebhookHandlerResult {
@@ -164,6 +165,42 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling(image)");
       const imageRoleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+
+      // Bukti transfer confirmation (0222): Super Admin sending a photo
+      // after approving a gaji tukang / pembelian bahan pengajuan and
+      // actually transferring the money. FIFO-picks the oldest pengajuan
+      // still awaiting transfer proof, AI-reads the photo, posts jurnal in
+      // mkh-properti, and forwards this same photo to Kepala Cabang + Endy
+      // so they can pass it on to the tukang/toko. Short-circuits
+      // everything else since a bukti transfer photo isn't a progress/relay
+      // photo.
+      if (imageRoleKey === "super_admin") {
+        trace.push("tryConfirmTransferProofViaWhatsApp:calling");
+        const transferResult = await tryConfirmTransferProofViaWhatsApp({ id: employee.id, name: employee.full_name, roleKey: imageRoleKey }, inbound.content.url);
+        trace.push(`tryConfirmTransferProofViaWhatsApp:${transferResult.outcome}`);
+        if (transferResult.outcome === "confirmed") {
+          const recipientNames = transferResult.recipients.map((r) => r.name);
+          const mismatchNote =
+            transferResult.mismatch && transferResult.ai.nominal !== null
+              ? `\n⚠️ Perhatian: nominal di foto (Rp ${transferResult.ai.nominal.toLocaleString("id-ID")}) berbeda dari nominal pengajuan (Rp ${transferResult.nominal.toLocaleString("id-ID")}). Pastikan ini bukti transfer yang benar.`
+              : "";
+          const replyText =
+            `✅ Bukti transfer untuk ${transferResult.partyName ?? "pengajuan"} (Rp ${transferResult.nominal.toLocaleString("id-ID")}) diterima dan dicatat ke jurnal.` +
+            mismatchNote +
+            (recipientNames.length > 0 ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.` : "\n⚠️ Tidak ada Kepala Cabang/Endy dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          trace.push("sendWhatsAppText:calling(transfer-confirm)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          trace.push("sendWhatsAppImage:forwarding");
+          for (const recipient of transferResult.recipients) {
+            await sendWhatsAppImage(recipient.phone, inbound.content.url, `📎 Bukti transfer ${transferResult.partyName ?? ""} — Rp ${transferResult.nominal.toLocaleString("id-ID")} (dari Super Admin, tolong teruskan ke pihak terkait)`);
+          }
+          trace.push("sendWhatsAppImage:done");
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
 
       // Approval requests (0201): "AJUKAN ..." in the caption, from a Kepala
       // Cabang, is a submission (pricelist photo, anything) -- short-circuits
