@@ -192,6 +192,14 @@ export const PERMISSIONS = {
    */
   CONSTRUCTION_FINANCE_VIEW_OWN: "construction_finance.view_own",
   CONSTRUCTION_FINANCE_SUBMIT: "construction_finance.submit",
+  /**
+   * Kepala Cabang's seat in the weekly borongan payment flow (0220): Finance
+   * generates the draft, Kepala Cabang approves/rejects it for their own
+   * branch (sisa borongan per unit shown before the decision), then it's
+   * forwarded to whoever holds .manage for final approval/cash-out. Distinct
+   * from .submit (expense input) and .manage (full control, every branch).
+   */
+  CONSTRUCTION_FINANCE_APPROVE_BRANCH: "construction_finance.approve_branch",
   CONSTRUCTION_FINANCE_MANAGE: "construction_finance.manage",
 
   /**
@@ -247,6 +255,7 @@ export const KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS = [
   "dashboard.view",
   "construction_finance.view_own",
   "construction_finance.submit",
+  "construction_finance.approve_branch",
 ] as const satisfies readonly PermissionKey[];
 
 /**
@@ -426,6 +435,7 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     // the RPCs/RLS, not by this permission grant.
     PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
     PERMISSIONS.CONSTRUCTION_FINANCE_SUBMIT,
+    PERMISSIONS.CONSTRUCTION_FINANCE_APPROVE_BRANCH,
     PERMISSIONS.APPROVAL_REQUEST_VIEW_OWN,
     // kos_occupancy.view is deliberately NOT granted here -- every branch
     // shares the "Kepala Cabang" role, but Kos occupancy is scoped to the

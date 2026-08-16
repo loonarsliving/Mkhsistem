@@ -22,7 +22,14 @@ import { formatCurrency } from "@/lib/utils";
 import { listBranches } from "@/repositories/branch.repository";
 import { listProjectBoqLines } from "@/repositories/cm-boq.repository";
 import { getProjectCostControl, type ProjectCostControl } from "@/repositories/cm-cost-control.repository";
-import { listActiveContractors, listPendingLaborPayments, listProjectLaborContracts, listProjectWbsOptions } from "@/repositories/cm-labor.repository";
+import {
+  listActiveContractors,
+  listPaymentsAwaitingFinalApproval,
+  listPaymentsAwaitingKcApproval,
+  listProjectLaborContracts,
+  listProjectUnits,
+  listProjectWbsOptions,
+} from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
 import { listMaterialRequirement, listPendingPurchaseRequests } from "@/repositories/cm-procurement.repository";
 import { getProjectOverallProgress, listPendingWbsProgressLogs, listProjectWbs } from "@/repositories/cm-wbs.repository";
@@ -85,8 +92,9 @@ export default async function ConstructionFinancePage() {
   const session = await requireSession();
   const canSubmit = hasPermission(session, PERMISSIONS.CONSTRUCTION_FINANCE_SUBMIT);
   const canManage = hasPermission(session, PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE);
+  const canApproveBranch = hasPermission(session, PERMISSIONS.CONSTRUCTION_FINANCE_APPROVE_BRANCH);
 
-  if (!canSubmit && !canManage) redirect("/dashboard?error=forbidden");
+  if (!canSubmit && !canManage && !canApproveBranch) redirect("/dashboard?error=forbidden");
 
   const supabase = await createClient();
 
@@ -97,6 +105,8 @@ export default async function ConstructionFinancePage() {
       : [];
 
   const ownProject = projects.find((p) => p.branchId === session.employee.branch_id) ?? projects[0] ?? null;
+
+  const canSeeLaborContracts = canManage || canApproveBranch;
 
   const [
     expenses,
@@ -110,8 +120,10 @@ export default async function ConstructionFinancePage() {
     pendingPr,
     laborContracts,
     contractors,
+    projectUnits,
     wbsOptions,
-    pendingLaborPayments,
+    paymentsAwaitingKcApproval,
+    paymentsAwaitingFinalApproval,
     costControl,
     allProjectsCostControl,
     branches,
@@ -126,10 +138,12 @@ export default async function ConstructionFinancePage() {
     canManage ? listPendingWbsProgressLogs(supabase) : Promise.resolve([]),
     ownProject ? listMaterialRequirement(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listPendingPurchaseRequests(supabase) : Promise.resolve([]),
-    ownProject && canManage ? listProjectLaborContracts(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject && canSeeLaborContracts ? listProjectLaborContracts(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listActiveContractors(supabase) : Promise.resolve([]),
+    ownProject && canManage ? listProjectUnits(supabase, ownProject.id) : Promise.resolve([]),
     ownProject ? listProjectWbsOptions(supabase, ownProject.id) : Promise.resolve([]),
-    canManage ? listPendingLaborPayments(supabase) : Promise.resolve([]),
+    canSeeLaborContracts ? listPaymentsAwaitingKcApproval(supabase) : Promise.resolve([]),
+    canManage ? listPaymentsAwaitingFinalApproval(supabase) : Promise.resolve([]),
     ownProject ? getProjectCostControl(supabase, ownProject.id) : Promise.resolve(null),
     canManage && projects.length > 1
       ? Promise.all(projects.map(async (p) => ({ project: p, cost: await getProjectCostControl(supabase, p.id) })))
@@ -234,14 +248,17 @@ export default async function ConstructionFinancePage() {
         />
       )}
 
-      {ownProject && canManage && (
+      {ownProject && canSeeLaborContracts && (
         <CmLaborContractsCard
           projectId={ownProject.id}
           contracts={laborContracts}
           contractors={contractors}
+          projectUnits={projectUnits}
           wbsOptions={wbsOptions}
-          pendingPayments={pendingLaborPayments}
+          paymentsAwaitingKcApproval={paymentsAwaitingKcApproval}
+          paymentsAwaitingFinalApproval={paymentsAwaitingFinalApproval}
           canManage={canManage}
+          canApproveBranch={canApproveBranch}
         />
       )}
 

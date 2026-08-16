@@ -2982,6 +2982,7 @@ export interface Database {
             referencedColumns: ["id"];
           },
           { foreignKeyName: "cm_labor_contracts_contractor_id_fkey"; columns: ["contractor_id"]; referencedRelation: "cm_contractors"; referencedColumns: ["id"] },
+          { foreignKeyName: "cm_labor_contracts_unit_id_fkey"; columns: ["unit_id"]; referencedRelation: "cm_units"; referencedColumns: ["id"] },
         ];
       };
       cm_labor_contract_weights: {
@@ -3024,7 +3025,7 @@ export interface Database {
           net_payable: number;
           cumulative_earned_before: number;
           cumulative_paid_before: number;
-          status: "draft" | "approved" | "rejected";
+          status: "draft" | "kc_approved" | "approved" | "rejected";
           linked_expense_id: string | null;
           created_by: string | null;
           created_at: string;
@@ -3036,6 +3037,9 @@ export interface Database {
           ai_summary: string | null;
           ai_concerns: string[];
           ai_photo_count: number;
+          kc_decided_by: string | null;
+          kc_decided_at: string | null;
+          kc_reject_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -3049,7 +3053,7 @@ export interface Database {
           net_payable?: number;
           cumulative_earned_before?: number;
           cumulative_paid_before?: number;
-          status?: "draft" | "approved" | "rejected";
+          status?: "draft" | "kc_approved" | "approved" | "rejected";
           linked_expense_id?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -3061,6 +3065,9 @@ export interface Database {
           ai_summary?: string | null;
           ai_concerns?: string[];
           ai_photo_count?: number;
+          kc_decided_by?: string | null;
+          kc_decided_at?: string | null;
+          kc_reject_reason?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["cm_labor_payments"]["Insert"]>;
         Relationships: [
@@ -5257,9 +5264,11 @@ export interface Database {
           p_target_completion?: string | null;
           p_notes?: string | null;
           p_attachment_url?: string | null;
+          p_unit_id?: string | null;
         };
         Returns: string;
       };
+      cm_kepala_cabang_decide_labor_payment: { Args: { p_payment_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
       cm_set_labor_contract_weights: { Args: { p_contract_id: string; p_weights: Json }; Returns: undefined };
       cm_labor_contract_summary: {
         Args: { p_contract_id: string };

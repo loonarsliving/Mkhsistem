@@ -9,6 +9,7 @@ export type CreateContractorInput = z.infer<typeof createContractorSchema>;
 
 export const createLaborContractSchema = z.object({
   projectId: z.string().uuid(),
+  unitId: z.string().uuid().optional().or(z.literal("")),
   contractorId: z.string().uuid("Pilih kontraktor"),
   contractValue: z.number().positive("Nilai kontrak harus lebih dari 0"),
   retentionPct: z.number().min(0).max(100).optional(),
@@ -57,3 +58,10 @@ export const reviewLaborPaymentSchema = z.object({
   paymentId: z.string().uuid(),
 });
 export type ReviewLaborPaymentInput = z.infer<typeof reviewLaborPaymentSchema>;
+
+export const kepalaCabangDecideLaborPaymentSchema = z.object({
+  paymentId: z.string().uuid(),
+  approve: z.boolean(),
+  reason: z.string().trim().max(500).optional().or(z.literal("")),
+});
+export type KepalaCabangDecideLaborPaymentInput = z.infer<typeof kepalaCabangDecideLaborPaymentSchema>;

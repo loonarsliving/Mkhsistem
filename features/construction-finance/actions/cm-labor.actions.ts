@@ -14,6 +14,7 @@ import {
   createLaborContractSchema,
   decideLaborPaymentSchema,
   generateLaborPaymentSchema,
+  kepalaCabangDecideLaborPaymentSchema,
   reviewLaborPaymentSchema,
   setLaborContractWeightsSchema,
   type AddLaborDeductionInput,
@@ -22,6 +23,7 @@ import {
   type CreateLaborContractInput,
   type DecideLaborPaymentInput,
   type GenerateLaborPaymentInput,
+  type KepalaCabangDecideLaborPaymentInput,
   type ReviewLaborPaymentInput,
   type SetLaborContractWeightsInput,
 } from "../schemas/cm-labor.schema";
@@ -59,6 +61,7 @@ export async function createLaborContractAction(input: CreateLaborContractInput)
     p_start_date: parsed.data.startDate,
     p_target_completion: parsed.data.targetCompletion || null,
     p_notes: parsed.data.notes || null,
+    p_unit_id: parsed.data.unitId || null,
   });
   if (error) return actionError(error.message);
 
@@ -146,6 +149,30 @@ export async function decideLaborPaymentAction(input: DecideLaborPaymentInput): 
   const { error } = parsed.data.approve
     ? await supabase.rpc("cm_approve_labor_payment", { p_payment_id: parsed.data.paymentId })
     : await supabase.rpc("cm_reject_labor_payment", { p_payment_id: parsed.data.paymentId, p_reason: parsed.data.reason || null });
+  if (error) return actionError(error.message);
+
+  revalidatePath("/construction-finance");
+  return actionSuccess();
+}
+
+/**
+ * Kepala Cabang's own-branch decision (0220) -- approves a 'draft' payment
+ * forward to 'kc_approved' for final Super Admin/Finance approval, or
+ * rejects it outright. cm_kepala_cabang_decide_labor_payment enforces the
+ * branch match server-side, so this is safe to expose to anyone holding
+ * construction_finance.approve_branch, not just .manage.
+ */
+export async function kepalaCabangDecideLaborPaymentAction(input: KepalaCabangDecideLaborPaymentInput): Promise<ActionResult> {
+  await requireSession();
+  const parsed = kepalaCabangDecideLaborPaymentSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cm_kepala_cabang_decide_labor_payment", {
+    p_payment_id: parsed.data.paymentId,
+    p_approve: parsed.data.approve,
+    p_reason: parsed.data.reason || null,
+  });
   if (error) return actionError(error.message);
 
   revalidatePath("/construction-finance");

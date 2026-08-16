@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { Contractor, LaborContractWithSummary, LaborPaymentItem, ProjectWbsOption } from "@/repositories/cm-labor.repository";
+import type { Contractor, LaborContractWithSummary, LaborPaymentItem, ProjectUnitOption, ProjectWbsOption } from "@/repositories/cm-labor.repository";
 
 import {
   addLaborDeductionAction,
@@ -26,6 +26,7 @@ import {
   createLaborContractAction,
   decideLaborPaymentAction,
   generateLaborPaymentAction,
+  kepalaCabangDecideLaborPaymentAction,
   reviewLaborPaymentAction,
   setLaborContractWeightsAction,
 } from "../actions/cm-labor.actions";
@@ -46,9 +47,14 @@ interface CmLaborContractsCardProps {
   projectId: string;
   contracts: LaborContractWithSummary[];
   contractors: Contractor[];
+  projectUnits: ProjectUnitOption[];
   wbsOptions: ProjectWbsOption[];
-  pendingPayments: LaborPaymentItem[];
+  /** status='draft' -- Kepala Cabang's own-branch decision, before it's forwarded for final approval. */
+  paymentsAwaitingKcApproval: LaborPaymentItem[];
+  /** status='kc_approved' -- Kepala Cabang already signed off, Super Admin/Finance does the final money-moving approval. */
+  paymentsAwaitingFinalApproval: LaborPaymentItem[];
   canManage: boolean;
+  canApproveBranch: boolean;
 }
 
 function today() {
@@ -109,7 +115,7 @@ function CreateContractorDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function CreateContractDialog({ projectId, contractors }: { projectId: string; contractors: Contractor[] }) {
+function CreateContractDialog({ projectId, contractors, projectUnits }: { projectId: string; contractors: Contractor[]; projectUnits: ProjectUnitOption[] }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
   const {
@@ -120,7 +126,7 @@ function CreateContractDialog({ projectId, contractors }: { projectId: string; c
     formState: { errors, isSubmitting },
   } = useForm<CreateLaborContractInput>({
     resolver: zodResolver(createLaborContractSchema),
-    defaultValues: { projectId, contractorId: "", contractValue: undefined, retentionPct: 0, startDate: today(), targetCompletion: "", notes: "" },
+    defaultValues: { projectId, unitId: "", contractorId: "", contractValue: undefined, retentionPct: 0, startDate: today(), targetCompletion: "", notes: "" },
   });
 
   async function onSubmit(values: CreateLaborContractInput) {
@@ -130,7 +136,7 @@ function CreateContractDialog({ projectId, contractors }: { projectId: string; c
       return;
     }
     toast.success("Kontrak borongan dibuat -- lanjutkan atur bobot pekerjaan");
-    reset({ projectId, contractorId: "", contractValue: undefined, retentionPct: 0, startDate: today(), targetCompletion: "", notes: "" });
+    reset({ projectId, unitId: "", contractorId: "", contractValue: undefined, retentionPct: 0, startDate: today(), targetCompletion: "", notes: "" });
     setOpen(false);
   }
 
@@ -147,6 +153,31 @@ function CreateContractDialog({ projectId, contractors }: { projectId: string; c
           <DialogTitle>Kontrak Borongan Baru</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
+          {projectUnits.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Unit (opsional)</Label>
+              <Controller
+                control={control}
+                name="unitId"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tidak diikat ke unit tertentu" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectUnits.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <p className="text-xs text-muted-foreground">Kalau diikat ke unit, sisa borongan bisa dilihat per unit sebelum approval mingguan.</p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <Label>Kontraktor/Mandor</Label>
             <CreateContractorDialog onCreated={() => router.refresh()} />
@@ -395,7 +426,7 @@ const AI_VERDICT_LABEL: Record<NonNullable<LaborPaymentItem["aiVerdict"]>, { lab
   tidak_sesuai: { label: "AI: Tidak Sesuai Bukti Foto", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
-function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
+function PendingPaymentRow({ payment, mode }: { payment: LaborPaymentItem; mode: "kc" | "final" }) {
   const [busy, setBusy] = React.useState(false);
   const [showDeduction, setShowDeduction] = React.useState(false);
   const [deductionAmount, setDeductionAmount] = React.useState("");
@@ -420,13 +451,20 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
   async function decide(approve: boolean) {
     setBusy(true);
     const reason = approve ? undefined : (window.prompt("Alasan penolakan?") ?? undefined);
-    const result = await decideLaborPaymentAction({ paymentId: payment.id, approve, reason });
+    const result =
+      mode === "kc"
+        ? await kepalaCabangDecideLaborPaymentAction({ paymentId: payment.id, approve, reason })
+        : await decideLaborPaymentAction({ paymentId: payment.id, approve, reason });
     setBusy(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal memproses");
       return;
     }
-    toast.success(approve ? "Pembayaran disetujui & dicatat ke keuangan" : "Pembayaran ditolak");
+    if (mode === "kc") {
+      toast.success(approve ? "Disetujui -- diteruskan ke approval final" : "Pengajuan ditolak");
+    } else {
+      toast.success(approve ? "Pembayaran disetujui & dicatat ke keuangan" : "Pembayaran ditolak");
+    }
   }
 
   async function addDeduction() {
@@ -453,11 +491,16 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
       <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
         <div>
           <p className="font-medium">
-            {payment.contractorName} — {payment.periodStart} s/d {payment.periodEnd}
+            {payment.contractorName}
+            {payment.unitCode && ` -- Unit ${payment.unitCode}`} — {payment.periodStart} s/d {payment.periodEnd}
           </p>
           <p className="text-xs text-muted-foreground">
             Gross {formatCurrency(payment.grossEarned)} · Retention {formatCurrency(payment.retentionAmount)} · Potongan{" "}
             {formatCurrency(payment.deductionAmount)}
+          </p>
+          <p className="text-xs font-medium">
+            Sisa borongan {payment.unitCode ? `unit ${payment.unitCode}` : "kontrak ini"} setelah pembayaran ini:{" "}
+            {formatCurrency(Math.max(payment.contractRemaining - payment.netPayable, 0))} (dari total {formatCurrency(payment.contractRemaining)} saat ini)
           </p>
           {ai?.verdict && (
             <Badge variant="outline" className={cn("mt-1", AI_VERDICT_LABEL[ai.verdict].className)}>
@@ -470,11 +513,13 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
             {aiBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
             {ai ? "Analisa Ulang AI" : "Analisa AI"}
           </Button>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setShowDeduction((v) => !v)}>
-            + Potongan
-          </Button>
+          {mode === "final" && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setShowDeduction((v) => !v)}>
+              + Potongan
+            </Button>
+          )}
           <Button size="sm" disabled={busy} onClick={() => decide(true)}>
-            Setujui & Bayar
+            {mode === "kc" ? "Setujui" : "Setujui & Bayar"}
           </Button>
           <Button size="sm" variant="destructive" disabled={busy} onClick={() => decide(false)}>
             Tolak
@@ -515,8 +560,19 @@ function PendingPaymentRow({ payment }: { payment: LaborPaymentItem }) {
   );
 }
 
-export function CmLaborContractsCard({ projectId, contracts, contractors, wbsOptions, pendingPayments, canManage }: CmLaborContractsCardProps) {
-  if (!canManage && contracts.length === 0) return null;
+export function CmLaborContractsCard({
+  projectId,
+  contracts,
+  contractors,
+  projectUnits,
+  wbsOptions,
+  paymentsAwaitingKcApproval,
+  paymentsAwaitingFinalApproval,
+  canManage,
+  canApproveBranch,
+}: CmLaborContractsCardProps) {
+  if (!canManage && !canApproveBranch) return null;
+  if (!canManage && contracts.length === 0 && paymentsAwaitingKcApproval.length === 0) return null;
 
   return (
     <Card>
@@ -528,60 +584,86 @@ export function CmLaborContractsCard({ projectId, contracts, contractors, wbsOpt
         <CardDescription>Pembayaran dihitung dari earned value (nilai kontrak x bobot pekerjaan x progress bertambah) -- bukan input manual.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {canManage && <CreateContractDialog projectId={projectId} contractors={contractors} />}
+        {canManage && <CreateContractDialog projectId={projectId} contractors={contractors} projectUnits={projectUnits} />}
 
-        <div className="space-y-3">
-          {contracts.map((c) => (
-            <div key={c.id} className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-medium">{c.contractorName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Kontrak {formatCurrency(c.contractValue)} · Retention {c.retentionPct}%
-                  </p>
+        {contracts.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Sisa Borongan Tukang {contracts.some((c) => c.unitCode) ? "per Unit" : ""}</p>
+            {contracts.map((c) => {
+              const remaining = c.contractValue - c.summary.cumulativePaid;
+              return (
+                <div key={c.id} className="space-y-2 rounded-md border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium">
+                        {c.contractorName}
+                        {c.unitCode && (
+                          <Badge variant="outline" className="ml-2">
+                            Unit {c.unitCode}
+                          </Badge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Kontrak {formatCurrency(c.contractValue)} · Retention {c.retentionPct}%
+                      </p>
+                    </div>
+                    {c.summary.status === "overpayment" && (
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Overpayment
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Earned</p>
+                      <p className="tabular-nums">{formatCurrency(c.summary.cumulativeEarned)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Dibayar</p>
+                      <p className="tabular-nums">{formatCurrency(c.summary.cumulativePaid)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Sisa Bisa Dibayar</p>
+                      <p className="tabular-nums font-medium">{formatCurrency(c.summary.payable)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Sisa Kontrak</p>
+                      <p className="tabular-nums font-medium">{formatCurrency(remaining)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Kasbon Belum Lunas</p>
+                      <p className="tabular-nums">{formatCurrency(c.summary.outstandingAdvance)}</p>
+                    </div>
+                  </div>
+                  {canManage && (
+                    <div className="flex flex-wrap gap-2">
+                      <SetWeightsDialog contract={c} wbsOptions={wbsOptions} />
+                      {c.hasWeights && <GeneratePaymentDialog contract={c} />}
+                      <ApplyAdvanceDialog contract={c} />
+                    </div>
+                  )}
                 </div>
-                {c.summary.status === "overpayment" && (
-                  <Badge variant="destructive" className="flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Overpayment
-                  </Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Earned</p>
-                  <p className="tabular-nums">{formatCurrency(c.summary.cumulativeEarned)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Dibayar</p>
-                  <p className="tabular-nums">{formatCurrency(c.summary.cumulativePaid)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Sisa Bisa Dibayar</p>
-                  <p className="tabular-nums font-medium">{formatCurrency(c.summary.payable)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Kasbon Belum Lunas</p>
-                  <p className="tabular-nums">{formatCurrency(c.summary.outstandingAdvance)}</p>
-                </div>
-              </div>
-              {canManage && (
-                <div className="flex flex-wrap gap-2">
-                  <SetWeightsDialog contract={c} wbsOptions={wbsOptions} />
-                  {c.hasWeights && <GeneratePaymentDialog contract={c} />}
-                  <ApplyAdvanceDialog contract={c} />
-                </div>
-              )}
-            </div>
-          ))}
-          {contracts.length === 0 && <p className="text-sm text-muted-foreground">Belum ada kontrak borongan.</p>}
-        </div>
+              );
+            })}
+          </div>
+        )}
+        {canManage && contracts.length === 0 && <p className="text-sm text-muted-foreground">Belum ada kontrak borongan.</p>}
 
-        {canManage && pendingPayments.length > 0 && (
+        {paymentsAwaitingKcApproval.length > 0 && (
           <div className="space-y-2 border-t pt-4">
-            <p className="text-sm font-medium">Pembayaran Menunggu Approval ({pendingPayments.length})</p>
-            {pendingPayments.map((p) => (
-              <PendingPaymentRow key={p.id} payment={p} />
+            <p className="text-sm font-medium">Pengajuan Menunggu Persetujuan Anda ({paymentsAwaitingKcApproval.length})</p>
+            {paymentsAwaitingKcApproval.map((p) => (
+              <PendingPaymentRow key={p.id} payment={p} mode="kc" />
+            ))}
+          </div>
+        )}
+
+        {canManage && paymentsAwaitingFinalApproval.length > 0 && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="text-sm font-medium">Menunggu Approval Final -- Sudah Disetujui Kepala Cabang ({paymentsAwaitingFinalApproval.length})</p>
+            {paymentsAwaitingFinalApproval.map((p) => (
+              <PendingPaymentRow key={p.id} payment={p} mode="final" />
             ))}
           </div>
         )}
