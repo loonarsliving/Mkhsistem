@@ -15,6 +15,7 @@ import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval"
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
+import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -175,6 +176,53 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // everything else since a bukti transfer photo isn't a progress/relay
       // photo.
       if (imageRoleKey === "super_admin") {
+        // Construction project fund transfer (0225): caption mentions a
+        // branch/project/Kepala Cabang name (e.g. "Kendari" or "Fasly") --
+        // tops up that project's dana masuk instead of being treated as a
+        // gaji-tukang/material expense transfer proof. Deliberately
+        // caption-gated so it never hijacks the far more common expense
+        // transfer proof below, which has no caption requirement.
+        trace.push("tryRecordConstructionFundTransferViaWhatsApp:calling");
+        const fundTransferResult = await tryRecordConstructionFundTransferViaWhatsApp(
+          { id: employee.id, name: employee.full_name, roleKey: imageRoleKey },
+          inbound.content.url,
+          inbound.content.caption,
+        );
+        trace.push(`tryRecordConstructionFundTransferViaWhatsApp:${fundTransferResult.outcome}`);
+        if (fundTransferResult.outcome === "recorded") {
+          const recipientNames = fundTransferResult.recipients.map((r) => r.name);
+          const replyText =
+            `✅ Dana proyek *${fundTransferResult.projectName}* (${fundTransferResult.branchName}) bertambah Rp ${fundTransferResult.amount.toLocaleString("id-ID")} (dibaca dari foto).` +
+            (recipientNames.length > 0 ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.` : "\n⚠️ Tidak ada Kepala Cabang dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          trace.push("sendWhatsAppText:calling(fund-transfer)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          trace.push("sendWhatsAppImage:forwarding(fund-transfer)");
+          for (const recipient of fundTransferResult.recipients) {
+            await sendWhatsAppImage(recipient.phone, inbound.content.url, `📎 Bukti transfer dana proyek ${fundTransferResult.projectName} — Rp ${fundTransferResult.amount.toLocaleString("id-ID")} (dari Super Admin)`);
+          }
+          trace.push("sendWhatsAppImage:done(fund-transfer)");
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dana proyek]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (fundTransferResult.outcome === "ambiguous") {
+          const replyText = `⚠️ Caption foto ini cocok dengan lebih dari satu proyek: ${fundTransferResult.candidates.join(", ")}. Tolong kirim ulang dengan caption yang lebih spesifik (nama proyek/cabang).`;
+          trace.push("sendWhatsAppText:calling(fund-transfer-ambiguous)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dana proyek]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (fundTransferResult.outcome === "unreadable") {
+          const replyText = `⚠️ Foto untuk dana proyek *${fundTransferResult.projectName}* tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto bukti transfer yang lebih jelas.`;
+          trace.push("sendWhatsAppText:calling(fund-transfer-unreadable)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dana proyek]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         trace.push("tryConfirmTransferProofViaWhatsApp:calling");
         const transferResult = await tryConfirmTransferProofViaWhatsApp({ id: employee.id, name: employee.full_name, roleKey: imageRoleKey }, inbound.content.url);
         trace.push(`tryConfirmTransferProofViaWhatsApp:${transferResult.outcome}`);

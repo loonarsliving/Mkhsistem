@@ -44,8 +44,12 @@ function parseRecognition(text: string): TransferProofRecognition {
  * call, same mechanism as assessConstructionProgress
  * (construction-progress-vision.ts).
  */
-export async function recognizeTransferProof(input: { imageBase64: string; imageMimeType: string; expectedNominal: number }): Promise<TransferProofRecognition> {
-  const userPrompt = `Ini adalah foto/screenshot yang dikirim sebagai bukti transfer bank untuk sebuah pembayaran perusahaan. Nominal yang seharusnya ditransfer: Rp${Math.round(input.expectedNominal).toLocaleString("id-ID")}.
+export async function recognizeTransferProof(input: { imageBase64: string; imageMimeType: string; expectedNominal?: number }): Promise<TransferProofRecognition> {
+  const expectedLine =
+    typeof input.expectedNominal === "number"
+      ? `Nominal yang seharusnya ditransfer: Rp${Math.round(input.expectedNominal).toLocaleString("id-ID")}.`
+      : "Nominal yang ditransfer belum diketahui sebelumnya -- baca langsung dari gambar.";
+  const userPrompt = `Ini adalah foto/screenshot yang dikirim sebagai bukti transfer bank untuk sebuah pembayaran perusahaan. ${expectedLine}
 
 Lihat langsung isi gambar ini dan baca:
 - readable: true kalau ini benar-benar terlihat seperti bukti transfer (screenshot m-banking/struk ATM) yang cukup jelas dibaca, false kalau tidak
