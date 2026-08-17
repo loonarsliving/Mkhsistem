@@ -174,6 +174,18 @@ alter table public.ai_job_queue add constraint ai_job_queue_job_type_check check
 -- ----------------------------------------------------------------------------
 -- New notification category so a Kepala Cabang's HOT-lead handoff shows up
 -- in the in-app notification bell too, not just WhatsApp.
+--
+-- The array below is the FULL list actually live on production at the time
+-- this migration was applied (verified via `pg_get_constraintdef` before
+-- running it) -- earlier migrations in this repo's history had already
+-- drifted from what got shipped (several categories, e.g. 'new_ad_lead',
+-- 'construction_expense_submitted', 'approval_request_decided', existed live
+-- but were never captured in a checked-in migration file). Dropping and
+-- recreating this constraint from the stale shorter list any earlier
+-- migration used would have silently deleted every one of those live
+-- categories and broken the features that insert them. If this file is ever
+-- replayed against a fresh database, re-verify the live constraint first
+-- rather than trusting this snapshot blindly.
 -- ----------------------------------------------------------------------------
 alter table public.mkc_notifications drop constraint mkc_notifications_category_check;
 alter table public.mkc_notifications add constraint mkc_notifications_category_check
@@ -192,6 +204,15 @@ alter table public.mkc_notifications add constraint mkc_notifications_category_c
     'daily_motivation', 'daily_report',
     'birthday_wish',
     'ad_campaign_launched', 'ad_campaign_failed',
+    'new_ad_lead', 'content_published', 'content_publish_reminder', 'finance_expense_alert',
+    'branch_balance_alert', 'sales_coaching_tip', 'ad_lead_followup_reminder', 'ad_lead_escalation_branch',
+    'ad_lead_escalation_director', 'whatsapp_webhook_silence_alert', 'finance_expense_pending_verification',
+    'sales_conduct_warning', 'meta_ads_balance_low', 'content_publish_failed', 'database_followup_push',
+    'lead_wants_info', 'loonars_fee_alert', 'automation_dispatch_failed', 'automation_job_dead_letter',
+    'automation_queue_stalled', 'disciplinary_warning', 'employee_terminated', 'content_review_pending',
+    'salary_transfer_request', 'salary_transferred', 'salary_transfer_summary',
+    'construction_expense_submitted', 'construction_weekly_report', 'material_purchase_missing_photo',
+    'construction_progress_report', 'approval_request_submitted', 'approval_request_decided',
     -- This migration
     'lead_hot_handoff', 'pending_question_timeout'
   ]));
