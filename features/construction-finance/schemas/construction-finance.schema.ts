@@ -59,6 +59,9 @@ export type RecordConstructionFundTransferInput = z.infer<typeof recordConstruct
  * tukang_borongan table (sync_inbound's tukang_borongan_sisa_upsert
  * branch, migration 0019 there). Not tied to a construction_projects row.
  */
+/** `register(..., { valueAsNumber: true })` turns an emptied number input into NaN, not undefined -- z.number().optional() rejects NaN, so this normalizes it first. */
+const optionalNumber = (schema: z.ZodNumber) => z.preprocess((v) => (typeof v === "number" && Number.isNaN(v) ? undefined : v), schema.optional());
+
 export const syncTukangBorongonSchema = z.object({
   proyek: z.enum(["LL", "AFP", "IH", "GCI", "GCR"], { errorMap: () => ({ message: "Pilih proyek" }) }),
   blok: z.string().trim().max(30).optional().or(z.literal("")),
@@ -66,9 +69,9 @@ export const syncTukangBorongonSchema = z.object({
   item: z.string().trim().max(200).optional().or(z.literal("")),
   nilaiKontrak: z.number().min(0, "Tidak boleh negatif"),
   terbayar: z.number().min(0, "Tidak boleh negatif"),
-  totalUnit: z.number().positive().optional(),
+  totalUnit: optionalNumber(z.number().positive()),
   hargaPerUnit: z.number().positive().optional(),
-  unitSelesai: z.number().min(0).optional(),
+  unitSelesai: optionalNumber(z.number().min(0)),
   ket: z.string().trim().max(500).optional().or(z.literal("")),
 });
 export type SyncTukangBorongonInput = z.infer<typeof syncTukangBorongonSchema>;

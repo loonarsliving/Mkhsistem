@@ -136,6 +136,7 @@ export function TukangBorongonSyncCard() {
             <div className="space-y-1.5">
               <Label>Total Unit (opsional)</Label>
               <Input type="number" min="0" step="1" placeholder="-" disabled={isSubmitting} {...register("totalUnit", { valueAsNumber: true })} />
+              {errors.totalUnit && <p className="text-sm text-destructive">{errors.totalUnit.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Harga per Unit (opsional)</Label>
@@ -144,10 +145,12 @@ export function TukangBorongonSyncCard() {
                 name="hargaPerUnit"
                 render={({ field }) => <CurrencyInput value={field.value} onValueChange={field.onChange} disabled={isSubmitting} />}
               />
+              {errors.hargaPerUnit && <p className="text-sm text-destructive">{errors.hargaPerUnit.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Unit Selesai (opsional)</Label>
               <Input type="number" min="0" step="1" placeholder="-" disabled={isSubmitting} {...register("unitSelesai", { valueAsNumber: true })} />
+              {errors.unitSelesai && <p className="text-sm text-destructive">{errors.unitSelesai.message}</p>}
             </div>
           </div>
 
