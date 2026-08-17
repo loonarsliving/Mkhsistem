@@ -3,7 +3,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_CONFIG } from "./config";
 import { getWhatsAppConnector } from "./connectors/manager";
 import {
-  routeAdDrivenLead,
   tryBulkReassignAdLeadFollowUp,
   tryConfirmAdLeadFollowUp,
   tryNotifySalesLeadWantsInfo,
@@ -11,6 +10,7 @@ import {
 } from "./domains/ad-lead-routing";
 import { tryHandleApprovalDecision, tryHandleApprovalSubmission } from "./domains/approval-requests";
 import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
+import { hasNurtureEligibleLead, tryHandleSuperadminAnswer } from "./domains/lead-nurture";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
@@ -18,7 +18,7 @@ import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
-import { enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
+import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
 export interface WhatsAppWebhookHandlerResult {
   status: "processed" | "queued" | "ignored" | "error" | "ad_lead_routed" | "lead_info_request_routed";
@@ -101,14 +101,32 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
     trace.push(`normalized.content.kind:${inbound.content.kind}`);
 
     if (inbound.adReferral) {
-      // Ad-driven lead: never hand this to the AI reply pipeline -- the
-      // operator already runs their own auto-reply on this WhatsApp number
-      // (see lib/ai/domains/ad-lead-routing.ts's module doc). This only
-      // gets the lead into prospects and notifies the assigned sales rep.
+      // Ad-driven lead: the AI nurture bot (lib/ai/domains/lead-nurture.ts)
+      // now talks to the lead directly, answering only from that project's
+      // knowledge_base and tracking temperature across the conversation --
+      // replacing the old "get into prospects + instantly notify a
+      // round-robin Sales" behavior. Queued (not called synchronously) for
+      // the same reason every other Gemini-backed WhatsApp reply in this
+      // file is: a slow/retrying Gemini call must never risk this
+      // function's own duration budget. The actual routing decision
+      // (nurture vs. the legacy freelance/no-recipient fallback) happens
+      // inside the job.
       trace.push(`adReferral:present(${inbound.adReferral.sourceId})`);
-      const routed = await routeAdDrivenLead(inbound.sender, inbound.senderName, inbound.adReferral);
-      trace.push(`routeAdDrivenLead:${routed.outcome}`);
-      return { status: "ad_lead_routed", sender: inbound.sender, reason: routed.outcome, trace };
+      const job = await enqueueLeadNurtureReplyJob(
+        {
+          sender: inbound.sender,
+          senderName: inbound.senderName ?? null,
+          contentText: inbound.content.kind === "text" ? inbound.content.text : "(klik iklan)",
+          adReferralSourceId: inbound.adReferral.sourceId,
+        },
+        AI_CONFIG.retryMaxAttempts,
+      );
+      if (!job) {
+        trace.push("enqueueLeadNurtureReplyJob:failed");
+        return { status: "error", reason: "failed to enqueue lead nurture job", sender: inbound.sender, trace };
+      }
+      trace.push(`enqueueLeadNurtureReplyJob:queued(${job.id})`);
+      return { status: "queued", sender: inbound.sender, jobId: job.id, trace };
     }
 
     trace.push("findEmployeeByPhone:calling");
@@ -125,12 +143,32 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // configured Auto Reply (outside this app) covers the canned
       // "terima kasih, sales kami akan segera menghubungi" greeting.
       //
-      // Before giving up entirely: a known lead (already has a prospects
-      // row) asking for info/presentasi is a real signal that shouldn't be
-      // dropped just because this particular message carries no fresh
-      // ad_reply referral -- hand it to their assigned Sales instead of
-      // silently ignoring it (see tryNotifySalesLeadWantsInfo's doc).
+      // Before giving up entirely: a follow-up text (no fresh ad_reply on
+      // this particular message) from a number that already has an
+      // ad-driven prospects row belongs to the nurture bot, same as a
+      // fresh ad click -- it just continues the existing conversation
+      // instead of opening a new one (see lib/ai/domains/lead-nurture.ts's
+      // continueExistingLeadNurture). Only a lead with NO ad-driven
+      // prospects row at all (e.g. sourced from another channel) falls
+      // through to tryNotifySalesLeadWantsInfo's narrower keyword-based
+      // safety net below.
       if (inbound.content.kind === "text") {
+        trace.push("hasNurtureEligibleLead:calling");
+        const nurtureEligible = await hasNurtureEligibleLead(inbound.sender);
+        trace.push(`hasNurtureEligibleLead:${nurtureEligible}`);
+        if (nurtureEligible) {
+          trace.push("enqueueLeadNurtureReplyJob:calling(follow-up)");
+          const job = await enqueueLeadNurtureReplyJob(
+            { sender: inbound.sender, senderName: inbound.senderName ?? null, contentText: inbound.content.text, adReferralSourceId: null },
+            AI_CONFIG.retryMaxAttempts,
+          );
+          if (job) {
+            trace.push(`enqueueLeadNurtureReplyJob:queued(${job.id})`);
+            return { status: "queued", sender: inbound.sender, jobId: job.id, trace };
+          }
+          trace.push("enqueueLeadNurtureReplyJob:failed");
+        }
+
         trace.push("tryNotifySalesLeadWantsInfo:calling");
         const infoResult = await tryNotifySalesLeadWantsInfo(inbound.sender, inbound.senderName, inbound.content.text);
         trace.push(`tryNotifySalesLeadWantsInfo:${infoResult.outcome}`);
@@ -380,6 +418,39 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // the general AI pipeline; only short-circuits when a fee is actually
       // pending, so it never hijacks an unrelated "ya" reply.
       if (roleKey === "super_admin") {
+        // Super Admin answering a nurture-bot escalation, "[PQ-0001]:
+        // jawaban" (see lib/ai/domains/lead-nurture.ts's
+        // notifySuperadminsPendingQuestion). Must run first in this block
+        // -- "PQ-" is distinctive enough it never collides with the
+        // "ya"/"setuju" fee-approval or approval-decision checks below, but
+        // running it first keeps that guarantee explicit rather than
+        // incidental. The DB writes (mark answered + bank into
+        // knowledge_base) happen synchronously here; the Gemini rephrase +
+        // actual send-to-lead is queued (whatsapp_admin_answer_relay) so it
+        // can't blow this webhook's duration budget.
+        trace.push("tryHandleSuperadminAnswer:calling");
+        const answerResult = await tryHandleSuperadminAnswer(inbound.content.text);
+        trace.push(`tryHandleSuperadminAnswer:${answerResult.outcome}`);
+        if (answerResult.outcome !== "not_an_answer_command") {
+          let replyText: string;
+          if (answerResult.outcome === "answered" && answerResult.pendingQuestionId) {
+            const relayJob = await enqueueAdminAnswerRelayJob({ pendingQuestionId: answerResult.pendingQuestionId }, AI_CONFIG.retryMaxAttempts);
+            replyText = relayJob
+              ? "✅ Jawaban diterima, sedang diteruskan ke lead dan disimpan ke knowledge base."
+              : "⚠️ Jawaban tersimpan, tapi gagal menjadwalkan pengiriman ke lead. Tolong cek manual.";
+          } else if (answerResult.outcome === "already_answered") {
+            replyText = "Pertanyaan itu sudah dijawab sebelumnya.";
+          } else {
+            replyText = "Tidak ditemukan pertanyaan pending dengan kode itu. Cek lagi kodenya.";
+          }
+          trace.push("sendWhatsAppText:calling(pending-question-answer)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         trace.push("tryApproveLoonarsFeeViaWhatsApp:calling");
         const feeApprovalResult = await tryApproveLoonarsFeeViaWhatsApp(employee.id, employee.full_name, inbound.content.text);
         trace.push(`tryApproveLoonarsFeeViaWhatsApp:${feeApprovalResult.outcome}`);
