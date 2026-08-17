@@ -116,11 +116,20 @@ export type NotificationCategoryDb =
   | "salary_transfer_request"
   | "salary_transferred"
   // Consolidated per-branch salary transfer digest (migration 0190)
-  | "salary_transfer_summary";
+  | "salary_transfer_summary"
+  // AI lead-nurture bot (migration 0228)
+  | "lead_hot_handoff"
+  | "pending_question_timeout";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
 export type LeadSourceDb = "facebook_ads" | "instagram" | "tiktok" | "walk_in" | "referral" | "whatsapp" | "marketplace" | "other";
+export type LeadTemperatureDb = "cold" | "warm" | "hot";
+export type LeadAiModeDb = "nurture" | "standby";
+export type KnowledgeBaseKategoriDb = "harga" | "unit" | "fasilitas" | "pembayaran" | "lainnya";
+export type KnowledgeBaseSumberDb = "manual" | "dari_admin";
+export type LeadChatSenderDb = "lead" | "ai" | "admin";
+export type PendingQuestionStatusDb = "waiting" | "answered" | "timeout_escalated";
 export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "survey" | "video_call" | "site_visit" | "negotiation";
 export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
@@ -2249,6 +2258,10 @@ export interface Database {
           last_reminder_sent_at: string | null;
           total_collection: number;
           total_commission: number;
+          lead_temperature: LeadTemperatureDb;
+          temperature_signals: Json;
+          ai_mode: LeadAiModeDb;
+          hot_at: string | null;
           closed_at: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -2272,6 +2285,10 @@ export interface Database {
           last_reminder_sent_at?: string | null;
           total_collection?: number;
           total_commission?: number;
+          lead_temperature?: LeadTemperatureDb;
+          temperature_signals?: Json;
+          ai_mode?: LeadAiModeDb;
+          hot_at?: string | null;
           closed_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
@@ -2295,6 +2312,119 @@ export interface Database {
           },
           {
             foreignKeyName: "prospects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      knowledge_base: {
+        Row: {
+          id: string;
+          project_id: string;
+          kategori: KnowledgeBaseKategoriDb;
+          pertanyaan_umum: string;
+          jawaban: string;
+          sumber: KnowledgeBaseSumberDb;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          kategori: KnowledgeBaseKategoriDb;
+          pertanyaan_umum: string;
+          jawaban: string;
+          sumber?: KnowledgeBaseSumberDb;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["knowledge_base"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      lead_chat_history: {
+        Row: {
+          id: string;
+          prospect_id: string;
+          sender: LeadChatSenderDb;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          prospect_id: string;
+          sender: LeadChatSenderDb;
+          message: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_chat_history"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "lead_chat_history_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      pending_questions: {
+        Row: {
+          id: string;
+          code: string;
+          prospect_id: string;
+          project_id: string;
+          branch_id: string;
+          pertanyaan: string;
+          status: PendingQuestionStatusDb;
+          dikirim_ke_admin_at: string;
+          dijawab_at: string | null;
+          jawaban_admin: string | null;
+          timeout_escalated_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code?: string;
+          prospect_id: string;
+          project_id: string;
+          branch_id: string;
+          pertanyaan: string;
+          status?: PendingQuestionStatusDb;
+          dikirim_ke_admin_at?: string;
+          dijawab_at?: string | null;
+          jawaban_admin?: string | null;
+          timeout_escalated_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pending_questions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "pending_questions_prospect_id_fkey";
+            columns: ["prospect_id"];
+            referencedRelation: "prospects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_questions_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "crm_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_questions_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
             referencedColumns: ["id"];
@@ -3313,7 +3443,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -3325,7 +3455,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;

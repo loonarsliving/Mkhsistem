@@ -37,7 +37,8 @@ import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { askAI } from "@/lib/ai/service";
 import { AIProviderError } from "@/lib/ai/provider/errors";
 import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
-import type { WhatsAppAiReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
+import type { WhatsAppAdminAnswerRelayJobPayload, WhatsAppAiReplyJobPayload, WhatsAppLeadNurtureReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
+import { handleAdDrivenNurtureLead, continueExistingLeadNurture, relayAdminAnswerToLead } from "@/lib/ai/domains/lead-nurture";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
@@ -196,6 +197,22 @@ async function processWhatsAppAiReply(supabase: AdminClient, job: JobRow) {
   const sendResult = await sendWhatsAppText(payload.sender, replyText);
   await saveAiConversationTurn(payload.sender, payload.contentText, replyText, payload.employeeId);
   return { replySent: sendResult.success };
+}
+
+/** One nurture-bot turn (lib/ai/domains/lead-nurture.ts) -- either a fresh/repeat ad click (adReferralSourceId set) or a follow-up message from a number that already has an ad-driven prospects row. */
+async function processLeadNurtureReply(job: JobRow) {
+  const payload = job.payload as unknown as WhatsAppLeadNurtureReplyJobPayload;
+  const result = payload.adReferralSourceId
+    ? await handleAdDrivenNurtureLead(payload.sender, payload.senderName ?? undefined, { sourceId: payload.adReferralSourceId, sourceType: "whatsapp" }, payload.contentText)
+    : await continueExistingLeadNurture(payload.sender, payload.senderName ?? undefined, payload.contentText);
+  return { outcome: result?.outcome ?? "no_prospect", temperature: result && "temperature" in result ? result.temperature : undefined };
+}
+
+/** Rephrases + sends a Super Admin's "[PQ-0001]: jawaban" answer to the lead (the DB writes already happened synchronously in the webhook -- see tryHandleSuperadminAnswer). */
+async function processAdminAnswerRelay(job: JobRow) {
+  const payload = job.payload as unknown as WhatsAppAdminAnswerRelayJobPayload;
+  const result = await relayAdminAnswerToLead(payload.pendingQuestionId);
+  return { sent: result.sent };
 }
 
 /** One Gemini attempt to draft an SP1 letter, then hands it to a human (crm_review_sp1_warning) -- never auto-issued. */
@@ -2123,7 +2140,11 @@ export async function POST(request: Request) {
                                                         ? await processFridayHoldingBriefing(job.payload as unknown as FridayHoldingBriefingJobPayload, job.id)
                                                         : job.job_type === "social_weekly_evaluation"
                                                           ? await processSocialWeeklyEvaluation(supabase)
-                                                          : unknownJobType(job.job_type);
+                                                          : job.job_type === "whatsapp_lead_nurture_reply"
+                                                            ? await processLeadNurtureReply(job)
+                                                            : job.job_type === "whatsapp_admin_answer_relay"
+                                                              ? await processAdminAnswerRelay(job)
+                                                              : unknownJobType(job.job_type);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });
@@ -2169,6 +2190,21 @@ export async function POST(request: Request) {
       const payload = job.payload as unknown as WhatsAppAiReplyJobPayload;
       const sendResult = await sendWhatsAppText(payload.sender, AI_BUSY_FALLBACK_MESSAGE);
       await saveAiConversationTurn(payload.sender, payload.contentText, AI_BUSY_FALLBACK_MESSAGE, payload.employeeId);
+
+      await supabase
+        .from("ai_job_queue")
+        .update({ status: "dead_letter", attempt_count: attemptCount, last_error: errorMessage, updated_at: new Date().toISOString() })
+        .eq("id", job.id);
+
+      return NextResponse.json({ status: "dead_letter", replySent: sendResult.success });
+    }
+
+    // A lead waiting on the nurture bot must never be left hanging either,
+    // same reasoning as whatsapp_ai_reply above -- send the fallback
+    // directly rather than trying to fake a knowledge-base answer.
+    if (job.job_type === "whatsapp_lead_nurture_reply") {
+      const payload = job.payload as unknown as WhatsAppLeadNurtureReplyJobPayload;
+      const sendResult = await sendWhatsAppText(payload.sender, AI_BUSY_FALLBACK_MESSAGE);
 
       await supabase
         .from("ai_job_queue")

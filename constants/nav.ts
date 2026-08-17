@@ -4,6 +4,7 @@ import {
   Banknote,
   BarChart3,
   BedDouble,
+  BookOpen,
   BrainCircuit,
   BriefcaseBusiness,
   Building2,
@@ -113,6 +114,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Target Sales", href: "/crm/targets", icon: Target, permission: PERMISSIONS.SALES_TARGET_MANAGE },
       { label: "SP1 Sales", href: "/crm/warnings", icon: FileWarning, permission: PERMISSIONS.SP1_WARNING_MANAGE },
       { label: "Project Master", href: "/crm/projects", icon: FolderKanban, permission: PERMISSIONS.CRM_PROJECT_MANAGE },
+      { label: "Knowledge Base AI", href: "/crm/knowledge-base", icon: BookOpen, permission: PERMISSIONS.PROSPECT_MANAGE },
       {
         label: "Analitik CRM",
         href: "/crm/analytics",
