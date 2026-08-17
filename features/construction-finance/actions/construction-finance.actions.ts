@@ -116,7 +116,7 @@ export async function syncTukangBorongonAction(input: SyncTukangBorongonInput): 
     direction: "outbound",
     event_type: "tukang_borongan_sisa_upsert",
     source_table: "manual_input",
-    source_id: `${d.proyek}-${d.blok || "-"}-${d.nama}`,
+    source_id: crypto.randomUUID(),
     idempotency_key: `tukang-sisa-${crypto.randomUUID()}`,
     payload: {
       proyek: d.proyek,
