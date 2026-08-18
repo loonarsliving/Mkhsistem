@@ -136,6 +136,7 @@ export type PaymentStatusDb = "pending" | "approved" | "rejected";
 export type CrmProjectTypeDb = "commercial" | "subsidized" | "villa" | "land";
 export type CrmProjectOfferingTypeDb = "sale" | "rental_stay" | "management_service";
 export type CrmProjectStatusDb = "planning" | "selling" | "completed";
+export type CrmProjectAiLeadModeDb = "nurture" | "handoff";
 export type KpiTaskStatusDb = "pending" | "awaiting_verification" | "completed" | "rejected";
 export type KpiTaskContentFocusDb = "leasehold_sales" | "occupancy" | "general";
 export type KpiRankingScopeDb = "weekly" | "monthly";
@@ -1305,6 +1306,7 @@ export interface Database {
           is_active: boolean;
           mkh_project_code: string | null;
           product_description: string | null;
+          ai_lead_mode: CrmProjectAiLeadModeDb;
           created_at: string;
           updated_at: string;
           created_by: string | null;
@@ -1323,6 +1325,7 @@ export interface Database {
           is_active?: boolean;
           mkh_project_code?: string | null;
           product_description?: string | null;
+          ai_lead_mode?: CrmProjectAiLeadModeDb;
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;
