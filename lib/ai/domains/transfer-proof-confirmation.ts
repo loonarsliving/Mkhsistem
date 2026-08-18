@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type TransferProofConfirmationOutcome =
   | { outcome: "not_super_admin" }
   | { outcome: "no_pending_transfer" }
+  | { outcome: "sync_failed"; error: string }
   | {
       outcome: "confirmed";
       tipe: "bahan" | "tukang";
@@ -91,11 +92,17 @@ export async function tryConfirmTransferProofViaWhatsApp(
   const row = claimedRows[0];
   const nominal = Number(row.nominal);
 
-  await supabase.from("sync_log").insert({
+  const { error: syncLogError } = await supabase.from("sync_log").insert({
     direction: "outbound",
     event_type: "finance_expense_transfer_confirmed",
     source_table: "finance_pending_transfers",
-    source_id: String(row.pengajuan_id),
+    // row.id is already a real uuid (finance_pending_transfers.id) --
+    // sync_log.source_id is a uuid column, pengajuan_id (bigint) doesn't
+    // fit it. Previously this inserted String(row.pengajuan_id), which
+    // silently failed every single time (invalid uuid), meaning nothing
+    // ever actually posted to mkh-properti's jurnal despite the WA reply
+    // claiming success -- only caught by cross-checking a real case.
+    source_id: row.id,
     idempotency_key: `transfer-confirmed-${row.pengajuan_id}-${row.id}`,
     payload: {
       pengajuan_id: row.pengajuan_id,
@@ -106,6 +113,13 @@ export async function tryConfirmTransferProofViaWhatsApp(
       confirmed_by: sender.name,
     },
   });
+  if (syncLogError) {
+    // Un-claim so the next bukti transfer reply can retry this same
+    // pengajuan instead of it being stuck "confirmed" with nothing ever
+    // synced -- never silently report success on a write that didn't happen.
+    await supabase.from("finance_pending_transfers").update({ confirmed_at: null, confirmed_by: null }).eq("id", row.id);
+    return { outcome: "sync_failed", error: syncLogError.message };
+  }
 
   const recipients: { name: string; phone: string }[] = [];
   if (row.branch_id) {

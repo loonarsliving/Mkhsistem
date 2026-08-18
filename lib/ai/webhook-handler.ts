@@ -320,6 +320,14 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        if (transferResult.outcome === "sync_failed") {
+          const replyText = `⚠️ Bukti transfer diterima, tapi GAGAL dicatat ke jurnal (${transferResult.error}). Tolong kirim ulang fotonya -- belum ada yang tercatat, jadi aman diulang.`;
+          trace.push("sendWhatsAppText:calling(transfer-sync-failed)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
       }
 
       // Approval requests (0201): "AJUKAN ..." in the caption, from a Kepala
