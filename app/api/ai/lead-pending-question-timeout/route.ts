@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const { data: timedOut, error } = await supabase
     .from("pending_questions")
     .select(
-      "id, code, pertanyaan, branch_id, prospect:prospect_id(phone, customer_name), project:project_id(name)",
+      "id, code, pertanyaan, branch_id, prospect:prospect_id(phone, customer_name), project:project_id(name), branch:branch_id(name)",
     )
     .eq("status", "waiting")
     .is("timeout_escalated_at", null)
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
   for (const row of timedOut ?? []) {
     const prospect = row.prospect as unknown as { phone: string; customer_name: string } | null;
     const project = row.project as unknown as { name: string } | null;
+    const branch = row.branch as unknown as { name: string } | null;
     if (!prospect) continue;
 
     const holdSendResult = await sendWhatsAppText(prospect.phone, HOLDING_MESSAGE);
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     );
 
     const escalationText =
-      `⏰ Pertanyaan lead belum dijawab admin lebih dari ${TIMEOUT_MINUTES} menit -- ${project?.name ?? "-"}\n` +
+      `⏰ Pertanyaan lead belum dijawab admin lebih dari ${TIMEOUT_MINUTES} menit -- ${project?.name ?? "-"} (Cabang ${branch?.name ?? "-"})\n` +
       `[${row.code}]\n` +
       `Lead: ${prospect.customer_name || "Tidak diketahui"} (${prospect.phone})\n` +
       `Pertanyaan: ${row.pertanyaan}\n\n` +
