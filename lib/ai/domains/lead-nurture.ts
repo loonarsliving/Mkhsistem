@@ -309,19 +309,17 @@ async function notifyKepalaCabangHot(
 }
 
 /**
- * Escalates to BOTH the (branch-agnostic) Super Admin pool AND the specific
- * branch's Kepala Cabang -- deliberately reusing the same branch_id the
- * nurture bot already resolved from meta_ad_campaigns at lead-creation time
- * (see createNurtureProspect / lib/ai/domains/ad-lead-routing.ts, which used
- * that exact mapping to route leads to the right branch's Sales before this
- * module existed). A Super Admin juggling escalations from every branch at
- * once is exactly how a Property Management (Jogja) question got answered
- * with a Cendana (Makassar) address in production -- the branch name is now
- * spelled out in the notification itself, and the Kepala Cabang who
- * actually owns that branch/project is looped in from the start instead of
- * only as a 20-minute timeout backup (see the timeout sweep route), since
- * they're far less likely to confuse their own branch's project with
- * another one.
+ * Escalates an unanswered question to the (branch-agnostic) Super Admin pool
+ * only -- the Kepala Cabang stays out of this immediate escalation and is
+ * only looped in later, either via the 20-minute timeout sweep or once the
+ * lead actually goes HOT (see notifyKepalaCabangHot). Owner's explicit ask:
+ * pertanyaan yang belum terjawab tetap dikirim ke Super Admin saja, jangan
+ * ke Kepala Cabang. The branch name is still spelled out in the message
+ * (deliberately reusing the same branch_id the nurture bot already resolved
+ * from meta_ad_campaigns, see createNurtureProspect /
+ * lib/ai/domains/ad-lead-routing.ts) so a Super Admin juggling escalations
+ * from every branch at once doesn't repeat the mixup that answered a
+ * Property Management (Jogja) question with a Cendana (Makassar) address.
  */
 async function notifySuperadminsPendingQuestion(
   code: string,
@@ -347,11 +345,6 @@ async function notifySuperadminsPendingQuestion(
   const superAdmins = (employeesRows ?? []).filter(
     (e) => (e.roles as unknown as { key: string } | null)?.key === "super_admin",
   );
-  const kepalaCabangs = (employeesRows ?? []).filter(
-    (e) =>
-      (e.roles as unknown as { key: string } | null)?.key === "kepala_cabang" &&
-      e.branch_id === prospect.branch_id,
-  );
 
   const notifyText =
     `❓ Pertanyaan lead belum terjawab -- ${projectLabel}\n` +
@@ -360,7 +353,7 @@ async function notifySuperadminsPendingQuestion(
     `Pertanyaan: ${question}\n\n` +
     `Balas dengan format: [${code}]: <jawaban Anda> -- jawaban akan otomatis diteruskan ke lead dan disimpan ke knowledge base khusus project ini.`;
 
-  for (const recipient of [...superAdmins, ...kepalaCabangs]) {
+  for (const recipient of superAdmins) {
     if (!recipient.phone) continue;
     const sendResult = await sendWhatsAppText(recipient.phone, notifyText);
     if (!sendResult.success)
