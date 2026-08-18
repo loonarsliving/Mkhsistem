@@ -345,6 +345,19 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        if (transferResult.outcome === "no_pending_transfer") {
+          // Deliberately doesn't short-circuit -- Super Admin's photo might
+          // not have been a bukti transfer at all (the generic photo-relay
+          // flow below still applies), but sending only that generic "Foto
+          // diterima..." prompt when there genuinely was nothing pending
+          // reads as a silent failure. Say so explicitly, then let the
+          // request keep falling through to the relay flow as before.
+          trace.push("sendWhatsAppText:calling(transfer-no-pending)");
+          await sendWhatsAppText(
+            inbound.sender,
+            "ℹ️ Tidak ada pengajuan gaji tukang/pembelian bahan yang sedang menunggu bukti transfer saat ini. Kalau foto ini memang bukti transfer, cek dulu apakah pengajuannya sudah disetujui Kepala Cabang.",
+          );
+        }
       }
 
       // Approval requests (0201): "AJUKAN ..." in the caption, from a Kepala
