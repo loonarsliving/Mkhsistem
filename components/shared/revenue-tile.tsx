@@ -17,6 +17,13 @@ const TONE_CLASS: Record<NonNullable<RevenueTileProps["tone"]>, string> = {
   destructive: "bg-destructive/10 text-destructive",
 };
 
+const TONE_WRAPPER_CLASS: Record<NonNullable<RevenueTileProps["tone"]>, string> = {
+  default: "border-border",
+  success: "border-success/20 bg-success/5",
+  warning: "border-warning/20 bg-warning/5",
+  destructive: "border-destructive/20 bg-destructive/5",
+};
+
 /**
  * For monetary KPIs that can run into the hundreds of millions or billions
  * of Rupiah (Revenue, Target Revenue, Collection). Always spans the full
@@ -26,7 +33,7 @@ const TONE_CLASS: Record<NonNullable<RevenueTileProps["tone"]>, string> = {
  */
 export function RevenueTile({ icon: Icon, label, value, tone = "default", className }: RevenueTileProps) {
   return (
-    <div className={cn("col-span-full flex items-center gap-4 rounded-lg border border-border p-4 sm:p-5", className)}>
+    <div className={cn("col-span-full flex items-center gap-4 rounded-lg border p-4 sm:p-5", TONE_WRAPPER_CLASS[tone], className)}>
       <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", TONE_CLASS[tone])}>
         <Icon className="h-5 w-5" />
       </div>

@@ -66,9 +66,12 @@ export function AllBranchBalancesCard({ balances }: { balances: BranchBalance[] 
           {balances.map((b) => {
             const isLow = b.saldo < b.alert_threshold;
             return (
-              <div key={b.branch_id} className="rounded-lg border border-border p-4">
+              <div
+                key={b.branch_id}
+                className={`rounded-lg border p-4 ${isLow ? "border-destructive/20 bg-destructive/5" : "border-success/20 bg-success/5"}`}
+              >
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{b.branch_name}</p>
-                <p className={`mt-1 text-lg font-bold tabular-nums ${isLow ? "text-destructive" : ""}`}>{formatCurrency(b.saldo)}</p>
+                <p className={`mt-1 text-lg font-bold tabular-nums ${isLow ? "text-destructive" : "text-success"}`}>{formatCurrency(b.saldo)}</p>
                 {isLow && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
                     <AlertTriangle className="h-3 w-3" /> {SITUATION_LABEL[b.situation_type]}
