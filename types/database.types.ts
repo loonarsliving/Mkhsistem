@@ -2326,6 +2326,7 @@ export interface Database {
           pertanyaan_umum: string;
           jawaban: string;
           sumber: KnowledgeBaseSumberDb;
+          image_url: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -2339,6 +2340,7 @@ export interface Database {
           pertanyaan_umum: string;
           jawaban: string;
           sumber?: KnowledgeBaseSumberDb;
+          image_url?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -2392,6 +2394,7 @@ export interface Database {
           dikirim_ke_admin_at: string;
           dijawab_at: string | null;
           jawaban_admin: string | null;
+          image_url: string | null;
           timeout_escalated_at: string | null;
           created_at: string;
         };
@@ -2406,6 +2409,7 @@ export interface Database {
           dikirim_ke_admin_at?: string;
           dijawab_at?: string | null;
           jawaban_admin?: string | null;
+          image_url?: string | null;
           timeout_escalated_at?: string | null;
           created_at?: string;
         };

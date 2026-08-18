@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import type { AdReferral } from "../connectors/types";
-import { sendWhatsAppText } from "../notifications/engine";
+import { sendWhatsAppImage, sendWhatsAppText } from "../notifications/engine";
 import { generateAIText } from "../service";
 import { routeAdDrivenLead } from "./ad-lead-routing";
 
@@ -43,7 +43,17 @@ interface NurtureModelOutput {
   answered_from_knowledge: boolean;
   unanswered_question: string | null;
   lead_summary: string;
+  /** knowledge_base ids (from the KB block fed into the prompt) whose attached image/denah is relevant to this reply -- sent as separate WhatsApp images right after reply_to_lead. */
+  image_knowledge_ids?: string[];
   signals: Partial<Record<SignalKey, boolean>>;
+}
+
+interface KnowledgeRow {
+  id: string;
+  kategori: string;
+  pertanyaan_umum: string;
+  jawaban: string;
+  image_url: string | null;
 }
 
 /** Best-effort JSON parse -- Gemini occasionally wraps JSON in a ```json fence despite responseFormat: "json" asking it not to. */
@@ -66,12 +76,15 @@ function buildSystemPrompt(
   projectName: string,
   brandContext: string,
   aiMode: "nurture" | "standby",
-  knowledge: { kategori: string; pertanyaan_umum: string; jawaban: string }[],
+  knowledge: KnowledgeRow[],
 ): string {
   const kbBlock =
     knowledge.length > 0
       ? knowledge
-          .map((k, i) => `${i + 1}. [${k.kategori}] Q: ${k.pertanyaan_umum}\n   A: ${k.jawaban}`)
+          .map(
+            (k) =>
+              `- [ID: ${k.id}] [${k.kategori}] Q: ${k.pertanyaan_umum}\n   A: ${k.jawaban}${k.image_url ? "\n   (punya lampiran gambar -- sertakan ID ini di image_knowledge_ids kalau relevan dengan pertanyaan lead saat ini)" : ""}`,
+          )
           .join("\n")
       : "(belum ada data knowledge untuk project ini -- anggap semua pertanyaan lead sebagai belum terjawab)";
 
@@ -93,8 +106,10 @@ DETEKSI SINYAL -- evaluasi dari SELURUH riwayat percakapan (bukan cuma pesan lea
 
 Juga ringkas dalam 1 kalimat singkat apa yang diminati lead sejauh ini (unit/lokasi/budget yang disebut, kalau ada) di "lead_summary" -- kosongkan jika belum ada info berarti.
 
+Kalau ada knowledge di atas yang punya lampiran gambar (ditandai "punya lampiran gambar") dan relevan dengan pertanyaan lead saat ini (misalnya lead minta denah/foto/brosur), masukkan ID knowledge itu ke "image_knowledge_ids" (array of string, boleh lebih dari satu, boleh kosong kalau tidak relevan) -- gambar itu akan otomatis dikirim terpisah setelah balasan teks Anda.
+
 Balas HANYA JSON valid persis struktur berikut, tanpa markdown/backtick, tanpa teks lain di luar JSON:
-{"reply_to_lead": "...", "answered_from_knowledge": true, "unanswered_question": null, "lead_summary": "...", "signals": {"survey_schedule": false, "payment_scheme_specific": false, "ready_or_full_data": false}}`;
+{"reply_to_lead": "...", "answered_from_knowledge": true, "unanswered_question": null, "lead_summary": "...", "image_knowledge_ids": [], "signals": {"survey_schedule": false, "payment_scheme_specific": false, "ready_or_full_data": false}}`;
 }
 
 function renderTranscript(history: { sender: string; message: string }[]): string {
@@ -363,19 +378,15 @@ async function runNurtureTurn(
       .limit(30),
     supabase
       .from("knowledge_base")
-      .select("kategori, pertanyaan_umum, jawaban")
+      .select("id, kategori, pertanyaan_umum, jawaban, image_url")
       .eq("project_id", prospect.project_id ?? "")
       .eq("is_active", true),
   ]);
+  const knowledge = (knowledgeRows ?? []) as KnowledgeRow[];
 
   const projectName = project?.name ?? "properti kami";
   const brandContext = project?.city ? `Maha Karya Haluoleo (${project.city})` : "";
-  const systemPrompt = buildSystemPrompt(
-    projectName,
-    brandContext,
-    prospect.ai_mode,
-    knowledgeRows ?? [],
-  );
+  const systemPrompt = buildSystemPrompt(projectName, brandContext, prospect.ai_mode, knowledge);
   const transcript = renderTranscript(
     (historyRows ?? []).map((h) => ({ sender: h.sender, message: h.message })),
   );
@@ -438,6 +449,26 @@ async function runNurtureTurn(
       prospectId: prospect.id,
       error: sendResult.error,
     });
+
+  // Any knowledge_base entries Gemini flagged as relevant (denah/foto/brosur
+  // attached to a KB row, see buildSystemPrompt) go out as separate WhatsApp
+  // images right after the text reply, in the order Gemini listed them.
+  for (const kbId of modelOutput.image_knowledge_ids ?? []) {
+    const kbRow = knowledge.find((k) => k.id === kbId);
+    if (!kbRow?.image_url) continue;
+    const imageSendResult = await sendWhatsAppImage(prospect.phone, kbRow.image_url);
+    if (!imageSendResult.success)
+      logger.error("runNurtureTurn: WA image send to lead failed", {
+        prospectId: prospect.id,
+        knowledgeBaseId: kbId,
+        error: imageSendResult.error,
+      });
+    await supabase.from("lead_chat_history").insert({
+      prospect_id: prospect.id,
+      sender: "ai",
+      message: `[gambar terkirim: ${kbRow.pertanyaan_umum}]`,
+    });
+  }
 
   if (
     !modelOutput.answered_from_knowledge &&
@@ -627,14 +658,76 @@ export async function tryHandleSuperadminAnswer(
   };
 }
 
-/** Step 2 (queued, see whatsapp_admin_answer_relay job): rephrase the admin's raw answer into a natural WhatsApp reply and send it to the lead. */
+/** Same escalation reply, but the admin answered with a photo (denah/brosur/foto) instead of -- or alongside -- words. Caption-gated: code required, trailing text after it optional (unlike the text-only tryHandleSuperadminAnswer, where an empty answer is rejected as noise) since "here's the photo" often needs no caption text at all. */
+const SUPERADMIN_IMAGE_CODE_PATTERN = /\[?\s*(PQ-\d{3,})\s*\]?\s*(?:[:\-]\s*([\s\S]+))?/i;
+
+/**
+ * Image counterpart to tryHandleSuperadminAnswer -- same DB-writes-now,
+ * Gemini-rephrase-and-send-later split (see relayAdminAnswerToLead). Banks
+ * the image into knowledge_base too, so the same denah/brosur is reused
+ * automatically for the next lead who asks, without round-tripping to an
+ * admin again.
+ */
+export async function tryHandleSuperadminImageAnswer(
+  caption: string | undefined,
+  imageUrl: string,
+): Promise<SuperadminAnswerResult> {
+  if (!caption) return { outcome: "not_an_answer_command" };
+  const match = caption.match(SUPERADMIN_IMAGE_CODE_PATTERN);
+  if (!match) return { outcome: "not_an_answer_command" };
+
+  const code = match[1].toUpperCase();
+  const answer = (match[2] ?? "").trim() || "Gambar/dokumen terlampir.";
+
+  const supabase = createAdminClient();
+  const { data: pending } = await supabase
+    .from("pending_questions")
+    .select("id, status, pertanyaan, project_id, prospect:prospect_id(phone)")
+    .eq("code", code)
+    .maybeSingle();
+
+  if (!pending) return { outcome: "not_found" };
+  if (pending.status === "answered") return { outcome: "already_answered" };
+
+  await supabase
+    .from("pending_questions")
+    .update({
+      status: "answered",
+      dijawab_at: new Date().toISOString(),
+      jawaban_admin: answer,
+      image_url: imageUrl,
+    })
+    .eq("id", pending.id);
+
+  if (pending.project_id) {
+    await supabase.from("knowledge_base").insert({
+      project_id: pending.project_id,
+      kategori: "lainnya",
+      pertanyaan_umum: pending.pertanyaan,
+      jawaban: answer,
+      image_url: imageUrl,
+      sumber: "dari_admin",
+    });
+  }
+
+  const prospect = pending.prospect as unknown as { phone: string } | null;
+  return {
+    outcome: "answered",
+    pendingQuestionId: pending.id,
+    prospectPhone: prospect?.phone,
+    question: pending.pertanyaan,
+    adminAnswer: answer,
+  };
+}
+
+/** Step 2 (queued, see whatsapp_admin_answer_relay job): rephrase the admin's raw answer into a natural WhatsApp reply and send it to the lead -- as an image with a rephrased caption when the admin answered with a photo, plain text otherwise. */
 export async function relayAdminAnswerToLead(
   pendingQuestionId: string,
 ): Promise<{ sent: boolean }> {
   const supabase = createAdminClient();
   const { data: pending } = await supabase
     .from("pending_questions")
-    .select("pertanyaan, jawaban_admin, prospect:prospect_id(id, phone)")
+    .select("pertanyaan, jawaban_admin, image_url, prospect:prospect_id(id, phone)")
     .eq("id", pendingQuestionId)
     .maybeSingle();
 
@@ -653,11 +746,17 @@ export async function relayAdminAnswerToLead(
   const replyText = rephrased?.text?.trim() || pending.jawaban_admin;
 
   await supabase.from("lead_chat_history").insert([
-    { prospect_id: prospect.id, sender: "admin", message: pending.jawaban_admin },
+    {
+      prospect_id: prospect.id,
+      sender: "admin",
+      message: pending.image_url ? `${pending.jawaban_admin} [gambar terlampir]` : pending.jawaban_admin,
+    },
     { prospect_id: prospect.id, sender: "ai", message: replyText },
   ]);
 
-  const sendResult = await sendWhatsAppText(prospect.phone, replyText);
+  const sendResult = pending.image_url
+    ? await sendWhatsAppImage(prospect.phone, pending.image_url, replyText)
+    : await sendWhatsAppText(prospect.phone, replyText);
   if (!sendResult.success)
     logger.error("relayAdminAnswerToLead: WA send failed", {
       pendingQuestionId,
