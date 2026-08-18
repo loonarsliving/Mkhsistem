@@ -14,6 +14,7 @@ import {
   hasNurtureEligibleLead,
   tryHandleSuperadminAnswer,
   tryHandleSuperadminImageAnswer,
+  tryHandleUnmatchedAdLead,
 } from "./domains/lead-nurture";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
@@ -180,6 +181,22 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           await saveAiConversationTurn(inbound.sender, inbound.content.text, null, null);
           trace.push("saveAiConversationTurn:done");
           return { status: "lead_info_request_routed", sender: inbound.sender, reason: infoResult.outcome, trace };
+        }
+
+        // Last resort before giving up entirely: a first-contact stranger
+        // whose ad click didn't carry usable ad_reply data (Whacenter can
+        // send source_id/source_type/source_url all null even though
+        // WhatsApp's own client shows "started from an ad" -- confirmed via
+        // ai_integration_logs on a real incident). Ask which project they
+        // meant instead of silently dropping them; see
+        // tryHandleUnmatchedAdLead / pending_project_selections.
+        trace.push("tryHandleUnmatchedAdLead:calling");
+        const unmatchedResult = await tryHandleUnmatchedAdLead(inbound.sender, inbound.senderName, inbound.content.text);
+        trace.push(`tryHandleUnmatchedAdLead:handled(${unmatchedResult.handled})${unmatchedResult.jobId ? `,queued(${unmatchedResult.jobId})` : ""}`);
+        if (unmatchedResult.handled) {
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, null, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: unmatchedResult.jobId ? "queued" : "processed", sender: inbound.sender, jobId: unmatchedResult.jobId, trace };
         }
       }
 

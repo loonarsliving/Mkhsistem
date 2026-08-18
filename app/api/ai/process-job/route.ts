@@ -38,7 +38,7 @@ import { askAI } from "@/lib/ai/service";
 import { AIProviderError } from "@/lib/ai/provider/errors";
 import { computeBackoffMs } from "@/lib/ai/provider/gemini-retry";
 import type { WhatsAppAdminAnswerRelayJobPayload, WhatsAppAiReplyJobPayload, WhatsAppLeadNurtureReplyJobPayload } from "@/lib/ai/queue/ai-job-queue";
-import { handleAdDrivenNurtureLead, continueExistingLeadNurture, relayAdminAnswerToLead } from "@/lib/ai/domains/lead-nurture";
+import { handleAdDrivenNurtureLead, continueExistingLeadNurture, relayAdminAnswerToLead, resolveProjectSelectionAndNurture } from "@/lib/ai/domains/lead-nurture";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
@@ -202,9 +202,11 @@ async function processWhatsAppAiReply(supabase: AdminClient, job: JobRow) {
 /** One nurture-bot turn (lib/ai/domains/lead-nurture.ts) -- either a fresh/repeat ad click (adReferralSourceId set) or a follow-up message from a number that already has an ad-driven prospects row. */
 async function processLeadNurtureReply(job: JobRow) {
   const payload = job.payload as unknown as WhatsAppLeadNurtureReplyJobPayload;
-  const result = payload.adReferralSourceId
-    ? await handleAdDrivenNurtureLead(payload.sender, payload.senderName ?? undefined, { sourceId: payload.adReferralSourceId, sourceType: "whatsapp" }, payload.contentText)
-    : await continueExistingLeadNurture(payload.sender, payload.senderName ?? undefined, payload.contentText);
+  const result = payload.resolvedProjectId
+    ? await resolveProjectSelectionAndNurture(payload.sender, payload.senderName ?? undefined, payload.resolvedProjectId, payload.contentText)
+    : payload.adReferralSourceId
+      ? await handleAdDrivenNurtureLead(payload.sender, payload.senderName ?? undefined, { sourceId: payload.adReferralSourceId, sourceType: "whatsapp" }, payload.contentText)
+      : await continueExistingLeadNurture(payload.sender, payload.senderName ?? undefined, payload.contentText);
   return { outcome: result?.outcome ?? "no_prospect", temperature: result && "temperature" in result ? result.temperature : undefined };
 }
 

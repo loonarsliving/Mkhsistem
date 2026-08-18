@@ -16,6 +16,8 @@ export interface WhatsAppLeadNurtureReplyJobPayload {
   contentText: string;
   /** Present only when this message carried a real ad_reply referral (see connectors/types.ts's AdReferral). */
   adReferralSourceId: string | null;
+  /** Present only when the lead's ad_reply was empty (e.g. Whacenter sent nulls despite WhatsApp showing "started from an ad") and they were asked which project they meant -- see tryHandleUnmatchedAdLead / pending_project_selections. Takes priority over adReferralSourceId when both would somehow be set. */
+  resolvedProjectId?: string | null;
 }
 
 export interface WhatsAppAdminAnswerRelayJobPayload {

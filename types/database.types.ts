@@ -130,6 +130,7 @@ export type KnowledgeBaseKategoriDb = "harga" | "unit" | "fasilitas" | "pembayar
 export type KnowledgeBaseSumberDb = "manual" | "dari_admin";
 export type LeadChatSenderDb = "lead" | "ai" | "admin";
 export type PendingQuestionStatusDb = "waiting" | "answered" | "timeout_escalated";
+export type PendingProjectSelectionStatusDb = "awaiting" | "matched";
 export type FollowUpActivityTypeDb = "phone_call" | "whatsapp" | "meeting" | "survey" | "video_call" | "site_visit" | "negotiation";
 export type PaymentTypeDb = "booking_fee" | "dp" | "installment" | "bank_disbursement";
 export type PaymentStatusDb = "pending" | "approved" | "rejected";
@@ -2434,6 +2435,39 @@ export interface Database {
             foreignKeyName: "pending_questions_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      pending_project_selections: {
+        Row: {
+          id: string;
+          phone: string;
+          phone_normalized: string;
+          sender_name: string | null;
+          first_message: string;
+          status: PendingProjectSelectionStatusDb;
+          matched_project_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          phone: string;
+          phone_normalized: string;
+          sender_name?: string | null;
+          first_message: string;
+          status?: PendingProjectSelectionStatusDb;
+          matched_project_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pending_project_selections"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "pending_project_selections_matched_project_id_fkey";
+            columns: ["matched_project_id"];
+            referencedRelation: "crm_projects";
             referencedColumns: ["id"];
           },
         ];
