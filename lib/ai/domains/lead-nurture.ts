@@ -380,6 +380,121 @@ export interface NurtureTurnResult {
 }
 
 /** Core turn: log the lead's message, ask Gemini (knowledge-base-only), update temperature/mode, escalate or reply. Shared by every entry point below. */
+/**
+ * Sends a lead one redirect message and hands them off to their branch's
+ * Kepala Cabang immediately -- no knowledge-base engagement at all. Used for
+ * "handoff" mode projects (see runNurtureTurn) on a lead's first message,
+ * and reused standalone by the one-off manual-handoff route
+ * (app/api/ai/lead-manual-handoff) to correct a lead who was answered
+ * before handoff mode existed for their project.
+ */
+export async function handoffProspectToKepalaCabang(
+  prospectId: string,
+  messageToLead: string,
+): Promise<{ sent: boolean }> {
+  const supabase = createAdminClient();
+  const { data: prospect } = await supabase
+    .from("prospects")
+    .select("id, phone, customer_name, project_id, branch_id")
+    .eq("id", prospectId)
+    .maybeSingle();
+  if (!prospect) return { sent: false };
+
+  await supabase
+    .from("lead_chat_history")
+    .insert({ prospect_id: prospect.id, sender: "ai", message: messageToLead });
+  const sendResult = await sendWhatsAppText(prospect.phone, messageToLead);
+  if (!sendResult.success)
+    logger.error("handoffProspectToKepalaCabang: WA send to lead failed", {
+      prospectId,
+      error: sendResult.error,
+    });
+
+  await supabase.from("prospects").update({ ai_mode: "standby" }).eq("id", prospect.id);
+
+  const [{ data: project }, { data: branch }, { data: employeesRows }, { data: historyRows }] =
+    await Promise.all([
+      supabase.from("crm_projects").select("name").eq("id", prospect.project_id ?? "").maybeSingle(),
+      supabase.from("branches").select("name").eq("id", prospect.branch_id).maybeSingle(),
+      supabase
+        .from("employees")
+        .select("id, phone, roles:role_id(key)")
+        .eq("branch_id", prospect.branch_id)
+        .eq("employment_status", "active")
+        .is("deleted_at", null)
+        .not("phone", "is", null),
+      supabase
+        .from("lead_chat_history")
+        .select("sender, message")
+        .eq("prospect_id", prospect.id)
+        .order("created_at", { ascending: true })
+        .limit(30),
+    ]);
+
+  const kepalaCabangs = (employeesRows ?? []).filter(
+    (e) => (e.roles as unknown as { key: string } | null)?.key === "kepala_cabang",
+  );
+  const transcript = renderTranscript(
+    (historyRows ?? []).map((h) => ({ sender: h.sender, message: h.message })),
+  );
+
+  const notifyText =
+    `📞 Lead baru -- ${project?.name ?? "-"} (Cabang ${branch?.name ?? "-"})\n` +
+    `Nama: ${prospect.customer_name || "Tidak diketahui"}\n` +
+    `WA: ${prospect.phone}\n\n` +
+    `Riwayat chat:\n${transcript || "(belum ada riwayat)"}\n\n` +
+    `Mohon segera dihubungi langsung ya kak -- project ini ditangani manual, AI hanya mengarahkan.`;
+
+  if (kepalaCabangs.length === 0) {
+    logger.error("handoffProspectToKepalaCabang: no active Kepala Cabang with phone on file for branch", {
+      branchId: prospect.branch_id,
+    });
+  }
+
+  for (const kc of kepalaCabangs) {
+    if (!kc.phone) continue;
+    const kcSendResult = await sendWhatsAppText(kc.phone, notifyText);
+    if (!kcSendResult.success)
+      logger.error("handoffProspectToKepalaCabang: WA notify failed", {
+        kepalaCabangId: kc.id,
+        error: kcSendResult.error,
+      });
+    await supabase.from("mkc_notifications").insert({
+      user_id: kc.id,
+      type: "crm",
+      category: "lead_hot_handoff",
+      title: "Lead baru -- perlu ditindaklanjuti",
+      body: `${prospect.customer_name || "Lead"} (${prospect.phone}) perlu dihubungi langsung.`,
+      link: `/crm/${prospect.id}`,
+    });
+  }
+
+  return { sent: sendResult.success };
+}
+
+/** Handoff-mode turn (see runNurtureTurn): first message hands off immediately; every message after that just gets a short repeat acknowledgement -- never knowledge-base engagement. */
+async function runHandoffTurn(prospect: ProspectRow, projectName: string): Promise<NurtureTurnResult> {
+  const supabase = createAdminClient();
+
+  if (prospect.ai_mode !== "standby") {
+    const redirectText = `Terima kasih sudah menghubungi kami! Untuk ${projectName}, saya sambungkan langsung dengan tim kami ya, mohon ditunggu sebentar 🙏`;
+    await handoffProspectToKepalaCabang(prospect.id, redirectText);
+  } else {
+    const ackText = "Baik kak, mohon ditunggu ya, tim kami akan segera menghubungi 🙏";
+    await supabase
+      .from("lead_chat_history")
+      .insert({ prospect_id: prospect.id, sender: "ai", message: ackText });
+    const sendResult = await sendWhatsAppText(prospect.phone, ackText);
+    if (!sendResult.success)
+      logger.error("runHandoffTurn: WA send to lead failed", {
+        prospectId: prospect.id,
+        error: sendResult.error,
+      });
+  }
+
+  return { outcome: "replied", prospectId: prospect.id, temperature: prospect.lead_temperature };
+}
+
 async function runNurtureTurn(
   prospect: ProspectRow,
   leadName: string | undefined,
@@ -394,7 +509,7 @@ async function runNurtureTurn(
   const [{ data: project }, { data: historyRows }, { data: knowledgeRows }] = await Promise.all([
     supabase
       .from("crm_projects")
-      .select("name, city")
+      .select("name, city, ai_lead_mode")
       .eq("id", prospect.project_id ?? "")
       .maybeSingle(),
     supabase
@@ -410,8 +525,16 @@ async function runNurtureTurn(
       .eq("is_active", true),
   ]);
   const knowledge = (knowledgeRows ?? []) as KnowledgeRow[];
-
   const projectName = project?.name ?? "properti kami";
+
+  // Handoff-mode projects (e.g. Property Management/Kirana -- a partner
+  // reseller pitching property owners, not a buyer nurture flow) skip
+  // knowledge-base engagement entirely: AI only redirects, a human
+  // (Kepala Cabang) takes it from the first message.
+  if (project?.ai_lead_mode === "handoff") {
+    return runHandoffTurn(prospect, projectName);
+  }
+
   const brandContext = project?.city ? `Maha Karya Haluoleo (${project.city})` : "";
   const systemPrompt = buildSystemPrompt(projectName, brandContext, prospect.ai_mode, knowledge);
   const transcript = renderTranscript(
