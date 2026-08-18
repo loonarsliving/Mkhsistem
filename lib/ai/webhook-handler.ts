@@ -303,8 +303,9 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
             transferResult.mismatch && transferResult.ai.nominal !== null
               ? `\n⚠️ Perhatian: nominal di foto (Rp ${transferResult.ai.nominal.toLocaleString("id-ID")}) berbeda dari nominal pengajuan (Rp ${transferResult.nominal.toLocaleString("id-ID")}). Pastikan ini bukti transfer yang benar.`
               : "";
+          const matchNote = transferResult.matchedByAmount ? " (dicocokkan otomatis dari nominal di foto)" : "";
           const replyText =
-            `✅ Bukti transfer untuk ${transferResult.partyName ?? "pengajuan"} (Rp ${transferResult.nominal.toLocaleString("id-ID")}) diterima dan dicatat ke jurnal.` +
+            `✅ Bukti transfer untuk ${transferResult.partyName ?? "pengajuan"} (Rp ${transferResult.nominal.toLocaleString("id-ID")}) diterima dan dicatat ke jurnal.${matchNote}` +
             mismatchNote +
             (recipientNames.length > 0 ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.` : "\n⚠️ Tidak ada Kepala Cabang/Endy dengan nomor WA terdaftar untuk diteruskan otomatis.");
           trace.push("sendWhatsAppText:calling(transfer-confirm)");

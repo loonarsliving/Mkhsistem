@@ -14,6 +14,7 @@ export type TransferProofConfirmationOutcome =
       nominal: number;
       ai: TransferProofRecognition;
       mismatch: boolean;
+      matchedByAmount: boolean;
       recipients: { name: string; phone: string }[];
     };
 
@@ -26,12 +27,17 @@ function isNominalMismatch(expected: number, read: number | null): boolean {
 
 /**
  * Super Admin's WhatsApp reply with the bukti transfer photo -- the real
- * final approval that posts jurnal in mkh-properti (0018/0222). FIFO-picks
- * the oldest unconfirmed pengajuan awaiting transfer, same accepted
- * trade-off as tryApproveLoonarsFeeViaWhatsApp (no per-pengajuan
- * disambiguation yet; Super Admin is expected to transfer and confirm one
- * at a time). Never blocks on an AI mismatch -- Super Admin's own judgment
- * is final, the mismatch is surfaced as a warning in the reply instead.
+ * final approval that posts jurnal in mkh-properti (0018/0222).
+ *
+ * Reads the photo FIRST (before claiming anything), then tries to match
+ * its AI-read nominal against every still-pending transfer -- not just the
+ * oldest one -- so sending a bukti transfer out of submission order still
+ * lands on the right pengajuan instead of silently confirming whatever
+ * happens to be at the front of the queue. Falls back to FIFO (oldest
+ * pending) only when the photo is unreadable or its nominal doesn't match
+ * any pending row, in which case the existing mismatch warning covers it.
+ * Never blocks on a mismatch either way -- Super Admin's own judgment is
+ * final, the mismatch is only ever surfaced as a warning in the reply.
  */
 export async function tryConfirmTransferProofViaWhatsApp(
   sender: { id: string; name: string; roleKey: string | null },
@@ -42,16 +48,32 @@ export async function tryConfirmTransferProofViaWhatsApp(
   }
 
   const supabase = createAdminClient();
-  const { data: pending } = await supabase
+  const { data: pendingRows } = await supabase
     .from("finance_pending_transfers")
     .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal")
     .is("confirmed_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
-  if (!pending) {
+  if (!pendingRows || pendingRows.length === 0) {
     return { outcome: "no_pending_transfer" };
+  }
+
+  const image = await fetchImageAsBase64(imageUrl);
+  const ai: TransferProofRecognition =
+    image && !image.fetchError
+      ? await recognizeTransferProof({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(
+          (): TransferProofRecognition => ({ readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Analisa AI gagal, foto tetap dicatat sebagai bukti transfer." }),
+        )
+      : { readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI, tetap dicatat sebagai bukti transfer." };
+
+  let target = pendingRows[0];
+  let matchedByAmount = false;
+  if (ai.readable && ai.nominal !== null) {
+    const amountMatches = pendingRows.filter((p) => !isNominalMismatch(Number(p.nominal), ai.nominal));
+    if (amountMatches.length > 0) {
+      target = amountMatches[0];
+      matchedByAmount = true;
+    }
   }
 
   // Race-safe claim, same pattern as the fee-approval flow: only one
@@ -59,7 +81,7 @@ export async function tryConfirmTransferProofViaWhatsApp(
   const { data: claimedRows } = await supabase
     .from("finance_pending_transfers")
     .update({ confirmed_at: new Date().toISOString(), confirmed_by: sender.id })
-    .eq("id", pending.id)
+    .eq("id", target.id)
     .is("confirmed_at", null)
     .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal");
 
@@ -68,14 +90,6 @@ export async function tryConfirmTransferProofViaWhatsApp(
   }
   const row = claimedRows[0];
   const nominal = Number(row.nominal);
-
-  const image = await fetchImageAsBase64(imageUrl);
-  const ai: TransferProofRecognition =
-    image && !image.fetchError
-      ? await recognizeTransferProof({ imageBase64: image.data, imageMimeType: image.mimeType, expectedNominal: nominal }).catch(
-          (): TransferProofRecognition => ({ readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Analisa AI gagal, foto tetap dicatat sebagai bukti transfer." }),
-        )
-      : { readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI, tetap dicatat sebagai bukti transfer." };
 
   await supabase.from("sync_log").insert({
     direction: "outbound",
@@ -128,6 +142,7 @@ export async function tryConfirmTransferProofViaWhatsApp(
     nominal,
     ai,
     mismatch: isNominalMismatch(nominal, ai.nominal),
+    matchedByAmount,
     recipients,
   };
 }
