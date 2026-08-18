@@ -117,7 +117,15 @@ export async function tryConfirmTransferProofViaWhatsApp(
     // ever actually posted to mkh-properti's jurnal despite the WA reply
     // claiming success -- only caught by cross-checking a real case.
     source_id: row.id,
-    idempotency_key: `transfer-confirmed-${row.pengajuan_id}-${row.id}`,
+    // Includes a fresh random suffix, not just row.id -- the race-safe
+    // claim above (confirmed_at IS NULL) is what actually prevents double
+    // processing, so this doesn't need to be deterministic across retries.
+    // A purely row.id-based key collided with sync_log's own unique
+    // constraint on every retry after a legitimate reset (e.g. correcting
+    // a wrong nominal match, or a prior sync_failed rollback), since the
+    // earlier attempt's row -- succeeded or failed -- had already taken
+    // that exact key permanently.
+    idempotency_key: `transfer-confirmed-${row.pengajuan_id}-${row.id}-${crypto.randomUUID()}`,
     payload: {
       pengajuan_id: row.pengajuan_id,
       bukti_transfer_url: imageUrl,
