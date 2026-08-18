@@ -76,6 +76,17 @@ const PUBLIC_PATHS = [
   // automation_post/pg_net -- no browser session, same class of bug as
   // crm-promo-sends-worker above. Own auth: requireCronAuth (x-cron-secret).
   "/api/automation/construction-tukang-tip",
+  // pg_cron-triggered (ad-lead-pending-question-timeout-sweep, 0229) via
+  // automation_post/pg_net -- same class of bug as
+  // crm-promo-sends-worker/construction-tukang-tip above, found the same
+  // way: this sweep was silently redirected to /login on every tick since
+  // it shipped, so pending_questions never actually timed out. Own auth:
+  // requireCronAuth (x-cron-secret).
+  "/api/ai/lead-pending-question-timeout",
+  // One-off manual trigger (no automated caller) for
+  // handoffProspectToKepalaCabang -- see app/api/ai/lead-manual-handoff/route.ts.
+  // Own auth: requireCronAuth (x-cron-secret).
+  "/api/ai/lead-manual-handoff",
 ];
 
 function isPublicPath(pathname: string) {
