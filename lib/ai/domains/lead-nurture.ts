@@ -3,8 +3,10 @@ import "server-only";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { AI_CONFIG } from "../config";
 import type { AdReferral } from "../connectors/types";
 import { sendWhatsAppImage, sendWhatsAppText } from "../notifications/engine";
+import { enqueueLeadNurtureReplyJob } from "../queue/ai-job-queue";
 import { generateAIText } from "../service";
 import { routeAdDrivenLead } from "./ad-lead-routing";
 
@@ -144,6 +146,43 @@ async function findCampaignBySourceId(sourceId: string): Promise<CampaignMatch |
     projectName: project?.name ?? "properti kami",
     branchId: campaign.branch_id,
     brandContext: project?.city ? `Maha Karya Haluoleo (${project.city})` : "Maha Karya Haluoleo",
+  };
+}
+
+interface ActiveProjectRow {
+  id: string;
+  name: string;
+  city: string | null;
+  branch_id: string;
+  ai_lead_mode: "nurture" | "handoff";
+}
+
+/** All crm_projects, used both to render the "which project?" prompt and to match a lead's free-text reply against. Small, fixed list (5 projects today) -- no pagination needed. */
+async function listActiveProjects(): Promise<ActiveProjectRow[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase.from("crm_projects").select("id, name, city, branch_id, ai_lead_mode").order("name");
+  return (data ?? []) as ActiveProjectRow[];
+}
+
+/** Loose substring match (either direction, case-insensitive) against crm_projects.name -- these are short, distinct brand names ("Cendana", "Loonars living", "Griya cariu indah"), not a domain that needs fuzzy/typo-tolerant matching yet. Picks the longest name match to prefer a more specific project over a generic word collision. */
+function matchProjectFromText(text: string, projects: ActiveProjectRow[]): ActiveProjectRow | null {
+  const normalized = text.toLowerCase();
+  let best: ActiveProjectRow | null = null;
+  for (const project of projects) {
+    const name = project.name.toLowerCase();
+    if (normalized.includes(name) || name.includes(normalized.trim())) {
+      if (!best || name.length > best.name.length) best = project;
+    }
+  }
+  return best;
+}
+
+function projectToCampaignMatch(project: ActiveProjectRow): CampaignMatch {
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    branchId: project.branch_id,
+    brandContext: project.city ? `Maha Karya Haluoleo (${project.city})` : "Maha Karya Haluoleo",
   };
 }
 
@@ -732,6 +771,109 @@ export async function continueExistingLeadNurture(
   const prospect = await findProspectByPhone(sender);
   if (!prospect) return null;
   return runNurtureTurn(prospect, senderName, messageText);
+}
+
+/** Entry point C: a fresh/repeat ad click whose ad_reply came back with source_id null -- Whacenter's own real-world flakiness (confirmed via ai_integration_logs on a live incident), not something the connector misparsed. Since the source campaign can't be resolved, the nurture bot can't be routed by ad-lead-routing.ts's usual meta_ad_campaigns lookup at all. Owner's explicit fix: ask the lead which project they meant, then match their reply against crm_projects and continue as an ordinary nurture lead from there. Reused for the resolved-turn's own Gemini call by queuing the same whatsapp_lead_nurture_reply job type with resolvedProjectId set (see ai-job-queue.ts / process-job route). */
+export async function resolveProjectSelectionAndNurture(
+  sender: string,
+  senderName: string | undefined,
+  projectId: string,
+  originalMessageText: string,
+): Promise<NurtureTurnResult> {
+  const supabase = createAdminClient();
+  const { data: projectRow } = await supabase
+    .from("crm_projects")
+    .select("id, name, city, branch_id, ai_lead_mode")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!projectRow) return { outcome: "no_recipient_available" };
+
+  const campaign = projectToCampaignMatch(projectRow as ActiveProjectRow);
+  let prospect = await findProspectByPhone(sender);
+  if (!prospect) {
+    prospect = await createNurtureProspect(sender, senderName, campaign, "pilihan project manual (ad_reply kosong)");
+    if (!prospect) return { outcome: "no_recipient_available" };
+  }
+  return runNurtureTurn(prospect, senderName, originalMessageText);
+}
+
+const PROJECT_SELECTION_ASK_TEMPLATE = (projectNames: string[]) =>
+  `Halo, terima kasih sudah menghubungi kami! 🙏 Boleh tahu kakak tertarik dengan project yang mana ya? (${projectNames.join(", ")})`;
+
+const PROJECT_SELECTION_RETRY_TEMPLATE = (projectNames: string[]) =>
+  `Maaf kak, boleh disebutkan lagi salah satu nama project berikut ya: ${projectNames.join(", ")} 🙏`;
+
+export interface UnmatchedAdLeadResult {
+  handled: boolean;
+  jobId?: string;
+}
+
+/**
+ * Handles a text message from an unrecognized (non-employee) sender that
+ * couldn't be routed any other way -- no real ad_reply on this message (or
+ * none at all) and no existing prospects row. Previously this fell straight
+ * through to a silent ignore (see webhook-handler.ts's
+ * "unrecognized_sender:ignored_no_ai_reply" branch) -- a first-contact lead
+ * whose ad click didn't carry ad_reply data got zero reply and zero
+ * notification to anyone. See resolveProjectSelectionAndNurture's doc for
+ * why this is a real (not hypothetical) gap.
+ *
+ * Always returns handled: true -- the caller should treat this as the final
+ * step before giving up, not one option among several.
+ */
+export async function tryHandleUnmatchedAdLead(
+  sender: string,
+  senderName: string | undefined,
+  messageText: string,
+): Promise<UnmatchedAdLeadResult> {
+  const supabase = createAdminClient();
+  const senderDigits = digitsOnly(sender);
+
+  const { data: awaiting } = await supabase
+    .from("pending_project_selections")
+    .select("id, first_message")
+    .eq("phone_normalized", senderDigits)
+    .eq("status", "awaiting")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const projects = await listActiveProjects();
+  const projectNames = projects.map((p) => p.name);
+
+  if (awaiting) {
+    const matched = matchProjectFromText(messageText, projects);
+    if (!matched) {
+      await sendWhatsAppText(sender, PROJECT_SELECTION_RETRY_TEMPLATE(projectNames));
+      return { handled: true };
+    }
+
+    await supabase
+      .from("pending_project_selections")
+      .update({ status: "matched", matched_project_id: matched.id })
+      .eq("id", awaiting.id);
+
+    const job = await enqueueLeadNurtureReplyJob(
+      {
+        sender,
+        senderName: senderName ?? null,
+        contentText: awaiting.first_message,
+        adReferralSourceId: null,
+        resolvedProjectId: matched.id,
+      },
+      AI_CONFIG.retryMaxAttempts,
+    );
+    return { handled: true, jobId: job?.id };
+  }
+
+  await supabase.from("pending_project_selections").insert({
+    phone: sender,
+    phone_normalized: senderDigits,
+    sender_name: senderName ?? null,
+    first_message: messageText,
+  });
+  await sendWhatsAppText(sender, PROJECT_SELECTION_ASK_TEMPLATE(projectNames));
+  return { handled: true };
 }
 
 export type SuperadminAnswerOutcome =
