@@ -10,7 +10,11 @@ import {
 } from "./domains/ad-lead-routing";
 import { tryHandleApprovalDecision, tryHandleApprovalSubmission } from "./domains/approval-requests";
 import { tryRouteConstructionPhotoReport } from "./domains/construction-report-routing";
-import { hasNurtureEligibleLead, tryHandleSuperadminAnswer } from "./domains/lead-nurture";
+import {
+  hasNurtureEligibleLead,
+  tryHandleSuperadminAnswer,
+  tryHandleSuperadminImageAnswer,
+} from "./domains/lead-nurture";
 import { tryApproveLoonarsFeeViaWhatsApp } from "./domains/loonars-fee-approval";
 import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToEmployees } from "./domains/message-relay";
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
@@ -214,6 +218,35 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // everything else since a bukti transfer photo isn't a progress/relay
       // photo.
       if (imageRoleKey === "super_admin") {
+        // Super Admin answering a nurture-bot escalation with a PHOTO --
+        // "[PQ-0001]" or "[PQ-0001]: ini denahnya" as the caption (see
+        // lib/ai/domains/lead-nurture.ts's tryHandleSuperadminImageAnswer).
+        // Must run before the fund-transfer/bukti-transfer checks below --
+        // "PQ-" never collides with a branch/Kepala Cabang name caption, but
+        // running it first keeps that guarantee explicit.
+        trace.push("tryHandleSuperadminImageAnswer:calling");
+        const imageAnswerResult = await tryHandleSuperadminImageAnswer(inbound.content.caption, inbound.content.url);
+        trace.push(`tryHandleSuperadminImageAnswer:${imageAnswerResult.outcome}`);
+        if (imageAnswerResult.outcome !== "not_an_answer_command") {
+          let replyText: string;
+          if (imageAnswerResult.outcome === "answered" && imageAnswerResult.pendingQuestionId) {
+            const relayJob = await enqueueAdminAnswerRelayJob({ pendingQuestionId: imageAnswerResult.pendingQuestionId }, AI_CONFIG.retryMaxAttempts);
+            replyText = relayJob
+              ? "✅ Gambar diterima, sedang diteruskan ke lead dan disimpan ke knowledge base."
+              : "⚠️ Gambar tersimpan, tapi gagal menjadwalkan pengiriman ke lead. Tolong cek manual.";
+          } else if (imageAnswerResult.outcome === "already_answered") {
+            replyText = "Pertanyaan itu sudah dijawab sebelumnya.";
+          } else {
+            replyText = "Tidak ditemukan pertanyaan pending dengan kode itu. Cek lagi kodenya.";
+          }
+          trace.push("sendWhatsAppText:calling(pending-question-image-answer)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[gambar]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Construction project fund transfer (0225): caption mentions a
         // branch/project/Kepala Cabang name (e.g. "Kendari" or "Fasly") --
         // tops up that project's dana masuk instead of being treated as a
