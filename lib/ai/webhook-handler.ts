@@ -578,6 +578,17 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("sendWhatsAppText:calling(transfer-reject)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          if (rejectResult.outcome === "rejected") {
+            trace.push("sendWhatsAppText:forwarding(transfer-reject)");
+            const forwardText =
+              `❌ Pengajuan ${rejectResult.code} (${rejectResult.partyName ?? "-"}, Rp ${rejectResult.nominal.toLocaleString("id-ID")}) DIBATALKAN oleh Super Admin.` +
+              (rejectResult.reason ? `\n📝 Alasan: ${rejectResult.reason}` : "") +
+              `\n\nTolong perbaiki dan ajukan ulang.`;
+            for (const recipient of rejectResult.recipients) {
+              await sendWhatsAppText(recipient.phone, forwardText);
+            }
+            trace.push("sendWhatsAppText:done(transfer-reject)");
+          }
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
