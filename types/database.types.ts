@@ -3732,6 +3732,9 @@ export interface Database {
           admin_email: string | null;
           confirmed_at: string | null;
           confirmed_by: string | null;
+          rejected_at: string | null;
+          rejected_by: string | null;
+          rejected_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -3746,12 +3749,16 @@ export interface Database {
           admin_email?: string | null;
           confirmed_at?: string | null;
           confirmed_by?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
+          rejected_reason?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["finance_pending_transfers"]["Insert"]>;
         Relationships: [
           { foreignKeyName: "finance_pending_transfers_branch_id_fkey"; columns: ["branch_id"]; referencedRelation: "branches"; referencedColumns: ["id"] },
           { foreignKeyName: "finance_pending_transfers_confirmed_by_fkey"; columns: ["confirmed_by"]; referencedRelation: "employees"; referencedColumns: ["id"] },
+          { foreignKeyName: "finance_pending_transfers_rejected_by_fkey"; columns: ["rejected_by"]; referencedRelation: "employees"; referencedColumns: ["id"] },
         ];
       };
       construction_progress_assessments: {

@@ -22,6 +22,7 @@ import { tryTrackConstructionProgressPhoto } from "./domains/construction-progre
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
+import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -543,6 +544,38 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         if (feeApprovalResult.outcome === "approved") {
           const replyText = `✅ Fee unit ${feeApprovalResult.unit ?? "-"} (${feeApprovalResult.buyer ?? "-"}) disetujui via WhatsApp.\n💰 Nilai fee: Rp ${(feeApprovalResult.feeAmount ?? 0).toLocaleString("id-ID")}`;
           trace.push("sendWhatsAppText:calling(fee-approval)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Reject an approved-but-unpaid pengajuan (0234): "TOLAK <KK-kode>
+        // <alasan>", replied instead of a bukti transfer photo. Requires the
+        // literal KK-code, so it never collides with approval_requests'
+        // bare "TOLAK"/"TOLAK <AP-code>" pattern below.
+        trace.push("tryRejectPendingTransferViaWhatsApp:calling");
+        const rejectResult = await tryRejectPendingTransferViaWhatsApp({ id: employee.id, name: employee.full_name, roleKey }, inbound.content.text);
+        trace.push(`tryRejectPendingTransferViaWhatsApp:${rejectResult.outcome}`);
+        if (rejectResult.outcome !== "not_a_rejection") {
+          let replyText: string;
+          if (rejectResult.outcome === "rejected") {
+            const recipientNames = rejectResult.recipients.map((r) => r.name);
+            replyText =
+              `❌ Pengajuan ${rejectResult.code} (${rejectResult.partyName ?? "-"}, Rp ${rejectResult.nominal.toLocaleString("id-ID")}) dibatalkan.` +
+              (rejectResult.reason ? `\n📝 Alasan: ${rejectResult.reason}` : "") +
+              (recipientNames.length > 0
+                ? `\n📤 Sudah diteruskan ke ${recipientNames.join(" & ")} supaya bisa diperbaiki dan diajukan ulang.`
+                : "\n⚠️ Tidak ada Kepala Cabang/pengaju dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          } else if (rejectResult.outcome === "sync_failed") {
+            replyText = `⚠️ Penolakan diterima, tapi GAGAL disinkronkan (${rejectResult.error}). Coba lagi -- belum ada perubahan status.`;
+          } else if (rejectResult.outcome === "not_super_admin") {
+            replyText = "Hanya Super Admin yang bisa menolak pengajuan lewat WhatsApp.";
+          } else {
+            replyText = `Tidak ditemukan pengajuan pending dengan kode ${rejectResult.code}. Cek lagi kodenya.`;
+          }
+          trace.push("sendWhatsAppText:calling(transfer-reject)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);

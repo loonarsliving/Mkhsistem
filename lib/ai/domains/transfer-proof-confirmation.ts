@@ -44,7 +44,7 @@ function isNominalMismatch(expected: number, read: number | null): boolean {
  * Strips the label prefix to get the bare name for matching against
  * employees.full_name.
  */
-function extractSubmitterName(adminEmail: string | null): string | null {
+export function extractSubmitterName(adminEmail: string | null): string | null {
   if (!adminEmail) return null;
   const match = adminEmail.match(/^(?:Pengawas|Pelapor)\s*:\s*(.+)$/i);
   const name = (match ? match[1] : adminEmail).trim();
@@ -86,6 +86,7 @@ export async function tryConfirmTransferProofViaWhatsApp(
     .from("finance_pending_transfers")
     .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email")
     .is("confirmed_at", null)
+    .is("rejected_at", null)
     .order("created_at", { ascending: true });
 
   if (!pendingRows || pendingRows.length === 0) {
@@ -123,6 +124,7 @@ export async function tryConfirmTransferProofViaWhatsApp(
     .update({ confirmed_at: new Date().toISOString(), confirmed_by: sender.id })
     .eq("id", target.id)
     .is("confirmed_at", null)
+    .is("rejected_at", null)
     .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email");
 
   if (!claimedRows || claimedRows.length === 0) {
