@@ -9,6 +9,11 @@ export type TransferProofConfirmationOutcome =
   | { outcome: "no_pending_transfer" }
   | { outcome: "sync_failed"; error: string }
   | {
+      outcome: "no_amount_match";
+      readNominal: number;
+      candidates: { partyName: string | null; nominal: number }[];
+    }
+  | {
       outcome: "confirmed";
       tipe: "bahan" | "tukang";
       partyName: string | null;
@@ -19,10 +24,16 @@ export type TransferProofConfirmationOutcome =
       recipients: { name: string; phone: string }[];
     };
 
-/** >1000 rupiah or >0.5% off (whichever is larger) counts as a mismatch worth flagging -- exact-cent rounding differences shouldn't trip the warning. */
+/**
+ * >6500 rupiah or >0.5% off (whichever is larger) counts as a mismatch.
+ * The floor covers ordinary interbank admin fees (BI-FAST/SKN/RTGS are
+ * typically Rp 2500-6500) that can make the amount actually debited from
+ * the sender differ slightly from the pengajuan's nominal, or from
+ * whichever of the two figures on the receipt the AI happens to read.
+ */
 function isNominalMismatch(expected: number, read: number | null): boolean {
   if (read === null) return false;
-  const tolerance = Math.max(1000, expected * 0.005);
+  const tolerance = Math.max(6500, expected * 0.005);
   return Math.abs(read - expected) > tolerance;
 }
 
@@ -48,11 +59,19 @@ function extractSubmitterName(adminEmail: string | null): string | null {
  * its AI-read nominal against every still-pending transfer -- not just the
  * oldest one -- so sending a bukti transfer out of submission order still
  * lands on the right pengajuan instead of silently confirming whatever
- * happens to be at the front of the queue. Falls back to FIFO (oldest
- * pending) only when the photo is unreadable or its nominal doesn't match
- * any pending row, in which case the existing mismatch warning covers it.
- * Never blocks on a mismatch either way -- Super Admin's own judgment is
- * final, the mismatch is only ever surfaced as a warning in the reply.
+ * happens to be at the front of the queue.
+ *
+ * Falls back to FIFO (oldest pending) ONLY when the photo itself is
+ * unreadable -- there's genuinely nothing better to go on. When the photo
+ * IS readable but its nominal doesn't match any pending row, this used to
+ * still confirm the oldest one anyway (mismatch surfaced only as a
+ * non-blocking warning) -- in practice that meant an unrelated photo (e.g.
+ * a PLN token receipt sent by mistake) would get silently attached to
+ * whatever pengajuan happened to be first in the queue, real money
+ * example: Rp 503.500 token listrik receipt auto-confirmed a Rp 76.343
+ * ongkir pengajuan it had nothing to do with. Now a readable-but-unmatched
+ * nominal returns no_amount_match instead of guessing -- Super Admin has
+ * to say which pengajuan it's actually for (or resend the right photo).
  */
 export async function tryConfirmTransferProofViaWhatsApp(
   sender: { id: string; name: string; roleKey: string | null },
@@ -88,6 +107,12 @@ export async function tryConfirmTransferProofViaWhatsApp(
     if (amountMatches.length > 0) {
       target = amountMatches[0];
       matchedByAmount = true;
+    } else {
+      return {
+        outcome: "no_amount_match",
+        readNominal: ai.nominal,
+        candidates: pendingRows.map((p) => ({ partyName: p.party_name, nominal: Number(p.nominal) })),
+      };
     }
   }
 

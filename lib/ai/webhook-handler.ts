@@ -345,6 +345,20 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        if (transferResult.outcome === "no_amount_match") {
+          const candidateLines = transferResult.candidates
+            .map((c) => `- ${c.partyName ?? "Pengajuan"}: Rp ${c.nominal.toLocaleString("id-ID")}`)
+            .join("\n");
+          const replyText =
+            `⚠️ Nominal di foto (Rp ${transferResult.readNominal.toLocaleString("id-ID")}) tidak cocok dengan pengajuan manapun yang sedang pending, jadi belum saya catat ke jurnal supaya tidak salah tempel.\n\n` +
+            `Pengajuan yang masih menunggu:\n${candidateLines}\n\n` +
+            `Kalau foto ini memang bukti transfer untuk salah satunya, balas dengan sebutkan pengajuannya. Kalau foto ini bukan bukti transfer (mis. struk lain yang salah kirim), abaikan saja.`;
+          trace.push("sendWhatsAppText:calling(transfer-no-amount-match)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
         if (transferResult.outcome === "no_pending_transfer") {
           // Deliberately doesn't short-circuit -- Super Admin's photo might
           // not have been a bukti transfer at all (the generic photo-relay
