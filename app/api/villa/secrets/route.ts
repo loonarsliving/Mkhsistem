@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
+import { getClientIp, recordAuthFailure } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,11 @@ export async function POST(request: Request) {
 
   const provided = (request.headers.get("x-internal-secret") ?? "").trim();
   if (!secretsMatch(provided, expected)) {
+    const limited = recordAuthFailure(`villa-secrets:${getClientIp(request)}`);
+    if (limited) {
+      logger.warn("villa/secrets: rate-limited after repeated invalid x-internal-secret attempts");
+      return NextResponse.json({ success: false, error: "too many attempts" }, { status: 429 });
+    }
     logger.warn("villa/secrets: rejected request with missing or invalid x-internal-secret");
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }

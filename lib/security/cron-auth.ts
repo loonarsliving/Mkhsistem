@@ -5,6 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
+import { getClientIp, recordAuthFailure } from "@/lib/security/rate-limit";
 
 /**
  * Shared secret guard for the endpoints that only pg_cron / Postgres
@@ -45,11 +46,18 @@ export function requireCronAuth(request: Request): NextResponse | null {
     return null;
   }
 
+  const path = new URL(request.url).pathname;
   const provided = (request.headers.get("x-cron-secret") ?? "").trim();
   if (!secretsMatch(provided, expected)) {
-    logger.warn("cron auth: rejected request with missing or invalid x-cron-secret", {
-      path: new URL(request.url).pathname,
-    });
+    // Repeated failures from the same source within a minute are treated as
+    // brute-forcing rather than a one-off misconfiguration -- see
+    // lib/security/rate-limit.ts.
+    const limited = recordAuthFailure(`cron-auth:${path}:${getClientIp(request)}`);
+    if (limited) {
+      logger.warn("cron auth: rate-limited after repeated invalid x-cron-secret attempts", { path });
+      return NextResponse.json({ status: "error", error: "too many attempts" }, { status: 429 });
+    }
+    logger.warn("cron auth: rejected request with missing or invalid x-cron-secret", { path });
     return NextResponse.json({ status: "error", error: "unauthorized" }, { status: 401 });
   }
 

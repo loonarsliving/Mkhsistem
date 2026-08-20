@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
+import { getClientIp, recordAuthFailure } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,11 @@ export async function POST(request: Request) {
 
   const provided = (request.headers.get("x-internal-secret") ?? "").trim();
   if (!secretsMatch(provided, expected)) {
+    const limited = recordAuthFailure(`wa-send:${getClientIp(request)}`);
+    if (limited) {
+      logger.warn("wa/send: rate-limited after repeated invalid x-internal-secret attempts");
+      return NextResponse.json({ success: false, error: "too many attempts" }, { status: 429 });
+    }
     logger.warn("wa/send: rejected request with missing or invalid x-internal-secret");
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
