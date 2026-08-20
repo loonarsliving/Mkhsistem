@@ -1835,6 +1835,22 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["wa_pending_media_relay"]["Insert"]>;
         Relationships: [];
       };
+      sso_exchange_codes: {
+        Row: {
+          code: string;
+          access_token: string;
+          created_at: string;
+          consumed_at: string | null;
+        };
+        Insert: {
+          code: string;
+          access_token: string;
+          created_at?: string;
+          consumed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["sso_exchange_codes"]["Insert"]>;
+        Relationships: [];
+      };
       photo_auto_forward_rules: {
         Row: {
           id: string;
