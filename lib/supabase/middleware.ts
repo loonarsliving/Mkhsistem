@@ -10,8 +10,13 @@ import type { Database } from "@/types/database.types";
 // files for request-level authorization (re-fetches by id, rejects anything
 // not created in the last 2 minutes). /api/integrations/whatsapp/webhook is
 // called by Meta directly (Meta's own verify-token handshake is its auth).
-// /api/debug/whatsapp-config is TEMPORARY -- meant to be opened directly in a
-// browser for diagnosis, returns booleans/labels only, never a secret value.
+// The /api/debug/* diagnostics (whatsapp-config, meta-ads-config,
+// instagram-config, zernio-connect) used to be listed here so an operator
+// could open them directly in a browser -- but that also meant anyone on the
+// internet who found the path could hit them unauthenticated. They now
+// require the normal cookie session like every other route, AND their own
+// handlers additionally gate on Super Admin (requireSuperAdminSession, see
+// lib/rbac/session.ts) so being logged in as e.g. Sales isn't enough either.
 // /api/ai/process-job is called by the ai_job_queue insert trigger and the
 // pg_cron sweep (migration 0065), server-to-server -- its own atomic claim
 // (UPDATE ... WHERE status = 'pending') is the request-level authorization:
@@ -33,12 +38,6 @@ const PUBLIC_PATHS = [
   "/api/ai/whatsapp-relay",
   "/api/ai/process-job",
   "/api/integrations/whatsapp/webhook",
-  "/api/debug/whatsapp-config",
-  "/api/debug/meta-ads-config",
-  // TEMPORARY -- Zernio Instagram/TikTok connect setup + status check, see
-  // app/api/debug/zernio-connect/route.ts. Remove once both platforms are
-  // connected and confirmed flowing real data.
-  "/api/debug/zernio-connect",
   // pg_cron-triggered worker routes (net.http_post carries no session
   // cookie) -- found missing here while building 0096: every tick of
   // crm-promo-sends-worker and the daily social-snapshot capture cron has
@@ -87,6 +86,12 @@ const PUBLIC_PATHS = [
   // handoffProspectToKepalaCabang -- see app/api/ai/lead-manual-handoff/route.ts.
   // Own auth: requireCronAuth (x-cron-secret).
   "/api/ai/lead-manual-handoff",
+  // Called server-to-server by loonars-sales's own backend (never a browser)
+  // to redeem the one-time code minted by /api/sso/loonars-sales -- see
+  // app/api/sso/loonars-sales/exchange/route.ts and migration
+  // 0236_sso_exchange_codes.sql. Own auth: the code itself (unguessable,
+  // single-use, 60s TTL), same posture as /api/ai/process-job's claim-by-id.
+  "/api/sso/loonars-sales/exchange",
 ];
 
 function isPublicPath(pathname: string) {

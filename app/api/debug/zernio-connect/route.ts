@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { requireSuperAdminSession } from "@/lib/rbac/session";
 import { getZernioConnectUrl, isZernioConfigured, listZernioAccounts, type ZernioProduct } from "@/lib/social/zernio";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,14 @@ export const dynamic = "force-dynamic";
  * separate Loonars Beauty Zernio account (0126) instead of property's.
  * Remove once both product lines show both platforms connected here and
  * capture-snapshots has confirmed real data flowing for each.
+ *
+ * Requires an authenticated Super Admin session -- see PUBLIC_PATHS' comment
+ * in lib/supabase/middleware.ts.
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireSuperAdminSession();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
   const productParam = request.nextUrl.searchParams.get("product");
   const product: ZernioProduct = productParam === "beauty" ? "beauty" : "property";
 

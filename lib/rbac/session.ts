@@ -131,3 +131,18 @@ export async function requirePermission(permission: PermissionKey): Promise<Curr
   }
   return session;
 }
+
+/**
+ * Session-cookie counterpart to lib/supabase/bearer.ts#requireSuperAdminBearer,
+ * for API route handlers that must return a JSON error instead of redirecting
+ * (redirect() throws, which is fine inside a page render but wrong for a
+ * route handler a script/browser fetch()es directly -- e.g. the /api/debug/*
+ * diagnostics). Reads the same cookie-based session middleware.ts already
+ * requires these routes to have.
+ */
+export async function requireSuperAdminSession(): Promise<{ ok: true; session: CurrentSession } | { ok: false; status: number; error: string }> {
+  const session = await getCurrentSession();
+  if (!session) return { ok: false, status: 401, error: "Not authenticated" };
+  if (session.roleKey !== ROLE_KEYS.SUPER_ADMIN) return { ok: false, status: 403, error: "Forbidden" };
+  return { ok: true, session };
+}

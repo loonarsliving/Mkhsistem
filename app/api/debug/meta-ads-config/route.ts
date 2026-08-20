@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { metaGraphRequest } from "@/lib/meta/client";
 import { META_CONFIG, isMetaConfigured } from "@/lib/meta/config";
+import { requireSuperAdminSession } from "@/lib/rbac/session";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,14 @@ export const dynamic = "force-dynamic";
  * proves it either way instead of trusting the Meta UI's framing. Nothing
  * secret is returned, only names/ids the user can already see themselves in
  * Facebook/Business Manager. Remove once Ads Specialist launches cleanly.
+ *
+ * Requires an authenticated Super Admin session -- see PUBLIC_PATHS' comment
+ * in lib/supabase/middleware.ts.
  */
 export async function GET() {
+  const auth = await requireSuperAdminSession();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
   const rawDailyBudgetCap = process.env.META_ADS_DAILY_BUDGET_CAP_IDR ?? null;
   const dailyBudgetCapIdr = Number(rawDailyBudgetCap ?? "0");
 

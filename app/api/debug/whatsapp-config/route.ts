@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getWhatsAppConnector } from "@/lib/ai/connectors/manager";
+import { requireSuperAdminSession } from "@/lib/rbac/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,14 @@ export const dynamic = "force-dynamic";
  * Whacenter's side (a QR-paired session, not something our own config can
  * attest to). Every field is a boolean/non-secret label; never a token
  * value. Remove once inbound webhook traffic is confirmed flowing again.
+ *
+ * Requires an authenticated Super Admin session -- see PUBLIC_PATHS' comment
+ * in lib/supabase/middleware.ts.
  */
 export async function GET() {
+  const auth = await requireSuperAdminSession();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
   const accessToken = Boolean(process.env.WHATSAPP_ACCESS_TOKEN);
   const phoneNumberId = Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID);
   const businessAccountId = Boolean(process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);

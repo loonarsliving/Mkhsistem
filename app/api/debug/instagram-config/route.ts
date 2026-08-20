@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { metaGraphRequest } from "@/lib/meta/client";
 import { META_CONFIG } from "@/lib/meta/config";
+import { requireSuperAdminSession } from "@/lib/rbac/session";
 import { isInstagramConfigured } from "@/lib/social/instagram";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +17,14 @@ export const dynamic = "force-dynamic";
  * (vs whatever the Meta UI's "full access" toggle implied) -- that's the
  * one fact neither of us can see without calling the API directly. Remove
  * once Content Audit's Instagram capture works cleanly.
+ *
+ * Requires an authenticated Super Admin session -- see PUBLIC_PATHS' comment
+ * in lib/supabase/middleware.ts.
  */
 export async function GET() {
+  const auth = await requireSuperAdminSession();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
   const result: Record<string, unknown> = {
     META_IG_USER_ID_configured: Boolean(META_CONFIG.igUserId),
     META_IG_USER_ID_value: META_CONFIG.igUserId || null,
