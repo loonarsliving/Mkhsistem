@@ -124,7 +124,7 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         trace.push(`trySubmitContractorReceiptReport:${reportResult.outcome}`);
         const replyText =
           reportResult.outcome === "submitted"
-            ? `✅ Nota diterima (${reportResult.code}):\n🧾 ${reportResult.item}\n💰 Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\nSudah dikirim ke Vando untuk dicek.`
+            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\nSudah dikirim ke Vando untuk dicek.`
             : reportResult.outcome === "no_vando_configured"
               ? "⚠️ Nota diterima, tapi sistem belum bisa menemukan Vando untuk verifikasi. Tolong hubungi admin."
               : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
@@ -282,7 +282,8 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       );
       trace.push(`tryHandleReceiptPhotoSubmission:${receiptResult.outcome}`);
       if (receiptResult.outcome === "submitted") {
-        const replyText = `✅ Nota diterima dan dibaca AI:\n🧾 ${receiptResult.item}\n💰 Rp ${receiptResult.nominal.toLocaleString("id-ID")}\n\nPengajuan sudah dikirim, menunggu verifikasi Kepala Cabang lewat WhatsApp.`;
+        const itemLines = receiptResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n");
+        const replyText = `✅ Nota diterima dan dibaca AI:\n${itemLines}\n💰 Total: Rp ${receiptResult.nominal.toLocaleString("id-ID")}\n\nPengajuan sudah dikirim, menunggu verifikasi Kepala Cabang lewat WhatsApp.`;
         trace.push("sendWhatsAppText:calling(receipt-submitted)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
