@@ -21,6 +21,7 @@ import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToE
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
+import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
@@ -226,6 +227,50 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling(image)");
       const imageRoleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+
+      // Nota-belanja submission via WhatsApp AI (0027 in mkh-properti):
+      // Endy/Rebecca captioning a receipt photo "nota" turns it straight
+      // into a pengajuan (bahan), no manual web form needed -- the photo is
+      // read once by Gemini and never stored. Must run before every
+      // role-gated block below (none of them apply to Endy/Rebecca anyway)
+      // and before the generic auto-forward/progress/relay flows, so a
+      // "nota"-captioned photo is treated as this submission and nothing
+      // else. Anyone else, or a photo without the keyword, falls straight
+      // through unchanged (no_caption_keyword / not_eligible_sender).
+      trace.push("tryHandleReceiptPhotoSubmission:calling");
+      const receiptResult = await tryHandleReceiptPhotoSubmission(
+        { id: employee.id, fullName: employee.full_name },
+        inbound.content.url,
+        inbound.content.caption,
+      );
+      trace.push(`tryHandleReceiptPhotoSubmission:${receiptResult.outcome}`);
+      if (receiptResult.outcome === "submitted") {
+        const replyText = `✅ Nota diterima dan dibaca AI:\n🧾 ${receiptResult.item}\n💰 Rp ${receiptResult.nominal.toLocaleString("id-ID")}\n\nPengajuan sudah dikirim, menunggu verifikasi Kepala Cabang lewat WhatsApp.`;
+        trace.push("sendWhatsAppText:calling(receipt-submitted)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[nota]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      if (receiptResult.outcome === "unreadable") {
+        const replyText = "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
+        trace.push("sendWhatsAppText:calling(receipt-unreadable)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[nota]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      if (receiptResult.outcome === "sync_failed") {
+        const replyText = `⚠️ Nota terbaca, tapi GAGAL dikirim sebagai pengajuan (${receiptResult.error}). Tolong coba kirim ulang.`;
+        trace.push("sendWhatsAppText:calling(receipt-sync-failed)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[nota]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
 
       // Bukti transfer confirmation (0222): Super Admin sending a photo
       // after approving a gaji tukang / pembelian bahan pengajuan and
