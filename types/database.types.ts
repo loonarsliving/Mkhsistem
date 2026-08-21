@@ -1904,6 +1904,7 @@ export interface Database {
           reviewed_by: string | null;
           reviewed_at: string | null;
           reject_reason: string | null;
+          recapped_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -1920,6 +1921,7 @@ export interface Database {
           reviewed_by?: string | null;
           reviewed_at?: string | null;
           reject_reason?: string | null;
+          recapped_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["contractor_expense_reports"]["Insert"]>;
