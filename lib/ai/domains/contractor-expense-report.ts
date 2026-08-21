@@ -3,6 +3,7 @@ import "server-only";
 import { fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database.types";
 import { sendWhatsAppText } from "../notifications/engine";
 
 export interface ContractorSender {
@@ -44,7 +45,12 @@ async function findVando(): Promise<{ id: string; fullName: string; phone: strin
 export type ContractorReportSubmissionOutcome =
   | { outcome: "unreadable" }
   | { outcome: "no_vando_configured" }
-  | { outcome: "submitted"; code: string; item: string; nominal: number };
+  | { outcome: "submitted"; code: string; itemSummary: string; nominal: number; ai: ExpenseReceiptRecognition };
+
+/** "Semen 5 sak (Rp 500.000); Paku 2kg (Rp 50.000)" -- same joined-text convention material-receipt-submission.ts uses for mkh-properti's pengajuan.item. */
+function formatItemSummary(items: { nama: string; harga: number }[]): string {
+  return items.map((it) => `${it.nama} (Rp ${it.harga.toLocaleString("id-ID")})`).join("; ");
+}
 
 /**
  * Anang (or any future row in contractor_wa_senders) sending a nota photo
@@ -60,11 +66,11 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
   const ai: ExpenseReceiptRecognition =
     image && !image.fetchError
       ? await recognizeExpenseReceipt({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(
-          (): ExpenseReceiptRecognition => ({ readable: false, item: null, nominal: null, tanggal: null, supplier: null, notes: "Analisa AI gagal." }),
+          (): ExpenseReceiptRecognition => ({ readable: false, items: [], nominal: null, tanggal: null, supplier: null, notes: "Analisa AI gagal." }),
         )
-      : { readable: false, item: null, nominal: null, tanggal: null, supplier: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI." };
+      : { readable: false, items: [], nominal: null, tanggal: null, supplier: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI." };
 
-  if (!ai.readable || ai.nominal === null || !ai.item) {
+  if (!ai.readable || ai.nominal === null || ai.items.length === 0) {
     return { outcome: "unreadable" };
   }
 
@@ -73,6 +79,7 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
     return { outcome: "no_vando_configured" };
   }
 
+  const itemSummary = formatItemSummary(ai.items);
   const supabase = createAdminClient();
   const { data: inserted, error } = await supabase
     .from("contractor_expense_reports")
@@ -80,7 +87,8 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
       contractor_id: contractor.id,
       contractor_name: contractor.fullName,
       contractor_phone: contractor.phone,
-      item: ai.item,
+      item: itemSummary,
+      items: ai.items as unknown as Json,
       nominal: ai.nominal,
       tanggal: ai.tanggal,
       supplier: ai.supplier,
@@ -94,13 +102,14 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
   }
 
   const code = `LAP-${String(inserted.id).padStart(4, "0")}`;
+  const itemLines = ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n");
 
   await sendWhatsAppText(
     vando.phone,
-    `📋 Laporan belanja *${contractor.fullName}* (${code}):\n🧾 ${ai.item}${ai.supplier ? ` (${ai.supplier})` : ""}\n💰 Rp ${ai.nominal.toLocaleString("id-ID")}${ai.tanggal ? `\n📅 ${ai.tanggal}` : ""}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
+    `📋 Laporan belanja *${contractor.fullName}* (${code})${ai.supplier ? ` — ${ai.supplier}` : ""}:\n${itemLines}\n💰 Total: Rp ${ai.nominal.toLocaleString("id-ID")}${ai.tanggal ? `\n📅 ${ai.tanggal}` : ""}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
   );
 
-  return { outcome: "submitted", code, item: ai.item, nominal: ai.nominal };
+  return { outcome: "submitted", code, itemSummary, nominal: ai.nominal, ai };
 }
 
 export type ContractorReportDecisionOutcome =
@@ -179,7 +188,7 @@ async function recapApprovedReportsToSuperAdmin(): Promise<void> {
   const supabase = createAdminClient();
   const { data: pending } = await supabase
     .from("contractor_expense_reports")
-    .select("id, contractor_name, item, nominal, tanggal, supplier")
+    .select("id, contractor_name, item, items, nominal, tanggal, supplier")
     .eq("status", "approved")
     .is("recapped_at", null)
     .order("created_at", { ascending: true });
@@ -188,7 +197,9 @@ async function recapApprovedReportsToSuperAdmin(): Promise<void> {
 
   const lines = pending.map((r, i) => {
     const code = `LAP-${String(r.id).padStart(4, "0")}`;
-    return `${i + 1}. ${r.contractor_name} — ${r.item}${r.supplier ? ` (${r.supplier})` : ""} — Rp ${Number(r.nominal).toLocaleString("id-ID")} (${code})`;
+    const items = Array.isArray(r.items) ? (r.items as { nama: string; harga: number }[]) : [];
+    const itemLines = items.length > 0 ? items.map((it) => `   🧾 ${it.nama} - Rp ${Number(it.harga).toLocaleString("id-ID")}`).join("\n") : `   🧾 ${r.item}`;
+    return `${i + 1}. ${r.contractor_name}${r.supplier ? ` — ${r.supplier}` : ""} (${code})\n${itemLines}`;
   });
   const total = pending.reduce((sum, r) => sum + Number(r.nominal), 0);
   const message = `📊 Rekap Laporan Belanja Kontraktor (disetujui Vando):\n\n${lines.join("\n")}\n\nTotal: Rp ${total.toLocaleString("id-ID")}`;

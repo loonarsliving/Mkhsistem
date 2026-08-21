@@ -1912,6 +1912,7 @@ export interface Database {
           contractor_name: string;
           contractor_phone: string;
           item: string;
+          items: Json;
           nominal: number;
           tanggal: string | null;
           supplier: string | null;
@@ -1929,6 +1930,7 @@ export interface Database {
           contractor_name: string;
           contractor_phone: string;
           item: string;
+          items?: Json;
           nominal: number;
           tanggal?: string | null;
           supplier?: string | null;
