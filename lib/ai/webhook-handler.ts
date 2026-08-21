@@ -148,8 +148,18 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         const fundRequestResult = await tryHandleContractorFundRequest(contractor, inbound.content.text);
         trace.push(`tryHandleContractorFundRequest:${fundRequestResult.outcome}`);
         if (fundRequestResult.outcome === "submitted") {
-          const replyText = `✅ Pengajuan dana diterima:\n📝 ${fundRequestResult.keterangan}\n💰 Rp ${fundRequestResult.nominal.toLocaleString("id-ID")}\n\nMenunggu penilaian dan persetujuan Vando sebelum ditransfer.`;
+          const kategoriLabel = fundRequestResult.kategori === "gaji" ? "Gaji/Upah Tukang" : "Material";
+          const replyText = `✅ Pengajuan dana diterima (${kategoriLabel}):\n📝 ${fundRequestResult.keterangan}\n💰 Rp ${fundRequestResult.nominal.toLocaleString("id-ID")}\n\nMenunggu penilaian dan persetujuan Vando sebelum ditransfer.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (fundRequestResult.outcome === "needs_category_clarification") {
+          const replyText = `Untuk pengajuan Rp ${fundRequestResult.nominal.toLocaleString("id-ID")} ini, apakah untuk *gaji/upah tukang* atau *beli material*? Tolong kirim ulang pesannya dengan menyebutkan salah satu, ya Pak.`;
+          trace.push("sendWhatsAppText:calling(contractor-fund-request-clarify)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
