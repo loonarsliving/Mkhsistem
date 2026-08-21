@@ -149,7 +149,8 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         trace.push(`tryHandleContractorFundRequest:${fundRequestResult.outcome}`);
         if (fundRequestResult.outcome === "submitted") {
           const kategoriLabel = fundRequestResult.kategori === "gaji" ? "Gaji/Upah Tukang" : "Material";
-          const replyText = `✅ Pengajuan dana diterima (${kategoriLabel}):\n📝 ${fundRequestResult.keterangan}\n💰 Rp ${fundRequestResult.nominal.toLocaleString("id-ID")}\n\nMenunggu penilaian dan persetujuan Vando sebelum ditransfer.`;
+          const itemLines = fundRequestResult.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n");
+          const replyText = `✅ Pengajuan dana diterima (${kategoriLabel}):\n${itemLines}\n💰 Total: Rp ${fundRequestResult.nominal.toLocaleString("id-ID")}\n\nMenunggu penilaian dan persetujuan Vando sebelum ditransfer.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
