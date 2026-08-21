@@ -156,5 +156,68 @@ export async function tryDecideContractorReport(decider: { id: string; fullName:
       : `⚠️ Laporan belanja Anda (${code}) belum sesuai menurut ${decider.fullName}.${reason ? `\n📝 Alasan: ${reason}` : ""}\nTolong kirim ulang nota yang benar.`,
   );
 
+  if (approved) {
+    // Fire-and-forget from the caller's point of view -- a failure here
+    // never blocks Vando's own "decided" reply, and unrecapped rows just
+    // get picked up by the next approval (recapped_at stays null).
+    await recapApprovedReportsToSuperAdmin();
+  }
+
   return { outcome: "decided", code, approved, contractorName: row.contractor_name, contractorPhone: row.contractor_phone };
+}
+
+/**
+ * Bundles every approved-but-not-yet-recapped contractor_expense_reports
+ * row into one WhatsApp message to every active Super Admin, then marks
+ * them recapped_at. Called right after tryDecideContractorReport approves a
+ * report -- picking up "approved AND recapped_at IS NULL" (not just the
+ * one just decided) means any report that failed to recap earlier (e.g. no
+ * Super Admin had a phone number at the time) gets swept in automatically
+ * on the next approval, instead of being silently lost.
+ */
+async function recapApprovedReportsToSuperAdmin(): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: pending } = await supabase
+    .from("contractor_expense_reports")
+    .select("id, contractor_name, item, nominal, tanggal, supplier")
+    .eq("status", "approved")
+    .is("recapped_at", null)
+    .order("created_at", { ascending: true });
+
+  if (!pending || pending.length === 0) return;
+
+  const lines = pending.map((r, i) => {
+    const code = `LAP-${String(r.id).padStart(4, "0")}`;
+    return `${i + 1}. ${r.contractor_name} — ${r.item}${r.supplier ? ` (${r.supplier})` : ""} — Rp ${Number(r.nominal).toLocaleString("id-ID")} (${code})`;
+  });
+  const total = pending.reduce((sum, r) => sum + Number(r.nominal), 0);
+  const message = `📊 Rekap Laporan Belanja Kontraktor (disetujui Vando):\n\n${lines.join("\n")}\n\nTotal: Rp ${total.toLocaleString("id-ID")}`;
+
+  const { data: admins } = await supabase
+    .from("employees")
+    .select("phone, role:role_id(key)")
+    .not("phone", "is", null)
+    .is("deleted_at", null)
+    .eq("employment_status", "active");
+  const superAdminPhones = (admins ?? [])
+    .filter((e) => (e.role as unknown as { key: string } | null)?.key === "super_admin" && e.phone)
+    .map((e) => e.phone as string);
+
+  if (superAdminPhones.length === 0) return;
+
+  let anySent = false;
+  for (const phone of superAdminPhones) {
+    const result = await sendWhatsAppText(phone, message);
+    if (result.success) anySent = true;
+  }
+
+  if (anySent) {
+    await supabase
+      .from("contractor_expense_reports")
+      .update({ recapped_at: new Date().toISOString() })
+      .in(
+        "id",
+        pending.map((r) => r.id),
+      );
+  }
 }
