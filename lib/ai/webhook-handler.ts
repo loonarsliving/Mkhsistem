@@ -22,6 +22,7 @@ import { tryTrackConstructionProgressPhoto } from "./domains/construction-progre
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { findContractorByPhone, trySubmitContractorReceiptReport, tryDecideContractorReport } from "./domains/contractor-expense-report";
+import { tryHandleContractorFundRequest } from "./domains/contractor-fund-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
@@ -135,7 +136,37 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         trace.push("saveAiConversationTurn:done");
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
-      const replyText = `Halo ${contractor.fullName}, kirim foto nota belanja ya untuk dilaporkan ke Vando.`;
+      if (inbound.content.kind === "text") {
+        // Fund request (owner's ask): Anang explaining, in his own words,
+        // that he needs an advance -- AI reads whether it's a genuine
+        // request with a clear amount. Still just becomes a pengajuan
+        // Vando has to judge and approve, same as Endy's own requests --
+        // never auto-approved. Anything that doesn't read as a clear
+        // request (a question, small talk, an unclear amount) falls
+        // through to the generic reply below instead of erroring.
+        trace.push("tryHandleContractorFundRequest:calling");
+        const fundRequestResult = await tryHandleContractorFundRequest(contractor, inbound.content.text);
+        trace.push(`tryHandleContractorFundRequest:${fundRequestResult.outcome}`);
+        if (fundRequestResult.outcome === "submitted") {
+          const replyText = `✅ Pengajuan dana diterima:\n📝 ${fundRequestResult.keterangan}\n💰 Rp ${fundRequestResult.nominal.toLocaleString("id-ID")}\n\nMenunggu penilaian dan persetujuan Vando sebelum ditransfer.`;
+          trace.push("sendWhatsAppText:calling(contractor-fund-request)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (fundRequestResult.outcome === "sync_failed") {
+          const replyText = `⚠️ Permintaan dana diterima, tapi GAGAL dikirim sebagai pengajuan (${fundRequestResult.error}). Tolong coba kirim ulang.`;
+          trace.push("sendWhatsAppText:calling(contractor-fund-request-failed)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
+      const replyText = `Halo ${contractor.fullName}, kirim foto nota belanja untuk dilaporkan ke Vando, atau jelaskan kebutuhan dana Anda (sebutkan nominalnya) untuk mengajukan uang muka baru.`;
       trace.push("sendWhatsAppText:calling(contractor-non-image)");
       const sendResult = await sendWhatsAppText(inbound.sender, replyText);
       trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
