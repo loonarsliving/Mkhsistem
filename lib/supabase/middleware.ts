@@ -86,6 +86,13 @@ const PUBLIC_PATHS = [
   // handoffProspectToKepalaCabang -- see app/api/ai/lead-manual-handoff/route.ts.
   // Own auth: requireCronAuth (x-cron-secret).
   "/api/ai/lead-manual-handoff",
+  // One-off manual trigger (no automated caller) for sending an arbitrary
+  // WhatsApp text through automation_post(), e.g. onboarding a brand new
+  // contractor_wa_senders row -- see app/api/admin/send-wa-message/route.ts.
+  // Own auth: requireCronAuth (x-cron-secret). Found missing here the same
+  // way every route above was: a real automation_post() call to it landed
+  // on the /login HTML page (200 OK) instead of ever reaching the handler.
+  "/api/admin/send-wa-message",
   // Called server-to-server by loonars-sales's own backend (never a browser)
   // to redeem the one-time code minted by /api/sso/loonars-sales -- see
   // app/api/sso/loonars-sales/exchange/route.ts and migration
