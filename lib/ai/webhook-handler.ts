@@ -21,6 +21,7 @@ import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToE
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
+import { findContractorByPhone, trySubmitContractorReceiptReport, tryDecideContractorReport } from "./domains/contractor-expense-report";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
@@ -106,6 +107,42 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
 
     const inbound = received.normalized;
     trace.push(`normalized.content.kind:${inbound.content.kind}`);
+
+    // Contractor (non-employee) nota report (0237): Anang and future rows
+    // in contractor_wa_senders are NOT employees -- must be checked before
+    // findEmployeeByPhone below, whose "no match" branch would otherwise
+    // treat them as an unrecognized customer and drop the message. Checked
+    // before adReferral too, since a contractor's number should never be
+    // mistaken for an ad lead.
+    trace.push("findContractorByPhone:calling");
+    const contractor = await findContractorByPhone(inbound.sender);
+    trace.push(contractor ? `findContractorByPhone:matched(${contractor.fullName})` : "findContractorByPhone:no_match");
+    if (contractor) {
+      if (inbound.content.kind === "image") {
+        trace.push("trySubmitContractorReceiptReport:calling");
+        const reportResult = await trySubmitContractorReceiptReport(contractor, inbound.content.url);
+        trace.push(`trySubmitContractorReceiptReport:${reportResult.outcome}`);
+        const replyText =
+          reportResult.outcome === "submitted"
+            ? `✅ Nota diterima (${reportResult.code}):\n🧾 ${reportResult.item}\n💰 Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\nSudah dikirim ke Vando untuk dicek.`
+            : reportResult.outcome === "no_vando_configured"
+              ? "⚠️ Nota diterima, tapi sistem belum bisa menemukan Vando untuk verifikasi. Tolong hubungi admin."
+              : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
+        trace.push("sendWhatsAppText:calling(contractor-report)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[nota kontraktor]", replyText, null);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      const replyText = `Halo ${contractor.fullName}, kirim foto nota belanja ya untuk dilaporkan ke Vando.`;
+      trace.push("sendWhatsAppText:calling(contractor-non-image)");
+      const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+      trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+      await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text]", replyText, null);
+      trace.push("saveAiConversationTurn:done");
+      return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+    }
 
     if (inbound.adReferral) {
       // Ad-driven lead: the AI nurture bot (lib/ai/domains/lead-nurture.ts)
@@ -543,6 +580,33 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling");
       const roleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${roleKey ?? "null"}`);
+
+      // Vando deciding a contractor nota report (0237): "COCOK LAP-0001" /
+      // "TOLAK LAP-0001 <alasan>". Documentation only -- never touches
+      // mkh-properti, since the advance's expense was already posted when
+      // the original pengajuan was approved and transferred. Gated to
+      // Vando by name (not just kepala_cabang role) since he's specifically
+      // who reviews these; must run before the general AI pipeline for the
+      // same reason as every other WA command in this file.
+      if (/^(cocok|tolak)\s+lap-\d+/i.test(inbound.content.text.trim()) && /vando/i.test(employee.full_name)) {
+        trace.push("tryDecideContractorReport:calling");
+        const decision = await tryDecideContractorReport({ id: employee.id, fullName: employee.full_name }, inbound.content.text);
+        trace.push(`tryDecideContractorReport:${decision.outcome}`);
+        if (decision.outcome !== "not_a_decision") {
+          const replyText =
+            decision.outcome === "decided"
+              ? `✅ Laporan ${decision.code} sudah ${decision.approved ? "disetujui" : "ditolak"}. ${decision.contractorName} sudah diberi tahu via WA.`
+              : decision.outcome === "already_decided"
+                ? `Laporan ${decision.code} sudah diputuskan sebelumnya.`
+                : `Tidak ditemukan laporan dengan kode ${decision.code}.`;
+          trace.push("sendWhatsAppText:calling(contractor-report-decision)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+      }
 
       // TEMPORARY: Super Admin approving a loonars fee claim by replying
       // "ya"/"setuju" instead of using MKH Property's /verifikasi.html CFO

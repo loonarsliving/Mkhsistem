@@ -1871,6 +1871,60 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["photo_auto_forward_log"]["Insert"]>;
         Relationships: [];
       };
+      contractor_wa_senders: {
+        Row: {
+          id: string;
+          full_name: string;
+          phone: string;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          phone: string;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["contractor_wa_senders"]["Insert"]>;
+        Relationships: [];
+      };
+      contractor_expense_reports: {
+        Row: {
+          id: number;
+          contractor_id: string;
+          contractor_name: string;
+          contractor_phone: string;
+          item: string;
+          nominal: number;
+          tanggal: string | null;
+          supplier: string | null;
+          ai_notes: string | null;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          reject_reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          contractor_id: string;
+          contractor_name: string;
+          contractor_phone: string;
+          item: string;
+          nominal: number;
+          tanggal?: string | null;
+          supplier?: string | null;
+          ai_notes?: string | null;
+          status?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          reject_reason?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["contractor_expense_reports"]["Insert"]>;
+        Relationships: [];
+      };
       construction_blocks: {
         Row: {
           id: string;
