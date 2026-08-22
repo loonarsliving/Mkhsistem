@@ -1929,6 +1929,36 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["contractor_expense_reports"]["Insert"]>;
         Relationships: [];
       };
+      contractor_fund_request_pending: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          nominal: number;
+          items: Json;
+          keterangan: string;
+          ai_notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          nominal: number;
+          items: Json;
+          keterangan: string;
+          ai_notes?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["contractor_fund_request_pending"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "contractor_fund_request_pending_contractor_id_fkey";
+            columns: ["contractor_id"];
+            isOneToOne: false;
+            referencedRelation: "contractor_wa_senders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       construction_blocks: {
         Row: {
           id: string;
