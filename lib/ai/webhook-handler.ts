@@ -477,8 +477,11 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           trace.push("sendWhatsAppImage:forwarding(group)");
+          const forwardCaption =
+            `📎 Bukti transfer gabungan ${transferResult.items.length} pengajuan — Rp ${transferResult.totalNominal.toLocaleString("id-ID")}:\n${itemLines}` +
+            `\n\n(dari Super Admin, tolong teruskan ke pihak terkait)`;
           for (const recipient of transferResult.recipients) {
-            await sendWhatsAppImage(recipient.phone, inbound.content.url, `📎 Bukti transfer gabungan ${transferResult.items.length} pengajuan — Rp ${transferResult.totalNominal.toLocaleString("id-ID")} (dari Super Admin, tolong teruskan ke pihak terkait)`);
+            await sendWhatsAppImage(recipient.phone, inbound.content.url, forwardCaption);
           }
           trace.push("sendWhatsAppImage:done(group)");
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer gabungan]", replyText, employee.id);
