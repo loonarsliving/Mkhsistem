@@ -463,6 +463,28 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        if (transferResult.outcome === "confirmed_group") {
+          const itemLines = transferResult.items.map((it) => `- ${it.partyName ?? "Pengajuan"}: Rp ${it.nominal.toLocaleString("id-ID")}`).join("\n");
+          const recipientNames = transferResult.recipients.map((r) => r.name);
+          const failedNote = transferResult.failedItem
+            ? `\n\n⚠️ Satu item GAGAL dicatat (${transferResult.failedItem.partyName ?? "-"}: ${transferResult.failedItem.error}) -- otomatis dikembalikan ke antrian, tidak perlu diulang manual, akan tertangkap lagi oleh bukti transfer berikutnya.`
+            : "";
+          const replyText =
+            `✅ Nominal foto (Rp ${transferResult.totalNominal.toLocaleString("id-ID")}) cocok dengan total ${transferResult.items.length} pengajuan sekaligus, semuanya dicatat ke jurnal:\n${itemLines}` +
+            failedNote +
+            (recipientNames.length > 0 ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.` : "\n⚠️ Tidak ada Kepala Cabang/pengaju dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          trace.push("sendWhatsAppText:calling(transfer-confirm-group)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          trace.push("sendWhatsAppImage:forwarding(group)");
+          for (const recipient of transferResult.recipients) {
+            await sendWhatsAppImage(recipient.phone, inbound.content.url, `📎 Bukti transfer gabungan ${transferResult.items.length} pengajuan — Rp ${transferResult.totalNominal.toLocaleString("id-ID")} (dari Super Admin, tolong teruskan ke pihak terkait)`);
+          }
+          trace.push("sendWhatsAppImage:done(group)");
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer gabungan]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
         if (transferResult.outcome === "sync_failed") {
           const replyText = `⚠️ Bukti transfer diterima, tapi GAGAL dicatat ke jurnal (${transferResult.error}). Tolong kirim ulang fotonya -- belum ada yang tercatat, jadi aman diulang.`;
           trace.push("sendWhatsAppText:calling(transfer-sync-failed)");
