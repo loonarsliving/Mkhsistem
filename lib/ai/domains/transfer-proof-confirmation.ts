@@ -47,14 +47,15 @@ function isNominalMismatch(expected: number, read: number | null): boolean {
 
 /**
  * finance_pending_transfers.admin_email actually carries a free-text
- * "Pengawas: Endy" / "Pelapor: Rebecca" label from mkh-properti (who
- * actually submitted the pengajuan there), not a real email address.
- * Strips the label prefix to get the bare name for matching against
- * employees.full_name.
+ * "Pengawas: Endy" / "Pelapor: Rebecca" / "Kontraktor: Anang" label from
+ * mkh-properti (who actually submitted the pengajuan there), not a real
+ * email address. Strips the label prefix to get the bare name for matching
+ * against employees.full_name (or contractor_wa_senders.full_name for
+ * external contractors like Anang, who isn't an employee at all).
  */
 export function extractSubmitterName(adminEmail: string | null): string | null {
   if (!adminEmail) return null;
-  const match = adminEmail.match(/^(?:Pengawas|Pelapor)\s*:\s*(.+)$/i);
+  const match = adminEmail.match(/^(?:Pengawas|Pelapor|Kontraktor)\s*:\s*(.+)$/i);
   const name = (match ? match[1] : adminEmail).trim();
   return name || null;
 }
@@ -79,10 +80,12 @@ async function resolveRecipients(supabase: Supa, branchId: string | null, adminE
     }
   }
   // Forward to whoever actually submitted this pengajuan (mkh-properti's
-  // "Pengawas: Endy" / "Pelapor: Rebecca" label) instead of always Endy --
-  // Rebecca submits operational expenses (outside bahan/tukang) the same
-  // way Endy submits material/tukang, so the bukti transfer should reach
-  // whichever of them actually needs to pass it on.
+  // "Pengawas: Endy" / "Pelapor: Rebecca" / "Kontraktor: Anang" label)
+  // instead of always Endy -- Rebecca submits operational expenses (outside
+  // bahan/tukang) the same way Endy submits material/tukang, and external
+  // contractors like Anang submit their own gaji-tukang/material requests
+  // too, so the bukti transfer should reach whichever of them actually
+  // needs to pass it on.
   const submitterName = extractSubmitterName(adminEmail);
   let submitterMatched = false;
   if (submitterName) {
@@ -97,6 +100,20 @@ async function resolveRecipients(supabase: Supa, branchId: string | null, adminE
     const submitter = submitterRows?.[0];
     if (submitter?.phone && !recipients.some((r) => r.phone === submitter.phone)) {
       recipients.push({ name: submitter.full_name, phone: submitter.phone });
+      submitterMatched = true;
+    }
+  }
+  // External contractors (e.g. Anang) aren't in employees at all -- check
+  // contractor_wa_senders before giving up and falling back to Endy.
+  if (!submitterMatched && submitterName) {
+    const { data: contractorRows } = await supabase
+      .from("contractor_wa_senders")
+      .select("full_name, phone")
+      .ilike("full_name", `%${submitterName}%`)
+      .limit(1);
+    const contractor = contractorRows?.[0];
+    if (contractor?.phone && !recipients.some((r) => r.phone === contractor.phone)) {
+      recipients.push({ name: contractor.full_name, phone: contractor.phone });
       submitterMatched = true;
     }
   }
