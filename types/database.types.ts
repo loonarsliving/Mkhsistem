@@ -3793,6 +3793,7 @@ export interface Database {
           rejected_at: string | null;
           rejected_by: string | null;
           rejected_reason: string | null;
+          rekening_tujuan: string | null;
           created_at: string;
         };
         Insert: {
@@ -3810,6 +3811,7 @@ export interface Database {
           rejected_at?: string | null;
           rejected_by?: string | null;
           rejected_reason?: string | null;
+          rekening_tujuan?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["finance_pending_transfers"]["Insert"]>;

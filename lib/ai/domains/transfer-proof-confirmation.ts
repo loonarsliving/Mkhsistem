@@ -129,7 +129,25 @@ type PendingRow = {
   party_name: string | null;
   nominal: number | string;
   admin_email: string | null;
+  rekening_tujuan: string | null;
 };
+
+const PENDING_ROW_COLUMNS = "id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email, rekening_tujuan";
+
+/**
+ * Bank account numbers are the longest run of digits in a destination-account
+ * string (e.g. "BCA 6975175212 endy septianto" -> "6975175212"). Used to
+ * compare the pengajuan's own destination account against whatever the AI
+ * read off the bukti transfer photo -- free text on both sides, so exact
+ * string equality would almost never match, but the account number itself
+ * should.
+ */
+function extractAccountDigits(text: string | null): string | null {
+  if (!text) return null;
+  const runs = text.match(/\d{6,}/g);
+  if (!runs || runs.length === 0) return null;
+  return runs.reduce((longest, run) => (run.length > longest.length ? run : longest), "");
+}
 
 /** Inserts the outbound sync_log event for one pengajuan; on failure, un-claims that row so it's retryable. */
 async function syncConfirmedRow(supabase: Supa, row: PendingRow, imageUrl: string, ai: TransferProofRecognition, sender: { id: string; name: string }): Promise<string | null> {
@@ -172,7 +190,7 @@ async function confirmSingleRow(
     .eq("id", target.id)
     .is("confirmed_at", null)
     .is("rejected_at", null)
-    .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email");
+    .select(PENDING_ROW_COLUMNS);
 
   if (!claimedRows || claimedRows.length === 0) {
     return { outcome: "no_pending_transfer" };
@@ -216,7 +234,7 @@ async function confirmGroup(supabase: Supa, group: PendingRow[], sender: { id: s
     .in("id", ids)
     .is("confirmed_at", null)
     .is("rejected_at", null)
-    .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email");
+    .select(PENDING_ROW_COLUMNS);
 
   if (!claimedRows || claimedRows.length !== ids.length) {
     // Someone else claimed part of the group between reading and writing --
@@ -297,7 +315,7 @@ export async function tryConfirmTransferProofViaWhatsApp(
   const supabase = createAdminClient();
   const { data: pendingRowsRaw } = await supabase
     .from("finance_pending_transfers")
-    .select("id, pengajuan_id, proyek, tipe, branch_id, party_name, nominal, admin_email")
+    .select(PENDING_ROW_COLUMNS)
     .is("confirmed_at", null)
     .is("rejected_at", null)
     .order("created_at", { ascending: true });
@@ -325,21 +343,21 @@ export async function tryConfirmTransferProofViaWhatsApp(
     return confirmSingleRow(supabase, amountMatches[0], sender, imageUrl, ai, true);
   }
 
-  const groups = new Map<string, PendingRow[]>();
-  for (const row of pendingRows) {
-    const name = extractSubmitterName(row.admin_email);
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(row);
-  }
-  const matchingGroups = [...groups.values()].filter((rows) => {
-    if (rows.length < 2) return false; // a single-row "group" is already covered by amountMatches above
-    const sum = rows.reduce((s, r) => s + Number(r.nominal), 0);
-    return !isNominalMismatch(sum, ai.nominal);
-  });
-  if (matchingGroups.length === 1) {
-    return confirmGroup(supabase, matchingGroups[0], sender, imageUrl, ai);
+  // Groups by the pengajuan's own destination account, not who submitted
+  // it -- a Kepala Cabang can submit on someone else's behalf, but the
+  // money only ever lands in one specific account, and that's what a
+  // single lump transfer is actually reimbursing. Requires the photo's own
+  // account to be readable -- without it there's nothing trustworthy to
+  // group by, so this falls straight through to no_amount_match instead of
+  // grouping on sum alone (which could coincidentally match an unrelated
+  // combination of pending items).
+  const aiAccount = extractAccountDigits(ai.rekeningTujuan);
+  if (aiAccount) {
+    const sameAccountRows = pendingRows.filter((row) => extractAccountDigits(row.rekening_tujuan) === aiAccount);
+    const sum = sameAccountRows.reduce((s, r) => s + Number(r.nominal), 0);
+    if (sameAccountRows.length >= 2 && !isNominalMismatch(sum, ai.nominal)) {
+      return confirmGroup(supabase, sameAccountRows, sender, imageUrl, ai);
+    }
   }
 
   return {
