@@ -141,12 +141,24 @@ const PENDING_ROW_COLUMNS = "id, pengajuan_id, proyek, tipe, branch_id, party_na
  * read off the bukti transfer photo -- free text on both sides, so exact
  * string equality would almost never match, but the account number itself
  * should.
+ *
+ * m-banking receipts often print the account number split into groups by a
+ * single space (e.g. "6975 1752 12" for "6975175212") -- matches those
+ * space-separated digit groups as one run and joins them back together,
+ * instead of only matching an unbroken run of 6+ digits, which would miss
+ * every group individually (real case: "ENDY SEPTIANTO BCA 6975 1752 12"
+ * read no account at all under the old digits-only-no-spaces regex).
  */
 function extractAccountDigits(text: string | null): string | null {
   if (!text) return null;
-  const runs = text.match(/\d{6,}/g);
+  const runs = text.match(/\d+(?: \d+)*/g);
   if (!runs || runs.length === 0) return null;
-  return runs.reduce((longest, run) => (run.length > longest.length ? run : longest), "");
+  let longest = "";
+  for (const run of runs) {
+    const joined = run.replace(/ /g, "");
+    if (joined.length >= 6 && joined.length > longest.length) longest = joined;
+  }
+  return longest || null;
 }
 
 /** Inserts the outbound sync_log event for one pengajuan; on failure, un-claims that row so it's retryable. */
