@@ -36,7 +36,15 @@ function formatItemSummary(items: FundRequestItem[]): string {
 /** A pending clarification older than this is treated as stale/abandoned rather than completed by an unrelated later message. */
 const PENDING_CLARIFICATION_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
-async function submitFundRequest(
+/**
+ * Exported so contractor-expense-report.ts can post the SAME kind of
+ * pengajuan when a contractor answers "REIMBURSE" to a nota photo --
+ * nota-derived reimbursements are always material purchases from a
+ * store, so that caller always passes kategori "material" directly
+ * instead of asking a second clarifying question nota photos already
+ * answer by what they are.
+ */
+export async function submitFundRequest(
   contractor: { id: string; fullName: string },
   nominal: number,
   items: FundRequestItem[],

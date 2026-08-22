@@ -21,7 +21,12 @@ import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToE
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
-import { findContractorByPhone, trySubmitContractorReceiptReport, tryDecideContractorReport } from "./domains/contractor-expense-report";
+import {
+  findContractorByPhone,
+  trySubmitContractorReceiptReport,
+  tryDecideContractorReport,
+  tryResolveContractorReportSettlementType,
+} from "./domains/contractor-expense-report";
 import { tryHandleContractorFundRequest } from "./domains/contractor-fund-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
@@ -124,11 +129,9 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         const reportResult = await trySubmitContractorReceiptReport(contractor, inbound.content.url);
         trace.push(`trySubmitContractorReceiptReport:${reportResult.outcome}`);
         const replyText =
-          reportResult.outcome === "submitted"
-            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\nSudah dikirim ke Vando untuk dicek.`
-            : reportResult.outcome === "no_vando_configured"
-              ? "⚠️ Nota diterima, tapi sistem belum bisa menemukan Vando untuk verifikasi. Tolong hubungi admin."
-              : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
+          reportResult.outcome === "awaiting_settlement_type"
+            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\n❓ Ini *REIMBURSE* (uang belum dibayar perusahaan, minta diganti) atau *PELAPORAN* (sudah pakai uang muka yang sudah ditransfer)? Balas salah satu ya Pak.`
+            : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
         trace.push("sendWhatsAppText:calling(contractor-report)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
         trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
@@ -137,6 +140,45 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       if (inbound.content.kind === "text") {
+        // Settlement-type answer (owner's ask, real Anang incident): a nota
+        // photo is held back from Vando until the contractor says whether
+        // it's REIMBURSE or PELAPORAN -- checked before the fund-request
+        // flow below so a reply like "REIMBURSE Rp 2.031.000" resolves the
+        // held nota(s) instead of being misread as an unrelated new request.
+        trace.push("tryResolveContractorReportSettlementType:calling");
+        const settlementResult = await tryResolveContractorReportSettlementType(contractor, inbound.content.text);
+        trace.push(`tryResolveContractorReportSettlementType:${settlementResult.outcome}`);
+        if (settlementResult.outcome === "sent_as_pelaporan") {
+          const replyText = `✅ Dicatat sebagai pelaporan (${settlementResult.codes.join(", ")}), total Rp ${settlementResult.nominal.toLocaleString("id-ID")}. Sudah dikirim ke Vando untuk dicocokkan dengan uang muka.`;
+          trace.push("sendWhatsAppText:calling(settlement-pelaporan)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (settlementResult.outcome === "converted_to_reimburse") {
+          const replyText =
+            settlementResult.fundResult.outcome === "submitted"
+              ? `✅ Dicatat sebagai reimburse, total Rp ${settlementResult.nominal.toLocaleString("id-ID")}. Sudah diajukan sebagai pengajuan dan menunggu penilaian dan persetujuan Vando sebelum ditransfer.`
+              : `⚠️ Dicatat sebagai reimburse, tapi GAGAL diajukan sebagai pengajuan${settlementResult.fundResult.outcome === "sync_failed" ? ` (${settlementResult.fundResult.error})` : ""}. Tolong hubungi admin.`;
+          trace.push("sendWhatsAppText:calling(settlement-reimburse)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        if (settlementResult.outcome === "awaiting_answer") {
+          const replyText = `Nota (${settlementResult.codes.join(", ")}) masih menunggu jawaban Bapak: ini *REIMBURSE* (belum dibayar perusahaan) atau *PELAPORAN* (sudah pakai uang muka)?`;
+          trace.push("sendWhatsAppText:calling(settlement-awaiting)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Fund request (owner's ask): Anang explaining, in his own words,
         // that he needs an advance -- AI reads whether it's a genuine
         // request with a clear amount. Still just becomes a pengajuan

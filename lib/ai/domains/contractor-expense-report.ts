@@ -2,6 +2,8 @@ import "server-only";
 
 import { fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
+import { submitFundRequest, type ContractorFundRequestOutcome } from "@/lib/ai/domains/contractor-fund-request";
+import type { FundRequestItem } from "@/lib/ai/domains/contractor-fund-request-recognition";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.types";
 import { sendWhatsAppText } from "../notifications/engine";
@@ -44,8 +46,7 @@ async function findVando(): Promise<{ id: string; fullName: string; phone: strin
 
 export type ContractorReportSubmissionOutcome =
   | { outcome: "unreadable" }
-  | { outcome: "no_vando_configured" }
-  | { outcome: "submitted"; code: string; itemSummary: string; nominal: number; ai: ExpenseReceiptRecognition };
+  | { outcome: "awaiting_settlement_type"; code: string; itemSummary: string; nominal: number; ai: ExpenseReceiptRecognition };
 
 /** "Semen 5 sak (Rp 500.000); Paku 2kg (Rp 50.000)" -- same joined-text convention material-receipt-submission.ts uses for mkh-properti's pengajuan.item. */
 function formatItemSummary(items: { nama: string; harga: number }[]): string {
@@ -53,13 +54,21 @@ function formatItemSummary(items: { nama: string; harga: number }[]): string {
 }
 
 /**
- * Anang (or any future row in contractor_wa_senders) sending a nota photo
- * -- accountability documentation for an advance already transferred via
- * the normal Endy-submits/Vando-approves/Owner-transfers pengajuan
- * pipeline. Deliberately does NOT touch mkh-properti or post anything to
- * a ledger: this only records a report for Vando to check against the
- * advance and reply COCOK/TOLAK to (see tryDecideContractorReport). The
- * photo itself is never stored -- read once by Gemini, then discarded.
+ * Anang (or any future row in contractor_wa_senders) sending a nota photo.
+ * Deliberately does NOT touch mkh-properti or post anything to a ledger,
+ * and deliberately does NOT notify Vando yet -- it only records the nota
+ * with settlement_type left null.
+ *
+ * Real incident this replaced: a nota photo used to go straight to Vando
+ * as a "laporan" (documentation against an advance already transferred)
+ * the instant it arrived, with nobody ever asking whether it actually was
+ * that or a REIMBURSE (money the company hasn't paid yet, needs its own
+ * pengajuan). Anang's own later "REIMBURSE Rp 2.031.000" text had nowhere
+ * to attach to, and the report had already gone out to Vando as a laporan
+ * to match against an advance it was never meant to be matched against.
+ * See tryResolveContractorReportSettlementType, which the caller must
+ * invoke on his next text reply to actually release these to Vando (as
+ * pelaporan) or convert them into a pengajuan (as reimburse).
  */
 export async function trySubmitContractorReceiptReport(contractor: ContractorSender, imageUrl: string): Promise<ContractorReportSubmissionOutcome> {
   const image = await fetchImageAsBase64(imageUrl);
@@ -72,11 +81,6 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
 
   if (!ai.readable || ai.nominal === null || ai.items.length === 0) {
     return { outcome: "unreadable" };
-  }
-
-  const vando = await findVando();
-  if (!vando || !vando.phone) {
-    return { outcome: "no_vando_configured" };
   }
 
   const itemSummary = formatItemSummary(ai.items);
@@ -102,14 +106,88 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
   }
 
   const code = `LAP-${String(inserted.id).padStart(4, "0")}`;
-  const itemLines = ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n");
+  return { outcome: "awaiting_settlement_type", code, itemSummary, nominal: ai.nominal, ai };
+}
 
-  await sendWhatsAppText(
-    vando.phone,
-    `📋 Laporan belanja *${contractor.fullName}* (${code})${ai.supplier ? ` — ${ai.supplier}` : ""}:\n${itemLines}\n💰 Total: Rp ${ai.nominal.toLocaleString("id-ID")}${ai.tanggal ? `\n📅 ${ai.tanggal}` : ""}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
-  );
+function detectSettlementType(text: string): "reimburse" | "pelaporan" | null {
+  const lower = text.toLowerCase();
+  if (/reimburse|ganti\s*uang|belum\s*(di)?\s*bayar|belum\s*dibayar/.test(lower)) return "reimburse";
+  if (/pelapor|sudah\s*(di)?\s*bayar|uang\s*muka|advance/.test(lower)) return "pelaporan";
+  return null;
+}
 
-  return { outcome: "submitted", code, itemSummary, nominal: ai.nominal, ai };
+export type ContractorReportSettlementOutcome =
+  | { outcome: "no_pending" }
+  | { outcome: "awaiting_answer"; codes: string[] }
+  | { outcome: "sent_as_pelaporan"; codes: string[]; nominal: number }
+  | { outcome: "converted_to_reimburse"; nominal: number; fundResult: ContractorFundRequestOutcome };
+
+/**
+ * Handles a contractor's text reply that answers the reimburse/pelaporan
+ * question asked right after his nota photo(s) were received. Resolves
+ * EVERY one of his still-unclassified reports at once (not just the
+ * latest), matching how Anang actually used it: several nota sent back to
+ * back, one combined answer covering all of them.
+ */
+export async function tryResolveContractorReportSettlementType(contractor: ContractorSender, text: string): Promise<ContractorReportSettlementOutcome> {
+  const supabase = createAdminClient();
+  const { data: pendingReports } = await supabase
+    .from("contractor_expense_reports")
+    .select("id, item, items, nominal, tanggal, supplier, ai_notes")
+    .eq("contractor_id", contractor.id)
+    .eq("status", "pending")
+    .is("settlement_type", null)
+    .order("created_at", { ascending: true });
+
+  if (!pendingReports || pendingReports.length === 0) {
+    return { outcome: "no_pending" };
+  }
+
+  const codes = pendingReports.map((r) => `LAP-${String(r.id).padStart(4, "0")}`);
+  const settlementType = detectSettlementType(text);
+  if (!settlementType) {
+    return { outcome: "awaiting_answer", codes };
+  }
+
+  const reportIds = pendingReports.map((r) => r.id);
+
+  if (settlementType === "pelaporan") {
+    await supabase.from("contractor_expense_reports").update({ settlement_type: "pelaporan" }).in("id", reportIds);
+
+    const vando = await findVando();
+    if (vando?.phone) {
+      for (const report of pendingReports) {
+        const code = `LAP-${String(report.id).padStart(4, "0")}`;
+        const items = Array.isArray(report.items) ? (report.items as { nama: string; harga: number }[]) : [];
+        const itemLines = items.length > 0 ? items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n") : `🧾 ${report.item}`;
+        await sendWhatsAppText(
+          vando.phone,
+          `📋 Laporan belanja *${contractor.fullName}* (${code})${report.supplier ? ` — ${report.supplier}` : ""}:\n${itemLines}\n💰 Total: Rp ${Number(report.nominal).toLocaleString("id-ID")}${report.tanggal ? `\n📅 ${report.tanggal}` : ""}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
+        );
+      }
+    }
+
+    const nominal = pendingReports.reduce((sum, r) => sum + Number(r.nominal), 0);
+    return { outcome: "sent_as_pelaporan", codes, nominal };
+  }
+
+  // reimburse: never sent to Vando as a laporan -- this is money the
+  // company hasn't paid Anang for yet, so it becomes its own pengajuan
+  // through the exact same pipeline his own fund requests use. Nota
+  // purchases are always store purchases, so kategori is always
+  // "material" -- no second clarifying question needed.
+  await supabase
+    .from("contractor_expense_reports")
+    .update({ settlement_type: "reimburse", status: "rejected", reject_reason: "Dikonversi menjadi pengajuan reimburse" })
+    .in("id", reportIds);
+
+  const items: FundRequestItem[] = pendingReports.flatMap((r) => (Array.isArray(r.items) ? (r.items as unknown as FundRequestItem[]) : [{ nama: r.item, harga: Number(r.nominal) }]));
+  const nominal = pendingReports.reduce((sum, r) => sum + Number(r.nominal), 0);
+  const keterangan = formatItemSummary(items);
+  const aiNotes = pendingReports.map((r) => r.ai_notes).filter(Boolean).join(" | ") || null;
+
+  const fundResult = await submitFundRequest(contractor, nominal, items, keterangan, "material", aiNotes);
+  return { outcome: "converted_to_reimburse", nominal, fundResult };
 }
 
 export type ContractorReportDecisionOutcome =

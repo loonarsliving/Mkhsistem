@@ -1907,6 +1907,7 @@ export interface Database {
           reject_reason: string | null;
           recapped_at: string | null;
           created_at: string;
+          settlement_type: string | null;
         };
         Insert: {
           id?: number;
@@ -1925,6 +1926,7 @@ export interface Database {
           reject_reason?: string | null;
           recapped_at?: string | null;
           created_at?: string;
+          settlement_type?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contractor_expense_reports"]["Insert"]>;
         Relationships: [];
