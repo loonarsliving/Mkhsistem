@@ -117,6 +117,15 @@ export type NotificationCategoryDb =
   | "salary_transferred"
   // Consolidated per-branch salary transfer digest (migration 0190)
   | "salary_transfer_summary"
+  // Construction finance (migrations 0193/0195/0198/0201) -- also present
+  // in the live mkc_notifications_category_check but missing from this
+  // mirror until now.
+  | "construction_expense_submitted"
+  | "construction_weekly_report"
+  | "material_purchase_missing_photo"
+  | "construction_progress_report"
+  | "approval_request_submitted"
+  | "approval_request_decided"
   // AI lead-nurture bot (migration 0228)
   | "lead_hot_handoff"
   | "pending_question_timeout";

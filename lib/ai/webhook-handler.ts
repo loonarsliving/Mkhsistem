@@ -22,6 +22,7 @@ import { tryTrackConstructionProgressPhoto } from "./domains/construction-progre
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { tryConfirmConstructionExpenseSettlementViaWhatsApp } from "./domains/construction-expense-settlement";
+import { tryRecordConstructionOutflowPhoto } from "./domains/construction-outflow-photo";
 import {
   findContractorByPhone,
   trySubmitContractorReceiptReport,
@@ -627,6 +628,29 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         }
       }
 
+      // Real gap this closes: a Kepala Cabang's (Fasly/Kendari) bukti
+      // transfer photo -- proof he already paid a toko/tukang himself --
+      // used to fall straight into tryRouteConstructionPhotoReport below
+      // and get forwarded to Super Admin captioned "Update Progress ..." as
+      // if it were a site photo, with the actual transaction never logged
+      // anywhere. Checked first so a recognized transfer short-circuits
+      // that generic forward entirely.
+      trace.push("tryRecordConstructionOutflowPhoto:calling");
+      const outflowResult = await tryRecordConstructionOutflowPhoto(
+        { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id, role_key: imageRoleKey },
+        inbound.content.url,
+      );
+      trace.push(`tryRecordConstructionOutflowPhoto:${outflowResult.outcome}`);
+      if (outflowResult.outcome === "recorded") {
+        const replyText = `✅ Dicatat sebagai transaksi keluar (${outflowResult.partyName}, Rp ${outflowResult.amount.toLocaleString("id-ID")}, ${outflowResult.projectName}). Sudah dikirim ke Super Admin.`;
+        trace.push("sendWhatsAppText:calling(construction-outflow)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+
       trace.push("tryRouteConstructionPhotoReport:calling");
       const constructionRoute = await tryRouteConstructionPhotoReport(
         { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id, role_key: imageRoleKey },
@@ -634,6 +658,16 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         inbound.content.caption,
       );
       trace.push(`tryRouteConstructionPhotoReport:${constructionRoute.outcome}`);
+
+      // Owner's ask: a building/site photo (i.e. not recognized as a
+      // transfer above) should prompt which blok it's for when the caption
+      // doesn't already say. Kendari has no fixed blok list yet (unlike
+      // Loonars Living's A1-C4), so this is a plain conversational
+      // follow-up rather than a lookup against construction_blocks.
+      if (constructionRoute.outcome === "routed" && !/\b(blok|lokasi|lantai)\b/i.test(inbound.content.caption ?? "")) {
+        trace.push("sendWhatsAppText:calling(construction-blok-ask)");
+        await sendWhatsAppText(inbound.sender, "📍 Foto ini blok/lokasi mana ya Pak?");
+      }
 
       // Table-driven auto-forward (0197) -- e.g. Endy's material-purchase
       // photos to Vando + every Super Admin. Independent of the
