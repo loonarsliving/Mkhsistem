@@ -18,6 +18,34 @@ export type ConstructionExpenseSettlementOutcome =
       recipient: { name: string; phone: string } | null;
     };
 
+/** Words shorter than this are too generic (toko, dana, dll) to count as a real name match either way. */
+const MIN_MATCH_WORD_LENGTH = 4;
+
+/** Splits into lowercase alphabetic-ish tokens, dropping short/generic words. */
+function significantWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter((w) => w.length >= MIN_MATCH_WORD_LENGTH);
+}
+
+/**
+ * True when the photo's recognized recipient text shares at least one
+ * meaningful word with this expense's party_name or description -- e.g.
+ * "Fasly" appearing in both. Guards against matching purely on a
+ * coincidental nominal (real incident: a Rp 2.000.000 transfer to Ahmad
+ * Febri Handoko for a Jogja pengajuan got auto-settled against Anto's
+ * unrelated Rp 2.000.000 Kendari sand purchase, since nothing but the
+ * amount was ever compared).
+ */
+function recipientNameMatches(row: { party_name: string | null; description: string | null }, aiRecipientText: string | null): boolean {
+  if (!aiRecipientText) return false;
+  const aiWords = new Set(significantWords(aiRecipientText));
+  if (aiWords.size === 0) return false;
+  const rowWords = significantWords(`${row.party_name ?? ""} ${row.description ?? ""}`);
+  return rowWords.some((w) => aiWords.has(w));
+}
+
 /**
  * Real incident: Fasly (Kepala Cabang Kendari) logged a Rp 20.570.500 cash
  * material purchase (construction_expenses, expense_type=material_tunai --
@@ -29,13 +57,19 @@ export type ConstructionExpenseSettlementOutcome =
  * populates. is_settled/settled_at/settled_by already existed on the table
  * with nothing driving them from WhatsApp.
  *
- * Deliberately silent on anything short of an exact nominal match (returns
+ * Second real incident (owner's fix request): matching by nominal alone
+ * auto-settled Anto's unrelated Kendari sand purchase against a Jogja
+ * pengajuan's bukti transfer that happened to be the same amount -- now
+ * also requires the photo's recognized recipient to share a name with the
+ * expense's party_name/description before matching at all.
+ *
+ * Deliberately silent on anything short of a full match (returns
  * "no_match", not an error) -- unlike the caption-gated project fund top-up
  * (construction-fund-transfer-confirmation.ts), this has no caption
  * requirement, so it must not swallow bukti transfer photos meant for the
- * ordinary pengajuan flow just because the photo happened to be unreadable.
- * The caller falls through to tryConfirmTransferProofViaWhatsApp on
- * anything but "settled".
+ * ordinary pengajuan flow just because the photo happened to be unreadable
+ * or the name didn't overlap. The caller falls through to
+ * tryConfirmTransferProofViaWhatsApp on anything but "settled".
  */
 export async function tryConfirmConstructionExpenseSettlementViaWhatsApp(
   sender: { id: string; name: string; roleKey: string | null },
@@ -48,7 +82,7 @@ export async function tryConfirmConstructionExpenseSettlementViaWhatsApp(
   const supabase = createAdminClient();
   const { data: pendingRows } = await supabase
     .from("construction_expenses")
-    .select("id, party_name, amount, created_by, project:project_id(name), branch:branch_id(name)")
+    .select("id, party_name, description, amount, created_by, project:project_id(name), branch:branch_id(name)")
     .eq("is_settled", false)
     .order("created_at", { ascending: true });
 
@@ -68,7 +102,7 @@ export async function tryConfirmConstructionExpenseSettlementViaWhatsApp(
     return { outcome: "no_match" };
   }
 
-  const match = pendingRows.find((row) => !isNominalMismatch(Number(row.amount), ai.nominal));
+  const match = pendingRows.find((row) => !isNominalMismatch(Number(row.amount), ai.nominal) && recipientNameMatches(row, ai.rekeningTujuan));
   if (!match) {
     return { outcome: "no_match" };
   }
