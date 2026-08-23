@@ -39,7 +39,7 @@ export type TransferProofConfirmationOutcome =
  * the sender differ slightly from the pengajuan's nominal, or from
  * whichever of the two figures on the receipt the AI happens to read.
  */
-function isNominalMismatch(expected: number, read: number | null): boolean {
+export function isNominalMismatch(expected: number, read: number | null): boolean {
   if (read === null) return false;
   const tolerance = Math.max(6500, expected * 0.005);
   return Math.abs(read - expected) > tolerance;

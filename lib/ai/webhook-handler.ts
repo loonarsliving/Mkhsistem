@@ -21,6 +21,7 @@ import { formatRelayReply, hasOtherPendingPhotos, stagePendingPhoto, tryRelayToE
 import { tryTrackConstructionProgressPhoto } from "./domains/construction-progress-tracking";
 import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
+import { tryConfirmConstructionExpenseSettlementViaWhatsApp } from "./domains/construction-expense-settlement";
 import {
   findContractorByPhone,
   trySubmitContractorReceiptReport,
@@ -476,6 +477,42 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dana proyek]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Construction cash-expense settlement (real Fasly/Kendari
+        // incident): construction_expenses (a separate module from
+        // mkh-properti's pengajuan) never populates finance_pending_transfers,
+        // so a bukti transfer settling one of its rows used to come back
+        // "tidak cocok dengan pengajuan manapun". Checked before the
+        // mkh-properti flow below on an exact nominal match; anything short
+        // of that falls through unchanged.
+        trace.push("tryConfirmConstructionExpenseSettlementViaWhatsApp:calling");
+        const constructionSettlementResult = await tryConfirmConstructionExpenseSettlementViaWhatsApp(
+          { id: employee.id, name: employee.full_name, roleKey: imageRoleKey },
+          inbound.content.url,
+        );
+        trace.push(`tryConfirmConstructionExpenseSettlementViaWhatsApp:${constructionSettlementResult.outcome}`);
+        if (constructionSettlementResult.outcome === "settled") {
+          const replyText =
+            `✅ Bukti transfer untuk ${constructionSettlementResult.partyName} (Rp ${constructionSettlementResult.amount.toLocaleString("id-ID")}, ${constructionSettlementResult.projectName}) diterima dan ditandai lunas.` +
+            (constructionSettlementResult.recipient
+              ? `\n📤 Bukti sudah diteruskan ke ${constructionSettlementResult.recipient.name}.`
+              : "\n⚠️ Tidak ada penanggung jawab dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          trace.push("sendWhatsAppText:calling(construction-settlement)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          if (constructionSettlementResult.recipient) {
+            trace.push("sendWhatsAppImage:forwarding(construction-settlement)");
+            await sendWhatsAppImage(
+              constructionSettlementResult.recipient.phone,
+              inbound.content.url,
+              `📎 Bukti transfer ${constructionSettlementResult.partyName} — Rp ${constructionSettlementResult.amount.toLocaleString("id-ID")} (dari Super Admin)`,
+            );
+            trace.push("sendWhatsAppImage:done(construction-settlement)");
+          }
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
 
