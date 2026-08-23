@@ -32,7 +32,7 @@ export function CreateConstructionProjectDialog({ branches }: CreateConstruction
     formState: { errors, isSubmitting },
   } = useForm<CreateConstructionProjectInput>({
     resolver: zodResolver(createConstructionProjectSchema),
-    defaultValues: { branchId: "", name: "", budgetPerUnit: undefined, totalUnits: undefined },
+    defaultValues: { branchId: "", name: "", budgetPerUnit: undefined, totalUnits: undefined, billingType: undefined },
   });
 
   const budgetPerUnit = watch("budgetPerUnit");
@@ -46,7 +46,7 @@ export function CreateConstructionProjectDialog({ branches }: CreateConstruction
       return;
     }
     toast.success(`Proyek dibuat dengan ${values.totalUnits} unit -- lanjutkan isi BOQ di kartu "BOQ Proyek" di bawah`);
-    reset({ branchId: "", name: "", budgetPerUnit: undefined, totalUnits: undefined });
+    reset({ branchId: "", name: "", budgetPerUnit: undefined, totalUnits: undefined, billingType: undefined });
     setOpen(false);
   }
 
@@ -113,6 +113,25 @@ export function CreateConstructionProjectDialog({ branches }: CreateConstruction
             </p>
           )}
           <p className="text-xs text-muted-foreground">Setiap unit langsung dibuat sebagai baris terpisah (U01, U02, dst) dengan anggaran masing-masing.</p>
+          <div className="space-y-1.5">
+            <Label>Tipe Kontrak (opsional)</Label>
+            <Controller
+              control={control}
+              name="billingType"
+              render={({ field }) => (
+                <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Belum diklasifikasi" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="borongan">Borongan -- dibayar per progress, tanpa kontrol stok</SelectItem>
+                    <SelectItem value="cost_by_fee">Cost-by-Fee -- kontrol stok ketat aktif</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <p className="text-xs text-muted-foreground">Pilih &quot;Cost-by-Fee&quot; untuk menyalakan cek sisa BOQ, Petugas Gudang, dan opname fisik.</p>
+          </div>
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}

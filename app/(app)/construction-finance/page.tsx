@@ -12,6 +12,8 @@ import { CmBoqCard } from "@/features/construction-finance/components/cm-boq-car
 import { CmCostControlCard } from "@/features/construction-finance/components/cm-cost-control-card";
 import { CmLaborContractsCard } from "@/features/construction-finance/components/cm-labor-contracts-card";
 import { CmMaterialRequirementCard } from "@/features/construction-finance/components/cm-material-requirement-card";
+import { CmStockOpnameCard } from "@/features/construction-finance/components/cm-stock-opname-card";
+import { CmWarehouseKeeperCard } from "@/features/construction-finance/components/cm-warehouse-keeper-card";
 import { CmWbsProgressCard } from "@/features/construction-finance/components/cm-wbs-progress-card";
 import { ConstructionExpenseForm } from "@/features/construction-finance/components/construction-expense-form";
 import { ConstructionProgressAssessmentCard } from "@/features/construction-finance/components/construction-progress-assessment-card";
@@ -34,6 +36,12 @@ import {
 } from "@/repositories/cm-labor.repository";
 import { listActiveMaterials, listMaterialStock } from "@/repositories/cm-material.repository";
 import { listMaterialRequirement, listPendingPurchaseRequests } from "@/repositories/cm-procurement.repository";
+import {
+  getActiveWarehouseKeeper,
+  listBranchEmployeeOptions,
+  listMaterialConsumption,
+  listStockOpnames,
+} from "@/repositories/cm-warehouse.repository";
 import { getProjectOverallProgress, listPendingWbsProgressLogs, listProjectWbs } from "@/repositories/cm-wbs.repository";
 import {
   getActiveConstructionProject,
@@ -110,6 +118,7 @@ export default async function ConstructionFinancePage() {
   const ownProject = projects.find((p) => p.branchId === session.employee.branch_id) ?? projects[0] ?? null;
 
   const canSeeLaborContracts = canManage || canApproveBranch;
+  const isCostByFee = ownProject?.billingType === "cost_by_fee";
 
   const [
     expenses,
@@ -132,6 +141,10 @@ export default async function ConstructionFinancePage() {
     branches,
     boqLines,
     progressAssessment,
+    warehouseKeeper,
+    warehouseEmployeeOptions,
+    materialConsumption,
+    stockOpnames,
   ] = await Promise.all([
     ownProject ? listConstructionExpenses(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? listUnsettledUtang(supabase) : Promise.resolve([]),
@@ -155,6 +168,10 @@ export default async function ConstructionFinancePage() {
     canManage ? listBranches(supabase, false) : Promise.resolve([]),
     ownProject && canManage ? listProjectBoqLines(supabase, ownProject.id) : Promise.resolve([]),
     canManage ? getConstructionProgressAssessment(supabase, "LL") : Promise.resolve(null),
+    ownProject && isCostByFee ? getActiveWarehouseKeeper(supabase, ownProject.id) : Promise.resolve(null),
+    ownProject && isCostByFee && canManage ? listBranchEmployeeOptions(supabase, ownProject.branchId) : Promise.resolve([]),
+    ownProject && isCostByFee ? listMaterialConsumption(supabase, ownProject.id) : Promise.resolve([]),
+    ownProject && isCostByFee ? listStockOpnames(supabase, ownProject.id) : Promise.resolve([]),
   ]);
 
   const branchesWithoutProject = branches.filter((b) => !projects.some((p) => p.branchId === b.id)).map((b) => ({ id: b.id, name: b.name }));
@@ -234,7 +251,7 @@ export default async function ConstructionFinancePage() {
 
       {costControl && <CmCostControlCard cost={costControl} />}
 
-      {ownProject && canManage && <CmBoqCard projectId={ownProject.id} lines={boqLines} materials={materials} />}
+      {ownProject && canManage && <CmBoqCard projectId={ownProject.id} lines={boqLines} materials={materials} wbsOptions={wbsOptions} />}
 
       {ownProject && wbsItems.length > 0 && (
         <CmWbsProgressCard
@@ -311,6 +328,21 @@ export default async function ConstructionFinancePage() {
           </CardContent>
         </Card>
       )}
+
+      {ownProject && isCostByFee && (canManage || warehouseKeeper?.employeeId === session.employee.id) && (
+        <CmWarehouseKeeperCard
+          projectId={ownProject.id}
+          keeper={warehouseKeeper}
+          employeeOptions={warehouseEmployeeOptions}
+          materials={materials}
+          wbsOptions={wbsOptions}
+          consumption={materialConsumption}
+          canManage={canManage}
+          canRecordConsumption={canManage || warehouseKeeper?.employeeId === session.employee.id}
+        />
+      )}
+
+      {ownProject && isCostByFee && canManage && <CmStockOpnameCard projectId={ownProject.id} materials={materials} opnames={stockOpnames} />}
 
       {canManage && unsettledUtang.length > 0 && (
         <Card>

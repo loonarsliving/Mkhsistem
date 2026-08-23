@@ -27,6 +27,11 @@ export const createConstructionProjectSchema = z.object({
   name: z.string().trim().min(3, "Nama proyek wajib diisi").max(200),
   budgetPerUnit: z.number().positive("Anggaran per unit harus lebih dari 0"),
   totalUnits: z.number().int().positive("Jumlah unit harus lebih dari 0"),
+  // Optional: NULL stays unclassified, same permissive behavior as every
+  // project created before 0245 (Kendari included). See "Peta Celah Stok
+  // Kontraktor" -- this is the gate for the whole cost-by-fee stock-control
+  // build, so it's deliberately not defaulted to either value here.
+  billingType: z.enum(["borongan", "cost_by_fee"]).optional(),
 });
 export type CreateConstructionProjectInput = z.infer<typeof createConstructionProjectSchema>;
 
@@ -38,8 +43,36 @@ export const addBoqLineSchema = z.object({
   quantity: z.number().positive("Quantity harus lebih dari 0"),
   unit: z.string().trim().min(1, "Satuan wajib diisi").max(30),
   unitPrice: z.number().min(0, "Harga tidak boleh negatif"),
+  // Which WBS item this line's material feeds -- powers cm_material_requirement()
+  // and the BOQ-balance guard (0246/0247). Optional: unlinked lines behave
+  // exactly as before.
+  projectWbsId: z.string().uuid().optional().or(z.literal("")),
 });
 export type AddBoqLineInput = z.infer<typeof addBoqLineSchema>;
+
+export const assignWarehouseKeeperSchema = z.object({
+  projectId: z.string().uuid(),
+  employeeId: z.string().uuid("Pilih karyawan"),
+});
+export type AssignWarehouseKeeperInput = z.infer<typeof assignWarehouseKeeperSchema>;
+
+export const consumeMaterialSchema = z.object({
+  projectId: z.string().uuid(),
+  materialId: z.string().uuid("Pilih material"),
+  quantity: z.number().positive("Jumlah harus lebih dari 0"),
+  photoUrl: z.string().trim().min(1, "Foto bukti wajib diunggah"),
+  projectWbsId: z.string().uuid().optional().or(z.literal("")),
+  note: z.string().trim().max(500).optional().or(z.literal("")),
+});
+export type ConsumeMaterialInput = z.infer<typeof consumeMaterialSchema>;
+
+export const recordStockOpnameSchema = z.object({
+  projectId: z.string().uuid(),
+  materialId: z.string().uuid("Pilih material"),
+  countedQuantity: z.number().min(0, "Tidak boleh negatif"),
+  note: z.string().trim().max(500).optional().or(z.literal("")),
+});
+export type RecordStockOpnameInput = z.infer<typeof recordStockOpnameSchema>;
 
 export const deleteBoqLineSchema = z.object({ id: z.string().uuid() });
 export type DeleteBoqLineInput = z.infer<typeof deleteBoqLineSchema>;

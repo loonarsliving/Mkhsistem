@@ -14,6 +14,7 @@ export interface ConstructionProject {
   name: string;
   totalBudget: number;
   status: "active" | "completed" | "cancelled";
+  billingType: "borongan" | "cost_by_fee" | null;
   danaMasuk: number;
   totalCashOut: number;
   totalUtangBelumLunas: number;
@@ -24,7 +25,7 @@ export interface ConstructionProject {
 export async function getActiveConstructionProject(supabase: TypedSupabaseClient, branchId: string): Promise<ConstructionProject | null> {
   const { data: project, error } = await supabase
     .from("construction_projects")
-    .select("id, branch_id, name, total_budget, status, branch:branch_id(name)")
+    .select("id, branch_id, name, total_budget, status, billing_type, branch:branch_id(name)")
     .eq("branch_id", branchId)
     .eq("status", "active")
     .order("created_at", { ascending: false })
@@ -53,6 +54,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
     name: project.name,
     totalBudget: Number(project.total_budget),
     status: project.status,
+    billingType: project.billing_type,
     danaMasuk,
     totalCashOut,
     totalUtangBelumLunas,
@@ -64,7 +66,7 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
 export async function listActiveConstructionProjects(supabase: TypedSupabaseClient): Promise<ConstructionProject[]> {
   const { data: projects, error } = await supabase
     .from("construction_projects")
-    .select("id, branch_id, name, total_budget, status, branch:branch_id(name)")
+    .select("id, branch_id, name, total_budget, status, billing_type, branch:branch_id(name)")
     .eq("status", "active")
     .order("created_at", { ascending: false });
   if (error) throw error;

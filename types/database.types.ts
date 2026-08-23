@@ -2794,6 +2794,7 @@ export interface Database {
           name: string;
           total_budget: number;
           status: "active" | "completed" | "cancelled";
+          billing_type: "borongan" | "cost_by_fee" | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -2804,6 +2805,7 @@ export interface Database {
           name: string;
           total_budget: number;
           status?: "active" | "completed" | "cancelled";
+          billing_type?: "borongan" | "cost_by_fee" | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -3074,6 +3076,7 @@ export interface Database {
           unit: string;
           unit_price: number;
           sort_order: number;
+          wbs_code: string | null;
         };
         Insert: {
           id?: string;
@@ -3085,6 +3088,7 @@ export interface Database {
           unit: string;
           unit_price: number;
           sort_order?: number;
+          wbs_code?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["cm_boq_template_items"]["Insert"]>;
         Relationships: [
@@ -3153,6 +3157,8 @@ export interface Database {
           decided_at: string | null;
           reject_reason: string | null;
           fulfilled_expense_id: string | null;
+          source: "app" | "whatsapp";
+          requested_by_contractor_id: string | null;
         };
         Insert: {
           id?: string;
@@ -3168,6 +3174,8 @@ export interface Database {
           decided_at?: string | null;
           reject_reason?: string | null;
           fulfilled_expense_id?: string | null;
+          source?: "app" | "whatsapp";
+          requested_by_contractor_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["cm_purchase_requests"]["Insert"]>;
         Relationships: [
@@ -3427,6 +3435,7 @@ export interface Database {
           quantity: number;
           source_type: "purchase" | "consumption" | "adjustment" | "waste";
           source_expense_id: string | null;
+          source_consumption_id: string | null;
           note: string | null;
           created_by: string | null;
           created_at: string;
@@ -3439,6 +3448,7 @@ export interface Database {
           quantity: number;
           source_type: "purchase" | "consumption" | "adjustment" | "waste";
           source_expense_id?: string | null;
+          source_consumption_id?: string | null;
           note?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -3461,6 +3471,155 @@ export interface Database {
             foreignKeyName: "cm_stock_movements_source_expense_id_fkey";
             columns: ["source_expense_id"];
             referencedRelation: "construction_expenses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_stock_movements_source_consumption_id_fkey";
+            columns: ["source_consumption_id"];
+            referencedRelation: "cm_material_consumption";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_material_aliases: {
+        Row: {
+          id: string;
+          alias: string;
+          material_id: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          alias: string;
+          material_id: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_material_aliases"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_material_aliases_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_warehouse_keepers: {
+        Row: {
+          id: string;
+          project_id: string;
+          employee_id: string;
+          is_active: boolean;
+          assigned_by: string | null;
+          assigned_at: string;
+          deactivated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          employee_id: string;
+          is_active?: boolean;
+          assigned_by?: string | null;
+          assigned_at?: string;
+          deactivated_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_warehouse_keepers"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_warehouse_keepers_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_warehouse_keepers_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_material_consumption: {
+        Row: {
+          id: string;
+          project_id: string;
+          material_id: string;
+          quantity: number;
+          project_wbs_id: string | null;
+          photo_url: string;
+          note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          material_id: string;
+          quantity: number;
+          project_wbs_id?: string | null;
+          photo_url: string;
+          note?: string | null;
+          recorded_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_material_consumption"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_material_consumption_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_material_consumption_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_material_consumption_project_wbs_id_fkey";
+            columns: ["project_wbs_id"];
+            referencedRelation: "cm_project_wbs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_stock_opnames: {
+        Row: {
+          id: string;
+          project_id: string;
+          material_id: string;
+          system_quantity: number;
+          counted_quantity: number;
+          variance: number;
+          note: string | null;
+          counted_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          material_id: string;
+          system_quantity: number;
+          counted_quantity: number;
+          note?: string | null;
+          counted_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_stock_opnames"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_stock_opnames_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_stock_opnames_material_id_fkey";
+            columns: ["material_id"];
+            referencedRelation: "cm_materials";
             referencedColumns: ["id"];
           },
         ];
@@ -5580,6 +5739,29 @@ export interface Database {
         Args: { p_project_id: string; p_material_id: string; p_requested_quantity: number; p_reason?: string | null };
         Returns: string;
       };
+      cm_boq_balance: {
+        Args: { p_project_id: string; p_material_id: string };
+        Returns: { boq_quantity: number; purchased_quantity: number; open_pr_quantity: number; remaining_quantity: number }[];
+      };
+      cm_submit_material_alias: { Args: { p_alias: string; p_material_id: string }; Returns: string };
+      cm_resolve_material_alias: { Args: { p_text: string }; Returns: string | null };
+      cm_assign_warehouse_keeper: { Args: { p_project_id: string; p_employee_id: string }; Returns: string };
+      cm_is_warehouse_keeper: { Args: { p_project_id: string }; Returns: boolean };
+      cm_consume_material: {
+        Args: {
+          p_project_id: string;
+          p_material_id: string;
+          p_quantity: number;
+          p_photo_url: string;
+          p_project_wbs_id?: string | null;
+          p_note?: string | null;
+        };
+        Returns: string;
+      };
+      cm_record_stock_opname: {
+        Args: { p_project_id: string; p_material_id: string; p_counted_quantity: number; p_note?: string | null };
+        Returns: string;
+      };
       cm_decide_purchase_request: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
       cm_create_contractor: {
         Args: { p_full_name: string; p_contractor_type?: string; p_phone?: string | null; p_bank_account?: string | null };
@@ -5647,7 +5829,7 @@ export interface Database {
         Returns: string;
       };
       construction_create_project: {
-        Args: { p_branch_id: string; p_name: string; p_budget_per_unit: number; p_total_units: number };
+        Args: { p_branch_id: string; p_name: string; p_budget_per_unit: number; p_total_units: number; p_billing_type?: string | null };
         Returns: string;
       };
       cm_add_project_boq_line: {

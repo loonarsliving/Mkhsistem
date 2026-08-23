@@ -64,6 +64,7 @@ export async function createConstructionProjectAction(input: CreateConstructionP
     p_name: parsed.data.name,
     p_budget_per_unit: parsed.data.budgetPerUnit,
     p_total_units: parsed.data.totalUnits,
+    p_billing_type: parsed.data.billingType || null,
   });
   if (error) return actionError(error.message);
 
@@ -85,6 +86,7 @@ export async function addBoqLineAction(input: AddBoqLineInput): Promise<ActionRe
     p_unit: parsed.data.unit,
     p_unit_price: parsed.data.unitPrice,
     p_material_id: parsed.data.materialId || null,
+    p_project_wbs_id: parsed.data.projectWbsId || null,
   });
   if (error) return actionError(error.message);
 

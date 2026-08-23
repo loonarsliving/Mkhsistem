@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 import type { ProjectBoqLine } from "@/repositories/cm-boq.repository";
+import type { ProjectWbsOption } from "@/repositories/cm-labor.repository";
 import type { MaterialCatalogItem } from "@/repositories/cm-material.repository";
 
 import { addBoqLineAction, deleteBoqLineAction } from "../actions/construction-finance.actions";
@@ -24,6 +25,7 @@ interface CmBoqCardProps {
   projectId: string;
   lines: ProjectBoqLine[];
   materials: MaterialCatalogItem[];
+  wbsOptions: ProjectWbsOption[];
 }
 
 const CATEGORY_LABEL: Record<AddBoqLineInput["category"], string> = {
@@ -39,7 +41,7 @@ const CATEGORY_LABEL: Record<AddBoqLineInput["category"], string> = {
 // kartu Kontrak Borongan di bawah, bukan diketik manual di BOQ.
 const ADDABLE_CATEGORIES = (["material", "equipment", "other"] as const) satisfies readonly AddBoqLineInput["category"][];
 
-function AddBoqLineForm({ projectId, materials }: { projectId: string; materials: MaterialCatalogItem[] }) {
+function AddBoqLineForm({ projectId, materials, wbsOptions }: { projectId: string; materials: MaterialCatalogItem[]; wbsOptions: ProjectWbsOption[] }) {
   const {
     register,
     handleSubmit,
@@ -50,7 +52,7 @@ function AddBoqLineForm({ projectId, materials }: { projectId: string; materials
     formState: { errors, isSubmitting },
   } = useForm<AddBoqLineInput>({
     resolver: zodResolver(addBoqLineSchema),
-    defaultValues: { projectId, category: "material", materialId: "", description: "", quantity: undefined, unit: "", unitPrice: undefined },
+    defaultValues: { projectId, category: "material", materialId: "", description: "", quantity: undefined, unit: "", unitPrice: undefined, projectWbsId: "" },
   });
   const category = watch("category");
 
@@ -61,7 +63,7 @@ function AddBoqLineForm({ projectId, materials }: { projectId: string; materials
       return;
     }
     toast.success("Baris BOQ ditambahkan");
-    reset({ projectId, category: values.category, materialId: "", description: "", quantity: undefined, unit: "", unitPrice: undefined });
+    reset({ projectId, category: values.category, materialId: "", description: "", quantity: undefined, unit: "", unitPrice: undefined, projectWbsId: "" });
   }
 
   return (
@@ -143,6 +145,30 @@ function AddBoqLineForm({ projectId, materials }: { projectId: string; materials
         </div>
       </div>
 
+      {category === "material" && wbsOptions.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Untuk Pekerjaan (WBS) -- opsional, tapi mengaktifkan cek kebutuhan material</Label>
+          <Controller
+            control={control}
+            name="projectWbsId"
+            render={({ field }) => (
+              <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Tidak ditautkan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {wbsOptions.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label>Quantity</Label>
@@ -189,6 +215,7 @@ function BoqLineRow({ line }: { line: ProjectBoqLine }) {
     <TableRow>
       <TableCell>{CATEGORY_LABEL[line.category]}</TableCell>
       <TableCell>{line.description}</TableCell>
+      <TableCell className="text-muted-foreground">{line.wbsName ?? "-"}</TableCell>
       <TableCell className="text-right tabular-nums">
         {line.quantity} {line.unit}
       </TableCell>
@@ -203,7 +230,7 @@ function BoqLineRow({ line }: { line: ProjectBoqLine }) {
   );
 }
 
-export function CmBoqCard({ projectId, lines, materials }: CmBoqCardProps) {
+export function CmBoqCard({ projectId, lines, materials, wbsOptions }: CmBoqCardProps) {
   const totalBudget = lines.reduce((sum, l) => sum + l.budget, 0);
 
   return (
@@ -220,7 +247,7 @@ export function CmBoqCard({ projectId, lines, materials }: CmBoqCardProps) {
           Gaji tukang tidak diisi di sini -- selalu borongan, dibayar mingguan sesuai bobot pekerjaan x progress lewat kartu &quot;Kontrak Borongan /
           Kontraktor&quot; di bawah.
         </p>
-        <AddBoqLineForm projectId={projectId} materials={materials} />
+        <AddBoqLineForm projectId={projectId} materials={materials} wbsOptions={wbsOptions} />
 
         {lines.length > 0 && (
           <div className="overflow-x-auto">
@@ -229,6 +256,7 @@ export function CmBoqCard({ projectId, lines, materials }: CmBoqCardProps) {
                 <TableRow>
                   <TableHead>Kategori</TableHead>
                   <TableHead>Deskripsi</TableHead>
+                  <TableHead>WBS</TableHead>
                   <TableHead className="text-right">Quantity</TableHead>
                   <TableHead className="text-right">Harga Satuan</TableHead>
                   <TableHead className="text-right">Budget</TableHead>
