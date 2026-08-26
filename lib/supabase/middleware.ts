@@ -99,6 +99,14 @@ const PUBLIC_PATHS = [
   // 0236_sso_exchange_codes.sql. Own auth: the code itself (unguessable,
   // single-use, 60s TTL), same posture as /api/ai/process-job's claim-by-id.
   "/api/sso/loonars-sales/exchange",
+  // Called server-to-server by the Mac Mini local file-manager agent
+  // (Filemanager repo, no browser session) -- catalog sync, polling for
+  // pending WhatsApp file requests, and delivering matched files. Own auth:
+  // requireFileAgentAuth (x-file-agent-secret), see
+  // lib/security/file-agent-auth.ts and migration 0245. Listed as a prefix
+  // (startsWith below) since it covers /api/files/agent/sync,
+  // /requests/pending, and /requests/:id/deliver together.
+  "/api/files/agent",
 ];
 
 function isPublicPath(pathname: string) {

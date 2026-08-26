@@ -2,6 +2,7 @@ import "server-only";
 
 import { askAI } from "../service";
 import { tryAnswerWithData } from "./data-queries";
+import { formatFileRequestReply, tryHandleFileRequest } from "./file-request";
 import { formatRelayReply, tryRelayToEmployees } from "./message-relay";
 import { getSystemPrompt } from "./prompts";
 
@@ -65,6 +66,22 @@ export async function routeAndAnswer(
   if (employee) {
     const dataResult = await tryAnswerWithData(question, employee);
     if (dataResult.applicable) return dataResult.answer;
+  }
+
+  // "Kirim saya file X" -- the company file manager (Filemanager repo agent,
+  // migration 0245). Checked before the general data-query/keyword-routed
+  // chat below for the same reason as tryAnswerWithData: without this,
+  // Gemini would just chat about the file instead of actually looking it up
+  // and queuing delivery. Runs for any sender (opts?.senderWaNumber),
+  // including one not yet resolved to an employee, since employee may be
+  // null here -- file requests aren't gated behind employee recognition at
+  // this layer (the WhatsApp webhook's earlier findEmployeeByPhone check
+  // already dropped fully unrecognized senders before reaching routeAndAnswer).
+  if (opts?.senderWaNumber) {
+    const fileResult = await tryHandleFileRequest(question, opts.senderWaNumber, employee?.id ?? null);
+    if (fileResult.outcome !== "not_a_file_request") {
+      return formatFileRequestReply(fileResult);
+    }
   }
 
   let domain: "general" | "hr" | "markom" | "crm" | "loonars_beauty" = "general";

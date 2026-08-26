@@ -100,6 +100,18 @@ None identified from repo contents — no issue tracker, no `TODO`/`FIXME`
 sweep was performed as part of this audit (out of scope for a
 non-invasive audit; a future pass could grep for these explicitly).
 
+## Company File Manager (added 2026-08-26, scaffold only)
+
+A WhatsApp "kirim saya file X" flow backed by a file catalog whose actual
+bytes live only on the owner's home Mac Mini, never in this Supabase
+project. See `docs/FILE_MANAGER.md` for the architecture. Migration
+`0245`, `lib/ai/domains/file-request.ts`, and `app/api/files/agent/*` are
+built and typecheck clean, but this is **not live** yet:
+`FILE_AGENT_SHARED_SECRET` is unset (the guard fails closed until it is),
+and the separate `Filemanager` repo agent that's supposed to run on the Mac
+Mini and actually call these endpoints does not exist yet as of this
+audit note — it's the companion piece this scaffold was built for.
+
 ## Important warnings
 
 - **This repository is public.** Real employee/production credentials must
