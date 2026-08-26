@@ -80,5 +80,12 @@ export async function tryAutoForwardPhoto(
   // before asking them to fill in pekerjaan/blok on a bahan pengajuan.
   await supabase.from("photo_auto_forward_log").insert({ employee_id: employee.id });
 
+  // Owner's ask (0244): a bahan pengajuan submitted with no nota photo yet
+  // has its "Pengajuan Baru Menunggu Verifikasi" alert to Vando held back
+  // instead of sent immediately -- release whatever's queued for this
+  // sender now that a photo just went out (to Vando, among others, via the
+  // forward above). A no-op when nothing was held.
+  await supabase.rpc("release_pending_expense_approval_notifications", { p_employee_id: employee.id });
+
   return { outcome: "routed", notifiedCount, recipientNames };
 }

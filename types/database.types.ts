@@ -1970,6 +1970,45 @@ export interface Database {
           },
         ];
       };
+      pending_expense_approval_notifications: {
+        Row: {
+          id: string;
+          employee_id: string;
+          branch_id: string | null;
+          title: string;
+          body: string;
+          link: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          branch_id?: string | null;
+          title: string;
+          body: string;
+          link: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pending_expense_approval_notifications"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "pending_expense_approval_notifications_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pending_expense_approval_notifications_branch_id_fkey";
+            columns: ["branch_id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       construction_blocks: {
         Row: {
           id: string;
@@ -5345,6 +5384,7 @@ export interface Database {
       };
     };
     Functions: {
+      release_pending_expense_approval_notifications: { Args: { p_employee_id: string }; Returns: number };
       markom_content_submitted: { Args: { p_submission_id: string }; Returns: Json };
       hr_discipline_evidence: { Args: { p_employee_id: string }; Returns: Json };
       hr_issue_warning: {
