@@ -149,6 +149,25 @@ splitting a specific contractor's fund requests into gaji vs material
 categories. See `CURRENT_STATE.md` for why this is flagged as still
 actively settling rather than finished.
 
+## 2026-08-26 — Filemanager AI proxy (standalone Filemanager repo, thin borrow)
+
+Added `app/api/integrations/filemanager-ai-proxy/route.ts` — a single,
+domain-agnostic Gemini text-completion proxy for a separate, standalone
+`Filemanager` repo (own WhatsApp connection via its own Whacenter device,
+own SQLite database, running on the owner's Mac Mini). This app has ZERO
+other involvement: no file catalog tables, no WhatsApp send/receive for
+Filemanager, no shared database access — the proxy route doesn't even know
+what a "file" is, it just forwards systemPrompt/userPrompt to
+`lib/ai/service.ts` and returns the text. Guarded by
+`FILEMANAGER_AI_PROXY_SECRET` (fail-closed, `lib/security/
+filemanager-ai-proxy-auth.ts`), bounded prompt/output size as a backstop
+against quota abuse. (An earlier same-day attempt built a full file-catalog
++ WhatsApp-delivery integration directly into this repo — migration 0245,
+`lib/ai/domains/file-request.ts`, `app/api/files/agent/*` — reverted per
+owner's explicit instruction that Filemanager stand entirely on its own;
+see this file's git history for the revert commit if that design is ever
+revisited.)
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

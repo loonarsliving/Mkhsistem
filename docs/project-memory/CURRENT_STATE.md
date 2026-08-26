@@ -100,6 +100,16 @@ None identified from repo contents — no issue tracker, no `TODO`/`FIXME`
 sweep was performed as part of this audit (out of scope for a
 non-invasive audit; a future pass could grep for these explicitly).
 
+## Filemanager AI proxy (added 2026-08-26)
+
+`app/api/integrations/filemanager-ai-proxy` is this app's only involvement
+with a separate, standalone `Filemanager` repo (own WhatsApp device, own
+SQLite database, meant to run on the owner's Mac Mini) — a bounded, generic
+Gemini text-completion proxy so Filemanager doesn't need its own
+`GEMINI_API_KEY`. Nothing else about that system lives here. Not live yet:
+`FILEMANAGER_AI_PROXY_SECRET` is unset (the guard fails closed until it
+is).
+
 ## Important warnings
 
 - **This repository is public.** Real employee/production credentials must
