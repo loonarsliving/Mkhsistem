@@ -149,25 +149,6 @@ splitting a specific contractor's fund requests into gaji vs material
 categories. See `CURRENT_STATE.md` for why this is flagged as still
 actively settling rather than finished.
 
-## 2026-08-26 — Company File Manager scaffold
-
-Added the WhatsApp-driven company file manager: migration
-`0245_company_file_manager.sql` (`mkc_file_categories`, `mkc_files`,
-`mkc_file_requests`, `files.view`/`files.manage` permissions, the private
-`mkc-file-delivery-temp` Storage bucket), a new AI domain
-(`lib/ai/domains/file-request.ts`, wired into `router.ts`) that classifies
-a WhatsApp message as a file request and matches it against the catalog,
-and three fail-closed agent-facing endpoints under `app/api/files/agent/*`
-(`lib/security/file-agent-auth.ts`, `FILE_AGENT_SHARED_SECRET`) for a new,
-separate `Filemanager` repo — a local agent intended to run on the owner's
-Mac Mini so file bytes never leave the home network; MK Connect only holds
-searchable metadata and does the actual WhatsApp send. See
-`docs/FILE_MANAGER.md` for the full architecture. Scaffold only: catalog
-sync/delivery plumbing is built and typechecked, but nothing has been run
-against a live agent yet — `FILE_AGENT_SHARED_SECRET` needs to be set on
-both sides, and the `Filemanager` repo agent needs to actually be stood up,
-before this is live end-to-end.
-
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,
