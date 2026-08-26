@@ -369,7 +369,24 @@ export async function tryConfirmTransferProofViaWhatsApp(
 
   const amountMatches = pendingRows.filter((p) => !isNominalMismatch(Number(p.nominal), ai.nominal));
   if (amountMatches.length > 0) {
-    return confirmSingleRow(supabase, amountMatches[0], sender, imageUrl, ai, true);
+    // Real incident: two unrelated pengajuan both happened to be exactly Rp
+    // 5.000.000 -- FIFO alone picked the older one (an item description had
+    // been typed into rekening_tujuan by mistake, so it had no real account
+    // to compare) over the newer one whose rekening_tujuan was the exact
+    // account the photo was actually addressed to. When more than one
+    // pengajuan matches the nominal AND the photo's own account is
+    // readable, prefer whichever of them has that same account -- only
+    // fall back to FIFO (oldest first) when no candidate's account matches
+    // (many legitimately have no rekening_tujuan recorded at all).
+    let target = amountMatches[0];
+    if (amountMatches.length > 1) {
+      const aiAccount = extractAccountDigits(ai.rekeningTujuan);
+      if (aiAccount) {
+        const accountMatch = amountMatches.find((row) => extractAccountDigits(row.rekening_tujuan) === aiAccount);
+        if (accountMatch) target = accountMatch;
+      }
+    }
+    return confirmSingleRow(supabase, target, sender, imageUrl, ai, true);
   }
 
   // Groups by the pengajuan's own destination account, not who submitted
