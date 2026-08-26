@@ -100,15 +100,21 @@ None identified from repo contents — no issue tracker, no `TODO`/`FIXME`
 sweep was performed as part of this audit (out of scope for a
 non-invasive audit; a future pass could grep for these explicitly).
 
-## Filemanager AI proxy (added 2026-08-26)
+## Company File Manager (added 2026-08-26, this app's side)
 
-`app/api/integrations/filemanager-ai-proxy` is this app's only involvement
-with a separate, standalone `Filemanager` repo (own WhatsApp device, own
-SQLite database, meant to run on the owner's Mac Mini) — a bounded, generic
-Gemini text-completion proxy so Filemanager doesn't need its own
-`GEMINI_API_KEY`. Nothing else about that system lives here. Not live yet:
-`FILEMANAGER_AI_PROXY_SECRET` is unset (the guard fails closed until it
-is).
+This app owns WhatsApp (the existing LEON pipeline) and the Gemini
+classification for "kirim saya file X" / "simpan sebagai ... kategori ..."
+requests (`lib/ai/domains/file-request.ts`, wired into `router.ts` and
+`webhook-handler.ts`'s Super Admin image branch). The actual files and
+catalog live entirely on a separate `Filemanager` repo on the owner's Mac
+Mini, called via `lib/filemanager/client.ts` over a Cloudflare Tunnel —
+this app stores no file metadata of its own. Saving a file is Super
+Admin-only for now (migration `0245`'s `files.wa_upload` permission; owner
+plans to extend it to more roles later). Not live yet:
+`FILEMANAGER_BASE_URL` / `FILEMANAGER_SHARED_SECRET` are unset, and the
+`Filemanager` repo needs its own matching update (it currently still
+expects to run standalone with its own WhatsApp device — see that repo's
+own state) before this works end-to-end.
 
 ## Important warnings
 

@@ -149,24 +149,31 @@ splitting a specific contractor's fund requests into gaji vs material
 categories. See `CURRENT_STATE.md` for why this is flagged as still
 actively settling rather than finished.
 
-## 2026-08-26 — Filemanager AI proxy (standalone Filemanager repo, thin borrow)
+## 2026-08-26 — Company File Manager, final shape: this app owns WhatsApp + AI
 
-Added `app/api/integrations/filemanager-ai-proxy/route.ts` — a single,
-domain-agnostic Gemini text-completion proxy for a separate, standalone
-`Filemanager` repo (own WhatsApp connection via its own Whacenter device,
-own SQLite database, running on the owner's Mac Mini). This app has ZERO
-other involvement: no file catalog tables, no WhatsApp send/receive for
-Filemanager, no shared database access — the proxy route doesn't even know
-what a "file" is, it just forwards systemPrompt/userPrompt to
-`lib/ai/service.ts` and returns the text. Guarded by
-`FILEMANAGER_AI_PROXY_SECRET` (fail-closed, `lib/security/
-filemanager-ai-proxy-auth.ts`), bounded prompt/output size as a backstop
-against quota abuse. (An earlier same-day attempt built a full file-catalog
-+ WhatsApp-delivery integration directly into this repo — migration 0245,
-`lib/ai/domains/file-request.ts`, `app/api/files/agent/*` — reverted per
-owner's explicit instruction that Filemanager stand entirely on its own;
-see this file's git history for the revert commit if that design is ever
-revisited.)
+Settled after two same-day pivots (see git history for the intermediate
+"standalone Filemanager + AI-proxy" design, since replaced): the owner
+decided this app should keep owning WhatsApp and the Gemini classification
+(reusing the existing LEON pipeline) for file requests/saves, while the
+actual file bytes and catalog stay entirely on a separate `Filemanager`
+repo running on the owner's Mac Mini, reached over a Cloudflare Tunnel.
+This app never stores a file catalog and never receives calls from
+Filemanager — it only calls OUT to it.
+
+- `lib/filemanager/client.ts` — HTTP client (search / store / get a
+  delivery link), guarded by `FILEMANAGER_SHARED_SECRET`.
+- `lib/ai/domains/file-request.ts` — two flows: "kirim saya file X" (any
+  recognized employee, wired into `router.ts`'s `routeAndAnswer`) searches
+  Filemanager's catalog and sends a match via `sendWhatsAppDocument`
+  (`lib/ai/notifications/engine.ts`); "simpan sebagai ... kategori ..."
+  (Super Admin only so far, migration `0245`'s new `files.wa_upload`
+  permission) downloads the WhatsApp attachment and hands it to Filemanager
+  to store — wired into `webhook-handler.ts`'s Super Admin image branch,
+  gated on an explicit caption-keyword pre-filter
+  (`looksLikeFileSaveCaption`) so it never shadows the many existing
+  bukti-transfer/nota/progress-photo flows in that same block.
+- No file-catalog tables in this app's database (deliberately) — search
+  and storage both happen on Filemanager's side.
 
 ## Documentation history (existing docs, for reference)
 

@@ -99,12 +99,6 @@ const PUBLIC_PATHS = [
   // 0236_sso_exchange_codes.sql. Own auth: the code itself (unguessable,
   // single-use, 60s TTL), same posture as /api/ai/process-job's claim-by-id.
   "/api/sso/loonars-sales/exchange",
-  // Called server-to-server by the standalone Filemanager repo (its own
-  // WhatsApp connection, its own database, running on the owner's Mac
-  // Mini) -- the only thing it borrows from this app is a Gemini call. No
-  // browser session possible. Own auth: requireFilemanagerAiProxyAuth
-  // (x-filemanager-ai-secret), see lib/security/filemanager-ai-proxy-auth.ts.
-  "/api/integrations/filemanager-ai-proxy",
 ];
 
 function isPublicPath(pathname: string) {

@@ -24,6 +24,19 @@ export async function sendWhatsAppImage(recipientPhone: string, url: string, cap
   return sendWhatsAppNotification(recipientPhone, { kind: "image", url, caption });
 }
 
+/**
+ * Sends an arbitrary document (not just PDFs) as a WhatsApp attachment.
+ * Named after the connector's "pdf" content kind for historical reasons
+ * (see connectors/types.ts), but Whacenter's underlying /send API attaches
+ * any file type identically (whatsapp-connector.ts's normalizeOutgoingMessage
+ * just passes `file` through) -- used by the company file manager
+ * (lib/ai/domains/file-request.ts) to deliver a file Filemanager (the
+ * Mac Mini agent) has staged a short-lived download link for.
+ */
+export async function sendWhatsAppDocument(recipientPhone: string, url: string, filename: string): Promise<SendResult> {
+  return sendWhatsAppNotification(recipientPhone, { kind: "pdf", url, filename });
+}
+
 interface CachedWhatsAppHealthCheck {
   result: { ok: boolean; detail: string };
   cachedAt: number;

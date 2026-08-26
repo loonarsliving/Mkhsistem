@@ -30,6 +30,7 @@ import {
   tryResolveContractorReportSettlementType,
 } from "./domains/contractor-expense-report";
 import { tryHandleContractorFundRequest } from "./domains/contractor-fund-request";
+import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
@@ -405,6 +406,31 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // everything else since a bukti transfer photo isn't a progress/relay
       // photo.
       if (imageRoleKey === "super_admin") {
+        // "Simpan sebagai ... kategori ..." -- saves this attachment into
+        // the company file manager (migration 0245's files.wa_upload
+        // permission, lib/ai/domains/file-request.ts). Gated on an explicit
+        // keyword pair (looksLikeFileSaveCaption) before this even runs, so
+        // it never intercepts an ordinary bukti-transfer/nota/progress photo
+        // -- those captions essentially never contain both "simpan" and
+        // "file"/"dokumen"/"kategori" together. Must run first among the
+        // super_admin checks for the same reason as the PQ- check below: a
+        // save command has nothing to do with any of the other flows in
+        // this block, so it should never be shadowed by them.
+        if (looksLikeFileSaveCaption(inbound.content.caption)) {
+          trace.push("tryHandleFileSaveViaWhatsApp:calling");
+          const saveResult = await tryHandleFileSaveViaWhatsApp(employee.id, inbound.content.caption ?? "", inbound.content.url);
+          trace.push(`tryHandleFileSaveViaWhatsApp:${saveResult.outcome}`);
+          if (saveResult.outcome !== "not_a_save_request") {
+            const replyText = formatFileSaveReply(saveResult);
+            trace.push("sendWhatsAppText:calling(file-save)");
+            const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+            trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+            await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[simpan file]", replyText, employee.id);
+            trace.push("saveAiConversationTurn:done");
+            return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+          }
+        }
+
         // Super Admin answering a nurture-bot escalation with a PHOTO --
         // "[PQ-0001]" or "[PQ-0001]: ini denahnya" as the caption (see
         // lib/ai/domains/lead-nurture.ts's tryHandleSuperadminImageAnswer).

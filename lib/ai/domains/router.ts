@@ -2,6 +2,7 @@ import "server-only";
 
 import { askAI } from "../service";
 import { tryAnswerWithData } from "./data-queries";
+import { formatFileRequestReply, tryHandleFileRequest } from "./file-request";
 import { formatRelayReply, tryRelayToEmployees } from "./message-relay";
 import { getSystemPrompt } from "./prompts";
 
@@ -65,6 +66,18 @@ export async function routeAndAnswer(
   if (employee) {
     const dataResult = await tryAnswerWithData(question, employee);
     if (dataResult.applicable) return dataResult.answer;
+  }
+
+  // "Kirim saya file X" -- the company file manager (Filemanager repo agent
+  // on the owner's Mac Mini, called via lib/filemanager/client.ts). Checked
+  // before the general keyword-routed chat below for the same reason as
+  // tryAnswerWithData: without this, Gemini would just chat about the file
+  // instead of actually looking it up and sending it.
+  if (opts?.senderWaNumber) {
+    const fileResult = await tryHandleFileRequest(question, opts.senderWaNumber);
+    if (fileResult.outcome !== "not_a_file_request") {
+      return formatFileRequestReply(fileResult);
+    }
   }
 
   let domain: "general" | "hr" | "markom" | "crm" | "loonars_beauty" = "general";
