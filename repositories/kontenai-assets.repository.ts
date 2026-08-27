@@ -108,9 +108,10 @@ export interface CreateKontenAiAssetInput {
   filename: string;
   asset_type: KontenAiAssetType;
   storage_path: string;
-  public_url: string;
-  /** Defaults to 'supabase' (the DB column's default) -- only set explicitly when a caller uploaded elsewhere (currently nothing does; Asset Library uploads go to Supabase Storage). */
-  storage_provider?: "supabase" | "google_drive";
+  /** Null for storage_provider='local_mac' -- see migration 0246. */
+  public_url: string | null;
+  /** Defaults to 'supabase' (the DB column's default) -- Asset Library uploads go to Supabase Storage; 'local_mac' is set by the footage-upload path that stores bytes via the Filemanager repo agent instead. */
+  storage_provider?: "supabase" | "google_drive" | "local_mac";
   file_type: string;
   file_size_bytes: number;
   resolution: string | null;
@@ -172,7 +173,7 @@ export async function duplicateKontenAiAsset(supabase: TypedSupabaseClient, id: 
     asset_type: original.asset_type as KontenAiAssetType,
     storage_path: original.storage_path,
     public_url: original.public_url,
-    storage_provider: (original.storage_provider as "supabase" | "google_drive") ?? "supabase",
+    storage_provider: (original.storage_provider as "supabase" | "google_drive" | "local_mac") ?? "supabase",
     file_type: original.file_type,
     file_size_bytes: original.file_size_bytes,
     resolution: original.resolution,
@@ -290,7 +291,7 @@ export interface KontenAiAnalyzedAsset {
   id: string;
   assetType: KontenAiAssetType;
   title: string;
-  publicUrl: string;
+  publicUrl: string | null;
   fileType: string;
   aiTitle: string | null;
   aiDescription: string | null;
@@ -351,9 +352,10 @@ export async function listAnalyzedAssetLibrary(
 export interface KontenAiAssetForRender {
   id: string;
   assetType: KontenAiAssetType;
-  publicUrl: string;
+  /** Null for storage_provider='local_mac' -- resolve via storagePath instead, see lib/kontenai/asset-source.ts. */
+  publicUrl: string | null;
   storagePath: string;
-  storageProvider: "supabase" | "google_drive";
+  storageProvider: "supabase" | "google_drive" | "local_mac";
   title: string;
   aiCategory: string | null;
   aiTags: string[];
@@ -372,7 +374,7 @@ export async function listKontenAiAssetsByIds(supabase: TypedSupabaseClient, ids
     assetType: row.asset_type as KontenAiAssetType,
     publicUrl: row.public_url,
     storagePath: row.storage_path,
-    storageProvider: (row.storage_provider as "supabase" | "google_drive") ?? "supabase",
+    storageProvider: (row.storage_provider as "supabase" | "google_drive" | "local_mac") ?? "supabase",
     title: row.title,
     aiCategory: row.ai_category,
     aiTags: row.ai_tags ?? [],
@@ -437,10 +439,10 @@ export interface KontenAiAssetForVision {
   title: string;
   filename: string;
   asset_type: KontenAiAssetType;
-  public_url: string;
+  public_url: string | null;
   duration_seconds: number | null;
   storage_path: string;
-  storage_provider: "supabase" | "google_drive";
+  storage_provider: "supabase" | "google_drive" | "local_mac";
 }
 
 /**
@@ -478,6 +480,6 @@ export async function listUnanalyzedAssetsByCompany(
     public_url: row.public_url,
     duration_seconds: row.duration_seconds,
     storage_path: row.storage_path,
-    storage_provider: row.storage_provider as "supabase" | "google_drive",
+    storage_provider: row.storage_provider as "supabase" | "google_drive" | "local_mac",
   }));
 }

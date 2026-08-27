@@ -40,7 +40,7 @@ export function AssetCardMenu({ asset, onPreview, onEdit }: AssetCardMenuProps) 
             Preview
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <a href={asset.public_url} download={asset.filename} target="_blank" rel="noreferrer">
+            <a href={asset.public_url ?? undefined} download={asset.filename} target="_blank" rel="noreferrer">
               <Download className="h-4 w-4" />
               Download
             </a>

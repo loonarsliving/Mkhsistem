@@ -4802,8 +4802,8 @@ export interface Database {
           filename: string;
           asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
           storage_path: string;
-          public_url: string;
-          storage_provider: "supabase" | "google_drive";
+          public_url: string | null;
+          storage_provider: "supabase" | "google_drive" | "local_mac";
           file_type: string;
           file_size_bytes: number;
           resolution: string | null;
@@ -4841,8 +4841,8 @@ export interface Database {
           filename: string;
           asset_type: "image" | "video" | "audio" | "logo" | "brand_guideline" | "font" | "template" | "document";
           storage_path: string;
-          public_url: string;
-          storage_provider?: "supabase" | "google_drive";
+          public_url?: string | null;
+          storage_provider?: "supabase" | "google_drive" | "local_mac";
           file_type: string;
           file_size_bytes: number;
           resolution?: string | null;

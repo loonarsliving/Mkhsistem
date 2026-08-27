@@ -27,6 +27,7 @@ import { createAdminClient } from "../lib/supabase/admin";
 import { fetchBackgroundMusic } from "../lib/ai/music";
 import { synthesizeVoiceOver } from "../lib/ai/tts";
 import { resolveAssetDownloadSource } from "../lib/kontenai/asset-source";
+import { resolveLocalMacAssetPath } from "./local-mac-asset-resolver";
 import { cleanupRenderWorkDir, readRenderedFile, renderStoryboardDraft, type RenderScene } from "../lib/video/render-storyboard";
 import { listKontenAiAssetsByIds } from "../repositories/kontenai-assets.repository";
 import {
@@ -82,16 +83,25 @@ async function processJob(jobId: string): Promise<void> {
       storyboard.scenes.map(async (scene) => {
         const asset = assetById.get(scene.selectedAssetId!);
         if (!asset) throw new Error(`Aset untuk scene "${scene.sceneTitle}" tidak ditemukan`);
+
+        // local_mac assets: try a direct disk read first (this worker running
+        // on the same Mac Mini as the Filemanager agent) before falling back
+        // to the network delivery-link path resolveAssetDownloadSource uses
+        // -- see local-mac-asset-resolver.ts's module comment for why this
+        // stays out of the shared lib/ code path.
+        const localPath = asset.storageProvider === "local_mac" ? resolveLocalMacAssetPath(asset.storagePath) : null;
+
         const [source, voiceOverPcm] = await Promise.all([
-          resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl }),
+          localPath ? Promise.resolve(null) : resolveAssetDownloadSource({ storage_provider: asset.storageProvider, storage_path: asset.storagePath, public_url: asset.publicUrl }),
           // A brief that decided this piece works better silent gets silence:
           // narrating an aesthetic villa tour over music is exactly the kind of
           // generic output the audit marks down.
           useVoiceOver ? synthesizeVoiceOver(scene.voiceOver) : Promise.resolve(null),
         ]);
         return {
-          assetUrl: source.url,
-          assetHeaders: source.headers,
+          assetUrl: source?.url ?? "",
+          assetHeaders: source?.headers,
+          assetLocalPath: localPath,
           assetType: asset.assetType === "video" ? "video" : "image",
           durationSeconds: scene.durationSeconds,
           voiceOverPcm,
