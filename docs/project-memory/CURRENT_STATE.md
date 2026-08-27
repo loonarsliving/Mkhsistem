@@ -100,7 +100,7 @@ None identified from repo contents — no issue tracker, no `TODO`/`FIXME`
 sweep was performed as part of this audit (out of scope for a
 non-invasive audit; a future pass could grep for these explicitly).
 
-## Company File Manager (added 2026-08-26, this app's side)
+## Company File Manager (added 2026-08-26, merged to production 2026-08-27)
 
 This app owns WhatsApp (the existing LEON pipeline) and the Gemini
 classification for "kirim saya file X" / "simpan sebagai ... kategori ..."
@@ -110,22 +110,33 @@ catalog live entirely on a separate `Filemanager` repo on the owner's Mac
 Mini, called via `lib/filemanager/client.ts` over a Cloudflare Tunnel —
 this app stores no file metadata of its own. Saving a file is Super
 Admin-only for now (migration `0245`'s `files.wa_upload` permission; owner
-plans to extend it to more roles later). Not live yet:
-`FILEMANAGER_BASE_URL` / `FILEMANAGER_SHARED_SECRET` are unset, and the
-owner's Mac Mini hasn't been provisioned yet (no tunnel running) —
-`Filemanager` repo code itself is up to date (own WhatsApp
-device design was reverted, it's a thin authenticated storage backend now,
-matching this app's client).
+plans to extend it to more roles later).
 
-## KontenAI local Mac Mini footage/render (added 2026-08-27)
+**Merged into `claude/mk-connect-app-o9zw2p` (production branch) and
+pushed 2026-08-27**; migration `0245` applied to the live Supabase project
+the same day (verified: `files.wa_upload` permission exists, granted to
+`super_admin`). The owner has since stood up the Mac Mini agent
+(`https://mac-mini-zafran.tail59f198.ts.net`, reachable via **Tailscale
+Funnel**, not the Cloudflare Tunnel this doc/the Filemanager README
+originally assumed — functionally equivalent, just a different tunnel
+provider) and set `FILEMANAGER_BASE_URL`/`FILEMANAGER_SHARED_SECRET` in
+Vercel. First live test (`"kirim saya file kontrak ABC"`) reached no
+request at the Mac Mini — root-caused to the code having been on a
+feature branch never merged to production at the time; now merged, an
+end-to-end retest is the next step.
 
-`storage_provider = 'local_mac'` (migration `0246`) lets `kontenai_assets`
-point at footage stored on the owner's Mac Mini SSD instead of Supabase
-Storage/Google Drive, and `scripts/render-worker.ts` (existing FFmpeg
-render pipeline, previously Railway-only) can now run unmodified ON that
-Mac Mini for a network-free render path
-(`scripts/local-mac-asset-resolver.ts`). Not live yet — same blocker as
-above (Mac Mini not provisioned) — and the "Upload Footage" UI (Bagian K
+## KontenAI local Mac Mini footage/render (added 2026-08-27, merged same day)
+
+`storage_provider = 'local_mac'` (migration `0246`, applied to the live
+Supabase project 2026-08-27 — verified: check constraint widened,
+`public_url` nullable) lets `kontenai_assets` point at footage stored on
+the owner's Mac Mini SSD instead of Supabase Storage/Google Drive, and
+`scripts/render-worker.ts` (existing FFmpeg render pipeline, previously
+Railway-only) can now run unmodified ON that Mac Mini for a network-free
+render path (`scripts/local-mac-asset-resolver.ts`). Merged to production
+same day as the migration. Not yet actually running on the Mac Mini
+(owner hasn't deployed the render-worker script there yet) — and the
+"Upload Footage" UI (Bagian K
 of the owner's brief: project/campaign/location/tags, separate from the
 plain-document WhatsApp upload) is intentionally not built yet, flagged as
 the next step. Note this is a DIFFERENT, narrower scope than the owner's

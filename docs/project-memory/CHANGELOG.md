@@ -215,6 +215,36 @@ store a Drive file id there.
   flow) — flagged as the clear next step once this plumbing is confirmed
   working end-to-end with a real Mac Mini.
 
+## 2026-08-27 — Company File Manager + local Mac Mini footage merged to production
+
+Merged `claude/company-file-manager-8jyo81` into `claude/mk-connect-app-o9zw2p`
+(the production branch) and pushed — the 5 commits described in the two
+entries above (Filemanager WhatsApp file manager, KontenAI local Mac Mini
+footage/render support) were sitting on a feature branch that had never
+been merged, which is why the owner's first live test found zero requests
+reaching the Mac Mini despite correct env vars on both sides. Root-caused
+via `git show origin/claude/mk-connect-app-o9zw2p:lib/ai/domains/file-request.ts`
+failing (file didn't exist on the production branch at all).
+
+Full validation re-run on the merged production branch before push
+(typecheck/lint/build/unit tests, all green), clean merge with no
+conflicts. Migrations `0245_filemanager_wa_upload_permission` and
+`0246_kontenai_local_mac_storage_provider` applied directly to the live
+Supabase project (`svcmybsziaelwwdrnzcv`) via the Supabase MCP
+`apply_migration` tool, each individually verified afterward
+(`files.wa_upload` permission exists and is granted to `super_admin`;
+`kontenai_assets_storage_provider_check` now allows `local_mac`;
+`kontenai_assets.public_url` is nullable). Security advisor re-run found
+no new findings attributable to either migration.
+
+The owner's Mac Mini agent is reachable at
+`https://mac-mini-zafran.tail59f198.ts.net` via **Tailscale Funnel** — not
+Cloudflare Tunnel, which is what `docs/FILE_MANAGER.md`-adjacent guidance
+and the Filemanager repo's own README assume throughout. Functionally
+equivalent (both just expose the agent's local port over HTTPS), but
+worth knowing before trusting any Cloudflare-specific instructions in
+those docs literally.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,
