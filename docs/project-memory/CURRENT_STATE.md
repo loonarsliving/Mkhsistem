@@ -115,15 +115,46 @@ plans to extend it to more roles later).
 **Merged into `claude/mk-connect-app-o9zw2p` (production branch) and
 pushed 2026-08-27**; migration `0245` applied to the live Supabase project
 the same day (verified: `files.wa_upload` permission exists, granted to
-`super_admin`). The owner has since stood up the Mac Mini agent
+`super_admin`). The owner stood up the Mac Mini agent
 (`https://mac-mini-zafran.tail59f198.ts.net`, reachable via **Tailscale
 Funnel**, not the Cloudflare Tunnel this doc/the Filemanager README
 originally assumed — functionally equivalent, just a different tunnel
 provider) and set `FILEMANAGER_BASE_URL`/`FILEMANAGER_SHARED_SECRET` in
-Vercel. First live test (`"kirim saya file kontrak ABC"`) reached no
-request at the Mac Mini — root-caused to the code having been on a
-feature branch never merged to production at the time; now merged, an
-end-to-end retest is the next step.
+Vercel.
+
+**Confirmed working end-to-end 2026-08-27** (`"kirim saya file kontrak
+ABC"` → LEON → Gemini classify → Filemanager search → reply), after three
+real issues found and fixed during rollout, each verified against
+`ai_conversations.reply_text` + Vercel runtime logs rather than the
+owner's own guess:
+1. The feature branch was never merged to production (see merge event
+   above) — zero requests were reaching the Mac Mini at all.
+2. `tryHandleFileRequest`'s `catch` around `searchFilemanagerCatalog`
+   mapped *any* failure (missing env vars **or** Filemanager being
+   unreachable) to the same `"not_configured"` outcome/reply — made a
+   real connectivity break indistinguishable from "env vars not set" from
+   the WhatsApp reply alone. Fixed: a distinct `connection_failed`
+   outcome/message + `logger.error` on both paths
+   (`lib/ai/domains/file-request.ts`, commit `918a163`) — worth
+   remembering if a similar silently-merged-error-message pattern shows
+   up elsewhere in the file-request/file-save flows.
+3. `FILEMANAGER_SHARED_SECRET` (Vercel) and `MKH_SHARED_SECRET`
+   (Filemanager's `.env` on the Mac Mini) fell out of sync after the
+   owner regenerated the Mac Mini's secret — surfaced as the Filemanager
+   agent's `/api/search` returning HTTP 401. Also worth remembering: the
+   Filemanager agent process must be **restarted** (`npm run dev` in
+   `~/Documents/Filemanager`) after editing `.env` — a running Node
+   process does not hot-reload `dotenv` values.
+
+**Still open / recommended next**: the Filemanager agent + Tailscale
+Funnel are currently started manually in a Terminal window on the Mac
+Mini, not as a persistent background service — they will silently stop on
+Terminal close, sleep, or restart (this already happened once during
+setup). The repo ships `com.mkh.filemanager-agent.plist.example` for
+launchd to keep it running unattended; the owner hasn't installed it yet.
+Catalog is still empty (0 files indexed as of setup) — no real file has
+been saved/tested yet via the `"simpan sebagai ... kategori ..."` WhatsApp
+flow or by dropping a file into `STORAGE_ROOT` for auto-sync.
 
 ## KontenAI local Mac Mini footage/render (added 2026-08-27, merged same day)
 
