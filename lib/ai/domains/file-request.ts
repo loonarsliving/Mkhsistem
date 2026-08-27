@@ -9,6 +9,8 @@ import {
   type FilemanagerFileCandidate,
 } from "@/lib/filemanager/client";
 
+import { logger } from "@/lib/logger";
+
 import { generateAIText } from "../service";
 import { sendWhatsAppDocument } from "../notifications/engine";
 
@@ -65,7 +67,8 @@ export type FileRequestOutcome =
   | { outcome: "send_failed"; fileName: string; error: string }
   | { outcome: "ambiguous"; candidates: FilemanagerFileCandidate[] }
   | { outcome: "no_match" }
-  | { outcome: "not_configured" };
+  | { outcome: "not_configured" }
+  | { outcome: "connection_failed" };
 
 /**
  * Called from router.ts's routeAndAnswer, before the general keyword-routed
@@ -77,7 +80,10 @@ export type FileRequestOutcome =
  * directly, it only ever answers calls FROM this app.
  */
 export async function tryHandleFileRequest(question: string, senderWaNumber: string): Promise<FileRequestOutcome> {
-  if (!isFilemanagerConfigured()) return { outcome: "not_configured" };
+  if (!isFilemanagerConfigured()) {
+    logger.error("file-request: Filemanager not configured (FILEMANAGER_BASE_URL / FILEMANAGER_SHARED_SECRET missing)");
+    return { outcome: "not_configured" };
+  }
 
   const intent = await extractFileRequestIntent(question);
   if (!intent.isFileRequest) return { outcome: "not_a_file_request" };
@@ -85,8 +91,14 @@ export async function tryHandleFileRequest(question: string, senderWaNumber: str
   let candidates: FilemanagerFileCandidate[];
   try {
     candidates = await searchFilemanagerCatalog(intent.searchTerms.join(" "));
-  } catch {
-    return { outcome: "not_configured" };
+  } catch (err) {
+    // isFilemanagerConfigured() already passed above, so env vars exist --
+    // this is Filemanager itself being unreachable (tunnel down, wrong
+    // secret, Mac Mini asleep, etc). Distinct outcome/log from
+    // "not_configured" so a real connectivity break doesn't get silently
+    // reported to the owner as "just needs env vars set".
+    logger.error("file-request: Filemanager search failed", { error: err instanceof Error ? err.message : String(err) });
+    return { outcome: "connection_failed" };
   }
 
   if (candidates.length === 0) return { outcome: "no_match" };
@@ -117,6 +129,8 @@ export function formatFileRequestReply(result: FileRequestOutcome): string {
       return "📁 Maaf, tidak ada file yang cocok dengan permintaan itu di katalog. Coba sebutkan nama filenya lebih spesifik.";
     case "not_configured":
       return "⚠️ Fitur file manager belum aktif saat ini. Hubungi admin.";
+    case "connection_failed":
+      return "⚠️ File manager sedang tidak bisa dihubungi (Mac Mini/tunnel mungkin sedang mati). Coba lagi sebentar atau hubungi admin.";
     case "not_a_file_request":
       return "";
   }
