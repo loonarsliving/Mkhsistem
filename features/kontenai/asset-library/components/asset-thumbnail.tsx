@@ -4,20 +4,21 @@ import type { KontenAiAssetType } from "@/repositories/kontenai-assets.repositor
 
 interface AssetThumbnailProps {
   assetType: KontenAiAssetType;
-  publicUrl: string;
+  /** Null for a local_mac-backed asset (migration 0246) -- no durable public URL, falls back to the generic type icon below. */
+  publicUrl: string | null;
   title: string;
   className?: string;
 }
 
 export function AssetThumbnail({ assetType, publicUrl, title, className }: AssetThumbnailProps) {
-  if (assetType === "image" || assetType === "logo") {
+  if (publicUrl && (assetType === "image" || assetType === "logo")) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not an app asset
       <img src={publicUrl} alt={title} className={cn("h-full w-full object-cover", className)} loading="lazy" />
     );
   }
 
-  if (assetType === "video") {
+  if (publicUrl && assetType === "video") {
     return <video src={publicUrl} className={cn("h-full w-full object-cover", className)} muted preload="metadata" />;
   }
 

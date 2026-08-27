@@ -2,7 +2,7 @@ import "server-only";
 
 import { execFile } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -54,6 +54,8 @@ export interface RenderScene {
   assetUrl: string;
   /** Auth header needed to fetch assetUrl's raw bytes (Drive-backed assets); omit/empty for a plain public URL. */
   assetHeaders?: Record<string, string>;
+  /** Set only when the render worker resolved a local_mac asset directly off disk (scripts/local-mac-asset-resolver.ts) -- takes priority over assetUrl/assetHeaders, a plain file copy instead of an HTTP round trip. */
+  assetLocalPath?: string | null;
   assetType: "image" | "video";
   durationSeconds: number;
   /** Raw PCM (16-bit LE, mono, 24kHz -- Gemini TTS's output format) narration for this scene; omitted/null renders the scene silent. */
@@ -203,12 +205,16 @@ export async function renderStoryboardDraft(scenes: RenderScene[], options: Rend
   const dimensions = resolveOutputDimensions(targetPlatform);
   const workDir = await mkdtemp(join(tmpdir(), "kontenai-render-"));
 
-  await onProgress?.(5, "Mengunduh aset");
+  await onProgress?.(5, "Menyiapkan aset");
   const sourcePaths = await Promise.all(
     scenes.map(async (scene, index) => {
       const ext = scene.assetType === "image" ? "img" : "mp4";
       const sourcePath = join(workDir, `source-${index}.${ext}`);
-      await downloadToTemp(scene.assetUrl, scene.assetHeaders ?? {}, sourcePath);
+      if (scene.assetLocalPath) {
+        await copyFile(scene.assetLocalPath, sourcePath);
+      } else {
+        await downloadToTemp(scene.assetUrl, scene.assetHeaders ?? {}, sourcePath);
+      }
       return sourcePath;
     }),
   );

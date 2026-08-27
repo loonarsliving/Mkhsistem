@@ -112,9 +112,29 @@ this app stores no file metadata of its own. Saving a file is Super
 Admin-only for now (migration `0245`'s `files.wa_upload` permission; owner
 plans to extend it to more roles later). Not live yet:
 `FILEMANAGER_BASE_URL` / `FILEMANAGER_SHARED_SECRET` are unset, and the
-`Filemanager` repo needs its own matching update (it currently still
-expects to run standalone with its own WhatsApp device — see that repo's
-own state) before this works end-to-end.
+owner's Mac Mini hasn't been provisioned yet (no tunnel running) —
+`Filemanager` repo code itself is up to date (own WhatsApp
+device design was reverted, it's a thin authenticated storage backend now,
+matching this app's client).
+
+## KontenAI local Mac Mini footage/render (added 2026-08-27)
+
+`storage_provider = 'local_mac'` (migration `0246`) lets `kontenai_assets`
+point at footage stored on the owner's Mac Mini SSD instead of Supabase
+Storage/Google Drive, and `scripts/render-worker.ts` (existing FFmpeg
+render pipeline, previously Railway-only) can now run unmodified ON that
+Mac Mini for a network-free render path
+(`scripts/local-mac-asset-resolver.ts`). Not live yet — same blocker as
+above (Mac Mini not provisioned) — and the "Upload Footage" UI (Bagian K
+of the owner's brief: project/campaign/location/tags, separate from the
+plain-document WhatsApp upload) is intentionally not built yet, flagged as
+the next step. Note this is a DIFFERENT, narrower scope than the owner's
+original full vision (a `mk-connect-local-agent` service also driving
+DaVinci Resolve automation) — that part is on hold: DaVinci Resolve's
+external-scripting API became Studio-only as of v19.1 (Nov 2024), the
+owner is on the Free edition, and no license/automation-approach decision
+has been made yet. FFmpeg-based rendering (this work) was chosen as the
+unblocked, immediately actionable slice.
 
 ## Important warnings
 

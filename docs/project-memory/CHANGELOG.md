@@ -175,6 +175,46 @@ Filemanager — it only calls OUT to it.
 - No file-catalog tables in this app's database (deliberately) — search
   and storage both happen on Filemanager's side.
 
+## 2026-08-27 — KontenAI local Mac Mini footage/render support
+
+Added `storage_provider = 'local_mac'` for `kontenai_assets` (migration
+`0246`, widens the check constraint added in `0167` for Google Drive; also
+relaxes `public_url` to nullable since a local_mac row has no durable
+public URL). Footage bytes for this provider live entirely on the owner's
+Mac Mini SSD, indexed by the separate `Filemanager` repo agent (see
+`docs/FILE_MANAGER.md`-adjacent context in this CHANGELOG's 2026-08-26
+entries) — `kontenai_assets.storage_path` holds Filemanager's own numeric
+file id, not a filesystem path, mirroring how `google_drive` rows already
+store a Drive file id there.
+
+- `lib/kontenai/asset-source.ts` — new branch: resolves a `local_mac`
+  asset via `lib/filemanager/client.ts`'s delivery-link API over
+  Filemanager's Cloudflare Tunnel. Works from anywhere (Vercel, a
+  Railway-hosted worker, or the Mac Mini itself).
+- `scripts/local-mac-asset-resolver.ts` (new, worker-only, never imported
+  by `app/`/`features/`) — when `scripts/render-worker.ts` happens to run
+  ON the same Mac Mini as the Filemanager agent, reads Filemanager's
+  SQLite catalog directly (read-only) to resolve a file id straight to an
+  absolute disk path, skipping the network round trip entirely. Falls back
+  to the network path automatically if `FILEMANAGER_DB_PATH`/
+  `FILEMANAGER_STORAGE_ROOT` aren't set (e.g. still running on Railway).
+- `lib/video/render-storyboard.ts` — `RenderScene.assetLocalPath`: when
+  set, copies the file directly instead of an HTTP download.
+- UI fallout from `public_url` becoming nullable: `AssetThumbnail` and the
+  Asset Library preview/download UI now show a generic icon /
+  disabled-download state instead of crashing when a local_mac asset (no
+  direct public URL) is displayed.
+- `render-worker`'s job-claim (`kontenai_render_jobs`, atomic
+  `UPDATE ... WHERE status = 'queued'`) was already safe for two workers
+  polling concurrently, so this ships without needing to change or pause
+  the existing Railway deployment — the Mac Mini worker is additive,
+  verified by re-running the full typecheck/lint/build/unit-test suite
+  (all green) plus a standalone smoke test of the SQLite resolver logic.
+- Deliberately NOT built yet: the "Upload Footage" UI (project/campaign/
+  location/tags entry, separate from the plain-document WhatsApp upload
+  flow) — flagged as the clear next step once this plumbing is confirmed
+  working end-to-end with a real Mac Mini.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

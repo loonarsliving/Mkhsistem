@@ -30,7 +30,12 @@ export function AssetPreviewDialog({ asset, open, onOpenChange }: AssetPreviewDi
         </DialogHeader>
 
         <div className="flex max-h-[50vh] items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
-          {asset.asset_type === "image" || asset.asset_type === "logo" ? (
+          {!asset.public_url ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+              <Icon className="h-10 w-10" />
+              <p className="text-sm">Pratinjau belum tersedia untuk aset yang tersimpan di Mac Mini -- lihat lewat File Manager.</p>
+            </div>
+          ) : asset.asset_type === "image" || asset.asset_type === "logo" ? (
             // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL
             <img src={asset.public_url} alt={asset.title} className="max-h-[50vh] w-full object-contain" />
           ) : asset.asset_type === "video" ? (
@@ -83,8 +88,8 @@ export function AssetPreviewDialog({ asset, open, onOpenChange }: AssetPreviewDi
 
         <AssetVisionPanel asset={asset} />
 
-        <Button asChild variant="outline" className="w-full">
-          <a href={asset.public_url} download={asset.filename} target="_blank" rel="noreferrer">
+        <Button asChild variant="outline" className="w-full" disabled={!asset.public_url}>
+          <a href={asset.public_url ?? undefined} download={asset.filename} target="_blank" rel="noreferrer">
             <Download className="h-4 w-4" />
             Download
           </a>
