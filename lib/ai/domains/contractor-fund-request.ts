@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recognizeFundRequestText, type FundRequestItem, type FundRequestKategori, type FundRequestRecognition } from "@/lib/ai/domains/contractor-fund-request-recognition";
 import type { Json } from "@/types/database.types";
+import { sendWhatsAppText } from "../notifications/engine";
 
 export type ContractorFundRequestOutcome =
   | { outcome: "not_a_request" }
@@ -247,4 +248,56 @@ export async function tryCaptureContractorBankAccount(contractor: { id: string }
   const supabase = createAdminClient();
   await supabase.from("contractor_wa_senders").update({ bank_account: rekening }).eq("id", contractor.id);
   return { outcome: "captured", rekening };
+}
+
+/** Matches a contractor trying to correct/cancel something he already sent -- "Ralat sudah dimasukan. Hapus", "batal", "salah input", "keliru". Deliberately loose since the only cost of a false positive is an extra manual-review ping to Vando/Super Admin. */
+const CORRECTION_PATTERN = /\b(ralat|batal(?:kan)?|dibatalkan|hapus(?:kan)?|keliru|salah\s*(?:kirim|input|masuk))\b/i;
+
+/**
+ * Real incident: Anang submitted a near-duplicate nota by mistake (kuar 2"
+ * then kuar 2.5", one minute apart), realized it, and replied "Ralat sudah
+ * dimasukan. Hapus" -- but nothing in the pipeline recognized a
+ * correction/cancellation message at all, so it fell through every check
+ * here and landed on the generic "kirim foto nota / jelaskan kebutuhan
+ * dana" canned reply, silently dropping his correction. The duplicate then
+ * sat un-flagged until Super Admin caught it manually days later.
+ *
+ * This never auto-cancels anything against real financial records -- a
+ * contractor's own claim of "salah" isn't enough to safely delete a
+ * pengajuan or report on its own. Instead it forwards his exact message to
+ * every Super Admin and Kepala Cabang so a human decides what to actually
+ * cancel/reject, and tells the contractor it was forwarded so he isn't left
+ * thinking he was ignored again.
+ *
+ * Caller (webhook-handler.ts) invokes this as a fallback, same tier as
+ * tryCaptureContractorBankAccount -- only after every other check found
+ * nothing to do with the message, so it never preempts a real fund request,
+ * pending-clarification answer, or settlement-type reply.
+ */
+export async function tryForwardContractorCorrectionRequest(
+  contractor: { id: string; fullName: string },
+  text: string,
+): Promise<{ outcome: "forwarded" } | { outcome: "not_applicable" }> {
+  const trimmed = text.trim();
+  if (!CORRECTION_PATTERN.test(trimmed)) {
+    return { outcome: "not_applicable" };
+  }
+
+  const supabase = createAdminClient();
+  const { data: reviewers } = await supabase
+    .from("employees")
+    .select("phone, role:role_id(key)")
+    .not("phone", "is", null)
+    .is("deleted_at", null)
+    .eq("employment_status", "active");
+  const reviewerPhones = (reviewers ?? [])
+    .filter((e) => ["super_admin", "kepala_cabang"].includes((e.role as unknown as { key: string } | null)?.key ?? ""))
+    .map((e) => e.phone as string);
+
+  const message = `⚠️ ${contractor.fullName} mengirim pesan koreksi/pembatalan via WhatsApp, tapi sistem belum bisa memprosesnya otomatis -- tolong cek manual:\n\n"${trimmed}"`;
+  for (const phone of reviewerPhones) {
+    await sendWhatsAppText(phone, message);
+  }
+
+  return { outcome: "forwarded" };
 }

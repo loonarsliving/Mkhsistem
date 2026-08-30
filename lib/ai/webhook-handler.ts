@@ -29,7 +29,7 @@ import {
   tryDecideContractorReport,
   tryResolveContractorReportSettlementType,
 } from "./domains/contractor-expense-report";
-import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount } from "./domains/contractor-fund-request";
+import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryForwardContractorCorrectionRequest } from "./domains/contractor-fund-request";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
@@ -224,6 +224,26 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        // Fallback (real incident): a correction/cancellation message
+        // ("Ralat sudah dimasukan. Hapus") that didn't read as any of the
+        // above -- checked before the bank-account fallback since intent
+        // words like "hapus"/"ralat" are more specific than a bare digit
+        // run. Never auto-cancels anything; just flags Vando/Super Admin
+        // for manual review instead of silently dropping it into the
+        // generic reply below.
+        trace.push("tryForwardContractorCorrectionRequest:calling");
+        const correctionResult = await tryForwardContractorCorrectionRequest(contractor, inbound.content.text);
+        trace.push(`tryForwardContractorCorrectionRequest:${correctionResult.outcome}`);
+        if (correctionResult.outcome === "forwarded") {
+          const replyText = `✅ Pesan koreksi/pembatalan Anda sudah diteruskan ke Vando/Super Admin untuk dicek manual. Terima kasih sudah mengabari.`;
+          trace.push("sendWhatsAppText:calling(contractor-correction-forwarded)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Fallback (real incident): a message that didn't read as any of
         // the above but is essentially just a bank account -- e.g. Anang
         // replying to a one-off "send your account" ask with nothing else
