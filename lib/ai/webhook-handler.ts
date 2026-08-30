@@ -29,7 +29,7 @@ import {
   tryDecideContractorReport,
   tryResolveContractorReportSettlementType,
 } from "./domains/contractor-expense-report";
-import { tryHandleContractorFundRequest } from "./domains/contractor-fund-request";
+import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount } from "./domains/contractor-fund-request";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
@@ -218,6 +218,23 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         if (fundRequestResult.outcome === "sync_failed") {
           const replyText = `⚠️ Permintaan dana diterima, tapi GAGAL dikirim sebagai pengajuan (${fundRequestResult.error}). Tolong coba kirim ulang.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request-failed)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        // Fallback (real incident): a message that didn't read as any of
+        // the above but is essentially just a bank account -- e.g. Anang
+        // replying to a one-off "send your account" ask with nothing else
+        // attached. Save it instead of dropping it into the generic reply
+        // below as if he'd said nothing useful.
+        trace.push("tryCaptureContractorBankAccount:calling");
+        const bankCaptureResult = await tryCaptureContractorBankAccount(contractor, inbound.content.text);
+        trace.push(`tryCaptureContractorBankAccount:${bankCaptureResult.outcome}`);
+        if (bankCaptureResult.outcome === "captured") {
+          const replyText = `✅ Nomor rekening (${bankCaptureResult.rekening}) sudah disimpan. Akan otomatis dipakai untuk pengajuan dana Anda berikutnya.`;
+          trace.push("sendWhatsAppText:calling(contractor-bank-account-captured)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);

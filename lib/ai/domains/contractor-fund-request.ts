@@ -221,3 +221,30 @@ export async function tryHandleContractorFundRequest(contractor: { id: string; f
   }
   return submitFundRequest(contractor, ai.nominal, items, keterangan, ai.kategori, ai.notes, rekening);
 }
+
+/**
+ * Real incident: asked Anang directly (a one-off WA message, not tied to
+ * any live fund request) to send his bank account -- he replied with just
+ * "Bank BCA 037-301-1441 A.n Anang Setiyatno Wibowo", no item/nominal
+ * attached. tryHandleContractorFundRequest correctly read that as
+ * not_a_request (nothing to submit), so the caller fell through to the
+ * generic "kirim foto nota / jelaskan kebutuhan dana" reply -- his account
+ * number was silently dropped instead of saved.
+ *
+ * Caller (webhook-handler.ts) invokes this ONLY as a fallback after
+ * tryHandleContractorFundRequest itself found nothing to do with the
+ * message, so it never preempts a real fund request or pending-clarification
+ * answer (both already handle rekening in-line). Fires only when the
+ * message reads as essentially just an account number -- the same
+ * digit-length heuristic already used for a pending clarification's
+ * rekening answer.
+ */
+export async function tryCaptureContractorBankAccount(contractor: { id: string }, text: string): Promise<{ outcome: "captured"; rekening: string } | { outcome: "not_applicable" }> {
+  const rekening = detectRekeningFromReply(text);
+  if (!rekening) {
+    return { outcome: "not_applicable" };
+  }
+  const supabase = createAdminClient();
+  await supabase.from("contractor_wa_senders").update({ bank_account: rekening }).eq("id", contractor.id);
+  return { outcome: "captured", rekening };
+}
