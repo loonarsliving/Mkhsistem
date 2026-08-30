@@ -20,6 +20,8 @@ export interface FundRequestRecognition {
   nominal: number | null;
   /** null when the message doesn't make clear whether this is for gaji or material -- caller must ask him to clarify, never guess. */
   kategori: FundRequestKategori | null;
+  /** Destination bank account, as written (e.g. "BCA 6975175212 an Anang") -- null when he didn't mention one this message. */
+  rekening: string | null;
   notes: string;
 }
 
@@ -60,6 +62,7 @@ function parseRecognition(text: string): FundRequestRecognition {
     items: parseItems(parsed.items),
     nominal: typeof parsed.nominal === "number" && Number.isFinite(parsed.nominal) && parsed.nominal > 0 ? parsed.nominal : null,
     kategori: parseKategori(parsed.kategori),
+    rekening: typeof parsed.rekening === "string" && parsed.rekening.trim() ? parsed.rekening.trim().slice(0, 150) : null,
     notes: typeof parsed.notes === "string" ? parsed.notes.trim().slice(0, 300) : "",
   };
 }
@@ -92,10 +95,11 @@ Baca dan tentukan:
   (array kosong kalau dia cuma sebutkan satu nominal total tanpa rincian per barang)
 - nominal: TOTAL dana yang diminta -- pakai total yang dia sebutkan eksplisit kalau ada, atau jumlahkan semua items kalau tidak ada total eksplisit (null kalau isRequest false atau nilai tidak jelas sama sekali)
 - kategori: "gaji" kalau ini untuk membayar gaji/upah tukang/pekerja, "material" kalau ini untuk membeli bahan bangunan/material, atau null kalau dari pesannya TIDAK JELAS yang mana (jangan menebak -- kalau ragu, null)
+- rekening: nomor rekening tujuan transfer PERSIS seperti dia tuliskan (nama bank + nomor rekening, bisa juga sertakan nama pemilik kalau disebutkan), atau null kalau dia TIDAK menyebutkan rekening sama sekali di pesan ini
 - notes: catatan singkat, misalnya kalau ada nominal tapi rinciannya/kategorinya tidak jelas
 
 Balas HANYA dengan JSON object:
-{"isRequest": true, "items": [{"nama": "...", "harga": 0}], "nominal": 0, "kategori": null, "notes": "..."}`;
+{"isRequest": true, "items": [{"nama": "...", "harga": 0}], "nominal": 0, "kategori": null, "rekening": null, "notes": "..."}`;
 
   const response = await generateAIText({
     systemPrompt: SYSTEM_PROMPT,

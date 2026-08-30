@@ -28,8 +28,9 @@ import {
   trySubmitContractorReceiptReport,
   tryDecideContractorReport,
   tryResolveContractorReportSettlementType,
+  tryCancelOwnPendingReport,
 } from "./domains/contractor-expense-report";
-import { tryHandleContractorFundRequest } from "./domains/contractor-fund-request";
+import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryForwardContractorCorrectionRequest } from "./domains/contractor-fund-request";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
@@ -131,9 +132,13 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         trace.push("trySubmitContractorReceiptReport:calling");
         const reportResult = await trySubmitContractorReceiptReport(contractor, inbound.content.url);
         trace.push(`trySubmitContractorReceiptReport:${reportResult.outcome}`);
+        const duplicateNotice =
+          reportResult.outcome === "awaiting_settlement_type" && reportResult.duplicateOfCode
+            ? `\n\n⚠️ Nota ini nilainya sama persis dengan ${reportResult.duplicateOfCode} yang baru saja Bapak kirim -- kalau ini foto yang sama/salah kirim ulang, balas *RALAT ${reportResult.code}* untuk membatalkan yang ini.`
+            : "";
         const replyText =
           reportResult.outcome === "awaiting_settlement_type"
-            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\n❓ Ini *REIMBURSE* (uang belum dibayar perusahaan, minta diganti) atau *PELAPORAN* (sudah pakai uang muka yang sudah ditransfer)? Balas salah satu ya Pak.`
+            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}${duplicateNotice}\n\n❓ Ini *REIMBURSE* (uang belum dibayar perusahaan, minta diganti) atau *PELAPORAN* (sudah pakai uang muka yang sudah ditransfer)? Balas salah satu ya Pak.`
             : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
         trace.push("sendWhatsAppText:calling(contractor-report)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
@@ -143,6 +148,30 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       if (inbound.content.kind === "text") {
+        // Self-cancel (real incident, mitigation for near-duplicate nota):
+        // "RALAT LAP-0001" / "BATAL LAP-0001" -- checked before the
+        // settlement-type answer below since it targets a specific report
+        // by code rather than answering REIMBURSE/PELAPORAN for whatever is
+        // currently pending. Only cancels a still-unresolved report (see
+        // tryCancelOwnPendingReport for why).
+        trace.push("tryCancelOwnPendingReport:calling");
+        const cancelResult = await tryCancelOwnPendingReport(contractor, inbound.content.text);
+        trace.push(`tryCancelOwnPendingReport:${cancelResult.outcome}`);
+        if (cancelResult.outcome !== "not_applicable") {
+          const replyText =
+            cancelResult.outcome === "cancelled"
+              ? `✅ ${cancelResult.code} sudah dibatalkan.`
+              : cancelResult.outcome === "already_resolved"
+                ? `⚠️ ${cancelResult.code} sudah diproses lebih lanjut (bukan pending lagi), tidak bisa dibatalkan sendiri. Tolong hubungi admin kalau ini tetap perlu dikoreksi.`
+                : `⚠️ Kode ${cancelResult.code} tidak ditemukan.`;
+          trace.push("sendWhatsAppText:calling(contractor-report-cancel)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Settlement-type answer (owner's ask, real Anang incident): a nota
         // photo is held back from Vando until the contractor says whether
         // it's REIMBURSE or PELAPORAN -- checked before the fund-request
@@ -203,8 +232,11 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
-        if (fundRequestResult.outcome === "needs_category_clarification") {
-          const replyText = `Untuk pengajuan Rp ${fundRequestResult.nominal.toLocaleString("id-ID")} ini, apakah untuk *gaji/upah tukang* atau *beli material*? Tolong kirim ulang pesannya dengan menyebutkan salah satu, ya Pak.`;
+        if (fundRequestResult.outcome === "needs_more_info") {
+          const asks: string[] = [];
+          if (fundRequestResult.missingKategori) asks.push("apakah ini untuk *gaji/upah tukang* atau *beli material*");
+          if (fundRequestResult.missingRekening) asks.push("nomor rekening tujuan transfernya (nama bank + nomor rekening)");
+          const replyText = `Untuk pengajuan Rp ${fundRequestResult.nominal.toLocaleString("id-ID")} ini, tolong balas pesan ini dengan ${asks.join(" dan ")}, ya Pak.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request-clarify)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
@@ -215,6 +247,43 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         if (fundRequestResult.outcome === "sync_failed") {
           const replyText = `⚠️ Permintaan dana diterima, tapi GAGAL dikirim sebagai pengajuan (${fundRequestResult.error}). Tolong coba kirim ulang.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request-failed)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+        // Fallback (real incident): a correction/cancellation message
+        // ("Ralat sudah dimasukan. Hapus") that didn't read as any of the
+        // above -- checked before the bank-account fallback since intent
+        // words like "hapus"/"ralat" are more specific than a bare digit
+        // run. Never auto-cancels anything; just flags Vando/Super Admin
+        // for manual review instead of silently dropping it into the
+        // generic reply below.
+        trace.push("tryForwardContractorCorrectionRequest:calling");
+        const correctionResult = await tryForwardContractorCorrectionRequest(contractor, inbound.content.text);
+        trace.push(`tryForwardContractorCorrectionRequest:${correctionResult.outcome}`);
+        if (correctionResult.outcome === "forwarded") {
+          const replyText = `✅ Pesan koreksi/pembatalan Anda sudah diteruskan ke Vando/Super Admin untuk dicek manual. Terima kasih sudah mengabari.`;
+          trace.push("sendWhatsAppText:calling(contractor-correction-forwarded)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Fallback (real incident): a message that didn't read as any of
+        // the above but is essentially just a bank account -- e.g. Anang
+        // replying to a one-off "send your account" ask with nothing else
+        // attached. Save it instead of dropping it into the generic reply
+        // below as if he'd said nothing useful.
+        trace.push("tryCaptureContractorBankAccount:calling");
+        const bankCaptureResult = await tryCaptureContractorBankAccount(contractor, inbound.content.text);
+        trace.push(`tryCaptureContractorBankAccount:${bankCaptureResult.outcome}`);
+        if (bankCaptureResult.outcome === "captured") {
+          const replyText = `✅ Nomor rekening (${bankCaptureResult.rekening}) sudah disimpan. Akan otomatis dipakai untuk pengajuan dana Anda berikutnya.`;
+          trace.push("sendWhatsAppText:calling(contractor-bank-account-captured)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
