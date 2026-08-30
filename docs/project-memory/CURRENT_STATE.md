@@ -146,15 +146,37 @@ owner's own guess:
    `~/Documents/Filemanager`) after editing `.env` — a running Node
    process does not hot-reload `dotenv` values.
 
-**Still open / recommended next**: the Filemanager agent + Tailscale
-Funnel are currently started manually in a Terminal window on the Mac
-Mini, not as a persistent background service — they will silently stop on
-Terminal close, sleep, or restart (this already happened once during
-setup). The repo ships `com.mkh.filemanager-agent.plist.example` for
-launchd to keep it running unattended; the owner hasn't installed it yet.
-Catalog is still empty (0 files indexed as of setup) — no real file has
-been saved/tested yet via the `"simpan sebagai ... kategori ..."` WhatsApp
-flow or by dropping a file into `STORAGE_ROOT` for auto-sync.
+**Filemanager agent now runs as a persistent launchd service (installed
+2026-08-30)**, not a manual Terminal session — survives Terminal close and
+Mac Mini restart. `curl http://127.0.0.1:3939/health` confirmed `{"status":
+"ok"}` via the launchd-managed process. Non-obvious setup facts worth
+remembering if this ever needs reinstalling or debugging:
+- The Mac Mini's Homebrew `node` (`/opt/homebrew/bin/node`) got upgraded
+  to a very new major version (v26.7.0) at some point, which
+  `better-sqlite3`'s native addon does not build against (V8 API removals
+  broke the `node-gyp` compile). Fix: installed `node@22` via
+  `brew install node@22`, reinstalled `node_modules` with
+  `PATH="/opt/homebrew/opt/node@22/bin:$PATH" /opt/homebrew/opt/node@22/bin/npm install`
+  (forcing PATH matters — `npm`'s own shebang re-resolves `node` via
+  `env`, so just invoking the node@22 binary by absolute path is not
+  enough on its own), then pointed the launchd plist's `node` binary at
+  `/opt/homebrew/opt/node@22/bin/node` (not the plain Homebrew `node`).
+  If Homebrew's default `node` gets upgraded again in the future and this
+  breaks again, the same fix applies.
+  `com.mkh.filemanager-agent.plist.example` → `~/Library/LaunchAgents/`).
+- On this Mac Mini, `launchctl load`/`unload` errored ("Input/output
+  error"); `launchctl bootout gui/$(id -u) <plist>` /
+  `launchctl bootstrap gui/$(id -u) <plist>` worked reliably instead.
+- Tailscale Funnel also needs to survive without a Terminal window open —
+  use `tailscale funnel --bg 3939` (not the bare interactive form, which
+  blocks the terminal and drops the funnel on Ctrl+C/close), and enable
+  "Launch Tailscale at login" in the Tailscale app so `tailscaled` itself
+  comes up on boot.
+
+Catalog is still near-empty (5 categories, 1 file as of 2026-08-30) — the
+`"simpan sebagai ... kategori ..."` WhatsApp save flow and dropping files
+into `STORAGE_ROOT` for auto-sync are both implemented but barely
+exercised yet with real company files.
 
 ## KontenAI local Mac Mini footage/render (added 2026-08-27, merged same day)
 
