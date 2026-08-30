@@ -1919,6 +1919,7 @@ export interface Database {
           recapped_at: string | null;
           created_at: string;
           settlement_type: string | null;
+          duplicate_of_id: number | null;
         };
         Insert: {
           id?: number;
@@ -1938,6 +1939,7 @@ export interface Database {
           recapped_at?: string | null;
           created_at?: string;
           settlement_type?: string | null;
+          duplicate_of_id?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["contractor_expense_reports"]["Insert"]>;
         Relationships: [];

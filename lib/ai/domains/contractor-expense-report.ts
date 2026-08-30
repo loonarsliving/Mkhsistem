@@ -46,11 +46,56 @@ async function findVando(): Promise<{ id: string; fullName: string; phone: strin
 
 export type ContractorReportSubmissionOutcome =
   | { outcome: "unreadable" }
-  | { outcome: "awaiting_settlement_type"; code: string; itemSummary: string; nominal: number; ai: ExpenseReceiptRecognition };
+  | { outcome: "awaiting_settlement_type"; code: string; itemSummary: string; nominal: number; ai: ExpenseReceiptRecognition; duplicateOfCode: string | null };
 
 /** "Semen 5 sak (Rp 500.000); Paku 2kg (Rp 50.000)" -- same joined-text convention material-receipt-submission.ts uses for mkh-properti's pengajuan.item. */
 function formatItemSummary(items: { nama: string; harga: number }[]): string {
   return items.map((it) => `${it.nama} (Rp ${it.harga.toLocaleString("id-ID")})`).join("; ");
+}
+
+/** A duplicate/retake of the same nota reads as the same total split into the same per-item values -- item NAMES can differ slightly (OCR/retyping, e.g. "kuar 2\"" vs "kuar 2.5\""), so only the harga multiset has to match, not the wording. */
+function sameItemValues(a: { harga: number }[], b: { harga: number }[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a.map((it) => it.harga)].sort((x, y) => x - y);
+  const sortedB = [...b.map((it) => it.harga)].sort((x, y) => x - y);
+  return sortedA.every((value, i) => value === sortedB[i]);
+}
+
+/** A duplicate/retake almost always follows within minutes of the original -- widening this risks flagging two genuinely separate same-total purchases days apart as duplicates. */
+const DUPLICATE_REPORT_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Real incident: Anang submitted a near-duplicate nota one minute after the
+ * first (same 3 items/values, same Rp 27.000 total, one item name reads
+ * "kuar 2\"" the first time and "kuar 2.5\"" the second) -- nothing flagged
+ * it, and the duplicate sat un-caught for days until Super Admin found it
+ * manually. Checked against this contractor's own recent reports (not yet
+ * rejected -- a report already rejected as a caught duplicate shouldn't
+ * itself trigger new "duplicate of a duplicate" warnings) before a new one
+ * is inserted. Returns the earlier report's code when found; the caller
+ * still creates the new report either way (a real photo is never dropped),
+ * just flags it prominently to both the contractor and Vando instead of
+ * letting it through silently.
+ */
+async function findLikelyDuplicateReport(contractorId: string, nominal: number, items: { harga: number }[]): Promise<string | null> {
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - DUPLICATE_REPORT_WINDOW_MS).toISOString();
+  const { data: recent } = await supabase
+    .from("contractor_expense_reports")
+    .select("id, nominal, items, created_at")
+    .eq("contractor_id", contractorId)
+    .neq("status", "rejected")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false });
+
+  for (const candidate of recent ?? []) {
+    if (Number(candidate.nominal) !== nominal) continue;
+    const candidateItems = Array.isArray(candidate.items) ? (candidate.items as { nama: string; harga: number }[]) : [];
+    if (sameItemValues(candidateItems, items)) {
+      return `LAP-${String(candidate.id).padStart(4, "0")}`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -84,6 +129,9 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
   }
 
   const itemSummary = formatItemSummary(ai.items);
+  const duplicateOfCode = await findLikelyDuplicateReport(contractor.id, ai.nominal, ai.items);
+  const duplicateOfId = duplicateOfCode ? Number(duplicateOfCode.replace("LAP-", "")) : null;
+
   const supabase = createAdminClient();
   const { data: inserted, error } = await supabase
     .from("contractor_expense_reports")
@@ -97,6 +145,7 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
       tanggal: ai.tanggal,
       supplier: ai.supplier,
       ai_notes: ai.notes,
+      duplicate_of_id: duplicateOfId,
     })
     .select("id")
     .single();
@@ -106,7 +155,54 @@ export async function trySubmitContractorReceiptReport(contractor: ContractorSen
   }
 
   const code = `LAP-${String(inserted.id).padStart(4, "0")}`;
-  return { outcome: "awaiting_settlement_type", code, itemSummary, nominal: ai.nominal, ai };
+  return { outcome: "awaiting_settlement_type", code, itemSummary, nominal: ai.nominal, ai, duplicateOfCode };
+}
+
+export type CancelOwnReportOutcome = { outcome: "not_applicable" } | { outcome: "not_found"; code: string } | { outcome: "already_resolved"; code: string } | { outcome: "cancelled"; code: string };
+
+/**
+ * Real incident: Anang tried to self-correct a duplicate nota by replying
+ * "Ralat sudah dimasukan. Hapus" -- unrecognized, so it fell through to the
+ * generic canned reply and the duplicate sat un-caught for days. This
+ * handles an explicit "RALAT LAP-0001" / "BATAL LAP-0001" reply referencing
+ * a specific code (the duplicate-detection reply above teaches him this
+ * exact syntax). Only cancels a report that's STILL "pending" with no
+ * settlement_type decided yet -- once it's been sent to Vando as a
+ * pelaporan or converted into a reimburse pengajuan, there's a real
+ * financial record downstream a bare WA claim of "salah kirim" can't safely
+ * delete on its own; tryForwardContractorCorrectionRequest (in
+ * contractor-fund-request.ts) is the fallback for that case, flagging
+ * Vando/Super Admin for manual review instead of auto-cancelling.
+ */
+export async function tryCancelOwnPendingReport(contractor: ContractorSender, text: string): Promise<CancelOwnReportOutcome> {
+  const match = text.trim().match(/^(?:ralat|batal(?:kan)?|hapus(?:kan)?)\s+(lap-\d+)\b/i);
+  if (!match) {
+    return { outcome: "not_applicable" };
+  }
+  const code = match[1].toUpperCase();
+  const idMatch = code.match(/^LAP-(\d+)$/);
+  const reportId = idMatch ? Number(idMatch[1]) : null;
+  if (reportId === null) {
+    return { outcome: "not_found", code };
+  }
+
+  const supabase = createAdminClient();
+  const { data: cancelled } = await supabase
+    .from("contractor_expense_reports")
+    .update({ status: "rejected", reject_reason: "Dibatalkan sendiri oleh kontraktor via WhatsApp (duplikat/salah kirim)" })
+    .eq("id", reportId)
+    .eq("contractor_id", contractor.id)
+    .eq("status", "pending")
+    .is("settlement_type", null)
+    .select("id")
+    .maybeSingle();
+
+  if (cancelled) {
+    return { outcome: "cancelled", code };
+  }
+
+  const { data: existing } = await supabase.from("contractor_expense_reports").select("id").eq("id", reportId).eq("contractor_id", contractor.id).maybeSingle();
+  return existing ? { outcome: "already_resolved", code } : { outcome: "not_found", code };
 }
 
 function detectSettlementType(text: string): "reimburse" | "pelaporan" | null {
@@ -133,7 +229,7 @@ export async function tryResolveContractorReportSettlementType(contractor: Contr
   const supabase = createAdminClient();
   const { data: pendingReports } = await supabase
     .from("contractor_expense_reports")
-    .select("id, item, items, nominal, tanggal, supplier, ai_notes")
+    .select("id, item, items, nominal, tanggal, supplier, ai_notes, duplicate_of_id")
     .eq("contractor_id", contractor.id)
     .eq("status", "pending")
     .is("settlement_type", null)
@@ -160,9 +256,12 @@ export async function tryResolveContractorReportSettlementType(contractor: Contr
         const code = `LAP-${String(report.id).padStart(4, "0")}`;
         const items = Array.isArray(report.items) ? (report.items as { nama: string; harga: number }[]) : [];
         const itemLines = items.length > 0 ? items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n") : `🧾 ${report.item}`;
+        const duplicateWarning = report.duplicate_of_id
+          ? `\n\n⚠️ *Kemungkinan duplikat* dari LAP-${String(report.duplicate_of_id).padStart(4, "0")} (item dan total sama, dikirim dalam 1 jam terakhir). Cek dulu sebelum COCOK.`
+          : "";
         await sendWhatsAppText(
           vando.phone,
-          `📋 Laporan belanja *${contractor.fullName}* (${code})${report.supplier ? ` — ${report.supplier}` : ""}:\n${itemLines}\n💰 Total: Rp ${Number(report.nominal).toLocaleString("id-ID")}${report.tanggal ? `\n📅 ${report.tanggal}` : ""}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
+          `📋 Laporan belanja *${contractor.fullName}* (${code})${report.supplier ? ` — ${report.supplier}` : ""}:\n${itemLines}\n💰 Total: Rp ${Number(report.nominal).toLocaleString("id-ID")}${report.tanggal ? `\n📅 ${report.tanggal}` : ""}${duplicateWarning}\n\nCocokkan dengan uang muka yang sudah ditransfer ke ${contractor.fullName}. Balas *COCOK ${code}* kalau sesuai, atau *TOLAK ${code} <alasan>* kalau tidak.`,
         );
       }
     }
@@ -266,7 +365,7 @@ async function recapApprovedReportsToSuperAdmin(): Promise<void> {
   const supabase = createAdminClient();
   const { data: pending } = await supabase
     .from("contractor_expense_reports")
-    .select("id, contractor_name, item, items, nominal, tanggal, supplier")
+    .select("id, contractor_name, item, items, nominal, tanggal, supplier, duplicate_of_id")
     .eq("status", "approved")
     .is("recapped_at", null)
     .order("created_at", { ascending: true });
@@ -277,7 +376,8 @@ async function recapApprovedReportsToSuperAdmin(): Promise<void> {
     const code = `LAP-${String(r.id).padStart(4, "0")}`;
     const items = Array.isArray(r.items) ? (r.items as { nama: string; harga: number }[]) : [];
     const itemLines = items.length > 0 ? items.map((it) => `   🧾 ${it.nama} - Rp ${Number(it.harga).toLocaleString("id-ID")}`).join("\n") : `   🧾 ${r.item}`;
-    return `${i + 1}. ${r.contractor_name}${r.supplier ? ` — ${r.supplier}` : ""} (${code})\n${itemLines}`;
+    const duplicateWarning = r.duplicate_of_id ? ` ⚠️ kemungkinan duplikat LAP-${String(r.duplicate_of_id).padStart(4, "0")}` : "";
+    return `${i + 1}. ${r.contractor_name}${r.supplier ? ` — ${r.supplier}` : ""} (${code})${duplicateWarning}\n${itemLines}`;
   });
   const total = pending.reduce((sum, r) => sum + Number(r.nominal), 0);
   const message = `📊 Rekap Laporan Belanja Kontraktor (disetujui Vando):\n\n${lines.join("\n")}\n\nTotal: Rp ${total.toLocaleString("id-ID")}`;

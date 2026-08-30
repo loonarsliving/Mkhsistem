@@ -28,6 +28,7 @@ import {
   trySubmitContractorReceiptReport,
   tryDecideContractorReport,
   tryResolveContractorReportSettlementType,
+  tryCancelOwnPendingReport,
 } from "./domains/contractor-expense-report";
 import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryForwardContractorCorrectionRequest } from "./domains/contractor-fund-request";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
@@ -131,9 +132,13 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         trace.push("trySubmitContractorReceiptReport:calling");
         const reportResult = await trySubmitContractorReceiptReport(contractor, inbound.content.url);
         trace.push(`trySubmitContractorReceiptReport:${reportResult.outcome}`);
+        const duplicateNotice =
+          reportResult.outcome === "awaiting_settlement_type" && reportResult.duplicateOfCode
+            ? `\n\n⚠️ Nota ini nilainya sama persis dengan ${reportResult.duplicateOfCode} yang baru saja Bapak kirim -- kalau ini foto yang sama/salah kirim ulang, balas *RALAT ${reportResult.code}* untuk membatalkan yang ini.`
+            : "";
         const replyText =
           reportResult.outcome === "awaiting_settlement_type"
-            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}\n\n❓ Ini *REIMBURSE* (uang belum dibayar perusahaan, minta diganti) atau *PELAPORAN* (sudah pakai uang muka yang sudah ditransfer)? Balas salah satu ya Pak.`
+            ? `✅ Nota diterima (${reportResult.code}):\n${reportResult.ai.items.map((it) => `🧾 ${it.nama} - Rp ${it.harga.toLocaleString("id-ID")}`).join("\n")}\n💰 Total: Rp ${reportResult.nominal.toLocaleString("id-ID")}${duplicateNotice}\n\n❓ Ini *REIMBURSE* (uang belum dibayar perusahaan, minta diganti) atau *PELAPORAN* (sudah pakai uang muka yang sudah ditransfer)? Balas salah satu ya Pak.`
             : "⚠️ Nota tidak bisa dibaca AI dengan jelas. Tolong kirim ulang foto nota yang lebih jelas (pastikan total belanja terlihat).";
         trace.push("sendWhatsAppText:calling(contractor-report)");
         const sendResult = await sendWhatsAppText(inbound.sender, replyText);
@@ -143,6 +148,30 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       if (inbound.content.kind === "text") {
+        // Self-cancel (real incident, mitigation for near-duplicate nota):
+        // "RALAT LAP-0001" / "BATAL LAP-0001" -- checked before the
+        // settlement-type answer below since it targets a specific report
+        // by code rather than answering REIMBURSE/PELAPORAN for whatever is
+        // currently pending. Only cancels a still-unresolved report (see
+        // tryCancelOwnPendingReport for why).
+        trace.push("tryCancelOwnPendingReport:calling");
+        const cancelResult = await tryCancelOwnPendingReport(contractor, inbound.content.text);
+        trace.push(`tryCancelOwnPendingReport:${cancelResult.outcome}`);
+        if (cancelResult.outcome !== "not_applicable") {
+          const replyText =
+            cancelResult.outcome === "cancelled"
+              ? `✅ ${cancelResult.code} sudah dibatalkan.`
+              : cancelResult.outcome === "already_resolved"
+                ? `⚠️ ${cancelResult.code} sudah diproses lebih lanjut (bukan pending lagi), tidak bisa dibatalkan sendiri. Tolong hubungi admin kalau ini tetap perlu dikoreksi.`
+                : `⚠️ Kode ${cancelResult.code} tidak ditemukan.`;
+          trace.push("sendWhatsAppText:calling(contractor-report-cancel)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, null);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Settlement-type answer (owner's ask, real Anang incident): a nota
         // photo is held back from Vando until the contractor says whether
         // it's REIMBURSE or PELAPORAN -- checked before the fund-request
