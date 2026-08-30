@@ -203,8 +203,11 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
-        if (fundRequestResult.outcome === "needs_category_clarification") {
-          const replyText = `Untuk pengajuan Rp ${fundRequestResult.nominal.toLocaleString("id-ID")} ini, apakah untuk *gaji/upah tukang* atau *beli material*? Tolong kirim ulang pesannya dengan menyebutkan salah satu, ya Pak.`;
+        if (fundRequestResult.outcome === "needs_more_info") {
+          const asks: string[] = [];
+          if (fundRequestResult.missingKategori) asks.push("apakah ini untuk *gaji/upah tukang* atau *beli material*");
+          if (fundRequestResult.missingRekening) asks.push("nomor rekening tujuan transfernya (nama bank + nomor rekening)");
+          const replyText = `Untuk pengajuan Rp ${fundRequestResult.nominal.toLocaleString("id-ID")} ini, tolong balas pesan ini dengan ${asks.join(" dan ")}, ya Pak.`;
           trace.push("sendWhatsAppText:calling(contractor-fund-request-clarify)");
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);

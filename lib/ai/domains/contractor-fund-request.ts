@@ -6,7 +6,7 @@ import type { Json } from "@/types/database.types";
 
 export type ContractorFundRequestOutcome =
   | { outcome: "not_a_request" }
-  | { outcome: "needs_category_clarification"; nominal: number; keterangan: string }
+  | { outcome: "needs_more_info"; nominal: number; keterangan: string; missingKategori: boolean; missingRekening: boolean }
   | { outcome: "sync_failed"; error: string }
   | { outcome: "submitted"; nominal: number; keterangan: string; items: FundRequestItem[]; kategori: FundRequestKategori };
 
@@ -16,6 +16,13 @@ function detectKategoriFromShortReply(text: string): FundRequestKategori | null 
   if (/gaji|upah|tukang/.test(lower)) return "gaji";
   if (/material|bahan|beli/.test(lower)) return "material";
   return null;
+}
+
+/** A bare rekening answer needs at least one real account-number-length digit run -- otherwise a short reply like "iya" or "material" could get misread as an account. */
+function detectRekeningFromReply(text: string): string | null {
+  const trimmed = text.trim();
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  return digitsOnly.length >= 8 ? trimmed.slice(0, 150) : null;
 }
 
 /** Always the same project Endy already submits Anang's advances under -- see accountForSender in material-receipt-submission.ts. */
@@ -43,6 +50,17 @@ const PENDING_CLARIFICATION_MAX_AGE_MS = 3 * 60 * 60 * 1000;
  * store, so that caller always passes kategori "material" directly
  * instead of asking a second clarifying question nota photos already
  * answer by what they are.
+ *
+ * Owner's fix: a contractor's request never carried a destination bank
+ * account at all -- only category was ever asked -- so keterangan (which
+ * becomes finance_pending_transfers.rekening_tujuan once approved) had
+ * nothing for the bukti-transfer auto-matching to compare against, the
+ * same class of bug that caused an unrelated Rp 5.000.000 pengajuan to
+ * get wrongly auto-confirmed earlier. `rekening` is optional here only so
+ * a caller with no better source (e.g. a REIMBURSE conversion with
+ * nothing else to go on) can still submit -- tryHandleContractorFundRequest
+ * itself always resolves one (from the message or contractor_wa_senders.bank_account)
+ * before calling this, never submitting blind.
  */
 export async function submitFundRequest(
   contractor: { id: string; fullName: string },
@@ -51,10 +69,21 @@ export async function submitFundRequest(
   keterangan: string,
   kategori: FundRequestKategori,
   aiNotes: string | null,
+  rekening?: string | null,
 ): Promise<ContractorFundRequestOutcome> {
   const { jenisAkun, jenisNama } = AKUN_BY_KATEGORI[kategori];
   const supabase = createAdminClient();
   const idempotencyKey = `contractor-fund-request-${contractor.id}-${Date.now()}-${crypto.randomUUID()}`;
+
+  let resolvedRekening = rekening ?? null;
+  if (!resolvedRekening) {
+    const { data: contractorRow } = await supabase.from("contractor_wa_senders").select("bank_account").eq("id", contractor.id).maybeSingle();
+    resolvedRekening = contractorRow?.bank_account ?? null;
+  } else {
+    // Remember it for next time -- he shouldn't have to repeat his account on every future request.
+    await supabase.from("contractor_wa_senders").update({ bank_account: resolvedRekening }).eq("id", contractor.id);
+  }
+  const keteranganWithRekening = resolvedRekening ? `${resolvedRekening} | ${keterangan}` : keterangan;
 
   const { error } = await supabase.from("sync_log").insert({
     direction: "outbound",
@@ -68,7 +97,7 @@ export async function submitFundRequest(
       items: items.map((it) => ({ nama: it.nama, nilai: it.harga })),
       item: keterangan,
       nominal,
-      keterangan,
+      keterangan: keteranganWithRekening,
       jenis_akun: jenisAkun,
       jenis_nama: jenisNama,
       pengawas: contractor.fullName,
@@ -89,29 +118,32 @@ export async function submitFundRequest(
  * his own words -- no rigid command syntax, just explaining what he needs
  * and how much. AI reads whether the message is a genuine request,
  * extracts EVERY item he listed with its own value (not one combined
- * summary -- same bar as a nota photo's breakdown), and classifies it as
- * gaji (upah tukang, paid weekly on Saturdays) or material -- never
- * guessed: an unclear category returns needs_category_clarification so the
- * caller asks him outright instead of miscategorizing real bookkeeping.
- * Once categorized, it becomes a pengajuan through the SAME pipeline
- * Endy's own requests already use (tipe='bahan', jenis Biaya Upah
- * Tukang/5-1003 or Pembelian Material/5-1001) -- Vando still has to judge
- * and approve it (verifikasi.html or WhatsApp) before Super Admin
- * transfers anything. Reuses mkh-properti's material_expense_receipt_submitted
- * sync_inbound event (0027/0028/0029) since the resulting pengajuan is
- * identical in shape to a nota-derived one; `sumber` distinguishes this as
- * a contractor-initiated request rather than an AI-read nota.
+ * summary -- same bar as a nota photo's breakdown), whether it's gaji
+ * (upah tukang, paid weekly on Saturdays) or material, and his
+ * destination bank account -- never guessed: a missing category or a
+ * missing account (with nothing already on file from an earlier request)
+ * returns needs_more_info so the caller asks him outright instead of
+ * miscategorizing real bookkeeping or submitting a pengajuan nobody can
+ * actually transfer money against. Once both are known, it becomes a
+ * pengajuan through the SAME pipeline Endy's own requests already use
+ * (tipe='bahan', jenis Biaya Upah Tukang/5-1003 or Pembelian
+ * Material/5-1001) -- Vando still has to judge and approve it
+ * (verifikasi.html or WhatsApp) before Super Admin transfers anything.
+ * Reuses mkh-properti's material_expense_receipt_submitted sync_inbound
+ * event (0027/0028/0029) since the resulting pengajuan is identical in
+ * shape to a nota-derived one; `sumber` distinguishes this as a
+ * contractor-initiated request rather than an AI-read nota.
  *
  * Real incident: Anang answered "REIMBURSE uang belanja sebesar Rp.
  * 2.031.000" -> got asked to clarify gaji/material -> replied "Beli
  * matrial" (no nominal restated) -> that short reply alone had nothing for
  * recognizeFundRequestText to read as a request, so it fell all the way
  * through to the generic "kirim foto nota / jelaskan kebutuhan dana" canned
- * reply, as if he'd never said anything about Rp 2.031.000 at all. Now
- * checks contractor_fund_request_pending first: if this contractor has an
- * unresolved clarification from the last few hours and this message reads
- * as a bare category answer, it completes THAT request using the nominal/
- * items already captured, instead of requiring him to retype everything.
+ * reply, as if he'd never said anything about Rp 2.031.000 at all. Checks
+ * contractor_fund_request_pending first: if this contractor has an
+ * unresolved clarification from the last few hours, a bare category or
+ * account-number reply completes whichever piece(s) it answers instead of
+ * requiring him to retype everything.
  */
 export async function tryHandleContractorFundRequest(contractor: { id: string; fullName: string }, text: string): Promise<ContractorFundRequestOutcome> {
   const trimmed = text.trim();
@@ -120,9 +152,13 @@ export async function tryHandleContractorFundRequest(contractor: { id: string; f
   }
 
   const supabase = createAdminClient();
+
+  const { data: contractorRow } = await supabase.from("contractor_wa_senders").select("bank_account").eq("id", contractor.id).maybeSingle();
+  const knownRekening = contractorRow?.bank_account ?? null;
+
   const { data: pendingRows } = await supabase
     .from("contractor_fund_request_pending")
-    .select("id, nominal, items, keterangan, ai_notes, created_at")
+    .select("id, nominal, items, keterangan, ai_notes, kategori, rekening, created_at")
     .eq("contractor_id", contractor.id)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -130,14 +166,27 @@ export async function tryHandleContractorFundRequest(contractor: { id: string; f
 
   if (pending && Date.now() - new Date(pending.created_at).getTime() <= PENDING_CLARIFICATION_MAX_AGE_MS) {
     const kategoriFromReply = detectKategoriFromShortReply(trimmed);
-    if (kategoriFromReply) {
+    const rekeningFromReply = detectRekeningFromReply(trimmed);
+    const kategori = (pending.kategori as FundRequestKategori | null) ?? kategoriFromReply;
+    const rekening = pending.rekening ?? rekeningFromReply ?? knownRekening;
+
+    if (kategori && rekening) {
       await supabase.from("contractor_fund_request_pending").delete().eq("id", pending.id);
-      return submitFundRequest(contractor, Number(pending.nominal), pending.items as unknown as FundRequestItem[], pending.keterangan, kategoriFromReply, pending.ai_notes);
+      return submitFundRequest(contractor, Number(pending.nominal), pending.items as unknown as FundRequestItem[], pending.keterangan, kategori, pending.ai_notes, rekening);
     }
+
+    if (kategoriFromReply || rekeningFromReply) {
+      await supabase
+        .from("contractor_fund_request_pending")
+        .update({ kategori, rekening: pending.rekening ?? rekeningFromReply })
+        .eq("id", pending.id);
+      return { outcome: "needs_more_info", nominal: Number(pending.nominal), keterangan: pending.keterangan, missingKategori: !kategori, missingRekening: !rekening };
+    }
+    // Reply didn't answer either missing piece -- fall through to fresh recognition below.
   }
 
   const ai: FundRequestRecognition = await recognizeFundRequestText(trimmed).catch(
-    (): FundRequestRecognition => ({ isRequest: false, items: [], nominal: null, kategori: null, notes: "Analisa AI gagal." }),
+    (): FundRequestRecognition => ({ isRequest: false, items: [], nominal: null, kategori: null, rekening: null, notes: "Analisa AI gagal." }),
   );
 
   if (!ai.isRequest || ai.nominal === null) {
@@ -149,10 +198,11 @@ export async function tryHandleContractorFundRequest(contractor: { id: string; f
   // request through, just without a line-by-line list to show Vando.
   const items: FundRequestItem[] = ai.items.length > 0 ? ai.items : [{ nama: trimmed.slice(0, 200), harga: ai.nominal }];
   const keterangan = formatItemSummary(items);
+  const rekening = ai.rekening ?? knownRekening;
 
-  if (ai.kategori === null) {
+  if (ai.kategori === null || !rekening) {
     // Replace any earlier unresolved clarification from this contractor --
-    // this newer request is what a follow-up category answer should complete.
+    // this newer request is what a follow-up answer should complete.
     await supabase.from("contractor_fund_request_pending").delete().eq("contractor_id", contractor.id);
     await supabase.from("contractor_fund_request_pending").insert({
       contractor_id: contractor.id,
@@ -160,12 +210,14 @@ export async function tryHandleContractorFundRequest(contractor: { id: string; f
       items: items as unknown as Json,
       keterangan,
       ai_notes: ai.notes,
+      kategori: ai.kategori,
+      rekening: ai.rekening,
     });
-    return { outcome: "needs_category_clarification", nominal: ai.nominal, keterangan };
+    return { outcome: "needs_more_info", nominal: ai.nominal, keterangan, missingKategori: ai.kategori === null, missingRekening: !rekening };
   }
 
   if (pending) {
     await supabase.from("contractor_fund_request_pending").delete().eq("id", pending.id);
   }
-  return submitFundRequest(contractor, ai.nominal, items, keterangan, ai.kategori, ai.notes);
+  return submitFundRequest(contractor, ai.nominal, items, keterangan, ai.kategori, ai.notes, rekening);
 }

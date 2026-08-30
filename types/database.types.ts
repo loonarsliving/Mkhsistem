@@ -1887,6 +1887,7 @@ export interface Database {
           phone: string;
           note: string | null;
           created_at: string;
+          bank_account: string | null;
         };
         Insert: {
           id?: string;
@@ -1894,6 +1895,7 @@ export interface Database {
           phone: string;
           note?: string | null;
           created_at?: string;
+          bank_account?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contractor_wa_senders"]["Insert"]>;
         Relationships: [];
@@ -1949,6 +1951,8 @@ export interface Database {
           keterangan: string;
           ai_notes: string | null;
           created_at: string;
+          kategori: string | null;
+          rekening: string | null;
         };
         Insert: {
           id?: string;
@@ -1958,6 +1962,8 @@ export interface Database {
           keterangan: string;
           ai_notes?: string | null;
           created_at?: string;
+          kategori?: string | null;
+          rekening?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contractor_fund_request_pending"]["Insert"]>;
         Relationships: [
