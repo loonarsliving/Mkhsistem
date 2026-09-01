@@ -166,7 +166,7 @@ const PENDING_ROW_COLUMNS = "id, pengajuan_id, proyek, tipe, branch_id, party_na
  * every group individually (real case: "ENDY SEPTIANTO BCA 6975 1752 12"
  * read no account at all under the old digits-only-no-spaces regex).
  */
-function extractAccountDigits(text: string | null): string | null {
+export function extractAccountDigits(text: string | null): string | null {
   if (!text) return null;
   const runs = text.match(/\d+(?: \d+)*/g);
   if (!runs || runs.length === 0) return null;

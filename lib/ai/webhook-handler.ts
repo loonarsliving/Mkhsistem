@@ -34,6 +34,7 @@ import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryFor
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
+import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -608,6 +609,38 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
             trace.push("sendWhatsAppImage:done(construction-settlement)");
           }
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Salary bukti transfer (owner's ask): checked before the
+        // bahan/tukang matcher below so a photo confirming a gaji transfer
+        // gets matched against employee_salary_submissions first. Only
+        // short-circuits on a confident match (confirmed) -- anything else
+        // (no pending salary, unreadable, no match, or an unresolved
+        // multi-match) falls straight through to the existing bahan/tukang
+        // flow instead of ever guessing which employee a photo is for.
+        trace.push("trySalaryTransferProofViaWhatsApp:calling");
+        const salaryTransferResult = await trySalaryTransferProofViaWhatsApp({ id: employee.id, name: employee.full_name, roleKey: imageRoleKey }, inbound.content.url);
+        trace.push(`trySalaryTransferProofViaWhatsApp:${salaryTransferResult.outcome}`);
+        if (salaryTransferResult.outcome === "confirmed") {
+          const recipientNames = salaryTransferResult.recipients.map((r) => r.name);
+          const replyText =
+            `✅ Bukti transfer gaji ${salaryTransferResult.employeeName} (${salaryTransferResult.periode}, Rp ${salaryTransferResult.amount.toLocaleString("id-ID")}) diterima dan dicatat.` +
+            (recipientNames.length > 0 ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.` : "\n⚠️ Tidak ada Kepala Cabang/karyawan dengan nomor WA terdaftar untuk diteruskan otomatis.");
+          trace.push("sendWhatsAppText:calling(salary-transfer-confirm)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          trace.push("sendWhatsAppImage:forwarding(salary)");
+          for (const recipient of salaryTransferResult.recipients) {
+            await sendWhatsAppImage(
+              recipient.phone,
+              inbound.content.url,
+              `📎 Bukti transfer gaji ${salaryTransferResult.employeeName} — ${salaryTransferResult.periode}, Rp ${salaryTransferResult.amount.toLocaleString("id-ID")} (dari Super Admin)`,
+            );
+          }
+          trace.push("sendWhatsAppImage:done(salary)");
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer gaji]", replyText, employee.id);
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
