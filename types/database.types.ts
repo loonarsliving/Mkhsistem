@@ -1824,6 +1824,46 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["social_leasehold_competitor_comparisons"]["Insert"]>;
         Relationships: [];
       };
+      social_monthly_content_reports: {
+        Row: {
+          id: string;
+          month_start: string;
+          report: Json;
+          narrative: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          month_start: string;
+          report: Json;
+          narrative: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["social_monthly_content_reports"]["Insert"]>;
+        Relationships: [];
+      };
+      markom_hashtag_bank: {
+        Row: {
+          id: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform: "instagram" | "tiktok";
+          tier: "broad" | "medium" | "niche";
+          hashtag: string;
+          rationale: string | null;
+          generated_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_focus: "leasehold_sales" | "occupancy" | "beauty";
+          platform: "instagram" | "tiktok";
+          tier: "broad" | "medium" | "niche";
+          hashtag: string;
+          rationale?: string | null;
+          generated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["markom_hashtag_bank"]["Insert"]>;
+        Relationships: [];
+      };
       wa_pending_media_relay: {
         Row: {
           id: string;
@@ -3630,7 +3670,7 @@ export interface Database {
       ai_job_queue: {
         Row: {
           id: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay" | "social_monthly_content_report" | "markom_hashtag_bank_refresh";
           payload: Json;
           status: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count: number;
@@ -3642,7 +3682,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay";
+          job_type: "whatsapp_ai_reply" | "crm_sp1_draft" | "markom_checklist_draft" | "meta_ads_launch" | "meta_ads_research" | "social_weekly_evaluation" | "crm_sales_coaching" | "loonars_beauty_weekly_evaluation" | "knowledge_bank_refresh" | "sales_closing_tips_broadcast" | "leasehold_competitor_comparison" | "competitor_discovery" | "loonars_beauty_competitor_comparison" | "loonars_beauty_content_ideas_draft" | "investor_intelligence_refresh" | "cashflow_intelligence_refresh" | "sales_teaching_weekly" | "cashflow_action_plan" | "loonars_beauty_weekly_content_audit" | "markom_content_performance_broadcast" | "occupancy_intelligence_refresh" | "occupancy_teaching_biweekly" | "content_submission_review" | "kontenai_auto_produce" | "kontenai_auto_produce_beauty" | "kontenai_auto_bridge_to_studio" | "zernio_publish_reconcile" | "friday_executive_briefing" | "friday_holding_briefing" | "kontenai_asset_vision" | "whatsapp_lead_nurture_reply" | "whatsapp_admin_answer_relay" | "social_monthly_content_report" | "markom_hashtag_bank_refresh";
           payload: Json;
           status?: "pending" | "processing" | "succeeded" | "failed" | "dead_letter";
           attempt_count?: number;
@@ -5568,6 +5608,8 @@ export interface Database {
       loonars_beauty_request_weekly_evaluation: { Args: Record<PropertyKey, never>; Returns: undefined };
       markom_request_leasehold_competitor_comparison: { Args: Record<PropertyKey, never>; Returns: undefined };
       markom_request_competitor_discovery: { Args: { p_focus: string }; Returns: undefined };
+      markom_request_monthly_report: { Args: Record<PropertyKey, never>; Returns: undefined };
+      markom_request_hashtag_bank_refresh: { Args: { p_focus: string; p_platform: string }; Returns: undefined };
       loonars_beauty_request_competitor_comparison: { Args: Record<PropertyKey, never>; Returns: undefined };
       loonars_beauty_request_content_ideas: { Args: Record<PropertyKey, never>; Returns: undefined };
       loonars_beauty_request_weekly_content_audit: { Args: Record<PropertyKey, never>; Returns: undefined };

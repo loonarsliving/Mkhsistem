@@ -236,7 +236,7 @@ Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tamba
 [{"title": "...", "description": "...", "platform": "Instagram atau TikTok", "platformReason": "..."}]
 
 title: singkat (maks 80 karakter), actionable -- nama tema kontennya.
-description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.
+description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini. HOOK dan DRAFT CAPTION WAJIB ditulis dengan gaya bahasa santai & personal ala kreator asli yang relate dengan milenial/Gen Z Indonesia -- pakai "kamu", kalimat pendek, TIDAK BOLEH terdengar seperti press release/company profile ("kami dengan bangga", "solusi terbaik untuk kebutuhan Anda"). Kalau draft-mu masih terasa kaku/formal, tulis ulang sebelum dijawab.
 platform: WAJIB pilih salah satu, "Instagram" atau "TikTok" -- platform mana yang paling cocok untuk KONSEP INI SPESIFIK, bukan sekadar bergantian. Instagram lebih cocok untuk konten yang lebih polished/aesthetic (carousel, reels rapi); TikTok lebih cocok untuk konten native/trend-jacking dengan hook cepat. Jangan asal posting konten yang sama ke kedua platform -- pilih yang benar-benar paling pas untuk memaksimalkan engagement konsep ini.
 platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang paling pas untuk konten ini (mis. gaya audiens, format yang lebih works di platform itu, atau data performa kami di platform itu).`;
 
@@ -250,7 +250,7 @@ platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang palin
 
   const fallbackPrompt = `Buatkan TEPAT 1 checklist konten untuk tim Markom cabang "${branchName}" untuk hari ini, seputar ${topic}, tanpa riset internet.${contextBlock}
 
-description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
+description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik. HOOK dan DRAFT CAPTION WAJIB ditulis dengan gaya bahasa santai & personal ala kreator asli yang relate dengan milenial/Gen Z Indonesia -- pakai "kamu", kalimat pendek, TIDAK BOLEH terdengar seperti press release/company profile.
 platform: WAJIB pilih "Instagram" atau "TikTok" -- yang paling pas untuk konsep ini, bukan asal-asalan.
 platformReason: 1 kalimat kenapa platform itu yang dipilih.
 
@@ -729,6 +729,126 @@ Balas HANYA dengan JSON object: {"score": 8.5, "feedback": "penjelasan singkat, 
 
   const response = await generateAIText({ systemPrompt, userPrompt, maxOutputTokens: 1024 });
   return parseContentReviewJson(response.text);
+}
+
+export interface HashtagBankItem {
+  tag: string;
+  tier: "broad" | "medium" | "niche";
+  rationale: string;
+}
+
+/** Shared parser for both generateHashtagBank (property, below) and generateBeautyHashtagBank (loonars-beauty.ts) -- same JSON shape either way, only the research topic/system prompt differ. */
+export function parseHashtagBankJson(text: string): HashtagBankItem[] {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed: unknown = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) throw new Error("Expected a JSON array of hashtag bank items");
+  return parsed
+    .filter((item): item is { tag: string; tier: string; rationale?: unknown } => typeof item?.tag === "string" && (item?.tier === "broad" || item?.tier === "medium" || item?.tier === "niche"))
+    .map((item) => ({
+      tag: item.tag.replace(/^#/, "").trim().slice(0, 100),
+      tier: item.tier as "broad" | "medium" | "niche",
+      rationale: typeof item.rationale === "string" ? item.rationale.trim().slice(0, 300) : "",
+    }))
+    .filter((item) => item.tag.length > 0);
+}
+
+function hashtagBankResearchPrompt(topic: string): string {
+  return `Riset lewat Google Search hashtag Instagram/TikTok yang benar-benar relevan dan aktif dipakai saat ini untuk: ${topic}.
+
+Ikuti formula 30/40/30: sekitar 5 hashtag BROAD (ratusan ribu-jutaan post), 6 hashtag MEDIUM (10rb-100rb post, biasanya paling efektif menjaring audiens yang benar-benar tertarik), dan 4 hashtag NICHE/spesifik (di bawah 10rb post) -- total sekitar 15 hashtag. Jangan mengarang perkiraan jumlah post -- kalau tidak yakin suatu hashtag benar-benar dipakai secara wajar untuk topik ini, jangan masukkan.
+
+Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan), tiap object:
+[{"tag": "hashtag tanpa tanda #", "tier": "broad, medium, atau niche", "rationale": "1 kalimat singkat kenapa hashtag ini relevan/di tier itu"}]`;
+}
+
+/**
+ * AI-generated hashtag bank for leasehold_sales/occupancy (property) --
+ * beauty's version (generateBeautyHashtagBank) lives in loonars-beauty.ts
+ * with its own system prompt/topic, same separation already enforced for
+ * competitor discovery (discoverPropertyCompetitors vs
+ * discoverBeautyCompetitors). Regenerated wholesale, not accumulated --
+ * see replaceHashtagBank (repositories/social.repository.ts).
+ */
+export async function generateHashtagBank(focus: ChecklistContentFocus, platform: "instagram" | "tiktok"): Promise<HashtagBankItem[]> {
+  const systemPrompt = await getSystemPrompt("markom");
+  const topic = `${focusResearchTopic(focus)}, khusus untuk platform ${platform === "instagram" ? "Instagram" : "TikTok"} di Indonesia`;
+  const response = await generateAIText({ systemPrompt, userPrompt: hashtagBankResearchPrompt(topic), useWebSearch: true, maxOutputTokens: 1536 });
+  return parseHashtagBankJson(response.text);
+}
+
+export interface MonthlyReportWeekSummary {
+  weekStart: string;
+  overall: number;
+  growthSignal: WeeklyContentGrowthSignal;
+}
+
+/** Everything numeric here is computed in application code from real data (process-job route) before this is ever called -- the AI only narrates, same "numbers in code, AI narrates" rule FRIDAY follows (lib/ai/friday/signals.ts). Never let the model recompute or restate these as if it derived them. */
+export interface MonthlyContentReportComputed {
+  monthLabel: string;
+  followersStart: number | null;
+  followersEnd: number | null;
+  followerGrowthPct: number | null;
+  avgWeeklyScore: number | null;
+  bestWeek: MonthlyReportWeekSummary | null;
+  worstWeek: MonthlyReportWeekSummary | null;
+  weeksCovered: number;
+}
+
+interface MonthlyNarrativeResult {
+  narrative: string;
+  recommendations: string[];
+}
+
+function parseMonthlyNarrativeJson(text: string): MonthlyNarrativeResult {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as Partial<MonthlyNarrativeResult>;
+  if (typeof parsed.narrative !== "string" || parsed.narrative.trim().length === 0) {
+    throw new Error("AI monthly report response missing narrative text");
+  }
+  return {
+    narrative: parsed.narrative.trim().slice(0, 2500),
+    recommendations: Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.filter((r): r is string => typeof r === "string" && r.trim().length > 0).map((r) => r.trim().slice(0, 300)).slice(0, 5)
+      : [],
+  };
+}
+
+/**
+ * Monthly rollup narrative -- reads the month's already-computed weekly
+ * audits (social_weekly_evaluations) plus code-computed follower growth,
+ * asks the AI only to narrate the trend and recommend next month's focus,
+ * never to invent or recompute the numbers themselves.
+ */
+export async function generateMonthlyContentReportNarrative(computed: MonthlyContentReportComputed, weeklyNarratives: string[]): Promise<MonthlyNarrativeResult> {
+  const systemPrompt = await getSystemPrompt("markom");
+  const weeklyBlock = weeklyNarratives.length > 0 ? `Ringkasan evaluasi mingguan bulan ini (data nyata, urut per minggu):\n${weeklyNarratives.join("\n\n")}` : "Tidak ada evaluasi mingguan tercatat bulan ini.";
+
+  const userPrompt = `Buatkan laporan performa media sosial bulanan (${computed.monthLabel}) untuk leasehold/occupancy, berdasarkan angka yang SUDAH dihitung dari data nyata di bawah -- JANGAN menghitung ulang atau mengarang angka lain, kamu hanya menulis narasi & rekomendasi.
+
+Angka bulan ini (sudah dihitung, gunakan apa adanya):
+- Followers Instagram: ${computed.followersStart ?? "tidak ada data"} -> ${computed.followersEnd ?? "tidak ada data"}${computed.followerGrowthPct !== null ? ` (pertumbuhan ${computed.followerGrowthPct}%)` : ""}
+- Rata-rata skor konten mingguan: ${computed.avgWeeklyScore ?? "tidak ada data"}/10 dari ${computed.weeksCovered} minggu yang tercatat
+- Minggu terbaik: ${computed.bestWeek ? `${computed.bestWeek.weekStart} (skor ${computed.bestWeek.overall}/10)` : "tidak ada data"}
+- Minggu terlemah: ${computed.worstWeek ? `${computed.worstWeek.weekStart} (skor ${computed.worstWeek.overall}/10)` : "tidak ada data"}
+
+${weeklyBlock}
+
+Tugas kamu:
+1. Tulis narrative (5-8 kalimat Bahasa Indonesia): tren bulan ini dibanding pola mingguannya, apa yang mendorong minggu terbaik, apa yang bikin minggu terlemah lemah, dan gambaran umum arah performa.
+2. Beri 3-5 rekomendasi konkret dan actionable untuk fokus bulan depan (bukan saran generik "posting lebih sering").
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan): {"narrative": "...", "recommendations": ["...", "..."]}`;
+
+  const response = await generateAIText({ systemPrompt, userPrompt, maxOutputTokens: 1536 });
+  return parseMonthlyNarrativeJson(response.text);
 }
 
 export interface AdPhotoOption {

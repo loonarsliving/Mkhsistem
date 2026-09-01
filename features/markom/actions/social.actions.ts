@@ -9,9 +9,11 @@ import {
   createCompetitorContentLog,
   deactivateCompetitorAccount,
   getLatestLeaseholdCompetitorComparison,
+  getLatestMonthlyReport,
   getLatestWeeklyEvaluation,
   listCompetitorAccounts,
   listCompetitorContentLogs,
+  listHashtagBank,
   listRecentAccountSnapshots,
   listWeeklyEvaluations,
   type CompetitorFocus,
@@ -147,5 +149,36 @@ export async function createCompetitorContentLogAction(input: CreateCompetitorCo
     return actionError(err instanceof Error ? err.message : "Gagal mencatat konten kompetitor");
   }
   revalidatePath("/markom/content-planner");
+  return actionSuccess();
+}
+
+/** Monthly rollup report (0251) -- generated automatically on the 1st of each month, property-only (leasehold_sales + occupancy share one account). */
+export async function getLatestMonthlyReportAction() {
+  await requirePermission("content_planner.view");
+  const supabase = await createClient();
+  return getLatestMonthlyReport(supabase);
+}
+
+/** Manual trigger for a fresh monthly rollup, same "run now instead of waiting for the schedule" pattern as triggerCompetitorComparisonAction. */
+export async function triggerMonthlyReportAction(): Promise<ActionResult> {
+  await requirePermission("content_planner.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("markom_request_monthly_report");
+  if (error) return actionError(error.message);
+  return actionSuccess();
+}
+
+export async function listHashtagBankAction(focus: CompetitorFocus, platform: "instagram" | "tiktok") {
+  await requireCompetitorPermission(focus, "view");
+  const supabase = await createClient();
+  return listHashtagBank(supabase, focus, platform);
+}
+
+/** Manual trigger for a fresh hashtag bank for one (focus, platform) -- automatic weekly refresh covers all 6 combos regardless. */
+export async function triggerHashtagBankRefreshAction(focus: CompetitorFocus, platform: "instagram" | "tiktok"): Promise<ActionResult> {
+  await requireCompetitorPermission(focus, "manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("markom_request_hashtag_bank_refresh", { p_focus: focus, p_platform: platform });
+  if (error) return actionError(error.message);
   return actionSuccess();
 }

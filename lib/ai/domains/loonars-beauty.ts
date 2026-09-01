@@ -113,6 +113,45 @@ Jangan mengarang username -- kalau hasil pencarianmu tidak yakin akun itu benar-
   return parseDiscoveredCompetitorsJson(response.text);
 }
 
+export interface BeautyHashtagBankItem {
+  tag: string;
+  tier: "broad" | "medium" | "niche";
+  rationale: string;
+}
+
+/** Local copy of the same parser shape as markom.ts's parseHashtagBankJson -- duplicated rather than imported so this file's AI reasoning stays fully self-contained, same reasoning as discoverBeautyCompetitors above. */
+function parseBeautyHashtagBankJson(text: string): BeautyHashtagBankItem[] {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed: unknown = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) throw new Error("Expected a JSON array of hashtag bank items");
+  return parsed
+    .filter((item): item is { tag: string; tier: string; rationale?: unknown } => typeof item?.tag === "string" && (item?.tier === "broad" || item?.tier === "medium" || item?.tier === "niche"))
+    .map((item) => ({
+      tag: item.tag.replace(/^#/, "").trim().slice(0, 100),
+      tier: item.tier as "broad" | "medium" | "niche",
+      rationale: typeof item.rationale === "string" ? item.rationale.trim().slice(0, 300) : "",
+    }))
+    .filter((item) => item.tag.length > 0);
+}
+
+/** Beauty's version of generateHashtagBank (markom.ts) -- same 30/40/30 formula, own topic/system prompt so it never reasons about property's leasehold/villa hashtags. */
+export async function generateBeautyHashtagBank(platform: "instagram" | "tiktok"): Promise<BeautyHashtagBankItem[]> {
+  const systemPrompt = await getSystemPrompt("loonars_beauty");
+  const researchPrompt = `Riset lewat Google Search hashtag Instagram/TikTok yang benar-benar relevan dan aktif dipakai saat ini untuk konten skincare/body lotion brightening (HydraGlow Advanced Brightening Lotion, Loonars Beauty) di Indonesia, khusus untuk platform ${platform === "instagram" ? "Instagram" : "TikTok"}.
+
+Ikuti formula 30/40/30: sekitar 5 hashtag BROAD (ratusan ribu-jutaan post), 6 hashtag MEDIUM (10rb-100rb post, biasanya paling efektif menjaring audiens yang benar-benar tertarik), dan 4 hashtag NICHE/spesifik (di bawah 10rb post) -- total sekitar 15 hashtag. Jangan mengarang perkiraan jumlah post -- kalau tidak yakin suatu hashtag benar-benar dipakai secara wajar untuk topik ini, jangan masukkan.
+
+Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tambahan), tiap object:
+[{"tag": "hashtag tanpa tanda #", "tier": "broad, medium, atau niche", "rationale": "1 kalimat singkat kenapa hashtag ini relevan/di tier itu"}]`;
+
+  const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 1536 });
+  return parseBeautyHashtagBankJson(response.text);
+}
+
 export interface BeautyCompetitorComparisonPost {
   caption: string | null;
   mediaType: string;
