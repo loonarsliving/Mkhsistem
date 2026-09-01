@@ -236,7 +236,7 @@ Balas HANYA dengan JSON array (tanpa markdown code fence, tanpa penjelasan tamba
 [{"title": "...", "description": "...", "platform": "Instagram atau TikTok", "platformReason": "..."}]
 
 title: singkat (maks 80 karakter), actionable -- nama tema kontennya.
-description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini.
+description: WAJIB mencakup secara eksplisit dan terstruktur: format konten (reel/video/foto/carousel), hook pembuka, durasi ideal, gaya editing, draft caption singkat, CTA, hashtag yang disarankan, dan jam upload terbaik (pakai data performa kami di atas jika tersedia). Sebutkan tren/kompetitor/data spesifik yang mendasari pilihan ini. HOOK dan DRAFT CAPTION WAJIB ditulis dengan gaya bahasa santai & personal ala kreator asli yang relate dengan milenial/Gen Z Indonesia -- pakai "kamu", kalimat pendek, TIDAK BOLEH terdengar seperti press release/company profile ("kami dengan bangga", "solusi terbaik untuk kebutuhan Anda"). Kalau draft-mu masih terasa kaku/formal, tulis ulang sebelum dijawab.
 platform: WAJIB pilih salah satu, "Instagram" atau "TikTok" -- platform mana yang paling cocok untuk KONSEP INI SPESIFIK, bukan sekadar bergantian. Instagram lebih cocok untuk konten yang lebih polished/aesthetic (carousel, reels rapi); TikTok lebih cocok untuk konten native/trend-jacking dengan hook cepat. Jangan asal posting konten yang sama ke kedua platform -- pilih yang benar-benar paling pas untuk memaksimalkan engagement konsep ini.
 platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang paling pas untuk konten ini (mis. gaya audiens, format yang lebih works di platform itu, atau data performa kami di platform itu).`;
 
@@ -250,7 +250,7 @@ platformReason: 1 kalimat, jelaskan ke tim Markom kenapa platform itu yang palin
 
   const fallbackPrompt = `Buatkan TEPAT 1 checklist konten untuk tim Markom cabang "${branchName}" untuk hari ini, seputar ${topic}, tanpa riset internet.${contextBlock}
 
-description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik.
+description WAJIB mencakup: format konten, hook pembuka, durasi ideal, gaya editing, draft caption, CTA, hashtag, dan jam upload terbaik. HOOK dan DRAFT CAPTION WAJIB ditulis dengan gaya bahasa santai & personal ala kreator asli yang relate dengan milenial/Gen Z Indonesia -- pakai "kamu", kalimat pendek, TIDAK BOLEH terdengar seperti press release/company profile.
 platform: WAJIB pilih "Instagram" atau "TikTok" -- yang paling pas untuk konsep ini, bukan asal-asalan.
 platformReason: 1 kalimat kenapa platform itu yang dipilih.
 

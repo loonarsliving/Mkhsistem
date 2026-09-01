@@ -249,6 +249,37 @@ those docs literally.
 
 Added `app/api/villa/ai/cctv-vision` + `lib/ai/domains/villa-cctv-vision.ts`: a bridge endpoint so the separate `villa` repo's AI CCTV checkpoint module can use this app's existing Gemini integration instead of provisioning its own `GEMINI_API_KEY`. Guarded by the same `VILLA_BRIDGE_SECRET` already used by the WhatsApp bridge (`/api/wa/send`). Merged to `claude/mk-connect-app-o9zw2p` and deployed to production same day.
 
+## Markom AI brief tone -- millennial/Gen Z voice (2026-09-01)
+
+Owner feedback: AI-generated Markom content briefs (`researchAndGenerateChecklist`,
+`lib/ai/domains/markom.ts`) read too stiff/corporate ("kaku"), not the natural
+voice millennial/Gen Z audiences respond to on Instagram/TikTok. Fixed at two
+levels since the two together determine the actual daily prompt sent to
+Gemini:
+1. The deterministic instruction text inside `researchAndGenerateChecklist`
+   (both the grounded and no-search fallback prompts) now explicitly requires
+   the hook + draft caption to read like a real creator talking to "kamu",
+   short sentences, and explicitly forbids press-release/company-profile
+   phrasing ("kami dengan bangga", "solusi terbaik untuk kebutuhan Anda").
+2. The `markom` system prompt's `[CONTENT PLANNER]` knowledge block (both the
+   code fallback in `lib/ai/domains/prompts.ts` and the live
+   `ai_system_prompts` DB row, which was byte-identical to that fallback and
+   unedited since 2026-07-16) got the same voice/tone bullet added.
+
+The `ai_system_prompts.markom` row was updated directly in production
+(`svcmybsziaelwwdrnzcv`) via SQL to match the new code default -- this table
+is intentionally live-admin-editable at runtime (`/ai` page,
+`ai_module.manage` permission), not migration-tracked, so this is the same
+kind of write the admin UI itself performs, not a schema/migration change.
+Confirmed with the owner before writing to prod. Only `markom` was touched;
+`crm`/`loonars_beauty`/`hr`/`general` prompts are untouched.
+
+Also surfaced during this pass, not yet acted on: Markom's social-media
+coverage is Instagram + TikTok only everywhere (`ZernioPlatform`, competitor
+schema, content submission schema) with no Facebook/YouTube/LinkedIn/X, and
+there is no community-management (comment/DM inbox) feature at all despite
+Zernio already being the connected publishing provider.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,
