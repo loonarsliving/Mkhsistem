@@ -21,10 +21,12 @@ const HOLDING_MESSAGE =
  * triggered every 5 minutes by pg_cron via automation_post (migration
  * 0229), same requireCronAuth-guarded worker pattern as
  * /api/crm/dispatch-promo-sends. Sends the lead one extra holding message
- * and escalates to the branch's Kepala Cabang as a backup, per spec: the
- * question itself stays 'waiting' (a Super Admin's later "[PQ-xxxx]:
- * jawaban" still answers it normally) -- only timeout_escalated_at is set,
- * so a given question is only ever escalated once.
+ * and re-escalates to Super Admin (never Kepala Cabang -- owner's explicit
+ * ask: a lead's question is a Super Admin matter end to end, escalation
+ * included) as a reminder backup, per spec: the question itself stays
+ * 'waiting' (a Super Admin's later "[PQ-xxxx]: jawaban" still answers it
+ * normally) -- only timeout_escalated_at is set, so a given question is
+ * only ever escalated once.
  */
 export async function POST(request: Request) {
   const unauthorized = requireCronAuth(request);
@@ -63,38 +65,37 @@ export async function POST(request: Request) {
         error: holdSendResult.error,
       });
 
-    const { data: kepalaCabangs } = await supabase
+    const { data: employeesRows } = await supabase
       .from("employees")
       .select("id, phone, roles:role_id(key)")
-      .eq("branch_id", row.branch_id)
       .eq("employment_status", "active")
       .is("deleted_at", null)
       .not("phone", "is", null);
-    const matches = (kepalaCabangs ?? []).filter(
-      (e) => (e.roles as unknown as { key: string } | null)?.key === "kepala_cabang",
+    const superAdmins = (employeesRows ?? []).filter(
+      (e) => (e.roles as unknown as { key: string } | null)?.key === "super_admin",
     );
 
     const escalationText =
-      `⏰ Pertanyaan lead belum dijawab admin lebih dari ${TIMEOUT_MINUTES} menit -- ${project?.name ?? "-"} (Cabang ${branch?.name ?? "-"})\n` +
+      `⏰ Pertanyaan lead belum dijawab lebih dari ${TIMEOUT_MINUTES} menit -- ${project?.name ?? "-"} (Cabang ${branch?.name ?? "-"})\n` +
       `[${row.code}]\n` +
       `Lead: ${prospect.customer_name || "Tidak diketahui"} (${prospect.phone})\n` +
       `Pertanyaan: ${row.pertanyaan}\n\n` +
-      `Ini eskalasi backup ke Anda. Kalau Anda tahu jawabannya, balas ke Super Admin atau bantu koordinasikan.`;
+      `Ini pengingat -- mohon segera dijawab. Balas dengan format: [${row.code}]: <jawaban Anda>.`;
 
-    for (const kc of matches) {
-      if (!kc.phone) continue;
-      const sendResult = await sendWhatsAppText(kc.phone, escalationText);
+    for (const admin of superAdmins) {
+      if (!admin.phone) continue;
+      const sendResult = await sendWhatsAppText(admin.phone, escalationText);
       if (!sendResult.success)
-        logger.error("lead-pending-question-timeout: KC escalation failed", {
+        logger.error("lead-pending-question-timeout: Super Admin escalation failed", {
           pendingQuestionId: row.id,
-          kepalaCabangId: kc.id,
+          superAdminId: admin.id,
           error: sendResult.error,
         });
       await supabase.from("mkc_notifications").insert({
-        user_id: kc.id,
+        user_id: admin.id,
         type: "crm",
         category: "pending_question_timeout",
-        title: "Pertanyaan lead belum dijawab admin",
+        title: "Pertanyaan lead belum dijawab",
         body: `${prospect.customer_name || "Lead"} (${prospect.phone}) menunggu jawaban lebih dari ${TIMEOUT_MINUTES} menit.`,
       });
     }
