@@ -9,6 +9,7 @@ import {
   compareBeautyCompetitorContent,
   discoverBeautyCompetitors,
   evaluateLoonarsWeeklyPerformance,
+  generateBeautyHashtagBank,
   researchAndGenerateBeautyContentIdeas,
 } from "@/lib/ai/domains/loonars-beauty";
 import { processKnowledgeBankRefreshJob } from "@/lib/ai/domains/knowledge-bank";
@@ -24,11 +25,15 @@ import {
   auditWeeklyContentPerformance,
   compareLeaseholdCompetitorContent,
   discoverPropertyCompetitors,
+  generateHashtagBank,
+  generateMonthlyContentReportNarrative,
   researchAndDraftAd,
   researchAndGenerateChecklist,
   reviewContentSubmission,
   type ChecklistContentFocus,
   type ContentPlannerContext,
+  type MonthlyContentReportComputed,
+  type MonthlyReportWeekSummary,
   type WeeklyContentAuditResult,
 } from "@/lib/ai/domains/markom";
 import { getSystemPrompt } from "@/lib/ai/domains/prompts";
@@ -41,7 +46,7 @@ import type { WhatsAppAdminAnswerRelayJobPayload, WhatsAppAiReplyJobPayload, Wha
 import { handleAdDrivenNurtureLead, continueExistingLeadNurture, relayAdminAnswerToLead, resolveProjectSelectionAndNurture } from "@/lib/ai/domains/lead-nurture";
 import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webhook-handler";
 import { isMetaConfigured } from "@/lib/meta/config";
-import { countActiveCompetitors, insertDiscoveredCompetitors, type CompetitorFocus } from "@/repositories/social.repository";
+import { countActiveCompetitors, insertDiscoveredCompetitors, replaceHashtagBank, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
 import { createContentSubmission, deleteSubmissionVideoFromStorage, reconcileZernioPublishStatus, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
@@ -1760,6 +1765,96 @@ async function processCompetitorDiscovery(supabase: AdminClient, job: JobRow) {
   return { focus, discovered: inserted };
 }
 
+interface HashtagBankJobPayload {
+  focus: CompetitorFocus;
+  platform: "instagram" | "tiktok";
+}
+
+/** Wholesale-refreshes markom_hashtag_bank for one (focus, platform) -- weekly automatic dispatch (all 6 combos) plus on-demand per Content Planner tab, same trigger pattern as competitor discovery. */
+async function processMarkomHashtagBankRefresh(supabase: AdminClient, job: JobRow) {
+  const payload = job.payload as unknown as HashtagBankJobPayload;
+  const { focus, platform } = payload;
+
+  const items = focus === "beauty" ? await generateBeautyHashtagBank(platform) : await generateHashtagBank(focus as ChecklistContentFocus, platform);
+  await replaceHashtagBank(supabase, focus, platform, items);
+
+  return { focus, platform, count: items.length };
+}
+
+/**
+ * Monthly rollup: reads the month's already-computed weekly audits
+ * (social_weekly_evaluations) and this month's first/last Instagram
+ * follower snapshot, computes growth/best-week/worst-week in code (never
+ * left to the model), then asks generateMonthlyContentReportNarrative for
+ * narrative + recommendations only. Property only (leasehold_sales +
+ * occupancy share one account) -- see migration 0251's doc comment for why.
+ * Skips (no row written) if there's no weekly data for the month yet,
+ * rather than generating a report over nothing.
+ */
+async function processSocialMonthlyContentReport(supabase: AdminClient) {
+  const now = new Date();
+  const firstOfThisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const firstOfPrevMonth = new Date(Date.UTC(firstOfThisMonth.getUTCFullYear(), firstOfThisMonth.getUTCMonth() - 1, 1));
+  const monthStart = firstOfPrevMonth.toISOString().slice(0, 10);
+  const monthEndExclusive = firstOfThisMonth.toISOString().slice(0, 10);
+
+  const [{ data: weeklyRows }, { data: igStart }, { data: igEnd }] = await Promise.all([
+    supabase.from("social_weekly_evaluations").select("week_start, audit").gte("week_start", monthStart).lt("week_start", monthEndExclusive).order("week_start", { ascending: true }),
+    supabase
+      .from("social_account_snapshots")
+      .select("followers_count")
+      .eq("platform", "instagram")
+      .eq("product_line", "property")
+      .gte("captured_at", monthStart)
+      .lt("captured_at", monthEndExclusive)
+      .order("captured_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("social_account_snapshots")
+      .select("followers_count")
+      .eq("platform", "instagram")
+      .eq("product_line", "property")
+      .gte("captured_at", monthStart)
+      .lt("captured_at", monthEndExclusive)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const weeks = (weeklyRows ?? [])
+    .filter((r) => r.audit !== null)
+    .map((r) => ({ weekStart: r.week_start, audit: r.audit as unknown as WeeklyContentAuditResult }));
+  if (weeks.length === 0) return { monthStart, skipped: "no weekly evaluations this month" };
+
+  let bestWeek: MonthlyReportWeekSummary | null = null;
+  let worstWeek: MonthlyReportWeekSummary | null = null;
+  let scoreSum = 0;
+  for (const w of weeks) {
+    const summary: MonthlyReportWeekSummary = { weekStart: w.weekStart, overall: w.audit.scores.overall, growthSignal: w.audit.growthSignal };
+    scoreSum += summary.overall;
+    if (!bestWeek || summary.overall > bestWeek.overall) bestWeek = summary;
+    if (!worstWeek || summary.overall < worstWeek.overall) worstWeek = summary;
+  }
+  const avgWeeklyScore = Math.round((scoreSum / weeks.length) * 10) / 10;
+
+  const followersStart = igStart?.followers_count ?? null;
+  const followersEnd = igEnd?.followers_count ?? null;
+  const followerGrowthPct = followersStart && followersStart > 0 && followersEnd !== null ? Math.round(((followersEnd - followersStart) / followersStart) * 1000) / 10 : null;
+
+  const monthLabel = new Date(`${monthStart}T00:00:00Z`).toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Makassar" });
+
+  const computed: MonthlyContentReportComputed = { monthLabel, followersStart, followersEnd, followerGrowthPct, avgWeeklyScore, bestWeek, worstWeek, weeksCovered: weeks.length };
+  const weeklyNarratives = weeks.map((w) => `${w.weekStart}: ${w.audit.narrative}`);
+  const { narrative, recommendations } = await generateMonthlyContentReportNarrative(computed, weeklyNarratives);
+
+  const report = { ...computed, narrative, recommendations };
+  const { error } = await supabase.from("social_monthly_content_reports").upsert({ month_start: monthStart, report: report as unknown as Json, narrative }, { onConflict: "month_start" });
+  if (error) throw new Error(`Failed to save monthly content report: ${error.message}`);
+
+  return { monthStart, weeksCovered: weeks.length };
+}
+
 /**
  * Beauty's own version of processSocialWeeklyEvaluation (0111/0123) -- the
  * scored hook/value/CTA/niche-fit/engagement/platform-optimization audit
@@ -2146,7 +2241,11 @@ export async function POST(request: Request) {
                                                             ? await processLeadNurtureReply(job)
                                                             : job.job_type === "whatsapp_admin_answer_relay"
                                                               ? await processAdminAnswerRelay(job)
-                                                              : unknownJobType(job.job_type);
+                                                              : job.job_type === "social_monthly_content_report"
+                                                                ? await processSocialMonthlyContentReport(supabase)
+                                                                : job.job_type === "markom_hashtag_bank_refresh"
+                                                                  ? await processMarkomHashtagBankRefresh(supabase, job)
+                                                                  : unknownJobType(job.job_type);
     await supabase.from("ai_job_queue").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     logger.info("ai job succeeded", { jobId: job.id, jobType: job.job_type, attempt: job.attempt_count + 1, result });

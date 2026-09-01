@@ -51,6 +51,8 @@ Never marked DONE without direct source evidence (route + repository/action
 | Ads management (Meta) | DONE | `app/(app)/markom/ads`, `features/markom/` (23 files), `lib/meta/`, migrations `0079_meta_ad_campaigns.sql` onward, `app/api/markom/check-ads-balance`, `refresh-ad-campaign-spend` |
 | Content planner / calendar / studio | DONE | `app/(app)/markom/content-planner`, `content-studio`, `content-audit`; matching migrations `0085_content_planner.sql`, `0142_markom_content_studio.sql` |
 | KPI/ranking | DONE | `app/(app)/markom/ranking`, migrations `0035_markom_kpi_schema.sql`, `0036-0038` |
+| Monthly content performance report (AI, property-only) | DONE | `MonthlyReportCard` in `app/(app)/markom/content-planner`, `social_monthly_content_reports`, migration `0251_markom_monthly_report_and_hashtag_bank.sql` |
+| Hashtag bank (AI, per content_focus x platform) | DONE | `HashtagBank` in `app/(app)/markom/content-planner`, `markom_hashtag_bank`, migration `0251_markom_monthly_report_and_hashtag_bank.sql` |
 
 ## KontenAI (AI content production)
 

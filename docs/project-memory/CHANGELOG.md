@@ -280,6 +280,59 @@ schema, content submission schema) with no Facebook/YouTube/LinkedIn/X, and
 there is no community-management (comment/DM inbox) feature at all despite
 Zernio already being the connected publishing provider.
 
+## Markom AI gap-closers: monthly report + hashtag bank (2026-09-01)
+
+Follow-up to a review of the Markom module against a "Social Media
+Specialist" role: two of the identified gaps that are genuinely AI-closeable
+with existing infrastructure (Gemini + web search grounding, the
+ai_job_queue/cron dispatch pattern, admin-editable system prompts) were
+built, following existing patterns exactly rather than introducing new
+architecture:
+
+1. **Monthly content performance report**
+   (`social_monthly_content_reports`, migration `0251`) -- a rollup of the
+   weekly content audits that already existed (`social_weekly_evaluations`,
+   0111/0124). Follower growth %, average weekly score, and best/worst week
+   are computed in application code (`processSocialMonthlyContentReport`,
+   `app/api/ai/process-job/route.ts`) from real snapshot/audit data -- the
+   AI (`generateMonthlyContentReportNarrative`, `lib/ai/domains/markom.ts`)
+   only narrates and recommends, same "numbers in code, AI narrates" rule
+   FRIDAY already follows. Auto-generated on the 1st of each month
+   (`social-monthly-content-report` cron), manual trigger via
+   `markom_request_monthly_report()` RPC. Property only (leasehold_sales +
+   occupancy share one account) for this first pass -- same scope weekly
+   evaluation itself started at before Beauty got its own version later.
+   UI: `MonthlyReportCard`, Content Planner's Leasehold tab.
+
+2. **Hashtag bank** (`markom_hashtag_bank`, migration `0251`) -- AI-generated
+   per (content_focus, platform), following the 30/40/30 broad/medium/niche
+   formula already documented in the markom system prompt. Wholesale
+   replace on each refresh (never accumulated). `generateHashtagBank`
+   (`lib/ai/domains/markom.ts`) covers leasehold_sales/occupancy;
+   `generateBeautyHashtagBank` (`lib/ai/domains/loonars-beauty.ts`) is
+   Beauty's own version with its own system prompt, same
+   property/beauty-knowledge separation already enforced for competitor
+   discovery. Auto weekly refresh for all 3 foci x 2 platforms
+   (`markom-hashtag-bank-dispatch-weekly` cron), manual trigger via
+   `markom_request_hashtag_bank_refresh(focus, platform)` RPC. UI:
+   `HashtagBank`, all three Content Planner tabs.
+
+Migration `0251` applied directly to the live Supabase project
+(`svcmybsziaelwwdrnzcv`) via the Supabase MCP `apply_migration` tool,
+confirmed with the owner first. `types/database.types.ts` is a
+hand-authored mirror (not CLI-generated) with specific structural
+conventions other code depends on -- patched surgically (new table/RPC
+entries only) rather than overwritten with the MCP `generate_typescript_types`
+tool's raw output, which reformats the entire file and would have produced
+an 18,000+ line diff unrelated to this change.
+
+Two other gaps from the same review (community management / comment-DM
+inbox, and social listening beyond what Google Search grounding already
+covers) were deliberately NOT built here -- they need the connected
+provider's (Zernio) actual API capabilities verified first, which wasn't
+possible in this pass. Multi-platform expansion (Facebook/YouTube/LinkedIn/X)
+was also flagged as out of scope -- it's an integration gap, not an AI one.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompetitorComparisonCard } from "@/features/markom/components/competitor-comparison-card";
 import { CompetitorTracker } from "@/features/markom/components/competitor-tracker";
 import { ContentPlannerOverview } from "@/features/markom/components/content-planner-overview";
+import { HashtagBank } from "@/features/markom/components/hashtag-bank";
+import { MonthlyReportCard } from "@/features/markom/components/monthly-report-card";
 import { TeamChecklistSection } from "@/features/markom/components/team-checklist-section";
 import { getContentPlannerOverviewAction, getLatestCompetitorComparisonAction, triggerCompetitorComparisonAction } from "@/features/markom/actions/social.actions";
 import { ContentBoard } from "@/features/loonars-beauty/components/content-board";
@@ -70,6 +72,7 @@ export default async function ContentPlannerPage() {
 
         <TabsContent value="leasehold_sales" className="space-y-6">
           <ContentPlannerOverview queryKey="content-planner-overview-property" overviewAction={getContentPlannerOverviewAction} />
+          <MonthlyReportCard canManage={canManage} />
           <CompetitorComparisonCard
             title="Analisa Perbandingan vs Kompetitor Leasehold"
             queryKey="leasehold-competitor-comparison"
@@ -78,11 +81,13 @@ export default async function ContentPlannerPage() {
             triggerComparisonAction={triggerCompetitorComparisonAction}
           />
           <CompetitorTracker focus="leasehold_sales" canManage={canManage} />
+          <HashtagBank focus="leasehold_sales" canManage={canManage} />
           <TeamChecklistSection focus="leasehold_sales" title="Checklist Konten Leasehold" />
         </TabsContent>
 
         <TabsContent value="occupancy" className="space-y-6">
           <CompetitorTracker focus="occupancy" canManage={canManage} />
+          <HashtagBank focus="occupancy" canManage={canManage} />
           <TeamChecklistSection focus="occupancy" title="Checklist Konten Occupancy" />
         </TabsContent>
 
@@ -97,6 +102,7 @@ export default async function ContentPlannerPage() {
               triggerComparisonAction={triggerBeautyCompetitorComparisonAction}
             />
             <CompetitorTracker focus="beauty" canManage={canManageBeauty} />
+            <HashtagBank focus="beauty" canManage={canManageBeauty} />
             <ContentRatioSummary />
             <RetargetingAlerts />
             {canManageBeauty && <BeautyContentIdeasTrigger />}

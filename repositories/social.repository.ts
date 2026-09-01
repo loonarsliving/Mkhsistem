@@ -138,3 +138,52 @@ export async function getLatestLeaseholdCompetitorComparison(supabase: TypedSupa
   if (error) throw error;
   return data;
 }
+
+/** Monthly rollup report (0251) -- one row per calendar month, newest first. */
+export async function getLatestMonthlyReport(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase.from("social_monthly_content_reports").select("*").order("month_start", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function listMonthlyReports(supabase: TypedSupabaseClient, limit = 12) {
+  const { data, error } = await supabase.from("social_monthly_content_reports").select("*").order("month_start", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** AI-generated hashtag bank (0251), grouped by tier for display -- see generateHashtagBank/generateBeautyHashtagBank. */
+export async function listHashtagBank(supabase: TypedSupabaseClient, focus: CompetitorFocus, platform: "instagram" | "tiktok") {
+  const { data, error } = await supabase
+    .from("markom_hashtag_bank")
+    .select("*")
+    .eq("content_focus", focus)
+    .eq("platform", platform)
+    .order("tier")
+    .order("hashtag");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Wholesale replace -- a refresh is a clean slate for this (focus, platform), never an accumulation, so the bank can't grow stale/duplicated across runs. */
+export async function replaceHashtagBank(
+  supabase: TypedSupabaseClient,
+  focus: CompetitorFocus,
+  platform: "instagram" | "tiktok",
+  items: { tag: string; tier: "broad" | "medium" | "niche"; rationale: string }[],
+): Promise<void> {
+  const { error: deleteError } = await supabase.from("markom_hashtag_bank").delete().eq("content_focus", focus).eq("platform", platform);
+  if (deleteError) throw deleteError;
+  if (items.length === 0) return;
+
+  const { error: insertError } = await supabase.from("markom_hashtag_bank").insert(
+    items.map((item) => ({
+      content_focus: focus,
+      platform,
+      tier: item.tier,
+      hashtag: item.tag,
+      rationale: item.rationale || null,
+    })),
+  );
+  if (insertError) throw insertError;
+}
