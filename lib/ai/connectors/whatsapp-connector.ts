@@ -168,24 +168,44 @@ export class WhatsAppConnector {
       message: outgoing.message,
     };
     if (outgoing.file) body.file = outgoing.file;
+
+    // Real incident: a transient network-level failure ("fetch failed" --
+    // not an HTTP error response, the request never reached Whacenter at
+    // all) silently dropped an approved pengajuan's notification and a
+    // salary-transfer summary, with no retry -- each sat unnoticed until
+    // manually investigated. Retries ONLY a thrown network error (DNS/
+    // connection reset/timeout), never a real HTTP response Whacenter sent
+    // back (a 4xx/5xx there is a legitimate API-level outcome, not a
+    // dropped-in-transit request, and retrying it blindly could double-send
+    // a message that Whacenter actually already queued).
+    const maxAttempts = 3;
+    const retryDelaysMs = [1000, 3000];
+    let lastError = "unknown error";
+    let attempts = 0;
     const startedAt = Date.now();
-    try {
-      const response = await this.http.post(
-  "/send",
-  body
-);
-      const latencyMs = Date.now() - startedAt;
-      const result: SendResult = response.ok
-        ? { success: true, externalId: extractMessageId(response.json) }
-        : { success: false, error: `Graph API returned ${response.status}: ${extractErrorMessage(response.json)}` };
-      await this.logOutgoing(body, result, response.status, latencyMs);
-      return result;
-    } catch (err) {
-      const latencyMs = Date.now() - startedAt;
-      const result: SendResult = { success: false, error: err instanceof Error ? err.message : String(err) };
-      await this.logOutgoing(body, result, 0, latencyMs);
-      return result;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      attempts = attempt;
+      try {
+        const response = await this.http.post("/send", body);
+        const latencyMs = Date.now() - startedAt;
+        const result: SendResult = response.ok
+          ? { success: true, externalId: extractMessageId(response.json) }
+          : { success: false, error: `Graph API returned ${response.status}: ${extractErrorMessage(response.json)}` };
+        await this.logOutgoing({ ...body, attempt: attempts }, result, response.status, latencyMs);
+        return result;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt - 1]));
+        }
+      }
     }
+
+    const latencyMs = Date.now() - startedAt;
+    const result: SendResult = { success: false, error: `${lastError} (after ${attempts} attempts)` };
+    await this.logOutgoing({ ...body, attempt: attempts }, result, 0, latencyMs);
+    return result;
   }
 
   /** Meta's webhook verification handshake. */
