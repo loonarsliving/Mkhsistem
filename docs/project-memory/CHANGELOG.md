@@ -245,6 +245,10 @@ equivalent (both just expose the agent's local port over HTTPS), but
 worth knowing before trusting any Cloudflare-specific instructions in
 those docs literally.
 
+## Villa AI CCTV bridge (2026-08-31)
+
+Added `app/api/villa/ai/cctv-vision` + `lib/ai/domains/villa-cctv-vision.ts`: a bridge endpoint so the separate `villa` repo's AI CCTV checkpoint module can use this app's existing Gemini integration instead of provisioning its own `GEMINI_API_KEY`. Guarded by the same `VILLA_BRIDGE_SECRET` already used by the WhatsApp bridge (`/api/wa/send`). Merged to `claude/mk-connect-app-o9zw2p` and deployed to production same day.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

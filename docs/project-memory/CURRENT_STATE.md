@@ -212,6 +212,10 @@ unblocked, immediately actionable slice.
   security posture that should not be forgotten when reasoning about the
   10 cron/trigger-only endpoints it's meant to protect.
 
+## Villa AI CCTV bridge (added 2026-08-31, merged to `claude/mk-connect-app-o9zw2p` and deployed)
+
+New `app/api/villa/ai/cctv-vision` route (`lib/ai/domains/villa-cctv-vision.ts`) — a bridge endpoint for the separate `villa` (Loonars Private Living) repo's AI CCTV checkpoint module, which has no Gemini integration of its own. Reuses `VILLA_BRIDGE_SECRET` (the same shared secret already guarding the existing `/api/wa/send` bridge) rather than a new credential — same caller, same auth pattern. Takes one base64 CCTV snapshot + a `zona` label, runs a single Gemini Vision call via the existing AI Service (`generateAIText` with `image`), and answers only a factual presence question (person visible or not) — deliberately never asked to judge performance/discipline. Not yet verified against a real EZVIZ snapshot end-to-end.
+
 ## Production status
 
 Live in production at `https://mkh.haluoleo.id`, hosted on Vercel, backed
