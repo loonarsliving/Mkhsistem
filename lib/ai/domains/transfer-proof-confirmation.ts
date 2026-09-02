@@ -247,6 +247,37 @@ async function confirmSingleRow(
 }
 
 /**
+ * Real incident: Anang's account had 4 pending pengajuan (an older, unrelated
+ * pipe purchase plus 3 newer ones tagged "belanja 31 Agustus/1 Sept mas
+ * Anang") -- the newer 3 summed to Rp 3.351.000, matching a Rp 3.350.000
+ * bukti transfer within tolerance, but confirmGroup's full-set sum (all 4)
+ * didn't, so the whole thing fell to no_amount_match even though a correct
+ * combination clearly existed. Finds every subset of same-account pending
+ * rows (2+ items) whose sum is within isNominalMismatch's tolerance of the
+ * target -- capped at 15 rows (2^15 subsets) since a real Super Admin never
+ * has more than a handful of pending items outstanding per account, and an
+ * unbounded search here would be pointless work anyway.
+ */
+function findMatchingSubsets(rows: PendingRow[], target: number): PendingRow[][] {
+  const n = rows.length;
+  const results: PendingRow[][] = [];
+  for (let mask = 1; mask < 1 << n; mask++) {
+    let sum = 0;
+    const subset: PendingRow[] = [];
+    for (let i = 0; i < n; i++) {
+      if (mask & (1 << i)) {
+        sum += Number(rows[i].nominal);
+        subset.push(rows[i]);
+      }
+    }
+    if (subset.length >= 2 && !isNominalMismatch(sum, target)) {
+      results.push(subset);
+    }
+  }
+  return results;
+}
+
+/**
  * Confirms every pending transfer in a same-submitter group at once, for
  * when the pengajuan being reimbursed were paid out of the submitter's own
  * pocket in cash and get topped up in one lump transfer instead of one
@@ -317,12 +348,16 @@ async function confirmGroup(supabase: Supa, group: PendingRow[], sender: { id: s
  * unreadable -- there's genuinely nothing better to go on. When the photo
  * IS readable but its nominal doesn't match any single pending row, it
  * tries one more thing before giving up: does the nominal match the SUM of
- * every still-pending item from one submitter? (Owner's real case: Endy
- * fronts several gaji tukang payments in cash and gets reimbursed in one
- * lump transfer instead of one per pengajuan.) Only ever auto-groups by
- * submitter -- never guesses an arbitrary subset that happens to add up,
- * and never groups across two different submitters -- so a coincidental
- * sum match doesn't silently confirm the wrong combination of pengajuan.
+ * every still-pending item for the same destination account? (Owner's real
+ * case: Endy fronts several gaji tukang payments in cash and gets
+ * reimbursed in one lump transfer instead of one per pengajuan.) If the
+ * full set doesn't sum to it either (a real Anang incident: an older,
+ * unrelated pending item for the same account inflated the total), tries
+ * every subset of that account's pending items and auto-confirms ONLY when
+ * exactly one combination matches -- never groups across two different
+ * accounts, and never picks between two equally-valid subsets, so a
+ * coincidental sum match doesn't silently confirm the wrong combination of
+ * pengajuan.
  * If nothing matches even that, this used to still confirm the oldest
  * pending row anyway (mismatch surfaced only as a non-blocking warning) --
  * in practice that meant an unrelated photo (e.g. a PLN token receipt sent
@@ -403,6 +438,18 @@ export async function tryConfirmTransferProofViaWhatsApp(
     const sum = sameAccountRows.reduce((s, r) => s + Number(r.nominal), 0);
     if (sameAccountRows.length >= 2 && !isNominalMismatch(sum, ai.nominal)) {
       return confirmGroup(supabase, sameAccountRows, sender, imageUrl, ai);
+    }
+    // Full-set sum didn't match -- an older, unrelated pending item for the
+    // same account can inflate it (real Anang incident). Try every subset
+    // instead, but only auto-confirm when exactly ONE combination matches --
+    // if two different subsets both add up, which one the photo actually
+    // means is genuinely ambiguous, so this still falls through to
+    // no_amount_match rather than guessing.
+    if (sameAccountRows.length >= 2 && sameAccountRows.length <= 15) {
+      const subsetMatches = findMatchingSubsets(sameAccountRows, ai.nominal);
+      if (subsetMatches.length === 1) {
+        return confirmGroup(supabase, subsetMatches[0], sender, imageUrl, ai);
+      }
     }
   }
 
