@@ -216,6 +216,34 @@ unblocked, immediately actionable slice.
 
 New `app/api/villa/ai/cctv-vision` route (`lib/ai/domains/villa-cctv-vision.ts`) — a bridge endpoint for the separate `villa` (Loonars Private Living) repo's AI CCTV checkpoint module, which has no Gemini integration of its own. Reuses `VILLA_BRIDGE_SECRET` (the same shared secret already guarding the existing `/api/wa/send` bridge) rather than a new credential — same caller, same auth pattern. Takes one base64 CCTV snapshot + a `zona` label, runs a single Gemini Vision call via the existing AI Service (`generateAIText` with `image`), and answers only a factual presence question (person visible or not) — deliberately never asked to judge performance/discipline. Not yet verified against a real EZVIZ snapshot end-to-end.
 
+## Tax Planning module (added 2026-09-02, not yet deployed/configured)
+
+New `/tax-planning` module (see CHANGELOG.md for full detail) estimating
+PPh Badan from mkh-properti's real jurnal, correctly separating PPh Final
+Pasal 4(2) property-sale revenue from normal PPh Badan on everything else.
+Built on branch `claude/tax-planning-mkh-module-tyldtb`, not yet merged to
+`claude/mk-connect-app-o9zw2p`. Three things must happen before it works
+end-to-end in production, none done yet:
+
+1. Migration `0252_tax_planning_module.sql` applied to the live
+   `svcmybsziaelwwdrnzcv` project (needs explicit owner confirmation first,
+   same as migration `0251`).
+2. `MKH_PROPERTI_SUPABASE_URL`/`MKH_PROPERTI_SUPABASE_ANON_KEY` set in
+   Vercel, pointing at mkh-properti's own Supabase project
+   (`gluoioiimapyhchdasfl`) -- the module fails loud with a clear message
+   in the UI until these are set, it never silently returns empty data.
+3. `tax_planning_fiscal_config` (prior fiscal loss balance, PP 55/2022
+   facility years used) reviewed and filled in by Finance/Super Admin --
+   defaults to zero/unknown, which is a conservative but not necessarily
+   accurate starting point.
+
+Every number the module produces is computed in
+`lib/tax-planning/calculator.ts`, never by the AI model, and every
+proposed strategy is explicitly framed as planning input for a licensed
+tax consultant to validate, not a finished answer -- the module never
+files, submits, or talks to DJP/e-Filing, and never writes back into
+mkh-properti's ledger.
+
 ## Production status
 
 Live in production at `https://mkh.haluoleo.id`, hosted on Vercel, backed

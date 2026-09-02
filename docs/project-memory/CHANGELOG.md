@@ -333,6 +333,57 @@ provider's (Zernio) actual API capabilities verified first, which wasn't
 possible in this pass. Multi-platform expansion (Facebook/YouTube/LinkedIn/X)
 was also flagged as out of scope -- it's an integration gap, not an AI one.
 
+## 2026-09-02 — Tax Planning module (new)
+
+New `/tax-planning` module estimating PPh Badan (corporate income tax) from
+mkh-properti's real jurnal, built to correctly separate revenue from land &
+building sales (final PPh Pasal 4(2), PP 34/2016, 2.5% of gross transfer
+value — excluded from the normal tax base) from ordinary non-final income
+(normal PPh Badan, with the cheaper of the Pasal 31E small-business
+discount or PP 55/2022's 0.5% final-turnover regime chosen automatically
+where legally eligible). mkh-properti's own Laporan Keuangan page has no
+PPh computation at all today — `bebanPajak` there is a manual, non-persisted
+number the user types per report run — so this module is a genuinely new
+capability, not a port of an existing one.
+
+- `lib/tax-planning/mkh-properti-client.ts` — read-only cross-project
+  Supabase client into mkh-properti's own, separate Supabase project
+  (`MKH_PROPERTI_SUPABASE_URL`/`MKH_PROPERTI_SUPABASE_ANON_KEY`, not yet
+  set in any environment — see `.env.example`). Server-only, read-only:
+  this module never writes back into mkh-properti's ledger.
+- `lib/tax-planning/mkh-properti-coa.ts` — a mirrored (not shared/DB-resident
+  on either side) copy of mkh-properti's chart of accounts, since
+  mkh-properti's own COA is a hardcoded TS array too (`src/lib/master.ts`
+  there), not a table. Drift risk is explicit in the file's own comment.
+- `lib/tax-planning/calculator.ts` — every number is computed here,
+  deterministically, in application code — same guardrail as
+  `lib/ai/friday/signals.ts`. Produces a fixed, code-decided set of
+  proposal candidates (final/non-final reclassification, 31E vs PP 55/2022
+  comparison, fiscal loss carryforward, unclassified-account review, RSH
+  PPN-exemption check, depreciation-method review).
+- `lib/ai/domains/tax-planning.ts` — the only AI call in the module: turns
+  the calculator's output into one Indonesian narrative paragraph. Never
+  asked to compute or invent a number, same "Jangan mengarang angka"
+  convention as `lib/ai/domains/finance.ts`.
+- `supabase/migrations/0252_tax_planning_module.sql` — `tax_planning_analyses`,
+  `tax_planning_proposals` (born `status='proposed'`, same
+  propose-then-a-human-decides shape as `friday_actions`), and a singleton
+  `tax_planning_fiscal_config` for facts the ledger can't supply (prior
+  fiscal loss balance, UMKM facility years used). New permissions
+  `tax_planning.{view,run,decide,configure}`, granted to
+  super_admin/direktur_utama/direktur_operasional/finance (`.configure`
+  additionally scoped to super_admin/finance only). **Not yet applied to
+  the live Supabase project** — created on branch
+  `claude/tax-planning-mkh-module-tyldtb`, pending the owner's confirmation
+  to apply (same "confirm with the owner first" step migration `0251` went
+  through) and pending `MKH_PROPERTI_SUPABASE_URL`/`_ANON_KEY` being set in
+  Vercel before the module can actually read live mkh-properti data.
+- UI: `app/(app)/tax-planning/page.tsx`, `features/tax-planning/*`. Every
+  proposal card explicitly states it is not final tax advice and needs a
+  licensed tax consultant's review before it becomes SPT input — this
+  module never talks to DJP/e-Filing or writes anything back into
+  mkh-properti.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

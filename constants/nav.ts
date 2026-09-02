@@ -8,6 +8,7 @@ import {
   BrainCircuit,
   BriefcaseBusiness,
   Building2,
+  Calculator,
   CalendarCheck,
   Clapperboard,
   ClipboardCheck,
@@ -228,6 +229,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/construction-finance",
         icon: HardHat,
         permission: [PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN, PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE],
+      },
+      {
+        label: "Tax Planning",
+        href: "/tax-planning",
+        icon: Calculator,
+        permission: PERMISSIONS.TAX_PLANNING_VIEW,
       },
       {
         label: "Approval WA",

@@ -1277,6 +1277,121 @@ export interface Database {
           },
         ];
       };
+      tax_planning_fiscal_config: {
+        Row: {
+          id: string;
+          fiscal_loss_carryforward_idr: number;
+          fiscal_loss_expiry_note: string | null;
+          umkm_final_tax_first_eligible_year: number | null;
+          umkm_final_tax_years_used: number;
+          annual_turnover_threshold_idr: number;
+          notes: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          fiscal_loss_carryforward_idr?: number;
+          fiscal_loss_expiry_note?: string | null;
+          umkm_final_tax_first_eligible_year?: number | null;
+          umkm_final_tax_years_used?: number;
+          annual_turnover_threshold_idr?: number;
+          notes?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tax_planning_fiscal_config"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "tax_planning_fiscal_config_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tax_planning_analyses: {
+        Row: {
+          id: string;
+          period_start: string;
+          period_end: string;
+          status: "ready" | "failed";
+          computed_result: Json;
+          narrative: string | null;
+          error_detail: string | null;
+          requested_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          period_start: string;
+          period_end: string;
+          status?: "ready" | "failed";
+          computed_result?: Json;
+          narrative?: string | null;
+          error_detail?: string | null;
+          requested_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tax_planning_analyses"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "tax_planning_analyses_requested_by_fkey";
+            columns: ["requested_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tax_planning_proposals: {
+        Row: {
+          id: string;
+          analysis_id: string;
+          strategy_key: string;
+          title: string;
+          description: string;
+          estimated_impact_idr: number | null;
+          confidence: "tinggi" | "sedang" | "rendah";
+          requires_professional_review: boolean;
+          status: "proposed" | "accepted" | "rejected" | "needs_review";
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          analysis_id: string;
+          strategy_key: string;
+          title: string;
+          description: string;
+          estimated_impact_idr?: number | null;
+          confidence?: "tinggi" | "sedang" | "rendah";
+          requires_professional_review?: boolean;
+          status?: "proposed" | "accepted" | "rejected" | "needs_review";
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tax_planning_proposals"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "tax_planning_proposals_analysis_id_fkey";
+            columns: ["analysis_id"];
+            referencedRelation: "tax_planning_analyses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tax_planning_proposals_decided_by_fkey";
+            columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       /** Migration 0176 (automation hardening). Service-role only — revoked from anon/authenticated. */
       automation_dispatch_log: {
         Row: {

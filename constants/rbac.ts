@@ -220,6 +220,21 @@ export const PERMISSIONS = {
    */
   SITEPLAN_VIEW: "siteplan.view",
   SITEPLAN_MANAGE: "siteplan.manage",
+
+  /**
+   * Tax Planning (/tax-planning) -- reads mkh-properti's real jurnal and
+   * estimates PPh Badan, split correctly between PPh Final Pasal 4(2)
+   * (property sales, PP 34/2016) and normal PPh Badan. Same three-way split
+   * as FRIDAY_VIEW/FRIDAY_RUN/FRIDAY_ACTION_DECIDE and for the same reason:
+   * reading an estimate, running a new one, and deciding what to do with a
+   * proposed strategy are different powers. CONFIGURE is separate again --
+   * it edits fiscal facts (prior-year loss balance, UMKM facility years
+   * used) that change every future computation, not just this one.
+   */
+  TAX_PLANNING_VIEW: "tax_planning.view",
+  TAX_PLANNING_RUN: "tax_planning.run",
+  TAX_PLANNING_DECIDE: "tax_planning.decide",
+  TAX_PLANNING_CONFIGURE: "tax_planning.configure",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -311,6 +326,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.FRIDAY_ACTION_DECIDE,
     PERMISSIONS.HOLDING_VIEW,
     PERMISSIONS.HOLDING_MANAGE,
+    PERMISSIONS.TAX_PLANNING_VIEW,
+    PERMISSIONS.TAX_PLANNING_RUN,
+    PERMISSIONS.TAX_PLANNING_DECIDE,
   ],
   [ROLE_KEYS.DIREKTUR_OPERASIONAL]: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -359,6 +377,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SALARY_INPUT_SUBMIT,
     PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
     PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE,
+    PERMISSIONS.TAX_PLANNING_VIEW,
+    PERMISSIONS.TAX_PLANNING_RUN,
+    PERMISSIONS.TAX_PLANNING_DECIDE,
   ],
   // HR administers people and attendance company-wide but must not be able
   // to restructure the org chart (branches/divisions/positions) or touch
@@ -495,6 +516,10 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.SALARY_INPUT_TRANSFER,
     PERMISSIONS.CONSTRUCTION_FINANCE_VIEW_OWN,
     PERMISSIONS.CONSTRUCTION_FINANCE_MANAGE,
+    PERMISSIONS.TAX_PLANNING_VIEW,
+    PERMISSIONS.TAX_PLANNING_RUN,
+    PERMISSIONS.TAX_PLANNING_DECIDE,
+    PERMISSIONS.TAX_PLANNING_CONFIGURE,
   ],
   [ROLE_KEYS.MARKOM]: [
     PERMISSIONS.DASHBOARD_VIEW,
