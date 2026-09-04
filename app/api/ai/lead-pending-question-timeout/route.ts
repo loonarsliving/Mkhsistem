@@ -27,6 +27,15 @@ const HOLDING_MESSAGE =
  * 'waiting' (a Super Admin's later "[PQ-xxxx]: jawaban" still answers it
  * normally) -- only timeout_escalated_at is set, so a given question is
  * only ever escalated once.
+ *
+ * Excludes raw_reply rows (0251, ai_lead_manual_takeover) -- those exist
+ * only from the brief window before the manual-takeover flow was made
+ * fully silent, and the owner answering leads directly in WhatsApp rather
+ * than via "[PQ-xxxx]: jawaban" means they'd otherwise sit 'waiting'
+ * forever and get an unwanted AI message sent to the lead on every sweep
+ * that finds them. runNurtureTurn no longer creates these rows at all
+ * during manual takeover, so this exclusion is defensive/future-proofing
+ * rather than something that should fire in normal operation.
  */
 export async function POST(request: Request) {
   const unauthorized = requireCronAuth(request);
@@ -41,6 +50,7 @@ export async function POST(request: Request) {
       "id, code, pertanyaan, branch_id, prospect:prospect_id(phone, customer_name), project:project_id(name), branch:branch_id(name)",
     )
     .eq("status", "waiting")
+    .eq("raw_reply", false)
     .is("timeout_escalated_at", null)
     .lte("dikirim_ke_admin_at", cutoff)
     .order("dikirim_ke_admin_at", { ascending: true })
