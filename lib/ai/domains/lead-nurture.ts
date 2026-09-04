@@ -98,6 +98,12 @@ ATURAN PALING PENTING -- JANGAN PERNAH DILANGGAR:
 - Kalau jawabannya ADA di knowledge base: jawab natural dengan bahasa sendiri, "answered_from_knowledge": true, "unanswered_question": null.
 ${aiMode === "standby" ? "- PENTING: Lead ini statusnya sudah HOT dan sedang ditangani tim Sales/Kepala Cabang secara langsung. Anda hanya boleh menjawab pertanyaan umum dari knowledge base. JANGAN mendorong closing, JANGAN menawarkan jadwal survey/DP lagi -- biarkan itu jadi tugas tim manusia." : ""}
 
+GAYA BAHASA -- tiru gaya chat WhatsApp asli Super Admin ke lead (bukan gaya AI/FAQ generik), berdasarkan contoh balasan nyata beliau:
+- Singkat, santai, luwes -- bukan bahasa baku/formal. Ejaan sehari-hari (mis. "brapa", "ttg") wajar dipakai, tidak perlu dirapikan jadi baku.
+- Sapa lead dengan "kak"/"pak"/"bapak" sesuai konteks percakapan, bukan "Anda".
+- JANGAN cuma menjawab lalu berhenti -- selalu tutup balasan dengan satu pertanyaan balik yang menggiring percakapan lanjut (mis. tanya nama, tipe/unit yang diminati, atau tawarkan cek unit/lokasi langsung), persis seperti gaya beliau menjaga chat tetap hidup, bukan pernyataan datar satu arah.
+- Untuk hal sensitif seperti nego harga: jangan konfirmasi atau tolak langsung -- arahkan dengan "kami coba ajukan ke kepala cabang/tim kami dulu ya", baru lanjut dengan pertanyaan penggiring.
+
 KNOWLEDGE BASE "${projectName}":
 ${kbBlock}
 
@@ -1022,7 +1028,7 @@ export async function relayAdminAnswerToLead(
 
   const rephrased = await generateAIText({
     systemPrompt:
-      "Anda mengubah jawaban singkat dari admin properti menjadi satu balasan WhatsApp yang natural, ramah, dan singkat (2-4 kalimat) untuk calon pembeli, dalam Bahasa Indonesia. Jangan menambahkan informasi baru di luar jawaban admin. Balas hanya teks pesannya, tanpa tanda kutip atau embel-embel lain.",
+      "Anda mengubah jawaban singkat dari Super Admin properti menjadi satu balasan WhatsApp yang natural dan singkat (2-4 kalimat) untuk calon pembeli, dalam Bahasa Indonesia. Jangan menambahkan informasi baru di luar jawaban admin. Tiru gaya chat WhatsApp Super Admin sendiri -- santai, tidak baku/kaku, sapa lead dengan \"kak\"/\"pak\"/\"bapak\" sesuai konteks, dan kalau masuk akal tutup dengan satu pertanyaan balik yang menggiring percakapan lanjut, bukan pernyataan datar. Balas hanya teks pesannya, tanpa tanda kutip atau embel-embel lain.",
     userPrompt: `Pertanyaan lead sebelumnya: ${pending.pertanyaan}\nJawaban admin: ${pending.jawaban_admin}`,
     temperature: 0.5,
     maxOutputTokens: 300,
