@@ -1046,6 +1046,26 @@ async function loadProjectWithPhotos(supabase: AdminClient, projectId: string) {
 }
 
 /**
+ * Recent past drafts/launches for this project, so researchAndDraftAd can be
+ * told explicitly not to repeat itself (see AdDraftInput.previousDrafts) --
+ * without this, every "Riset" click sent the exact same project inputs and
+ * Gemini kept converging on the same headline/primaryText across different
+ * photos. Excludes 'failed' rows (their headline is "Riset gagal", not real
+ * ad copy) and caps at 5 -- enough to steer variety without bloating the
+ * prompt with the project's entire ad history.
+ */
+async function loadPreviousAdDrafts(supabase: AdminClient, projectId: string): Promise<{ headline: string; primaryText: string }[]> {
+  const { data } = await supabase
+    .from("meta_ad_campaigns")
+    .select("headline, primary_text")
+    .eq("project_id", projectId)
+    .neq("status", "failed")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  return (data ?? []).map((d) => ({ headline: d.headline, primaryText: d.primary_text }));
+}
+
+/**
  * One attempt to research + launch a real Click-to-WhatsApp ad campaign for
  * one project -- fully autonomous per the user's explicit authorization (no
  * human pre-approval step, unlike SP1 which stays draft-only). Used only by
@@ -1066,6 +1086,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
   }
 
   const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
+  const previousDrafts = await loadPreviousAdDrafts(supabase, project.id);
 
   let remainingBudgetIdr: number;
   try {
@@ -1082,6 +1103,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     productDescription: project.product_description,
     availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
     targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
+    previousDrafts,
   });
   const photoById = new Map(photos.map((p) => [p.id, p]));
   const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));
@@ -1203,6 +1225,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
 
   try {
     const { project, photos } = await loadProjectWithPhotos(supabase, payload.project_id);
+    const previousDrafts = await loadPreviousAdDrafts(supabase, project.id);
 
     const draft = await researchAndDraftAd({
       projectName: project.name,
@@ -1212,6 +1235,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       productDescription: project.product_description,
       availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
       targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
+      previousDrafts,
     });
     const photoById = new Map(photos.map((p) => [p.id, p]));
     const selectedPhotos = draft.photoIds.map((id) => photoById.get(id)).filter((p): p is (typeof photos)[number] => Boolean(p));

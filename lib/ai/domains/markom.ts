@@ -880,6 +880,15 @@ export interface AdDraftInput {
   targetCities?: string[];
   /** Markom-authored specs/price/USP/target-buyer for this specific project (crm_projects.product_description) -- without this the AI only had name+city+type to work with, which produced generic property copy instead of copy grounded in what's actually being sold. */
   productDescription?: string | null;
+  /**
+   * Prior drafts/launches for this SAME project (most recent first), so a
+   * repeat "Riset" click doesn't produce near-identical copy. Without this,
+   * every call gets the exact same projectName/city/productDescription
+   * input, and Gemini tends to converge on the same hook/phrasing each time
+   * -- a real observed issue (same wording across multiple drafts with
+   * different photos). Capped by the caller to a handful of recent rows.
+   */
+  previousDrafts?: { headline: string; primaryText: string }[];
 }
 
 export interface AdDraft {
@@ -1017,6 +1026,20 @@ Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/peruma
     ? `Detail produk (dari Markom, WAJIB dipakai sebagai fakta utama materi iklan, jangan mengarang spesifikasi/harga lain):\n${input.productDescription.trim()}`
     : "Detail produk: belum diisi Markom -- tulis materi berbasis nama/kota/tipe project saja, jangan mengarang harga atau spesifikasi.";
 
+  /**
+   * Without this, every "Riset" click for the same project sends Gemini the
+   * exact same projectName/city/productDescription input, and it converges
+   * on near-identical headline/primaryText each time regardless of which
+   * photos were selected -- a real observed issue. Showing it its own past
+   * output and telling it explicitly not to repeat the hook/phrasing forces
+   * genuine variation across drafts.
+   */
+  const previousDraftsBlock = input.previousDrafts?.length
+    ? `\nMateri iklan yang SUDAH PERNAH dibuat untuk project ini sebelumnya (draft/iklan lama, dari yang terbaru):\n${input.previousDrafts
+        .map((d, i) => `${i + 1}. Headline: "${d.headline}" | Teks: "${d.primaryText}"`)
+        .join("\n")}\nWAJIB: tulis headline dan primaryText yang BENAR-BENAR BEDA dari semua yang di atas -- hook pembuka, sudut pandang, dan susunan kalimat harus baru, jangan menulis ulang/parafrase tipis dari draft lama manapun. Boleh tetap memakai fakta produk yang sama, tapi cara menyampaikannya harus segar.`
+    : "";
+
   // Tujuan iklan ini SELALU sama: maksimalkan klik ke percakapan WhatsApp
   // (hard selling, bukan brand awareness) -- indikator di bawah ini yang
   // menentukan seberapa maksimal hasilnya saat iklan tayang.
@@ -1026,7 +1049,8 @@ Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/peruma
 3. SATU CTA JELAS: ajakan tunggal yang mendorong klik chat WhatsApp (hard sell) -- jangan pecah perhatian dengan banyak ajakan sekaligus, dan CTA-nya harus sesuai TUJUAN IKLAN di atas (jangan ajak "beli" kalau tujuannya jasa kelola atau booking menginap).
 4. RELEVANSI AUDIENS: sesuaikan sudut pandang/bahasa dengan audiens yang benar-benar dituju (lihat TUJUAN IKLAN dan audiens kota target di atas, kalau ada) -- bukan nada generik nasional dan bukan audiens yang salah.
 5. GAYA KOMPETITOR: pakai pola iklan Click-to-WhatsApp yang sedang efektif dari riset kompetitor untuk penawaran SEJENIS (lihat TUJUAN IKLAN) -- jangan meniru persis, tapi pelajari pola yang berhasil (hook, panjang teks, penempatan CTA).
-6. KEJUJURAN: jangan mengarang urgensi/diskon/stok terbatas yang tidak ada di detail produk -- urgensi palsu merusak kepercayaan dan performa jangka panjang.`;
+6. KEJUJURAN: jangan mengarang urgensi/diskon/stok terbatas yang tidak ada di detail produk -- urgensi palsu merusak kepercayaan dan performa jangka panjang.
+7. SUDUT PANDANG DARI FOTO: lihat keterangan foto/video yang kamu pilih di "Materi asli" di bawah -- kalau keterangannya cukup spesifik (bukan "(tanpa keterangan)"), jadikan itu bagian nyata dari sudut pandang copy (mis. foto kolam renang -> soroti kolam renang), bukan hanya menulis copy generik tentang project yang tidak nyambung dengan apa yang sebenarnya terlihat di materi terpilih.`;
 
   const researchPrompt = `${offeringLine}
 
@@ -1039,6 +1063,7 @@ ${projectTypeLine}
 ${audienceLine}
 ${areaResearchLine}
 ${productLine}
+${previousDraftsBlock}
 
 ${indicatorsBlock}
 
@@ -1067,6 +1092,7 @@ Kota: ${input.projectCity ?? "-"}
 ${projectTypeLine}
 ${audienceLine}
 ${productLine}
+${previousDraftsBlock}
 
 ${indicatorsBlock}
 
