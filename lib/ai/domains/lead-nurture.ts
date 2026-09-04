@@ -545,57 +545,23 @@ async function isManualTakeoverActive(): Promise<boolean> {
 }
 
 /**
- * Owner's ask (0251): for a set window, every ad-lead question skips the AI
- * knowledge-base reply entirely and goes straight to Super Admin so the
- * owner can answer personally -- unlike the normal unanswered-question path
- * (runNurtureTurn below), this escalates EVERY question regardless of
- * whether knowledge_base could have answered it, since the point is to
- * collect the owner's own real answers as a dataset (raw_reply on the
- * inserted row tells relayAdminAnswerToLead to send that answer to the lead
- * verbatim, not AI-rephrased -- see buildSystemPrompt's "GAYA BAHASA"
- * section, already seeded from this same data source once before).
+ * Owner's ask (0251, tightened after seeing it in practice on real WA
+ * chats -- the AI's holding text and Super Admin ping were showing up as
+ * clutter in a thread the owner was already watching and replying in
+ * directly himself): during the manual-takeover window the AI goes
+ * completely silent on ad-lead chats -- no holding reply to the lead, no
+ * pending_questions escalation, no Super Admin WA ping. The lead's message
+ * is still logged (already done by the caller, runNurtureTurn, before this
+ * is reached) purely so the transcript exists for the later style-learning
+ * pass -- nothing else happens here. The owner is expected to keep
+ * replying to leads directly in WhatsApp himself for this window; the
+ * system has no way to capture those replies automatically (Whacenter's
+ * webhook only carries inbound lead messages, not the owner's own outbound
+ * ones), so the later learning pass works from whatever real examples get
+ * shared directly (screenshots, or the "[PQ-xxxx]: jawaban" flow if he
+ * chooses to use it for some questions) rather than an automatic capture.
  */
-async function runManualTakeoverTurn(
-  prospect: ProspectRow,
-  projectName: string,
-  leadName: string | undefined,
-  incomingText: string,
-): Promise<NurtureTurnResult> {
-  const supabase = createAdminClient();
-
-  const holdText = "Baik kak, mohon ditunggu sebentar ya, tim kami akan segera membalas 🙏";
-  await supabase
-    .from("lead_chat_history")
-    .insert({ prospect_id: prospect.id, sender: "ai", message: holdText });
-  const sendResult = await sendWhatsAppText(prospect.phone, holdText);
-  if (!sendResult.success)
-    logger.error("runManualTakeoverTurn: WA send to lead failed", {
-      prospectId: prospect.id,
-      error: sendResult.error,
-    });
-
-  if (prospect.project_id) {
-    const { data: pending, error } = await supabase
-      .from("pending_questions")
-      .insert({
-        prospect_id: prospect.id,
-        project_id: prospect.project_id,
-        branch_id: prospect.branch_id,
-        pertanyaan: incomingText,
-        raw_reply: true,
-      })
-      .select("code")
-      .single();
-    if (error || !pending) {
-      logger.error("runManualTakeoverTurn: pending_questions insert failed", {
-        prospectId: prospect.id,
-        error: error?.message,
-      });
-    } else {
-      await notifySuperadminsPendingQuestion(pending.code, incomingText, prospect, projectName, leadName);
-    }
-  }
-
+async function runManualTakeoverTurn(prospect: ProspectRow): Promise<NurtureTurnResult> {
   return { outcome: "replied", prospectId: prospect.id, temperature: prospect.lead_temperature };
 }
 
@@ -640,7 +606,7 @@ async function runNurtureTurn(
   }
 
   if (await isManualTakeoverActive()) {
-    return runManualTakeoverTurn(prospect, projectName, leadName, incomingText);
+    return runManualTakeoverTurn(prospect);
   }
 
   const brandContext = project?.city ? `Maha Karya Haluoleo (${project.city})` : "";
