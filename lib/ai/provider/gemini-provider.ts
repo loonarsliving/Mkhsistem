@@ -188,7 +188,7 @@ export class GeminiProvider implements AIProvider {
             ]);
           },
         },
-        () => this.callOnce(request.userPrompt, request.image, uploadedVideo, config),
+        () => this.callOnce(request.userPrompt, request.image, request.images, uploadedVideo, config),
       );
 
       const text = response.text ?? "";
@@ -229,6 +229,7 @@ export class GeminiProvider implements AIProvider {
   private async callOnce(
     userPrompt: string,
     image: AIGenerateRequest["image"],
+    images: AIGenerateRequest["images"],
     videoFile: { uri: string; mimeType: string } | null,
     config: GenerateContentConfig,
   ): Promise<GenerateContentResult> {
@@ -241,16 +242,26 @@ export class GeminiProvider implements AIProvider {
       );
     });
 
-    // Multimodal (vision) shape only when an image/video is attached --
-    // every other call keeps sending contents as a plain string, unchanged.
-    // image and video are never both set by any caller today (a review is
-    // either a photo or a video, never both), but if they were, Gemini
-    // happily accepts an inlineData image part alongside a fileData video
-    // part in one turn. Video always references the Files API upload
-    // (see generate()/uploadVideoFile) instead of inlineData -- that's what
-    // lifts video review off the ~20MB inline-request ceiling.
-    const mediaParts: ({ inlineData: { mimeType: string; data: string } } | { fileData: { fileUri: string; mimeType: string } })[] = [
-      image ? { inlineData: { mimeType: image.mimeType, data: image.data } } : null,
+    // Multimodal (vision) shape only when an image/images/video is attached
+    // -- every other call keeps sending contents as a plain string,
+    // unchanged. image/images and video are never both set by any caller
+    // today (a review is either photo(s) or a video, never both), but if
+    // they were, Gemini happily accepts inlineData image parts alongside a
+    // fileData video part in one turn. Video always references the Files
+    // API upload (see generate()/uploadVideoFile) instead of inlineData --
+    // that's what lifts video review off the ~20MB inline-request ceiling.
+    // Each entry in `images` is preceded by a plain-text label carrying its
+    // `id` so the model can tie what it sees back to the id it must echo in
+    // a structured response (e.g. picking/describing one of several
+    // candidate ad photos) -- inlineData parts alone carry no identifier.
+    const imageParts: { inlineData: { mimeType: string; data: string } }[] = image ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }] : [];
+    const labeledImageParts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] = (images ?? []).flatMap((img) => [
+      { text: `[Foto id: ${img.id}]` },
+      { inlineData: { mimeType: img.mimeType, data: img.data } },
+    ]);
+    const mediaParts: ({ text: string } | { inlineData: { mimeType: string; data: string } } | { fileData: { fileUri: string; mimeType: string } })[] = [
+      ...imageParts,
+      ...labeledImageParts,
       videoFile ? { fileData: { fileUri: videoFile.uri, mimeType: videoFile.mimeType } } : null,
     ].filter((part): part is NonNullable<typeof part> => part !== null);
     const contents = mediaParts.length > 0 ? [{ role: "user" as const, parts: [{ text: userPrompt }, ...mediaParts] }] : userPrompt;

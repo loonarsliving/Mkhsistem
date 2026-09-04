@@ -2,6 +2,7 @@ import "server-only";
 
 import { askAI, generateAIText } from "../service";
 import { getSystemPrompt } from "./prompts";
+import { fetchUrlAsBase64 } from "../../utils/fetch-remote-file";
 
 export async function askMarkomAi(question: string, context?: string): Promise<string> {
   const userPrompt = context ? `Konteks:\n${context}\n\nPertanyaan:\n${question}` : question;
@@ -856,6 +857,16 @@ export interface AdPhotoOption {
   caption: string | null;
   /** crm_project_photos.media_type -- a video ad is always exactly one video (Meta has no video carousel), never mixed with images. */
   mediaType: "image" | "video";
+  /** crm_project_photos.public_url -- used to actually fetch and show the AI the photo (Gemini vision) before it picks/writes copy, instead of relying on a caption alone. Videos aren't fetched here (no vision support for ad drafting yet, and would need the heavier Files API path); only used for mediaType "image". */
+  publicUrl: string;
+}
+
+/** Storage never records a content-type column for crm_project_photos -- guess from the URL extension against the bucket's allowed_mime_types (migration 0154), falling back to jpeg (the common case for uploaded phone photos) rather than failing the whole vision attempt over an unrecognized extension. */
+function guessImageMimeType(url: string): string {
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return "image/jpeg";
 }
 
 /**
@@ -968,6 +979,26 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
   const hasVideoOption = input.availablePhotos.some((p) => p.mediaType === "video");
 
   /**
+   * Real observed bug: without this, the AI only ever saw a caption string
+   * (often "(tanpa keterangan)") and had to write ad copy blind to what the
+   * photo actually shows -- different photos of the same project kept
+   * producing copy that was near-identical (or, worse, generic and
+   * disconnected from the actual image). Fetching the real bytes and
+   * attaching them as Gemini vision input (see AIGenerateRequest.images)
+   * lets the model genuinely look at each candidate before picking/writing.
+   * Capped at MAX_VISION_PHOTOS and resilient to individual fetch failures
+   * (a broken/slow URL just drops that one photo from vision -- it's still
+   * selectable by caption/id like before, the draft never fails over this).
+   * Videos aren't included -- vision for video ad drafting isn't built yet.
+   */
+  const MAX_VISION_PHOTOS = 6;
+  const photosForVision = input.availablePhotos.filter((p) => p.mediaType === "image").slice(0, MAX_VISION_PHOTOS);
+  const fetchedImages = await Promise.allSettled(
+    photosForVision.map(async (p) => ({ id: p.id, mimeType: guessImageMimeType(p.publicUrl), data: await fetchUrlAsBase64(p.publicUrl) })),
+  );
+  const images = fetchedImages.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+
+  /**
    * Stated FIRST and in the most forceful terms available, before any other
    * framing (audience/area lines) -- a real incident showed a
    * management_service project (offeringType), tagged projectType "villa",
@@ -1050,7 +1081,7 @@ Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/peruma
 4. RELEVANSI AUDIENS: sesuaikan sudut pandang/bahasa dengan audiens yang benar-benar dituju (lihat TUJUAN IKLAN dan audiens kota target di atas, kalau ada) -- bukan nada generik nasional dan bukan audiens yang salah.
 5. GAYA KOMPETITOR: pakai pola iklan Click-to-WhatsApp yang sedang efektif dari riset kompetitor untuk penawaran SEJENIS (lihat TUJUAN IKLAN) -- jangan meniru persis, tapi pelajari pola yang berhasil (hook, panjang teks, penempatan CTA).
 6. KEJUJURAN: jangan mengarang urgensi/diskon/stok terbatas yang tidak ada di detail produk -- urgensi palsu merusak kepercayaan dan performa jangka panjang.
-7. SUDUT PANDANG DARI FOTO: lihat keterangan foto/video yang kamu pilih di "Materi asli" di bawah -- kalau keterangannya cukup spesifik (bukan "(tanpa keterangan)"), jadikan itu bagian nyata dari sudut pandang copy (mis. foto kolam renang -> soroti kolam renang), bukan hanya menulis copy generik tentang project yang tidak nyambung dengan apa yang sebenarnya terlihat di materi terpilih.`;
+7. SUDUT PANDANG DARI FOTO: gambar asli sebagian besar foto di "Materi asli" di bawah TERLAMPIR LANGSUNG di prompt ini (dilabeli "[Foto id: ...]" tepat sebelum tiap gambar) -- BENAR-BENAR LIHAT ISINYA sebelum memilih dan menulis, jangan menebak dari keterangan/nama file saja. Jadikan apa yang benar-benar terlihat di foto yang kamu pilih (mis. kolam renang, dapur, teras, kamar) sebagai sudut pandang nyata copy-nya -- bukan menulis copy generik tentang project yang tidak nyambung dengan apa yang sebenarnya tampak di materi terpilih. Kalau ada beberapa foto tersedia, pilih yang paling representatif/menarik SECARA VISUAL (fokus tajam, pencahayaan baik, komposisi bagus), bukan asal foto pertama di daftar.`;
 
   const researchPrompt = `${offeringLine}
 
@@ -1069,6 +1100,7 @@ ${indicatorsBlock}
 
 Materi asli yang tersedia (WAJIB pilih dari id-id ini, jangan mengarang materi lain):
 ${photoList}
+${images.length > 0 ? `\nGambar asli untuk ${images.length} foto di atas terlampir langsung di bawah ini (dilabeli id-nya masing-masing) -- WAJIB benar-benar dilihat sebelum memilih/menulis, bukan hanya dibaca keterangannya.` : ""}
 
 PEMILIHAN MATERI: setiap item di atas bertipe "foto" atau "VIDEO". Iklan ini bisa berupa (a) SATU video (kalau ada video yang bagus dan relevan tersedia -- video biasanya lebih tinggi engagement-nya untuk tur properti/testimoni), (b) carousel 2-10 foto yang bisa di-swipe lead, atau (c) 1 foto tunggal. JANGAN PERNAH mencampur video dengan foto dalam satu pilihan -- kalau kamu pilih video, photoIds HANYA berisi id video itu saja (satu id, tidak ada foto lain). Pilih SEMUA foto yang benar-benar relevan dan berkualitas baik untuk carousel (maks 10, urutkan dari yang paling menarik/representatif duluan) -- jangan asal menyertakan yang tidak relevan/buram hanya demi jumlah.${
     hasVideoOption ? " Prioritaskan video kalau ada yang relevan dan berkualitas baik untuk brief/produk ini." : ""
@@ -1078,7 +1110,7 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
 {"targetSummary": "ringkasan riset & alasan target audiens dalam 2-3 kalimat", "photoIds": ["id foto di atas, urutan sesuai tampilan", "id foto lain jika carousel"], "headline": "maks 40 karakter, menarik perhatian", "primaryText": "maks 300 karakter, ajak chat WhatsApp, Bahasa Indonesia", "description": "maks 200 karakter", "welcomeMessage": "pesan sambutan singkat saat lead membuka chat WhatsApp dari iklan", "suggestedDailyBudgetIdr": angka_rupiah_wajar_untuk_iklan_leads_properti_harian, "targetAreas": ["kota/kabupaten hasil riset area target di atas, array kosong jika tidak relevan/tidak diminta"]}`;
 
   try {
-    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, maxOutputTokens: 2048 });
+    const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, images, maxOutputTokens: 2048 });
     return parseAdDraftJson(response.text, input.availablePhotos, input.projectName);
   } catch {
     // fall through to the unresearched fallback below -- still picks a real photo, just without grounded research backing the copy.
@@ -1098,9 +1130,10 @@ ${indicatorsBlock}
 
 Materi asli yang tersedia (WAJIB pilih dari id-id ini; tipe "VIDEO" berarti video -- kalau memilih video, photoIds HANYA berisi id video itu, jangan dicampur foto; pilih 2-10 foto relevan untuk carousel kalau ada beberapa yang layak, atau 1 saja kalau cuma itu yang bagus):
 ${photoList}
+${images.length > 0 ? `\nGambar asli untuk ${images.length} foto di atas terlampir langsung di bawah ini (dilabeli id-nya masing-masing) -- WAJIB benar-benar dilihat sebelum memilih/menulis, jangan asal menebak dari keterangan saja.` : ""}
 
 Balas HANYA dengan JSON object: {"targetSummary": "...", "photoIds": ["..."], "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
-  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, maxOutputTokens: 1024 });
+  const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, images, maxOutputTokens: 1024 });
   return parseAdDraftJson(fallbackResponse.text, input.availablePhotos, input.projectName);
 }
 

@@ -1101,7 +1101,7 @@ async function processMetaAdsLaunch(supabase: AdminClient, job: JobRow) {
     projectType: project.project_type,
     offeringType: project.offering_type,
     productDescription: project.product_description,
-    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
+    availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type, publicUrl: p.public_url })),
     targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
     previousDrafts,
   });
@@ -1233,7 +1233,7 @@ async function processMetaAdsResearch(supabase: AdminClient, job: JobRow) {
       projectType: project.project_type,
       offeringType: project.offering_type,
       productDescription: project.product_description,
-      availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type })),
+      availablePhotos: photos.map((p) => ({ id: p.id, caption: p.caption, mediaType: p.media_type, publicUrl: p.public_url })),
       targetCities: project.project_type === "villa" && project.offering_type === "sale" ? LEASEHOLD_TARGET_CITIES : undefined,
       previousDrafts,
     });

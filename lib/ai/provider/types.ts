@@ -18,6 +18,8 @@ export interface AIGenerateRequest {
   useWebSearch?: boolean;
   /** Attaches an image to the prompt (Gemini multimodal vision) -- e.g. reviewing an uploaded content photo against its brief. base64-encoded bytes, no data: URI prefix. */
   image?: { data: string; mimeType: string };
+  /** Attaches several labeled images to the prompt (Gemini multimodal vision) -- e.g. letting the AI actually look at every candidate photo before picking which to use in an ad and writing copy grounded in what's really shown, instead of only reading a caption. `id` is echoed back as a text label immediately before each image so the model can refer to "the photo labeled X" and the caller can tell which inlineData part is which. base64-encoded bytes, no data: URI prefix. Independent of `image` -- a caller may set one or the other, never both. */
+  images?: { id: string; data: string; mimeType: string }[];
   /** Attaches a video to the prompt (Gemini multimodal video understanding -- Gemini genuinely watches/analyzes frames+audio, not just a caption) -- e.g. reviewing an uploaded Content Studio video against its brief. base64-encoded bytes, no data: URI prefix. Sent inline (not via the Files API), so only safe for videos under ~20MB -- callers must check size themselves and fall back to a caption-only prompt for anything larger. */
   video?: { data: string; mimeType: string };
   /**
