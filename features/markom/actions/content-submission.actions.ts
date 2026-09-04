@@ -12,7 +12,7 @@ import {
   buildZernioMediaItems,
   createContentSubmission,
   deleteContentSubmission,
-  deleteSubmissionVideoFromStorage,
+  deleteSubmissionMediaFromStorage,
   getContentSubmission,
   listContentSubmissions,
   markContentPublished,
@@ -309,12 +309,10 @@ export async function markContentPublishedAction(submissionId: string): Promise<
   }
 
   // Best-effort storage cleanup -- once it's published somewhere, the
-  // original video no longer needs to sit in Storage (see
-  // deleteSubmissionVideoFromStorage's doc). Never blocks the "mark
-  // published" outcome even if this fails.
-  if (submission.media_type === "video") {
-    await deleteSubmissionVideoFromStorage(supabase, submission.storage_path).catch(() => undefined);
-  }
+  // original media (video, or photo + carousel) no longer needs to sit in
+  // Storage (see deleteSubmissionMediaFromStorage's doc). Never blocks the
+  // "mark published" outcome even if this fails.
+  await deleteSubmissionMediaFromStorage(supabase, submissionId, submission.storage_path).catch(() => undefined);
 
   revalidatePath(CONTENT_STUDIO_PATH);
   return actionSuccess();

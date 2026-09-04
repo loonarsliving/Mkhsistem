@@ -190,9 +190,22 @@ export function buildZernioMediaItems(row: {
   return [{ url: row.public_url, type: "image" as const }, ...extra];
 }
 
-/** Owner's call: once a video has actually been published somewhere (Zernio or manual), there's no more reason to keep the original file taking up Storage -- unlike photos (small, kept for the carousel/history display), videos are the bulk of Content Studio's storage footprint. Best-effort: called right after a submission flips to 'published', never blocks or fails the publish itself if the delete errors (e.g. already gone). storage_path/public_url stay on the row for history/audit even after the underlying object is gone. */
-export async function deleteSubmissionVideoFromStorage(supabase: TypedSupabaseClient, storagePath: string): Promise<void> {
-  await supabase.storage.from("markom-content-submissions").remove([storagePath]);
+/**
+ * Owner's call (2026-09-04, after the free-tier storage quota tripped
+ * "Services restricted" org-wide): photos were previously kept forever after
+ * publish on the theory that they're small -- but a Content Studio photo
+ * carousel submission can carry several multi-MB images, and nothing ever
+ * cleaned those up, unlike video. This deletes the *entire* media set for a
+ * published submission -- the row's own storage_path (photo #1 or the single
+ * video) plus every markom_content_submission_photos row (photo #2 onward) --
+ * once publish is confirmed. public_url/storage_path stay on both tables for
+ * history/audit even after the underlying object is gone, same as video.
+ * Best-effort: never throws, so it never blocks the publish outcome.
+ */
+export async function deleteSubmissionMediaFromStorage(supabase: TypedSupabaseClient, submissionId: string, storagePath: string): Promise<void> {
+  const { data: photos } = await supabase.from("markom_content_submission_photos").select("storage_path").eq("submission_id", submissionId);
+  const paths = [storagePath, ...(photos ?? []).map((p) => p.storage_path)];
+  await supabase.storage.from("markom-content-submissions").remove(paths);
 }
 
 export async function deleteContentSubmission(supabase: TypedSupabaseClient, id: string) {

@@ -48,7 +48,7 @@ import { AI_BUSY_FALLBACK_MESSAGE, saveAiConversationTurn } from "@/lib/ai/webho
 import { isMetaConfigured } from "@/lib/meta/config";
 import { countActiveCompetitors, insertDiscoveredCompetitors, replaceHashtagBank, type CompetitorFocus } from "@/repositories/social.repository";
 import { insertAdCampaignPhotos } from "@/repositories/meta-ads.repository";
-import { createContentSubmission, deleteSubmissionVideoFromStorage, reconcileZernioPublishStatus, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
+import { createContentSubmission, deleteSubmissionMediaFromStorage, reconcileZernioPublishStatus, saveContentReview, scheduleContentSubmission } from "@/repositories/content-submissions.repository";
 import { fetchUrlAsBase64 } from "@/lib/utils/fetch-remote-file";
 import { generateCreativeBrief, type DirectorObjective, type DirectorPlatform } from "@/lib/ai/domains/kontenai-director";
 import { generateStoryboardFromBrief } from "@/lib/ai/domains/kontenai-storyboard";
@@ -734,7 +734,7 @@ async function processKontenAiAutoProduceBeauty(supabase: AdminClient, job: JobR
  * Bridges one completed automation render into Content Studio: moves the
  * video from kontenai-renders into markom-content-submissions (see
  * lib/kontenai/content-studio-bridge.ts -- the only bucket
- * deleteSubmissionVideoFromStorage cleans up on publish), creates the
+ * deleteSubmissionMediaFromStorage cleans up on publish), creates the
  * submission row, then enqueues content_submission_review so it gets a real
  * AI score the same way any other submission does. If that review approves
  * it (score >= 8.5), the existing auto-schedule + 5-minute publish worker
@@ -858,11 +858,12 @@ async function processZernioPublishReconcile(supabase: AdminClient, job: JobRow)
 
   // Only now -- once Zernio's own status confirms 'published' (the platform
   // actually finished fetching/publishing it), not merely accepted at
-  // createPost time -- is it safe to remove the source video. Deleting any
-  // earlier raced a real Instagram fetch straight into "couldn't fetch your
-  // media from the URL" because we'd already removed it.
-  if (result.status === "published" && submission.media_type === "video") {
-    await deleteSubmissionVideoFromStorage(supabase, submission.storage_path).catch(() => undefined);
+  // createPost time -- is it safe to remove the source media (video, or
+  // photo + carousel). Deleting any earlier raced a real Instagram fetch
+  // straight into "couldn't fetch your media from the URL" because we'd
+  // already removed it.
+  if (result.status === "published") {
+    await deleteSubmissionMediaFromStorage(supabase, submission.id, submission.storage_path).catch(() => undefined);
   }
 
   return { zernioStatus: result.status, permalink: result.permalink, failed, errorMessage: result.errorMessage, errorCategory: result.errorCategory, errorSource: result.errorSource };

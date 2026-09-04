@@ -13,7 +13,7 @@ export interface MovedRenderOutput {
 /**
  * Moves (not copies) a completed render's output from kontenai-renders into
  * markom-content-submissions -- Content Studio's own bucket, the only one
- * deleteSubmissionVideoFromStorage (repositories/content-submissions.repository.ts)
+ * deleteSubmissionMediaFromStorage (repositories/content-submissions.repository.ts)
  * knows how to clean up once the submission is published. Deleting the
  * kontenai-renders copy here means the video never sits in storage twice.
  */
