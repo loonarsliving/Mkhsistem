@@ -533,6 +533,72 @@ async function runHandoffTurn(prospect: ProspectRow, projectName: string): Promi
   return { outcome: "replied", prospectId: prospect.id, temperature: prospect.lead_temperature };
 }
 
+/** ai_lead_manual_takeover (0251) -- a future `until` means the owner is personally handling every ad-lead question for that window; self-expiring, no cron needed to flip it back off. */
+async function isManualTakeoverActive(): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("ai_lead_manual_takeover")
+    .select("until")
+    .eq("id", "singleton")
+    .maybeSingle();
+  return Boolean(data?.until && new Date(data.until) > new Date());
+}
+
+/**
+ * Owner's ask (0251): for a set window, every ad-lead question skips the AI
+ * knowledge-base reply entirely and goes straight to Super Admin so the
+ * owner can answer personally -- unlike the normal unanswered-question path
+ * (runNurtureTurn below), this escalates EVERY question regardless of
+ * whether knowledge_base could have answered it, since the point is to
+ * collect the owner's own real answers as a dataset (raw_reply on the
+ * inserted row tells relayAdminAnswerToLead to send that answer to the lead
+ * verbatim, not AI-rephrased -- see buildSystemPrompt's "GAYA BAHASA"
+ * section, already seeded from this same data source once before).
+ */
+async function runManualTakeoverTurn(
+  prospect: ProspectRow,
+  projectName: string,
+  leadName: string | undefined,
+  incomingText: string,
+): Promise<NurtureTurnResult> {
+  const supabase = createAdminClient();
+
+  const holdText = "Baik kak, mohon ditunggu sebentar ya, tim kami akan segera membalas 🙏";
+  await supabase
+    .from("lead_chat_history")
+    .insert({ prospect_id: prospect.id, sender: "ai", message: holdText });
+  const sendResult = await sendWhatsAppText(prospect.phone, holdText);
+  if (!sendResult.success)
+    logger.error("runManualTakeoverTurn: WA send to lead failed", {
+      prospectId: prospect.id,
+      error: sendResult.error,
+    });
+
+  if (prospect.project_id) {
+    const { data: pending, error } = await supabase
+      .from("pending_questions")
+      .insert({
+        prospect_id: prospect.id,
+        project_id: prospect.project_id,
+        branch_id: prospect.branch_id,
+        pertanyaan: incomingText,
+        raw_reply: true,
+      })
+      .select("code")
+      .single();
+    if (error || !pending) {
+      logger.error("runManualTakeoverTurn: pending_questions insert failed", {
+        prospectId: prospect.id,
+        error: error?.message,
+      });
+    } else {
+      await notifySuperadminsPendingQuestion(pending.code, incomingText, prospect, projectName, leadName);
+    }
+  }
+
+  return { outcome: "replied", prospectId: prospect.id, temperature: prospect.lead_temperature };
+}
+
 async function runNurtureTurn(
   prospect: ProspectRow,
   leadName: string | undefined,
@@ -571,6 +637,10 @@ async function runNurtureTurn(
   // (Kepala Cabang) takes it from the first message.
   if (project?.ai_lead_mode === "handoff") {
     return runHandoffTurn(prospect, projectName);
+  }
+
+  if (await isManualTakeoverActive()) {
+    return runManualTakeoverTurn(prospect, projectName, leadName, incomingText);
   }
 
   const brandContext = project?.city ? `Maha Karya Haluoleo (${project.city})` : "";
@@ -1011,14 +1081,14 @@ export async function tryHandleSuperadminImageAnswer(
   };
 }
 
-/** Step 2 (queued, see whatsapp_admin_answer_relay job): rephrase the admin's raw answer into a natural WhatsApp reply and send it to the lead -- as an image with a rephrased caption when the admin answered with a photo, plain text otherwise. */
+/** Step 2 (queued, see whatsapp_admin_answer_relay job): rephrase the admin's raw answer into a natural WhatsApp reply and send it to the lead -- as an image with a rephrased caption when the admin answered with a photo, plain text otherwise. Skips the rephrase entirely for a raw_reply row (0251, ai_lead_manual_takeover) -- the lead gets the Super Admin's own words verbatim, both so it genuinely reads as the owner answering directly and so the captured text isn't AI-massaged before it's used as chat-style training data later. */
 export async function relayAdminAnswerToLead(
   pendingQuestionId: string,
 ): Promise<{ sent: boolean }> {
   const supabase = createAdminClient();
   const { data: pending } = await supabase
     .from("pending_questions")
-    .select("pertanyaan, jawaban_admin, image_url, prospect:prospect_id(id, phone)")
+    .select("pertanyaan, jawaban_admin, image_url, raw_reply, prospect:prospect_id(id, phone)")
     .eq("id", pendingQuestionId)
     .maybeSingle();
 
@@ -1026,15 +1096,17 @@ export async function relayAdminAnswerToLead(
   const prospect = pending.prospect as unknown as { id: string; phone: string } | null;
   if (!prospect) return { sent: false };
 
-  const rephrased = await generateAIText({
-    systemPrompt:
-      "Anda mengubah jawaban singkat dari Super Admin properti menjadi satu balasan WhatsApp yang natural dan singkat (2-4 kalimat) untuk calon pembeli, dalam Bahasa Indonesia. Jangan menambahkan informasi baru di luar jawaban admin. Tiru gaya chat WhatsApp Super Admin sendiri -- santai, tidak baku/kaku, sapa lead dengan \"kak\"/\"pak\"/\"bapak\" sesuai konteks, dan kalau masuk akal tutup dengan satu pertanyaan balik yang menggiring percakapan lanjut, bukan pernyataan datar. Balas hanya teks pesannya, tanpa tanda kutip atau embel-embel lain.",
-    userPrompt: `Pertanyaan lead sebelumnya: ${pending.pertanyaan}\nJawaban admin: ${pending.jawaban_admin}`,
-    temperature: 0.5,
-    maxOutputTokens: 300,
-  }).catch(() => null);
-
-  const replyText = rephrased?.text?.trim() || pending.jawaban_admin;
+  let replyText = pending.jawaban_admin;
+  if (!pending.raw_reply) {
+    const rephrased = await generateAIText({
+      systemPrompt:
+        "Anda mengubah jawaban singkat dari Super Admin properti menjadi satu balasan WhatsApp yang natural dan singkat (2-4 kalimat) untuk calon pembeli, dalam Bahasa Indonesia. Jangan menambahkan informasi baru di luar jawaban admin. Tiru gaya chat WhatsApp Super Admin sendiri -- santai, tidak baku/kaku, sapa lead dengan \"kak\"/\"pak\"/\"bapak\" sesuai konteks, dan kalau masuk akal tutup dengan satu pertanyaan balik yang menggiring percakapan lanjut, bukan pernyataan datar. Balas hanya teks pesannya, tanpa tanda kutip atau embel-embel lain.",
+      userPrompt: `Pertanyaan lead sebelumnya: ${pending.pertanyaan}\nJawaban admin: ${pending.jawaban_admin}`,
+      temperature: 0.5,
+      maxOutputTokens: 300,
+    }).catch(() => null);
+    replyText = rephrased?.text?.trim() || pending.jawaban_admin;
+  }
 
   await supabase.from("lead_chat_history").insert([
     {

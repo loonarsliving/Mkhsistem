@@ -2547,6 +2547,7 @@ export interface Database {
           image_url: string | null;
           timeout_escalated_at: string | null;
           created_at: string;
+          raw_reply: boolean;
         };
         Insert: {
           id?: string;
@@ -2562,6 +2563,7 @@ export interface Database {
           image_url?: string | null;
           timeout_escalated_at?: string | null;
           created_at?: string;
+          raw_reply?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["pending_questions"]["Insert"]>;
         Relationships: [
@@ -2581,6 +2583,29 @@ export interface Database {
             foreignKeyName: "pending_questions_branch_id_fkey";
             columns: ["branch_id"];
             referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_lead_manual_takeover: {
+        Row: {
+          id: string;
+          until: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          until?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["ai_lead_manual_takeover"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_lead_manual_takeover_updated_by_fkey";
+            columns: ["updated_by"];
+            referencedRelation: "employees";
             referencedColumns: ["id"];
           },
         ];
