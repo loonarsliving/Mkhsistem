@@ -55,7 +55,7 @@ Lihat langsung isi gambar ini dan baca:
 - readable: true kalau ini benar-benar terlihat seperti bukti transfer (screenshot m-banking/struk ATM) yang cukup jelas dibaca, false kalau tidak
 - nominal: jumlah uang yang ditransfer, sebagai angka murni tanpa "Rp" atau titik/koma (null kalau tidak terbaca)
 - tanggal: tanggal transaksi seperti tertulis di gambar (null kalau tidak terbaca)
-- rekeningTujuan: nama dan/atau nomor rekening tujuan seperti tertulis di gambar (null kalau tidak terbaca)
+- rekeningTujuan: nama dan/atau nomor rekening PENERIMA (tujuan transfer -- uang MASUK ke rekening ini), seperti tertulis di gambar. Kalau struk menampilkan dua rekening sekaligus (mis. field "Penerima"/"Tujuan" DAN field "Sumber Dana"/"Dari"/"Rekening Anda"), ambil HANYA yang berlabel Penerima/Tujuan -- JANGAN ambil rekening sumber dana/pengirim. null kalau tidak terbaca
 - notes: catatan singkat 1 kalimat, termasuk kalau nominal di gambar terlihat berbeda dari nominal yang seharusnya
 
 Balas HANYA dengan JSON object:

@@ -3,6 +3,7 @@ import "server-only";
 import { fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
 
 export type TransferProofConfirmationOutcome =
   | { outcome: "not_super_admin" }
@@ -176,6 +177,38 @@ export function extractAccountDigits(text: string | null): string | null {
     if (joined.length >= 6 && joined.length > longest.length) longest = joined;
   }
   return longest || null;
+}
+
+/**
+ * Real incident: a receipt template (bale by BTN) shows both "Penerima" and
+ * "Sumber Dana" account numbers -- when the AI reads the wrong one (or the
+ * right one but masked/unreadable, e.g. "7801 8*** *168 1"), extractAccountDigits
+ * comes back null or wrong, and account-based grouping/subset matching never
+ * even runs even though the payee's NAME is right there on both the receipt
+ * and every pengajuan's rekening_tujuan text. Falls back to comparing
+ * uppercase name words (4+ letters, common bank/noise words excluded) as a
+ * second signal alongside the account number, not instead of it.
+ */
+const ACCOUNT_TEXT_NOISE_WORDS = new Set([
+  "BCA", "BNI", "BRI", "BTN", "BSI", "CIMB", "PERMATA", "DANAMON", "JAGO", "SEABANK", "MANDIRI",
+  "BELANJA", "REIMBURSE", "REIMBURSED", "ONGKOS", "OPERASIONAL", "TANGGAL", "SEPT", "SEPTEMBER",
+  "AGUSTUS", "AUGUST", "KONTRAKTOR", "PENGAWAS", "PELAPOR", "MAHA", "KARYA", "HALUOLEO",
+]);
+
+export function extractAccountNameTokens(text: string | null): string[] {
+  if (!text) return [];
+  const words = text.toUpperCase().match(/[A-Z]{4,}/g) ?? [];
+  return Array.from(new Set(words.filter((w) => !ACCOUNT_TEXT_NOISE_WORDS.has(w))));
+}
+
+/** True when two rekening_tujuan-shaped texts plausibly refer to the same account, by digits or by a shared name word. */
+function sameAccount(a: string | null, b: string | null): boolean {
+  const digitsA = extractAccountDigits(a);
+  const digitsB = extractAccountDigits(b);
+  if (digitsA && digitsB && digitsA === digitsB) return true;
+  const namesA = extractAccountNameTokens(a);
+  const namesB = extractAccountNameTokens(b);
+  return namesA.length > 0 && namesA.some((n) => namesB.includes(n));
 }
 
 /** Inserts the outbound sync_log event for one pengajuan; on failure, un-claims that row so it's retryable. */
@@ -415,11 +448,8 @@ export async function tryConfirmTransferProofViaWhatsApp(
     // (many legitimately have no rekening_tujuan recorded at all).
     let target = amountMatches[0];
     if (amountMatches.length > 1) {
-      const aiAccount = extractAccountDigits(ai.rekeningTujuan);
-      if (aiAccount) {
-        const accountMatch = amountMatches.find((row) => extractAccountDigits(row.rekening_tujuan) === aiAccount);
-        if (accountMatch) target = accountMatch;
-      }
+      const accountMatch = amountMatches.find((row) => sameAccount(ai.rekeningTujuan, row.rekening_tujuan));
+      if (accountMatch) target = accountMatch;
     }
     return confirmSingleRow(supabase, target, sender, imageUrl, ai, true);
   }
@@ -428,13 +458,15 @@ export async function tryConfirmTransferProofViaWhatsApp(
   // it -- a Kepala Cabang can submit on someone else's behalf, but the
   // money only ever lands in one specific account, and that's what a
   // single lump transfer is actually reimbursing. Requires the photo's own
-  // account to be readable -- without it there's nothing trustworthy to
-  // group by, so this falls straight through to no_amount_match instead of
-  // grouping on sum alone (which could coincidentally match an unrelated
-  // combination of pending items).
+  // account (by digits OR by name -- see sameAccount) to be readable --
+  // without it there's nothing trustworthy to group by, so this falls
+  // straight through to no_amount_match instead of grouping on sum alone
+  // (which could coincidentally match an unrelated combination of pending
+  // items).
   const aiAccount = extractAccountDigits(ai.rekeningTujuan);
-  if (aiAccount) {
-    const sameAccountRows = pendingRows.filter((row) => extractAccountDigits(row.rekening_tujuan) === aiAccount);
+  const aiAccountNames = extractAccountNameTokens(ai.rekeningTujuan);
+  if (aiAccount || aiAccountNames.length > 0) {
+    const sameAccountRows = pendingRows.filter((row) => sameAccount(ai.rekeningTujuan, row.rekening_tujuan));
     const sum = sameAccountRows.reduce((s, r) => s + Number(r.nominal), 0);
     if (sameAccountRows.length >= 2 && !isNominalMismatch(sum, ai.nominal)) {
       return confirmGroup(supabase, sameAccountRows, sender, imageUrl, ai);
@@ -452,6 +484,19 @@ export async function tryConfirmTransferProofViaWhatsApp(
       }
     }
   }
+
+  // Logged specifically because there's nowhere else this ever surfaces --
+  // the WhatsApp reply only shows the read nominal, never what account the
+  // AI thought it read, so a real mismatch (misread destination account,
+  // e.g. grabbing "Sumber Dana" instead of "Penerima" off a two-account
+  // receipt template) was previously undiagnosable after the fact.
+  logger.info("transfer proof: no amount match", {
+    readNominal: ai.nominal,
+    readRekeningTujuan: ai.rekeningTujuan,
+    aiAccount,
+    aiAccountNames,
+    pendingCount: pendingRows.length,
+  });
 
   return {
     outcome: "no_amount_match",
