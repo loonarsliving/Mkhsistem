@@ -860,6 +860,18 @@ export interface UnmatchedAdLeadResult {
  * notification to anyone. See resolveProjectSelectionAndNurture's doc for
  * why this is a real (not hypothetical) gap.
  *
+ * During manual takeover (0251) this goes completely silent too -- same
+ * reasoning as runManualTakeoverTurn. Real incident this fixes: this
+ * function is a separate entry point from runNurtureTurn (it runs before
+ * any project/prospect is even known), so gating only runNurtureTurn left
+ * it un-silenced -- a lead stuck "awaiting" a project-name match kept
+ * getting the ASK/RETRY template on every single message, regardless of
+ * manual takeover being on, which is exactly the AI chatter the owner
+ * turned this off to get rid of. Bails out before creating or touching any
+ * pending_project_selections row, so nothing here needs to be reconciled
+ * once the window ends -- the very next message from a still-unmatched
+ * lead just resumes the normal ask/retry flow.
+ *
  * Always returns handled: true -- the caller should treat this as the final
  * step before giving up, not one option among several.
  */
@@ -868,6 +880,10 @@ export async function tryHandleUnmatchedAdLead(
   senderName: string | undefined,
   messageText: string,
 ): Promise<UnmatchedAdLeadResult> {
+  if (await isManualTakeoverActive()) {
+    return { handled: true };
+  }
+
   const supabase = createAdminClient();
   const senderDigits = digitsOnly(sender);
 
