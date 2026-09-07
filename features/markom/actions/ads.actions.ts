@@ -219,6 +219,37 @@ export async function setAdCampaignStatusAction(id: string, metaAdId: string | n
 }
 
 /**
+ * "Delete" for an already-launched (paused) campaign -- unlike
+ * deleteAdCampaignDraftAction this can't be a real DB delete, because the
+ * row references a real Meta campaign/ad set/ad. Hard-deleting it would
+ * orphan that Meta object with no way to find or manage it again.
+ * Instead: make sure it's paused on Meta (idempotent -- a no-op if it was
+ * already paused), then mark it 'ended' so it drops off the active list
+ * and, per migration 0253, is permanently excluded from
+ * markom_run_ai_ads_dispatch's weekly re-launch check for this project --
+ * this is what actually stops a "no longer used" ad from reappearing on
+ * its own.
+ */
+export async function endAdCampaignAction(id: string, metaAdId: string | null): Promise<ActionResult> {
+  await requirePermission("ad_campaign.manage");
+  const supabase = await createClient();
+
+  const campaign = await getAdCampaign(supabase, id);
+  if (campaign.status !== "active" && campaign.status !== "paused") {
+    return actionError("Hanya iklan yang sedang tayang atau dijeda yang bisa dihapus di sini");
+  }
+
+  try {
+    if (metaAdId) await setAdStatus(metaAdId, "PAUSED");
+    await updateAdCampaignStatus(supabase, id, "ended");
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menghapus iklan");
+  }
+  revalidatePath("/markom/ads");
+  return actionSuccess();
+}
+
+/**
  * Human override for daily budget. Two cases:
  * - Still 'draft' (not launched to Meta yet, metaAdSetId is null): a
  *   plain DB update to AI's suggested daily_budget_idr before Markom

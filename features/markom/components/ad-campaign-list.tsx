@@ -18,6 +18,7 @@ import { listProjectsForPhotoUploadAction } from "../actions/project-photo.actio
 import {
   analyzeAdCampaignAction,
   deleteAdCampaignDraftAction,
+  endAdCampaignAction,
   launchDraftCampaignAction,
   listAdCampaignsAction,
   requestAdsResearchAction,
@@ -40,6 +41,8 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [endTarget, setEndTarget] = React.useState<{ id: string; metaAdId: string | null } | null>(null);
+  const [ending, setEnding] = React.useState(false);
   const [budgetEditId, setBudgetEditId] = React.useState<string | null>(null);
   const [budgetValue, setBudgetValue] = React.useState("");
   const [savingBudget, setSavingBudget] = React.useState(false);
@@ -105,6 +108,25 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
       toast.error(err instanceof Error ? err.message : "Gagal menghapus draft iklan");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleEndCampaign() {
+    if (!endTarget) return;
+    setEnding(true);
+    try {
+      const result = await endAdCampaignAction(endTarget.id, endTarget.metaAdId);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus iklan");
+        return;
+      }
+      toast.success("Iklan dihapus -- tidak akan diluncurkan ulang otomatis oleh AI");
+      setEndTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menghapus iklan");
+    } finally {
+      setEnding(false);
     }
   }
 
@@ -358,6 +380,16 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                             {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
                             {c.analyzed_at ? "Analisis Ulang" : "Analisis"}
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            disabled={busyId === c.id}
+                            onClick={() => setEndTarget({ id: c.id, metaAdId: c.meta_ad_id })}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Hapus
+                          </Button>
                         </>
                       )}
                     </div>
@@ -378,6 +410,17 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
         destructive
         loading={deleting}
         onConfirm={handleDeleteDraft}
+      />
+
+      <ConfirmDialog
+        open={endTarget !== null}
+        onOpenChange={(open) => !open && setEndTarget(null)}
+        title="Hapus iklan ini?"
+        description="Iklan akan dijeda di Meta (tidak ada budget yang terpakai lagi) dan tidak akan ditampilkan lagi di sini maupun diluncurkan ulang otomatis oleh AI untuk project ini."
+        confirmLabel="Hapus"
+        destructive
+        loading={ending}
+        onConfirm={handleEndCampaign}
       />
     </div>
   );
