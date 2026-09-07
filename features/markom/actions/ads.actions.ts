@@ -15,6 +15,7 @@ import {
   updateAdSetDailyBudget,
 } from "@/lib/meta/ads";
 import { isMetaConfigured } from "@/lib/meta/config";
+import { MetaApiError } from "@/lib/meta/client";
 import { createClient } from "@/lib/supabase/server";
 import {
   deleteDraftAdCampaign,
@@ -240,7 +241,22 @@ export async function endAdCampaignAction(id: string, metaAdId: string | null): 
   }
 
   try {
-    if (metaAdId) await setAdStatus(metaAdId, "PAUSED");
+    if (metaAdId) {
+      try {
+        await setAdStatus(metaAdId, "PAUSED");
+      } catch (err) {
+        // subcode 1885088 = Meta already has this ad archived (e.g. someone
+        // archived it directly in Ads Manager) and refuses to touch it any
+        // further except its name -- that's already the "no more spend"
+        // state we want, so it's not a real failure, just proceed to mark
+        // our own row 'ended'. Any other Meta error is a real failure and
+        // should stop the delete instead of silently marking it ended while
+        // the ad might still be live and spending.
+        const isAlreadyArchived =
+          err instanceof MetaApiError && (err.graphError as { error_subcode?: number } | undefined)?.error_subcode === 1885088;
+        if (!isAlreadyArchived) throw err;
+      }
+    }
     await updateAdCampaignStatus(supabase, id, "ended");
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal menghapus iklan");
