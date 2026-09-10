@@ -21,21 +21,29 @@ posted workflow layer in front of the existing money-moving RPCs).
   entity. mkh-properti's new `construction_project_financial_records` table
   (0035/0036 there) is what keeps Coffee's spend distinguishable from
   Living's villa spend within those same books.
-- RAB v1 seeded: material envelope Rp58,387,454, labor/borongan
-  Rp75,000,000, total Rp133,387,454 (exact control totals, per the owner's
-  explicit instruction not to silently recalculate). Individual BOQ lines
-  are a partial, PROVISIONAL breakdown from the working drawing's stated
-  assumptions — the real itemized RAB spreadsheet was not available to this
-  build; a residual "belum dirinci" line reconciles to the exact material
-  total. **NEEDS OWNER CONFIRMATION**: the real cost-code-level RAB
-  breakdown should replace the provisional lines via `cm_new_boq_version`
-  once available — never edit v1's lines directly.
-- Labor contract seeded with a placeholder contractor name
-  (`cm_contractors.full_name` — **update once the owner names the actual
-  kontraktor borongan**). Weekly schedule (`cm_labor_weekly_schedule`)
-  seeded 8 weeks from Tue 2026-09-15 with an assumed front-loaded-then-
-  tapering progress curve — fully editable, not a re-derivation of the
-  Rp75,000,000 contract value.
+- **RAB v1 = the real "Loonars Coffee Tender Final" spreadsheet** (58
+  items, owner-supplied, subtotal Rp83,501,750), seeded verbatim into
+  `cm_project_boq` including its own quirks — never silently corrected:
+  item RAB-003's stated amount doesn't equal quantity×unit_price
+  (preserved via a new `amount_override` column, flagged
+  `CALCULATION_MISMATCH`), RAB-013's rebar quantity is a placeholder
+  (flagged `QUANTITY_PLACEHOLDER`), RAB-019's UNP truss value is the
+  original tender figure (any later engineering revision must be a new
+  `cm_new_boq_version`, never an edit), and several Rp0 lines are kept
+  visible as `UNPRICED / NOT_YET_BUDGETED` rather than removed. This
+  Rp83,501,750 tender subtotal is a SEPARATE layer from the PROJECT
+  CONTROL BASELINE — `construction_projects.material_procurement_budget`
+  (Rp58,387,454) + `.labor_contract_budget` (Rp75,000,000) =
+  `.total_budget` (Rp133,387,454), the figure actual spend is tracked
+  against going forward. `cm_boq_summary()` was fixed to respect
+  `amount_override` and (for future multi-version projects) only the
+  current BOQ version.
+- Labor contract: **Anang** (owner-confirmed contractor, matched to his
+  existing `contractor_wa_senders` record from the nota-report flow, 0237)
+  — Rp75,000,000, 5-week duration (15 Sep – 20 Oct 2026, owner-confirmed).
+  `cm_labor_weekly_schedule` seeded 5 weeks with a front-loaded-then-
+  tapering planning curve — fully editable, not a re-derivation of the
+  contract value.
 - Vando (WhatsApp) can now submit material purchases, contractor payment
   requests, progress reports, and evidence photos for Loonars Coffee — see
   `lib/ai/domains/loonars-coffee-field-ops.ts`, wired into
@@ -49,12 +57,29 @@ posted workflow layer in front of the existing money-moving RPCs).
   "SUDAH TRANSFER \<kode\>") or the existing `/construction-finance`
   dashboard. A requester can never approve their own request (enforced in
   code, not just UI).
-- **NOT built in this pass** (see the session's final report for the full
-  list): CCTV camera/snapshot integration (no real camera to integrate
-  against yet), a dedicated owner-facing weekly-report WhatsApp cron for
-  this project, and any UI change to hide the Construction Control Center
-  from non-owner roles beyond what `construction_finance.manage`/`.submit`
-  already gate (Vando still has no dedicated web nav entry, by design — see
+- **Weekly report live** (`0257`/`0258`): `construction_send_loonars_
+  coffee_weekly_report()`, pg_cron Saturday 06:00 UTC — detailed report to
+  every Super Admin, concise operational report to Vando, both from the
+  same server-computed figures. `0258` fixed a real bug found by actually
+  running it on production: it originally called the permission-gated
+  `cm_labor_contract_summary()` RPC, which always raises "Insufficient
+  permission" when called from a session-less pg_cron context — now
+  inlines the same earned-value math directly (same pattern every other
+  cron report function here already uses).
+- **Applied directly to the live production database** (`svcmybsziaelwwdrnzcv`)
+  2026-09-10 via Supabase MCP, with the owner's explicit go-ahead — not
+  just committed as unapplied migration files. Verified post-apply: 58 BOQ
+  items/Rp83,501,750 subtotal, Rp58,387,454/Rp75,000,000/Rp133,387,454
+  budget split, contractor "Anang", 5 weekly-schedule rows all present;
+  the weekly report function runs cleanly and inserted real
+  `mkc_notifications` rows (which may have already reached Super
+  Admin/Vando over WhatsApp as a one-off test send, ahead of the normal
+  Saturday cadence).
+- **NOT built in this pass**: CCTV camera/snapshot integration (no real
+  camera to integrate against yet — explicitly deferred by the owner), and
+  any UI change to hide the Construction Control Center from non-owner
+  roles beyond what `construction_finance.manage`/`.submit` already gate
+  (Vando still has no dedicated web nav entry, by design — see
   `CONSTRUCTION_FINANCE_BRANCH_IDS` in `lib/rbac/session.ts`, not modified
   here; confirm it doesn't need to include `LNC` for any other role).
 
