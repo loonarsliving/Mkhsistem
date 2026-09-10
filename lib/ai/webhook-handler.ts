@@ -31,6 +31,13 @@ import {
   tryCancelOwnPendingReport,
 } from "./domains/contractor-expense-report";
 import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryForwardContractorCorrectionRequest } from "./domains/contractor-fund-request";
+import {
+  tryHandleLoonarsCoffeeCostRequest,
+  tryHandleLoonarsCoffeeOwnerDecision,
+  tryHandleLoonarsCoffeeProgressReport,
+  tryHandleLoonarsCoffeePhotoEvidence,
+  tryAnswerLoonarsCoffeeQuery,
+} from "./domains/loonars-coffee-field-ops";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
@@ -421,6 +428,32 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling(image)");
       const imageRoleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+
+      // Loonars Coffee construction evidence photo -- caption-gated on
+      // "coffee" (e.g. "progress cakar ayam coffee") so it can never
+      // collide with Endy's block-coded Loonars Living progress photos or
+      // the generic Kepala-Cabang auto-forward below, both of which key off
+      // his OWN branch's project, not this one. Reuses the same Gemini
+      // Vision assessor Loonars Living's tracker uses (construction-
+      // progress-vision.ts), generalized to any project. Must run before
+      // every flow below since a "coffee"-captioned photo is never a nota
+      // or an unrelated Loonars Living update.
+      trace.push("tryHandleLoonarsCoffeePhotoEvidence:calling");
+      const coffeePhoto = await tryHandleLoonarsCoffeePhotoEvidence(
+        { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id },
+        inbound.content.url,
+        inbound.content.caption,
+      );
+      trace.push(`tryHandleLoonarsCoffeePhotoEvidence:${coffeePhoto.outcome}`);
+      if (coffeePhoto.outcome === "recorded") {
+        const replyText = `LOONARS COFFEE\n\n📸 Terdeteksi: ${coffeePhoto.stage} (~${coffeePhoto.suggestedProgressPct}%)\nItem WBS: ${coffeePhoto.wbsName}${coffeePhoto.concerns.length ? `\n⚠️ ${coffeePhoto.concerns.join("; ")}` : ""}\n\nMenunggu verifikasi di dashboard Construction.`;
+        trace.push("sendWhatsAppText:calling(coffee-photo)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[coffee progress photo]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
 
       // Nota-belanja submission via WhatsApp AI (0027 in mkh-properti):
       // Endy/Rebecca captioning a receipt photo "nota" turns it straight
@@ -915,6 +948,95 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+      }
+
+      // Loonars Coffee construction pilot -- owner (Super Admin/Direktur
+      // Operasional) deciding a WhatsApp-submitted cost request: "SETUJUI
+      // <id8>", "TOLAK <id8> <alasan>", "SUDAH TRANSFER <id8>". Gated
+      // internally by role (returns not_applicable for anyone else without
+      // an "not_authorized" false-negative on unrelated messages). Must run
+      // before the general AI pipeline, same as every other WA command here.
+      trace.push("tryHandleLoonarsCoffeeOwnerDecision:calling");
+      const coffeeOwnerDecision = await tryHandleLoonarsCoffeeOwnerDecision(
+        { id: employee.id, full_name: employee.full_name, roleKey },
+        inbound.content.text,
+      );
+      trace.push(`tryHandleLoonarsCoffeeOwnerDecision:${coffeeOwnerDecision.outcome}`);
+      if (coffeeOwnerDecision.outcome !== "not_applicable") {
+        const replyText =
+          coffeeOwnerDecision.outcome === "approved"
+            ? "✅ Pengajuan disetujui. Setelah transfer dilakukan, balas \"SUDAH TRANSFER <kode>\" untuk mencatatnya."
+            : coffeeOwnerDecision.outcome === "rejected"
+              ? "❌ Pengajuan ditolak."
+              : coffeeOwnerDecision.outcome === "transferred_and_posted"
+                ? "✅ Transfer dicatat. Untuk pembayaran kontraktor, selesaikan posting dari dashboard Construction (kartu Kontraktor)."
+                : coffeeOwnerDecision.outcome === "self_approval_blocked"
+                  ? "⚠️ Tidak bisa menyetujui pengajuan milik sendiri."
+                  : coffeeOwnerDecision.outcome === "not_authorized"
+                    ? "⚠️ Hanya Super Admin/Direktur Operasional yang bisa memutuskan pengajuan ini."
+                    : "⚠️ Pengajuan tidak ditemukan atau sudah diputuskan.";
+        trace.push("sendWhatsAppText:calling(coffee-owner-decision)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+
+      // Loonars Coffee -- read-only status queries ("Sisa RAB Loonars
+      // Coffee?", "Progress Loonars Coffee berapa?"). Must run before the
+      // cost-request check below since a query is never itself a request.
+      trace.push("tryAnswerLoonarsCoffeeQuery:calling");
+      const coffeeQuery = await tryAnswerLoonarsCoffeeQuery({ id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id }, inbound.content.text);
+      trace.push(`tryAnswerLoonarsCoffeeQuery:${coffeeQuery.outcome}`);
+      if (coffeeQuery.outcome === "answered") {
+        trace.push("sendWhatsAppText:calling(coffee-query)");
+        const sendResult = await sendWhatsAppText(inbound.sender, coffeeQuery.reply);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, coffeeQuery.reply, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+
+      // Loonars Coffee -- Vando submitting a material purchase / contractor
+      // payment / other expense in his own words ("Belanja Loonars Coffee 5
+      // sak semen 700rb", "Bayar kontraktor Coffee minggu 1 7.500.000").
+      // Creates a construction_cost_requests row awaiting owner approval --
+      // never posts money on its own. Reuses the SAME Construction
+      // Management (cm_*) engine the web dashboard already uses; see
+      // lib/ai/domains/loonars-coffee-field-ops.ts.
+      trace.push("tryHandleLoonarsCoffeeCostRequest:calling");
+      const coffeeCostRequest = await tryHandleLoonarsCoffeeCostRequest({ id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id }, inbound.content.text);
+      trace.push(`tryHandleLoonarsCoffeeCostRequest:${coffeeCostRequest.outcome}`);
+      if (coffeeCostRequest.outcome === "submitted" || coffeeCostRequest.outcome === "needs_clarification") {
+        const replyText =
+          coffeeCostRequest.outcome === "submitted"
+            ? `LOONARS COFFEE\n\n${coffeeCostRequest.description}\nTotal: Rp ${coffeeCostRequest.amount.toLocaleString("id-ID")}\n\nStatus: MENUNGGU APPROVAL\nKode: ${coffeeCostRequest.requestId.slice(0, 8)}`
+            : "Belum jelas apakah ini untuk beli material, bayar kontraktor, atau biaya lain -- tolong sebutkan salah satunya.";
+        trace.push("sendWhatsAppText:calling(coffee-cost-request)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+
+      // Loonars Coffee -- Vando reporting physical progress in free text
+      // ("Progress Coffee minggu ini sudah 20 persen", "Pengecoran cakar
+      // ayam Coffee sudah 100%"). Lands as a PENDING cm_wbs_progress_log
+      // row -- never moves cm_project_wbs.progress_pct without human
+      // verification via the web dashboard.
+      trace.push("tryHandleLoonarsCoffeeProgressReport:calling");
+      const coffeeProgress = await tryHandleLoonarsCoffeeProgressReport({ id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id }, inbound.content.text);
+      trace.push(`tryHandleLoonarsCoffeeProgressReport:${coffeeProgress.outcome}`);
+      if (coffeeProgress.outcome === "recorded") {
+        const replyText = `LOONARS COFFEE\n\n✅ Progress dicatat: ${coffeeProgress.wbsName} — ${coffeeProgress.progressPct}%\n\nMenunggu verifikasi di dashboard Construction.`;
+        trace.push("sendWhatsAppText:calling(coffee-progress)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
 
       // TEMPORARY: Super Admin approving a loonars fee claim by replying
