@@ -3,6 +3,61 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Coffee construction pilot (added 2026-09-10)
+
+First real project on the existing Construction Management module (cm_*
+tables, live since the 2026-08-15 Phase 1-8 build). Deliberately reuses
+cm_project_boq/cm_project_wbs/cm_labor_contracts/cm_purchase_requests/
+construction_submit_expense end to end — no second RAB/BOQ/labor engine was
+built. See migration `0256_loonars_coffee_construction_project.sql` for the
+full design rationale (RAB versioning, cost_code/planned dates/
+engineering_status fields, the weekly labor-schedule PLANNING table, and the
+`construction_cost_requests` draft→submitted→approved→transferred→paid→
+posted workflow layer in front of the existing money-moving RPCs).
+
+- New branch `LNC` (Loonars Coffee), `mkh_project_code = 'LL'` — per the
+  owner's decision, its money lives in Loonars Jogja/Living's own
+  mkh-properti books (project code `LL`), NOT a separate mkh_projects
+  entity. mkh-properti's new `construction_project_financial_records` table
+  (0035/0036 there) is what keeps Coffee's spend distinguishable from
+  Living's villa spend within those same books.
+- RAB v1 seeded: material envelope Rp58,387,454, labor/borongan
+  Rp75,000,000, total Rp133,387,454 (exact control totals, per the owner's
+  explicit instruction not to silently recalculate). Individual BOQ lines
+  are a partial, PROVISIONAL breakdown from the working drawing's stated
+  assumptions — the real itemized RAB spreadsheet was not available to this
+  build; a residual "belum dirinci" line reconciles to the exact material
+  total. **NEEDS OWNER CONFIRMATION**: the real cost-code-level RAB
+  breakdown should replace the provisional lines via `cm_new_boq_version`
+  once available — never edit v1's lines directly.
+- Labor contract seeded with a placeholder contractor name
+  (`cm_contractors.full_name` — **update once the owner names the actual
+  kontraktor borongan**). Weekly schedule (`cm_labor_weekly_schedule`)
+  seeded 8 weeks from Tue 2026-09-15 with an assumed front-loaded-then-
+  tapering progress curve — fully editable, not a re-derivation of the
+  Rp75,000,000 contract value.
+- Vando (WhatsApp) can now submit material purchases, contractor payment
+  requests, progress reports, and evidence photos for Loonars Coffee — see
+  `lib/ai/domains/loonars-coffee-field-ops.ts`, wired into
+  `webhook-handler.ts`. Deliberately **caption/text-gated on the word
+  "coffee"** for anyone (Vando) not filed directly under the LNC branch, so
+  it can never collide with his existing Loonars Living WhatsApp duties
+  (nota photos, block-coded progress, fund transfers) — Vando needs to say
+  "Coffee" when he means this project.
+- Owner (Super Admin/Direktur Operasional) can approve/reject/confirm-
+  transfer via WhatsApp ("SETUJUI \<kode\>", "TOLAK \<kode\> \<alasan\>",
+  "SUDAH TRANSFER \<kode\>") or the existing `/construction-finance`
+  dashboard. A requester can never approve their own request (enforced in
+  code, not just UI).
+- **NOT built in this pass** (see the session's final report for the full
+  list): CCTV camera/snapshot integration (no real camera to integrate
+  against yet), a dedicated owner-facing weekly-report WhatsApp cron for
+  this project, and any UI change to hide the Construction Control Center
+  from non-owner roles beyond what `construction_finance.manage`/`.submit`
+  already gate (Vando still has no dedicated web nav entry, by design — see
+  `CONSTRUCTION_FINANCE_BRANCH_IDS` in `lib/rbac/session.ts`, not modified
+  here; confirm it doesn't need to include `LNC` for any other role).
+
 ## Last known completed work
 
 As of the most recent commits (2026-08-21), the active area of work is a

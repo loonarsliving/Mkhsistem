@@ -57,10 +57,18 @@ function parseAssessment(text: string): ConstructionProgressAssessment {
  * does the photo show it happened"), so it's passed alongside the image
  * rather than parsed separately.
  */
-export async function assessConstructionProgress(input: { blockCode: string; caption?: string; imageBase64: string; imageMimeType: string }): Promise<ConstructionProgressAssessment> {
+export async function assessConstructionProgress(input: {
+  blockCode: string;
+  caption?: string;
+  imageBase64: string;
+  imageMimeType: string;
+  /** Human-readable project label for the prompt, e.g. "proyek Loonars Coffee (Yogyakarta)". Defaults to the original Loonars Living villa wording so every existing caller is unaffected. */
+  projectLabel?: string;
+}): Promise<ConstructionProgressAssessment> {
   const captionLine = input.caption ? `\n\nKeterangan yang ditulis pengawas saat mengirim foto ini: "${input.caption}"` : "";
+  const projectLabel = input.projectLabel ?? "proyek villa Loonars Living";
 
-  const userPrompt = `Ini adalah foto sore hari lokasi pembangunan blok ${input.blockCode} (proyek villa Loonars Living). Lihat langsung isi foto ini dan nilai progres pekerjaan konstruksinya.${captionLine}
+  const userPrompt = `Ini adalah foto sore hari lokasi pembangunan blok/zona ${input.blockCode} (${projectLabel}). Lihat langsung isi foto ini dan nilai progres pekerjaan konstruksinya.${captionLine}
 
 Hasilkan:
 - stage: tahap pekerjaan yang terlihat (misal: "Pondasi", "Struktur/Dinding", "Atap", "Finishing", "Selesai")
