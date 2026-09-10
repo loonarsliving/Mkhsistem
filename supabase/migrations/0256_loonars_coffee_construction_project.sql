@@ -31,19 +31,20 @@
 --      truth for the actual ledger, this table is the request/approval
 --      layer in front of it, not a parallel ledger.
 --
--- Budget baseline (owner-approved, from the project discussion — do not
--- silently recalculate): material Rp58,387,454, labor/borongan
--- Rp75,000,000, total Rp133,387,454. Individual BOQ line items below that
--- are DERIVED from the working drawing's stated assumptions (IWF/ringbal/
--- truss/roof quantities, unit prices given by the owner) are marked
--- engineering_status = 'PROVISIONAL' per the drawing's own disclaimer
--- (footing/rebar/truss profile/purlin spacing still need engineer
--- sign-off). Where a line's exact quantity was not in the material
--- provided to this migration, the remainder of each category's envelope is
--- kept as one explicit "belum dirinci" (not yet itemized) line rather than
--- inventing a fake breakdown -- the two control totals (material/labor)
--- are exact and authoritative regardless of how finely the lines are
--- itemized yet.
+-- Three distinct, owner-provided budgeting layers, never mixed/summed
+-- into each other:
+--   - ORIGINAL TENDER RAB (Rp83,501,750) — the real 58-item "Loonars
+--     Coffee Tender Final" spreadsheet, seeded verbatim as cm_project_boq
+--     v1 below, quirks and all (a stated-amount/qty*price mismatch, a
+--     placeholder rebar quantity, Rp0 unpriced lines) — never silently
+--     corrected.
+--   - MATERIAL PROCUREMENT BUDGET (Rp58,387,454) and LABOR/BORONGAN
+--     CONTRACT (Rp75,000,000) — a later calculation, stored directly on
+--     construction_projects (material_procurement_budget/
+--     labor_contract_budget) and as the real cm_labor_contracts.contract_value.
+--   - PROJECT CONTROL BASELINE (Rp133,387,454 = the two above added) —
+--     construction_projects.total_budget, the actual figure spend is
+--     tracked against going forward.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -65,6 +66,23 @@ alter table public.construction_projects add column if not exists engineering_st
 comment on column public.construction_projects.engineering_status is
   'PROVISIONAL/ENGINEER_REVIEW/APPROVED — whether the project''s structural drawing/quantities are still preliminary. Existing projects default to APPROVED (unaffected); Loonars Coffee is seeded as PROVISIONAL below per its working drawing''s own disclaimer.';
 
+-- Owner's explicit instruction: the ORIGINAL TENDER RAB subtotal
+-- (Rp83,501,750, itemized in cm_project_boq v1 below), the MATERIAL
+-- PROCUREMENT BUDGET envelope (Rp58,387,454), and the LABOR/BORONGAN
+-- CONTRACT (Rp75,000,000, cm_labor_contracts) are three DIFFERENT
+-- budgeting layers that must never be silently summed together (e.g.
+-- tender RAB + labor contract). total_budget stays the authoritative
+-- PROJECT CONTROL BASELINE (material envelope + labor contract, matching
+-- the owner-approved Rp133,387,454) — these two new columns record that
+-- split explicitly rather than forcing it to be re-derived from BOQ lines,
+-- which track the original tender data instead.
+alter table public.construction_projects add column if not exists material_procurement_budget numeric(16, 2);
+alter table public.construction_projects add column if not exists labor_contract_budget numeric(16, 2);
+comment on column public.construction_projects.material_procurement_budget is
+  'Material procurement budget ENVELOPE (a later calculation, distinct from the original tender RAB subtotal in cm_project_boq v1) — the control figure actual material purchases are tracked against.';
+comment on column public.construction_projects.labor_contract_budget is
+  'Labor/borongan contract control figure — should equal the active cm_labor_contracts.contract_value for this project.';
+
 do $$
 declare
   v_branch_id uuid;
@@ -73,8 +91,8 @@ begin
   select id into v_branch_id from public.branches where code = 'LNC';
 
   if not exists (select 1 from public.construction_projects where branch_id = v_branch_id) then
-    insert into public.construction_projects (branch_id, name, total_budget, status, engineering_status)
-    values (v_branch_id, 'Loonars Coffee — Yogyakarta (8.5m x 6m, 51m²)', 133387454, 'active', 'PROVISIONAL')
+    insert into public.construction_projects (branch_id, name, total_budget, status, engineering_status, material_procurement_budget, labor_contract_budget)
+    values (v_branch_id, 'Loonars Coffee — Yogyakarta (8.5m x 6m, 51m²)', 133387454, 'active', 'PROVISIONAL', 58387454, 75000000)
     returning id into v_project_id;
   end if;
 end $$;
@@ -88,6 +106,20 @@ alter table public.cm_project_boq add column if not exists planned_finish date;
 alter table public.cm_project_boq add column if not exists engineering_status text
   not null default 'APPROVED'
   check (engineering_status in ('PROVISIONAL', 'ENGINEER_REVIEW', 'APPROVED'));
+-- Preserves the ORIGINAL tender/spreadsheet category label (e.g. "TANAH &
+-- PONDASI") separately from `category`, which stays constrained to the
+-- 4-value material/labor/equipment/other cost-type enum every other cm_*
+-- rollup already relies on.
+alter table public.cm_project_boq add column if not exists category_label text;
+-- Some original RAB lines carry a stated Amount that doesn't equal
+-- quantity x unit_price (a real spreadsheet artifact — never silently
+-- "corrected"). When set, this is the OFFICIAL recorded amount for the
+-- line; quantity/unit_price stay exactly as originally written for audit.
+alter table public.cm_project_boq add column if not exists amount_override numeric(16, 2);
+-- Free-text data-quality flag carried over from the original RAB, e.g.
+-- 'CALCULATION_MISMATCH', 'QUANTITY_PLACEHOLDER', 'UNPRICED' — surfaced to
+-- the owner, never used to silently hide/alter a line.
+alter table public.cm_project_boq add column if not exists review_flag text;
 create index if not exists cm_project_boq_cost_code_idx on public.cm_project_boq (project_id, cost_code);
 
 create table if not exists public.cm_project_boq_versions (
@@ -135,8 +167,8 @@ begin
 
   select coalesce(max(version_no), 0) + 1 into v_next_version from public.cm_project_boq_versions where project_id = p_project_id;
 
-  select coalesce(sum(budget) filter (where category in ('material', 'equipment', 'other')), 0),
-         coalesce(sum(budget) filter (where category = 'labor'), 0)
+  select coalesce(sum(coalesce(amount_override, budget)) filter (where category in ('material', 'equipment', 'other')), 0),
+         coalesce(sum(coalesce(amount_override, budget)) filter (where category = 'labor'), 0)
   into v_material, v_labor
   from public.cm_project_boq
   where project_id = p_project_id and unit_id is null and version_id in (
@@ -153,10 +185,10 @@ begin
   if v_next_version > 1 then
     insert into public.cm_project_boq (
       project_id, unit_id, project_wbs_id, category, material_id, description, quantity, unit, unit_price,
-      cost_code, planned_start, planned_finish, engineering_status, sort_order, version_id
+      cost_code, planned_start, planned_finish, engineering_status, category_label, amount_override, review_flag, sort_order, version_id
     )
     select project_id, unit_id, project_wbs_id, category, material_id, description, quantity, unit, unit_price,
-           cost_code, planned_start, planned_finish, engineering_status, sort_order, v_new_version_id
+           cost_code, planned_start, planned_finish, engineering_status, category_label, amount_override, review_flag, sort_order, v_new_version_id
     from public.cm_project_boq
     where project_id = p_project_id and version_id = (
       select id from public.cm_project_boq_versions where project_id = p_project_id and version_no = v_next_version - 1
@@ -167,16 +199,59 @@ begin
 end;
 $$;
 
+-- cm_boq_summary(): pre-existing (0210), fixed here to (a) use
+-- coalesce(amount_override, budget) so a preserved spreadsheet mismatch
+-- doesn't distort the rollup, and (b) only sum a project's CURRENT BOQ
+-- version once RAB versioning is in use (see cm_new_boq_version) --
+-- otherwise a project with 2+ versions would double-count every past
+-- revision. A project with no versions (version_id null throughout, every
+-- existing project before this migration) is completely unaffected: the
+-- `version_id is null` branch keeps behaving exactly as before.
+create or replace function public.cm_boq_summary(p_project_id uuid)
+returns table(category text, total_budget numeric)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select category, coalesce(sum(coalesce(amount_override, budget)), 0) as total_budget
+  from public.cm_project_boq
+  where project_id = p_project_id and unit_id is null
+    and (
+      version_id is null
+      or version_id in (select id from public.cm_project_boq_versions where project_id = p_project_id and is_current = true)
+    )
+  group by category;
+$$;
+
 -- ----------------------------------------------------------------------------
--- 3. Loonars Coffee RAB v1 seed
+-- 3. Loonars Coffee RAB v1 seed — ORIGINAL TENDER RAB (58 items, from the
+--    real "Loonars Coffee Tender Final" spreadsheet, subtotal
+--    Rp83,501,750). This is historical/reference data, stored EXACTLY as
+--    given — including its own quirks, never silently corrected:
+--      - item 3 (RAB-003): stated Amount (Rp4,500,000) doesn't equal
+--        quantity x unit_price (51 x Rp25,000 = Rp1,275,000) in the
+--        original spreadsheet. amount_override preserves the ORIGINAL
+--        amount; quantity/unit_price stay exactly as written.
+--      - item 13 (RAB-013): quantity = 1 kg is a clear placeholder.
+--        Preserved as-is, flagged for engineering/quantity review.
+--      - item 19 (RAB-019): UNP truss quantity = 25.5 m is the ORIGINAL
+--        RAB value. A later engineering/procurement revision (different
+--        truss-line/chord/web breakdown) must be a NEW BOQ version
+--        (cm_new_boq_version), never an edit of this row.
+--      - Rp0 items are NOT "not required" — they're UNPRICED/NOT YET
+--        BUDGETED in the original tender and stay visible as such.
+--
+--    This Rp83,501,750 tender subtotal is DELIBERATELY NOT the same
+--    figure as material_procurement_budget (Rp58,387,454) or
+--    labor_contract_budget (Rp75,000,000) set on construction_projects
+--    above — three distinct budgeting layers per the owner's explicit
+--    instruction, never added together.
 -- ----------------------------------------------------------------------------
 do $$
 declare
   v_project_id uuid;
   v_version_id uuid;
-  v_material_lines numeric := 0;
-  v_material_target numeric := 58387454;
-  v_labor_target numeric := 75000000;
 begin
   select id into v_project_id from public.construction_projects
   where branch_id = (select id from public.branches where code = 'LNC') limit 1;
@@ -189,74 +264,83 @@ begin
   end if;
 
   insert into public.cm_project_boq_versions (project_id, version_no, label, is_current, material_budget_snapshot, labor_budget_snapshot)
-  values (v_project_id, 1, 'RAB v1 — baseline (owner-approved)', true, v_material_target, v_labor_target)
+  values (v_project_id, 1, 'Original Tender Final (RAB/BOQ Tender) — Rp83,501,750 subtotal, historical baseline', true, 83501750, null)
   returning id into v_version_id;
 
-  -- Concrete items with quantities/prices explicitly given in the project
-  -- brief. Everything here is PROVISIONAL per the working drawing's own
-  -- disclaimer (footing/rebar/truss profile/purlin spacing pending
-  -- engineer sign-off).
   insert into public.cm_project_boq (
-    project_id, version_id, category, cost_code, description, quantity, unit, unit_price,
-    engineering_status, sort_order
+    project_id, version_id, category, category_label, cost_code, description, quantity, unit, unit_price,
+    amount_override, review_flag, engineering_status, sort_order
   ) values
-    -- PRELIMINARY
-    (v_project_id, v_version_id, 'other', 'PRE-001', 'Mobilisasi & pembersihan lahan (site setting out)', 1, 'ls', 0, 'PROVISIONAL', 1),
-    -- STRUCTURE — IWF 150 columns: 6 perimeter points x 3m ≈ 18m run, IWF sold in 6m bars → 3 batang.
-    (v_project_id, v_version_id, 'material', 'STR-001', 'IWF 150 x 6m (kolom, 6 titik x 3m ≈ 18m)', 3, 'batang', 1145000, 'PROVISIONAL', 10),
-    -- STRUCTURE — CNP 100x42 ringbalk: perimeter ≈29m / 6m bars → this is the exact example given in the brief.
-    (v_project_id, v_version_id, 'material', 'STR-002', 'CNP 100x42x6m x2mm (ringbalk keliling ≈29m)', 5, 'batang', 215000, 'PROVISIONAL', 20),
-    -- STRUCTURE — CNP 100x50 for truss chords: 3 truss lines, ~8.5m clear span, 2 chord pieces/line.
-    (v_project_id, v_version_id, 'material', 'STR-003', 'CNP 100x50x6m x2mm (kuda-kuda/truss, 3 jalur bentang ≈8.5m)', 6, 'batang', 288000, 'PROVISIONAL', 30),
-    (v_project_id, v_version_id, 'material', 'STR-004', 'Gording (purlin) memanjang — spesifikasi & jarak final menunggu perhitungan struktur', 1, 'ls', 0, 'ENGINEER_REVIEW', 40),
-    -- FOUNDATION items under STRUCTURE category per the brief's cost-code list — no dimensions given, engineer-pending.
-    (v_project_id, v_version_id, 'other', 'CON-001', 'Cakar ayam (pondasi) — dimensi & tulangan menunggu perhitungan struktur engineer', 6, 'titik', 0, 'ENGINEER_REVIEW', 50),
-    (v_project_id, v_version_id, 'other', 'CON-002', 'Pedestal — menunggu perhitungan struktur engineer', 6, 'titik', 0, 'ENGINEER_REVIEW', 60),
-    (v_project_id, v_version_id, 'other', 'CON-003', 'Sloof — menunggu perhitungan struktur engineer', 1, 'ls', 0, 'ENGINEER_REVIEW', 70),
-    (v_project_id, v_version_id, 'other', 'CON-004', 'Slab lantai — menunggu perhitungan struktur engineer', 51, 'm2', 0, 'ENGINEER_REVIEW', 80),
-    -- ROOF — spandek + aluminium foil, 0.30mm per the brief's explicit instruction to use 0.30mm for the current estimate.
-    (v_project_id, v_version_id, 'material', 'ROOF-001', 'Spandek/Galvalum 0.30mm (atap, estimasi ≈8.5m x 6m bentang atap)', 51, 'm', 57000, 'PROVISIONAL', 90),
-    (v_project_id, v_version_id, 'material', 'ROOF-002', 'Aluminium foil (bawah atap)', 51, 'm2', 0, 'PROVISIONAL', 100),
-    -- FACADE
-    (v_project_id, v_version_id, 'other', 'FAC-001', 'Hollow 40x20 (rangka fasad)', 1, 'ls', 0, 'PROVISIONAL', 110),
-    -- KITCHEN / PLUMBING / ELECTRICAL / DRAINAGE / FINISHING — no line-level
-    -- quantities were supplied; kept as explicit category placeholders
-    -- rather than invented numbers, so procurement can attach real
-    -- quantities via cm_add_project_boq_line once available.
-    (v_project_id, v_version_id, 'other', 'KIT-000', 'Kitchen/service area — belum dirinci per item', 1, 'ls', 0, 'PROVISIONAL', 120),
-    (v_project_id, v_version_id, 'other', 'PLB-000', 'Plumbing — belum dirinci per item', 1, 'ls', 0, 'PROVISIONAL', 130),
-    (v_project_id, v_version_id, 'other', 'ELC-000', 'Electrical (MEP) — belum dirinci per item', 1, 'ls', 0, 'PROVISIONAL', 140),
-    (v_project_id, v_version_id, 'other', 'DRN-000', 'Drainase — belum dirinci per item', 1, 'ls', 0, 'PROVISIONAL', 150),
-    (v_project_id, v_version_id, 'other', 'FIN-000', 'Finishing (cat, keramik, dll) — belum dirinci per item', 1, 'ls', 0, 'PROVISIONAL', 160);
+    (v_project_id, v_version_id, 'other', 'PERSIAPAN', 'RAB-001', 'Mobilisasi & demobilisasi', 1, 'ls', 7500000, null, null, 'PROVISIONAL', 1),
+    (v_project_id, v_version_id, 'other', 'PERSIAPAN', 'RAB-002', 'Pengukuran / setting out bangunan 8,5 x 6 m', 1, 'ls', 4500000, null, null, 'PROVISIONAL', 2),
+    (v_project_id, v_version_id, 'other', 'PERSIAPAN', 'RAB-003', 'Pembersihan area kerja', 51, 'm2', 25000, 4500000, 'CALCULATION_MISMATCH / NEEDS_REVIEW — original spreadsheet amount (Rp4,500,000) does not equal 51 x Rp25,000 (Rp1,275,000); original amount preserved, not recalculated', 'PROVISIONAL', 3),
 
-  select coalesce(sum(budget), 0) into v_material_lines
-  from public.cm_project_boq where project_id = v_project_id and version_id = v_version_id;
+    (v_project_id, v_version_id, 'other', 'TANAH & PONDASI', 'RAB-004', 'Galian pondasi batu kali', 5.23, 'm3', 75000, null, null, 'PROVISIONAL', 4),
+    (v_project_id, v_version_id, 'other', 'TANAH & PONDASI', 'RAB-005', 'Urugan pasir bawah pondasi', 5, 'm3', 75000, null, null, 'PROVISIONAL', 5),
+    (v_project_id, v_version_id, 'other', 'TANAH & PONDASI', 'RAB-006', 'Pondasi batu kali tinggi ±50 cm', 5.08, 'm3', 275000, null, null, 'PROVISIONAL', 6),
+    (v_project_id, v_version_id, 'other', 'TANAH & PONDASI', 'RAB-007', 'Urugan kembali & pemadatan', 3, 'm3', 125000, null, null, 'PROVISIONAL', 7),
 
-  -- Reconciliation line: the sum of itemized lines above is a real but
-  -- partial breakdown of the actual RAB (the working drawing/spreadsheet
-  -- this baseline came from has more line-level detail than was included
-  -- in this task's brief). Rather than inventing precise quantities for
-  -- every remaining line, the unallocated remainder of the APPROVED
-  -- material envelope is kept as one explicit, clearly-labeled residual —
-  -- so MAT total = Rp58,387,454 exactly (acceptance criteria #3), and
-  -- nothing here is silently fabricated at the line level.
-  insert into public.cm_project_boq (
-    project_id, version_id, category, cost_code, description, quantity, unit, unit_price, engineering_status, sort_order
-  ) values (
-    v_project_id, v_version_id, 'other', 'MAT-RESIDUAL',
-    'Sisa anggaran material belum dirinci per item (menunggu RAB detail final dari kalkulasi terbaru) — bagian dari total envelope material Rp58.387.454',
-    1, 'ls', greatest(v_material_target - v_material_lines, 0), 'PROVISIONAL', 900
-  );
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-008', 'Footing/cakar ayam 6 titik', 6, 'titik', 350000, null, null, 'PROVISIONAL', 8),
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-009', 'Pedestal beton tinggi ±1 m, 6 titik', 6, 'titik', 250000, null, null, 'PROVISIONAL', 9),
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-010', 'Balok/sloof beton bila ditetapkan engineer', 29, 'm', 75000, null, null, 'ENGINEER_REVIEW', 10),
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-011', 'Plat lantai beton area bangunan', 51, 'm2', 65000, null, null, 'PROVISIONAL', 11),
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-012', 'Bekisting beton', 20, 'm2', 55000, null, null, 'PROVISIONAL', 12),
+    (v_project_id, v_version_id, 'other', 'BETON', 'RAB-013', 'Pembesian footing/pedestal/plat', 1, 'kg', 2500, null, 'QUANTITY_PLACEHOLDER / NEEDS_ENGINEERING_REVIEW — 1 kg is clearly a placeholder in the original tender, preserved as-is', 'ENGINEER_REVIEW', 13),
 
-  -- LABOR — one line representing the whole borongan contract value; the
-  -- real breakdown/control lives in cm_labor_contracts (below), this BOQ
-  -- line exists so cm_boq_summary()'s material/labor split reports
-  -- correctly and sums to the total baseline.
-  insert into public.cm_project_boq (
-    project_id, version_id, category, cost_code, description, quantity, unit, unit_price, engineering_status, sort_order
-  ) values (
-    v_project_id, v_version_id, 'labor', 'LAB-001', 'Borongan kontraktor (tukang) — sesuai kontrak cm_labor_contracts', 1, 'ls', v_labor_target, 'APPROVED', 1000
-  );
+    (v_project_id, v_version_id, 'other', 'LANTAI', 'RAB-014', 'Trowel finish seluruh lantai', 51, 'm2', 125000, null, null, 'PROVISIONAL', 14),
+
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-015', 'Kolom IWF 150, tinggi ±3 m', 18, 'm', 85000, null, null, 'PROVISIONAL', 15),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-016', 'Ringbal baja keliling', 29, 'm', 125000, null, null, 'PROVISIONAL', 16),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-017', 'Base plate kolom', 6, 'set', 125000, null, null, 'PROVISIONAL', 17),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-018', 'Anchor bolt set', 6, 'set', 15000, null, null, 'PROVISIONAL', 18),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-019', 'Kuda-kuda UNP bentang ±8,5 m', 25.5, 'm', 75000, null, 'ORIGINAL_VALUE_PRESERVED — later engineering/procurement analysis (3 truss lines with top/bottom chord + web) must be a separate BOQ version, not an overwrite of this original tender value', 'PROVISIONAL', 19),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-020', 'Bracing / pengaku atap', 1, 'ls', 1500000, null, null, 'PROVISIONAL', 20),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-021', 'Gording atap', 60, 'm', 85000, null, null, 'PROVISIONAL', 21),
+    (v_project_id, v_version_id, 'material', 'BAJA STRUKTUR', 'RAB-022', 'Plat sambungan, cleat, stiffener & hardware', 1, 'ls', 85000, null, null, 'PROVISIONAL', 22),
+    (v_project_id, v_version_id, 'labor', 'BAJA STRUKTUR', 'RAB-023', 'Pengelasan, fabrikasi & erection baja', 1, 'ls', 3500000, null, null, 'PROVISIONAL', 23),
+
+    (v_project_id, v_version_id, 'material', 'ATAP', 'RAB-024', 'Penutup atap spandek', 59, 'm2', 65000, null, null, 'PROVISIONAL', 24),
+    (v_project_id, v_version_id, 'material', 'ATAP', 'RAB-025', 'Aluminium foil insulation', 59, 'm2', 15000, null, null, 'PROVISIONAL', 25),
+    (v_project_id, v_version_id, 'material', 'ATAP', 'RAB-026', 'Sekrup roofing + washer', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 26),
+    (v_project_id, v_version_id, 'material', 'ATAP', 'RAB-027', 'Nok / flashing / lis tepi', 18, 'm', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 27),
+    (v_project_id, v_version_id, 'material', 'ATAP', 'RAB-028', 'Sealant & waterproofing joint atap', 1, 'ls', 35000, null, null, 'PROVISIONAL', 28),
+
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-029', 'Hollow 40x20 mm rangka facade', 115, 'm', 125000, null, null, 'PROVISIONAL', 29),
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-030', 'Kaca facade', 28, 'm2', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 30),
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-031', 'Pintu utama facade', 1, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 31),
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-032', 'Pintu servis/kitchen', 1, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 32),
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-033', 'Hardware pintu, handle, lock & stopper', 2, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 33),
+    (v_project_id, v_version_id, 'material', 'FACADE', 'RAB-034', 'Coating/cat rangka hollow', 115, 'm2', 22500, null, null, 'PROVISIONAL', 34),
+
+    (v_project_id, v_version_id, 'other', 'DINDING & SERVIS', 'RAB-035', 'Dinding area kitchen/servis', 20, 'm2', 55000, null, null, 'PROVISIONAL', 35),
+    (v_project_id, v_version_id, 'other', 'DINDING & SERVIS', 'RAB-036', 'Finishing dinding area servis', 20, 'm2', 125000, null, null, 'PROVISIONAL', 36),
+
+    (v_project_id, v_version_id, 'other', 'KITCHEN', 'RAB-037', 'Counter/meja kerja kitchen built-in', 4, 'm', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 37),
+    (v_project_id, v_version_id, 'other', 'KITCHEN', 'RAB-038', 'Backsplash kitchen', 8, 'm2', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 38),
+    (v_project_id, v_version_id, 'other', 'KITCHEN', 'RAB-039', 'Sink kitchen + faucet', 1, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 39),
+
+    (v_project_id, v_version_id, 'material', 'PLUMBING', 'RAB-040', 'Pipa air bersih + fitting', 30, 'm', 12500, null, null, 'PROVISIONAL', 40),
+    (v_project_id, v_version_id, 'material', 'PLUMBING', 'RAB-041', 'Pipa air buangan + fitting', 30, 'm', 25000, null, null, 'PROVISIONAL', 41),
+    (v_project_id, v_version_id, 'material', 'PLUMBING', 'RAB-042', 'Floor drain', 2, 'unit', 25000, null, null, 'PROVISIONAL', 42),
+    (v_project_id, v_version_id, 'material', 'PLUMBING', 'RAB-043', 'Clean out', 2, 'unit', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 43),
+    (v_project_id, v_version_id, 'material', 'PLUMBING', 'RAB-044', 'Valve, flexible hose & accessories', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 44),
+
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-045', 'Panel/DB + MCB/RCD sesuai perhitungan', 1, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 45),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-046', 'Kabel + conduit + accessories', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 46),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-047', 'Titik lampu indoor', 8, 'titik', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 47),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-048', 'Titik lampu facade/outdoor', 4, 'titik', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 48),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-049', 'Stop kontak', 10, 'titik', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 49),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-050', 'Switch', 6, 'titik', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 50),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-051', 'Grounding system', 1, 'set', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 51),
+    (v_project_id, v_version_id, 'material', 'ELEKTRIKAL', 'RAB-052', 'Testing & commissioning listrik', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 52),
+
+    (v_project_id, v_version_id, 'material', 'DRAINASE', 'RAB-053', 'Talang atap', 18, 'm', 45000, null, null, 'PROVISIONAL', 53),
+    (v_project_id, v_version_id, 'material', 'DRAINASE', 'RAB-054', 'Downpipe', 12, 'm', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 54),
+    (v_project_id, v_version_id, 'material', 'DRAINASE', 'RAB-055', 'Outlet / drain connection', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 55),
+
+    (v_project_id, v_version_id, 'other', 'FINISHING', 'RAB-056', 'Touch-up, sealant & minor hardware', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 56),
+    (v_project_id, v_version_id, 'other', 'FINISHING', 'RAB-057', 'Pembersihan akhir', 1, 'ls', 2500000, null, null, 'PROVISIONAL', 57),
+    (v_project_id, v_version_id, 'other', 'FINISHING', 'RAB-058', 'Testing & handover', 1, 'ls', 0, null, 'UNPRICED / NOT_YET_BUDGETED', 'PROVISIONAL', 58);
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -286,9 +370,11 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- 5. Labor contract — Rp75,000,000 borongan, weighted against the WBS
 --    phases above (earned-value payment engine already built in 0213).
---    Contractor name is a placeholder pending the owner naming the actual
---    kontraktor borongan — update cm_contractors.full_name directly once
---    known, no code change needed.
+--    Contractor is Anang (owner-confirmed) — already a real
+--    contractor_wa_senders row (0237's nota-report flow) with a known
+--    phone/bank account; reused here by name/phone match rather than
+--    re-entering his details, so cm_contractors and contractor_wa_senders
+--    both point at the same person.
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -296,6 +382,8 @@ declare
   v_contractor_id uuid;
   v_contract_id uuid;
   v_weights jsonb;
+  v_anang_phone text;
+  v_anang_bank text;
 begin
   select id into v_project_id from public.construction_projects
   where branch_id = (select id from public.branches where code = 'LNC') limit 1;
@@ -304,12 +392,15 @@ begin
     return;
   end if;
 
-  insert into public.cm_contractors (full_name, contractor_type, is_active)
-  values ('Kontraktor Borongan Loonars Coffee (nama belum dikonfirmasi)', 'subcontractor', true)
+  select phone, bank_account into v_anang_phone, v_anang_bank
+  from public.contractor_wa_senders where full_name ilike '%anang%' limit 1;
+
+  insert into public.cm_contractors (full_name, contractor_type, phone, bank_account, is_active)
+  values (coalesce((select full_name from public.contractor_wa_senders where full_name ilike '%anang%' limit 1), 'Anang'), 'subcontractor', v_anang_phone, v_anang_bank, true)
   returning id into v_contractor_id;
 
-  insert into public.cm_labor_contracts (project_id, contractor_id, contract_value, start_date, notes)
-  values (v_project_id, v_contractor_id, 75000000, '2026-09-15', 'Borongan kontraktor — nilai kontrak baseline dari RAB awal')
+  insert into public.cm_labor_contracts (project_id, contractor_id, contract_value, start_date, target_completion, notes)
+  values (v_project_id, v_contractor_id, 75000000, '2026-09-15', '2026-10-20', 'Borongan kontraktor (Anang) — nilai kontrak baseline dari RAB awal, durasi 5 minggu (15 Sep s/d 20 Okt 2026)')
   returning id into v_contract_id;
 
   select jsonb_agg(jsonb_build_object('project_wbs_id', id, 'weight_pct', weight))
@@ -421,18 +512,19 @@ begin
 end;
 $$;
 
--- Seed 8 initial weeks starting Tuesday 15 Sep 2026 — planned progress/
--- payment split is a REASONABLE INITIAL PLANNING ASSUMPTION (roughly
--- following the WBS sequence/weights above), not a re-derivation of the
--- Rp75,000,000 contract value itself, which remains the authoritative
--- total (section 10 of the brief: "do not simply divide equally"; this is
--- a front-loaded-then-tapering curve, not an equal split). Fully editable
--- via cm_upsert_labor_weekly_schedule.
+-- Seed 5 weeks starting Tuesday 15 Sep 2026 (owner-confirmed total
+-- construction duration: 5 weeks, ending ~20 Oct 2026, matching
+-- cm_labor_contracts.target_completion above). Planned progress/payment
+-- split is a REASONABLE INITIAL PLANNING ASSUMPTION (front-loaded
+-- structure/foundation work, tapering into finishing), not a re-derivation
+-- of the Rp75,000,000 contract value itself (section 10 of the brief: "do
+-- not simply divide equally"). Fully editable via
+-- cm_upsert_labor_weekly_schedule.
 do $$
 declare
   v_contract_id uuid;
   v_start date := date '2026-09-15';
-  v_plan numeric[] := array[8, 12, 15, 15, 15, 15, 12, 8]; -- sums to 100
+  v_plan numeric[] := array[15, 25, 25, 20, 15]; -- sums to 100, 5 weeks
   v_i int;
 begin
   select id into v_contract_id from public.cm_labor_contracts
@@ -443,7 +535,7 @@ begin
     return;
   end if;
 
-  for v_i in 1..8 loop
+  for v_i in 1..5 loop
     insert into public.cm_labor_weekly_schedule (
       labor_contract_id, week_number, period_start, period_end, planned_progress_pct, planned_payment
     ) values (
