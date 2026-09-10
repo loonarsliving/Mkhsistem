@@ -128,7 +128,11 @@ export type NotificationCategoryDb =
   | "approval_request_decided"
   // AI lead-nurture bot (migration 0228)
   | "lead_hot_handoff"
-  | "pending_question_timeout";
+  | "pending_question_timeout"
+  // Loonars Coffee construction pilot (migrations 0256/0257)
+  | "construction_cost_request_submitted"
+  | "construction_cost_request_decided"
+  | "construction_project_weekly_report";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -2915,6 +2919,9 @@ export interface Database {
           name: string;
           total_budget: number;
           status: "active" | "completed" | "cancelled";
+          engineering_status: "PROVISIONAL" | "ENGINEER_REVIEW" | "APPROVED";
+          material_procurement_budget: number | null;
+          labor_contract_budget: number | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -2925,6 +2932,9 @@ export interface Database {
           name: string;
           total_budget: number;
           status?: "active" | "completed" | "cancelled";
+          engineering_status?: "PROVISIONAL" | "ENGINEER_REVIEW" | "APPROVED";
+          material_procurement_budget?: number | null;
+          labor_contract_budget?: number | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -3230,6 +3240,14 @@ export interface Database {
           unit: string;
           unit_price: number;
           budget: number;
+          cost_code: string | null;
+          planned_start: string | null;
+          planned_finish: string | null;
+          engineering_status: "PROVISIONAL" | "ENGINEER_REVIEW" | "APPROVED";
+          category_label: string | null;
+          amount_override: number | null;
+          review_flag: string | null;
+          version_id: string | null;
           sort_order: number;
           created_at: string;
           updated_at: string;
@@ -3245,6 +3263,14 @@ export interface Database {
           quantity: number;
           unit: string;
           unit_price: number;
+          cost_code?: string | null;
+          planned_start?: string | null;
+          planned_finish?: string | null;
+          engineering_status?: "PROVISIONAL" | "ENGINEER_REVIEW" | "APPROVED";
+          category_label?: string | null;
+          amount_override?: number | null;
+          review_flag?: string | null;
+          version_id?: string | null;
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
@@ -3255,6 +3281,167 @@ export interface Database {
             foreignKeyName: "cm_project_boq_project_id_fkey";
             columns: ["project_id"];
             referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cm_project_boq_version_id_fkey";
+            columns: ["version_id"];
+            referencedRelation: "cm_project_boq_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_project_boq_versions: {
+        Row: {
+          id: string;
+          project_id: string;
+          version_no: number;
+          label: string | null;
+          is_current: boolean;
+          material_budget_snapshot: number | null;
+          labor_budget_snapshot: number | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          version_no: number;
+          label?: string | null;
+          is_current?: boolean;
+          material_budget_snapshot?: number | null;
+          labor_budget_snapshot?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_project_boq_versions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_project_boq_versions_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cm_labor_weekly_schedule: {
+        Row: {
+          id: string;
+          labor_contract_id: string;
+          week_number: number;
+          period_start: string;
+          period_end: string;
+          planned_progress_pct: number;
+          actual_progress_pct: number | null;
+          planned_payment: number;
+          requested_payment: number | null;
+          approved_payment: number | null;
+          paid_amount: number | null;
+          notes: string | null;
+          status: "planned" | "in_progress" | "submitted" | "paid" | "closed";
+          linked_payment_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          labor_contract_id: string;
+          week_number: number;
+          period_start: string;
+          period_end: string;
+          planned_progress_pct?: number;
+          actual_progress_pct?: number | null;
+          planned_payment?: number;
+          requested_payment?: number | null;
+          approved_payment?: number | null;
+          paid_amount?: number | null;
+          notes?: string | null;
+          status?: "planned" | "in_progress" | "submitted" | "paid" | "closed";
+          linked_payment_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["cm_labor_weekly_schedule"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "cm_labor_weekly_schedule_labor_contract_id_fkey";
+            columns: ["labor_contract_id"];
+            referencedRelation: "cm_labor_contracts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      construction_cost_requests: {
+        Row: {
+          id: string;
+          project_id: string;
+          request_type: "material_purchase" | "contractor_payment" | "other_expense";
+          cm_project_boq_id: string | null;
+          cost_code: string | null;
+          description: string;
+          items: Json | null;
+          amount: number;
+          party_name: string | null;
+          status: "draft" | "submitted" | "approved" | "rejected" | "transferred" | "paid" | "posted" | "cancelled";
+          requested_by: string | null;
+          requested_at: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          reject_reason: string | null;
+          transferred_at: string | null;
+          transfer_confirmed_by: string | null;
+          posted_expense_id: string | null;
+          posted_labor_payment_id: string | null;
+          wa_request_id: string | null;
+          source: "web" | "whatsapp";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          request_type: "material_purchase" | "contractor_payment" | "other_expense";
+          cm_project_boq_id?: string | null;
+          cost_code?: string | null;
+          description: string;
+          items?: Json | null;
+          amount: number;
+          party_name?: string | null;
+          status?: "draft" | "submitted" | "approved" | "rejected" | "transferred" | "paid" | "posted" | "cancelled";
+          requested_by?: string | null;
+          requested_at?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          reject_reason?: string | null;
+          transferred_at?: string | null;
+          transfer_confirmed_by?: string | null;
+          posted_expense_id?: string | null;
+          posted_labor_payment_id?: string | null;
+          wa_request_id?: string | null;
+          source?: "web" | "whatsapp";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["construction_cost_requests"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "construction_cost_requests_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "construction_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "construction_cost_requests_cm_project_boq_id_fkey";
+            columns: ["cm_project_boq_id"];
+            referencedRelation: "cm_project_boq";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "construction_cost_requests_posted_expense_id_fkey";
+            columns: ["posted_expense_id"];
+            referencedRelation: "construction_expenses";
             referencedColumns: ["id"];
           },
         ];

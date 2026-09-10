@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assessConstructionProgress, fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
+import type { Json, NotificationCategoryDb } from "@/types/database.types";
 
 /**
  * Loonars Coffee (Yogyakarta) — Vando's WhatsApp-first field-ops interface.
@@ -66,7 +67,7 @@ function mentionsLoonarsCoffee(text: string): boolean {
   return /coffee/i.test(text);
 }
 
-async function notifySuperAdmins(category: string, title: string, body: string, metadata: Record<string, unknown>) {
+async function notifySuperAdmins(category: NotificationCategoryDb, title: string, body: string, metadata: Json) {
   const supabase = createAdminClient();
   const { data: admins } = await supabase
     .from("employees")
@@ -155,7 +156,7 @@ export async function tryHandleLoonarsCoffeeCostRequest(
       project_id: project.id,
       request_type: ai.requestType,
       description,
-      items: ai.items.length > 0 ? ai.items : null,
+      items: ai.items.length > 0 ? (ai.items as unknown as Json) : null,
       amount: ai.nominal,
       party_name: ai.partyName,
       cost_code: ai.requestType === "contractor_payment" ? "LAB-001" : null,
@@ -287,6 +288,7 @@ export async function tryHandleLoonarsCoffeeOwnerDecision(owner: { id: string; f
     if (!req || req.status !== "approved") return { outcome: "not_found" };
 
     const { data: project } = await supabase.from("construction_projects").select("branch_id").eq("id", req.project_id).maybeSingle();
+    if (!project) return { outcome: "not_found" };
 
     if (req.request_type === "contractor_payment") {
       // Contractor payments still need the earned-value engine
@@ -304,7 +306,7 @@ export async function tryHandleLoonarsCoffeeOwnerDecision(owner: { id: string; f
         .from("construction_expenses")
         .insert({
           project_id: req.project_id,
-          branch_id: project?.branch_id,
+          branch_id: project.branch_id,
           expense_type: req.request_type === "material_purchase" ? "pembelian_material" : "pembelian_lain_lain",
           party_name: req.party_name ?? "Vando (WhatsApp)",
           description: req.description,
