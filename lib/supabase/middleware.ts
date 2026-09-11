@@ -59,6 +59,7 @@ const PUBLIC_PATHS = [
   "/api/villa/ai/cctv-vision",
   "/api/villa/ai/pricing-insight",
   "/api/villa/ai/competitor-pricing",
+  "/api/villa/ai/market-demand",
   // Called cross-origin by the Ultron voice assistant (separate "filehub"
   // deployment) with a Supabase access token in the Authorization header,
   // never a same-site session cookie -- must stay out of the cookie-based
