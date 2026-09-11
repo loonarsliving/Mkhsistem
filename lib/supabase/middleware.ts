@@ -48,6 +48,17 @@ const PUBLIC_PATHS = [
   "/api/social/publish-content",
   "/api/markom/check-ads-balance",
   "/api/markom/refresh-ad-campaign-spend",
+  // Server-to-server bridge endpoints called by loonarsliving/villa's
+  // server-side code (Supabase Edge Function / Vercel route handlers,
+  // never a browser session) -- found missing here the same way every
+  // route above was: villa's aiBridge.ts kept reporting "AI bridge
+  // failed: 200" because the POST landed on the /login HTML page (200
+  // OK) instead of ever reaching the handler. Each enforces its own
+  // shared-secret check (x-internal-secret against VILLA_BRIDGE_SECRET)
+  // in the route handler itself.
+  "/api/villa/ai/cctv-vision",
+  "/api/villa/ai/pricing-insight",
+  "/api/villa/ai/competitor-pricing",
   // Called cross-origin by the Ultron voice assistant (separate "filehub"
   // deployment) with a Supabase access token in the Authorization header,
   // never a same-site session cookie -- must stay out of the cookie-based
