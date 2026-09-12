@@ -43,6 +43,7 @@ import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-subm
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
+import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -125,6 +126,26 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
 
     const inbound = received.normalized;
     trace.push(`normalized.content.kind:${inbound.content.kind}`);
+
+    // Villa website booking: owner replies "LUNAS <kode>" once the QRIS
+    // money lands, and villa-api locks the unit (owner request
+    // 2026-09-12, so the guest never has to upload a transfer receipt).
+    //
+    // Checked before every other route because the pattern is exact and
+    // owner-only: anything that is not literally "LUNAS <6 hex>" from the
+    // super admin's own number falls straight through untouched, so this
+    // cannot shadow the contractor, employee or ad-lead paths below.
+    if (inbound.content.kind === "text") {
+      trace.push("tryConfirmVillaPaymentViaWhatsApp:calling");
+      const villaPayment = await tryConfirmVillaPaymentViaWhatsApp(inbound.sender, inbound.content.text);
+      if (villaPayment.outcome === "handled") {
+        trace.push("tryConfirmVillaPaymentViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, villaPayment.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, villaPayment.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryConfirmVillaPaymentViaWhatsApp:not_applicable");
+    }
 
     // Contractor (non-employee) nota report (0237): Anang and future rows
     // in contractor_wa_senders are NOT employees -- must be checked before
