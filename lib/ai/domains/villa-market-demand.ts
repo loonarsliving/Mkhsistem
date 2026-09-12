@@ -71,6 +71,22 @@ export interface MarketDemandResult {
   demand_trend: DemandTrend;
   trend_note: string;
   events: MarketDemandEvent[];
+  /**
+   * Minat pencarian per bulan, 0-100, mis. { "2026-10": 62 }.
+   *
+   * Versi berangka dari `demand_trend`, yang hanya satu kata untuk seluruh
+   * tahun dan karenanya tidak bisa membedakan Juli dari Februari -- padahal
+   * justru perbedaan antarbulan itulah yang berguna untuk harga. Villa
+   * memakai indeks ini lebih dulu dan jatuh kembali ke `demand_trend` hanya
+   * kalau indeksnya tidak ada, supaya sinyal yang sama tidak dihitung dua
+   * kali.
+   *
+   * Skalanya relatif terhadap dirinya sendiri (100 = bulan tersibuk dalam
+   * daftar), bukan jumlah pencarian sebenarnya -- yang tidak bisa diketahui
+   * dari pencarian web publik. Yang dibutuhkan mesin harga memang
+   * perbandingan antarbulan, bukan angka absolutnya.
+   */
+  search_index_by_month?: Record<string, number>;
 }
 
 interface RawEvent {
@@ -85,6 +101,7 @@ interface RawResult {
   demand_trend?: unknown;
   trend_note?: unknown;
   events?: unknown;
+  search_index_by_month?: unknown;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -97,29 +114,58 @@ function parseMarketDemandJson(text: string): MarketDemandResult {
     .trim();
   const parsed = JSON.parse(cleaned) as RawResult;
 
-  const demand_trend: DemandTrend = parsed.demand_trend === "naik" || parsed.demand_trend === "turun" ? parsed.demand_trend : "stabil";
-  const trend_note = typeof parsed.trend_note === "string" ? parsed.trend_note.trim().slice(0, 500) : "";
+  const demand_trend: DemandTrend =
+    parsed.demand_trend === "naik" || parsed.demand_trend === "turun"
+      ? parsed.demand_trend
+      : "stabil";
+  const trend_note =
+    typeof parsed.trend_note === "string" ? parsed.trend_note.trim().slice(0, 500) : "";
 
   const rawEvents = Array.isArray(parsed.events) ? (parsed.events as RawEvent[]) : [];
   const events: MarketDemandEvent[] = rawEvents
     .filter(
       (e): e is Required<Pick<RawEvent, "label" | "start_date" | "end_date">> & RawEvent =>
-        typeof e?.label === "string" && typeof e?.start_date === "string" && DATE_RE.test(e.start_date) && typeof e?.end_date === "string" && DATE_RE.test(e.end_date) && e.end_date >= e.start_date,
+        typeof e?.label === "string" &&
+        typeof e?.start_date === "string" &&
+        DATE_RE.test(e.start_date) &&
+        typeof e?.end_date === "string" &&
+        DATE_RE.test(e.end_date) &&
+        e.end_date >= e.start_date,
     )
     .map((e) => ({
       label: String(e.label).trim().slice(0, 200),
       start_date: e.start_date as string,
       end_date: e.end_date as string,
-      expected_impact: (e.expected_impact === "medium" || e.expected_impact === "high" ? e.expected_impact : "low") as "low" | "medium" | "high",
+      expected_impact: (e.expected_impact === "medium" || e.expected_impact === "high"
+        ? e.expected_impact
+        : "low") as "low" | "medium" | "high",
       certainty: (e.certainty === "recurring" ? "recurring" : "announced") as EventCertainty,
       source_note: typeof e.source_note === "string" ? e.source_note.trim().slice(0, 500) : "",
     }))
     .slice(0, 30);
 
-  return { demand_trend, trend_note, events };
+  // Disaring, tidak dipercaya apa adanya: keluaran model bisa mengandung
+  // bulan berformat aneh atau angka di luar 0-100, dan angka liar yang
+  // lolos akan langsung menggerakkan harga tamu. Di bawah tiga bulan,
+  // rata-ratanya bukan baseline yang berarti, jadi seluruh indeks dibuang
+  // daripada dipakai setengah-setengah.
+  let search_index_by_month: Record<string, number> | undefined;
+  const rawIndex = parsed.search_index_by_month;
+  if (rawIndex && typeof rawIndex === "object") {
+    const cleaned: Record<string, number> = {};
+    for (const [k, v] of Object.entries(rawIndex as Record<string, unknown>)) {
+      const n = Number(v);
+      if (/^\d{4}-\d{2}$/.test(k) && Number.isFinite(n) && n >= 0 && n <= 100) cleaned[k] = n;
+    }
+    if (Object.keys(cleaned).length >= 3) search_index_by_month = cleaned;
+  }
+
+  return { demand_trend, trend_note, events, search_index_by_month };
 }
 
-export async function researchVillaMarketDemand(input: MarketDemandInput): Promise<MarketDemandResult> {
+export async function researchVillaMarketDemand(
+  input: MarketDemandInput,
+): Promise<MarketDemandResult> {
   const today = new Date().toISOString().slice(0, 10);
   const systemPrompt =
     "Kamu asisten riset permintaan pasar akomodasi. Kamu HANYA boleh melaporkan event/festival/hari libur NYATA yang benar-benar akan berlangsung, berdasarkan hasil pencarian Google publik -- JANGAN PERNAH mengarang nama acara atau tanggal. Kalau tidak yakin suatu acara benar-benar akan terjadi pada tanggal tertentu, jangan masukkan ke daftar. Ini data referensi untuk mesin harga otomatis yang tetap dijaga batas atas/bawahnya oleh sistem, bukan keputusan harga final itu sendiri.";
@@ -136,13 +182,25 @@ export async function researchVillaMarketDemand(input: MarketDemandInput): Promi
 
    Untuk (a) tanggalnya boleh kamu tentukan dari kalender nasional Indonesia yang sudah pasti (mis. 1 Januari, 25 Desember); untuk (b) hanya masukkan kalau pengumuman tanggalnya benar-benar kamu temukan. Jangan mengarang tanggal acara berjadwal yang belum diumumkan.
 
+3. MINAT PENCARIAN PER BULAN: perkirakan seramai apa orang mencari penginapan/villa di area ini untuk SETIAP bulan dalam 12 bulan ke depan, dalam skala 0-100 yang relatif terhadap dirinya sendiri — 100 untuk bulan tersibuk dalam daftarmu, dan bulan lain proporsional terhadapnya. Ini bukan jumlah pencarian sebenarnya (itu tidak bisa diketahui dari pencarian web publik), melainkan perbandingan antarbulan, yang justru itulah yang dibutuhkan.
+
+   Dasarkan pada pola musim wisata yang kamu temukan: puncak libur sekolah dan akhir tahun tinggi, bulan Ramadan rendah, minggu-minggu setelah libur panjang rendah. Konsisten dengan jawabanmu di bagian 2 — bulan yang kamu tandai "turun" di sana tidak boleh tinggi di sini.
+
 Balas HANYA dengan JSON (tanpa markdown code fence, tanpa penjelasan tambahan):
-{"demand_trend": "naik" atau "turun" atau "stabil", "trend_note": "1-2 kalimat alasan singkat", "events": [{"label": "nama event", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "expected_impact": "low" atau "medium" atau "high", "certainty": "recurring" atau "announced", "source_note": "1 kalimat: sumber info ini"}]}
+{"demand_trend": "naik" atau "turun" atau "stabil", "trend_note": "1-2 kalimat alasan singkat", "events": [{"label": "nama event", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "expected_impact": "low" atau "medium" atau "high", "certainty": "recurring" atau "announced", "source_note": "1 kalimat: sumber info ini"}], "search_index_by_month": {"YYYY-MM": 0-100}}
+
+Isi "search_index_by_month" dengan objek bulan → angka, mis. {"2026-10": 55, "2026-11": 48, "2026-12": 95}. Sertakan seluruh 12 bulan ke depan kalau bisa; kalau kurang dari 3 bulan, kosongkan saja objeknya.
 
 Isi "certainty" dengan "recurring" untuk jenis (a) -- puncak musiman yang sudah pasti berulang tiap tahun -- dan "announced" untuk jenis (b) -- acara berjadwal yang tanggalnya kamu temukan diumumkan. Kalau ragu, pakai "announced".
 
 Kalau tidak menemukan event yang meyakinkan, balas array events kosong: []`;
 
-  const response = await generateAIText({ systemPrompt, userPrompt, useWebSearch: true, maxOutputTokens: 2048, temperature: 0.2 });
+  const response = await generateAIText({
+    systemPrompt,
+    userPrompt,
+    useWebSearch: true,
+    maxOutputTokens: 2048,
+    temperature: 0.2,
+  });
   return parseMarketDemandJson(response.text);
 }
