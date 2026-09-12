@@ -103,6 +103,22 @@ export interface MarketDemandResult {
   demand_trend: DemandTrend;
   trend_note: string;
   events: MarketDemandEvent[];
+  /**
+   * Minat pencarian per bulan, 0-100, mis. { "2026-10": 62 }.
+   *
+   * Versi berangka dari `demand_trend`, yang hanya satu kata untuk seluruh
+   * tahun dan karenanya tidak bisa membedakan Juli dari Februari -- padahal
+   * justru perbedaan antarbulan itulah yang berguna untuk harga. Villa
+   * memakai indeks ini lebih dulu dan jatuh kembali ke `demand_trend` hanya
+   * kalau indeksnya tidak ada, supaya sinyal yang sama tidak dihitung dua
+   * kali.
+   *
+   * Skalanya relatif terhadap dirinya sendiri (100 = bulan tersibuk dalam
+   * daftar), bukan jumlah pencarian sebenarnya -- yang tidak bisa diketahui
+   * dari pencarian web publik. Yang dibutuhkan mesin harga memang
+   * perbandingan antarbulan, bukan angka absolutnya.
+   */
+  search_index_by_month?: Record<string, number>;
 }
 
 interface RawEvent {
@@ -118,6 +134,7 @@ interface RawResult {
   demand_trend?: unknown;
   trend_note?: unknown;
   events?: unknown;
+  search_index_by_month?: unknown;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -163,7 +180,23 @@ function parseMarketDemandJson(text: string): MarketDemandResult {
     }))
     .slice(0, 30);
 
-  return { demand_trend, trend_note, events };
+  // Disaring, tidak dipercaya apa adanya: keluaran model bisa mengandung
+  // bulan berformat aneh atau angka di luar 0-100, dan angka liar yang lolos
+  // akan langsung menggerakkan harga tamu. Di bawah tiga bulan, rata-ratanya
+  // bukan baseline yang berarti, jadi seluruh indeks dibuang daripada dipakai
+  // setengah-setengah.
+  let search_index_by_month: Record<string, number> | undefined;
+  const rawIndex = parsed.search_index_by_month;
+  if (rawIndex && typeof rawIndex === "object") {
+    const cleaned: Record<string, number> = {};
+    for (const [k, v] of Object.entries(rawIndex as Record<string, unknown>)) {
+      const n = Number(v);
+      if (/^\d{4}-\d{2}$/.test(k) && Number.isFinite(n) && n >= 0 && n <= 100) cleaned[k] = n;
+    }
+    if (Object.keys(cleaned).length >= 3) search_index_by_month = cleaned;
+  }
+
+  return { demand_trend, trend_note, events, search_index_by_month };
 }
 
 export async function researchVillaMarketDemand(
@@ -193,8 +226,12 @@ export async function researchVillaMarketDemand(
 
    "expected_impact" menyatakan BESAR pergeserannya, bukan arahnya: "high" untuk Lebaran maupun untuk Ramadan, karena keduanya menggeser permintaan jauh -- hanya ke arah berlawanan. Arahnya ada di "direction".
 
+3. MINAT PENCARIAN PER BULAN: perkirakan seramai apa orang mencari penginapan/villa di area ini untuk SETIAP bulan dalam 12 bulan ke depan, dalam skala 0-100 yang relatif terhadap dirinya sendiri — 100 untuk bulan tersibuk dalam daftarmu, bulan lain proporsional terhadapnya. Ini bukan jumlah pencarian sebenarnya (itu tidak bisa diketahui dari pencarian web publik), melainkan perbandingan antarbulan — dan justru itu yang dibutuhkan.
+
+   Dasarkan pada pola musim wisata yang kamu temukan: puncak libur sekolah dan akhir tahun tinggi, bulan Ramadan rendah, minggu-minggu setelah libur panjang rendah. Harus konsisten dengan jawabanmu di bagian 2 — bulan yang kamu tandai direction "turun" di sana tidak boleh muncul tinggi di sini.
+
 Balas HANYA dengan JSON (tanpa markdown code fence, tanpa penjelasan tambahan):
-{"demand_trend": "naik" atau "turun" atau "stabil", "trend_note": "1-2 kalimat alasan singkat", "events": [{"label": "nama periode", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "expected_impact": "low" atau "medium" atau "high", "direction": "naik" atau "turun", "certainty": "recurring" atau "announced", "source_note": "1 kalimat: sumber info ini"}]}
+{"demand_trend": "naik" atau "turun" atau "stabil", "trend_note": "1-2 kalimat alasan singkat", "events": [{"label": "nama periode", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "expected_impact": "low" atau "medium" atau "high", "direction": "naik" atau "turun", "certainty": "recurring" atau "announced", "source_note": "1 kalimat: sumber info ini"}], "search_index_by_month": {"YYYY-MM": 0-100}}
 
 Kalau ragu arahnya, pakai "naik". Kalau ragu kepastiannya, pakai "announced".
 
