@@ -3,6 +3,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assessConstructionProgress, fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
+import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
+import { isNominalMismatch } from "@/lib/ai/domains/transfer-proof-confirmation";
 import type { Json, NotificationCategoryDb } from "@/types/database.types";
 
 /**
@@ -532,5 +534,191 @@ export async function tryAnswerLoonarsCoffeeQuery(employee: { id: string; full_n
   return {
     outcome: "answered",
     reply: `LOONARS COFFEE — Kontraktor\n\n📄 Nilai kontrak: ${formatRupiah(Number(summary.contract_value))}\n✅ Sudah dibayar: ${formatRupiah(Number(summary.cumulative_paid))}\n⏳ Earned (belum dibayar): ${formatRupiah(Number(summary.payable))}`,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 6. Transfer proof photo — the owner transfers the money for an APPROVED
+//    cost request and simply sends the bukti transfer photo, with no
+//    "SUDAH TRANSFER <id>" text at all.
+//
+//    Real incident this fixes: the owner approved a Loonars Coffee request,
+//    transferred the money, sent the proof photo, and got back "Nominal di
+//    foto tidak cocok dengan pengajuan manapun" -- every existing photo
+//    handler matches against a different table (finance_pending_transfers,
+//    construction_expenses, employee_salary_submissions), and
+//    construction_cost_requests populates none of them.
+//
+//    Deliberately narrow so the existing flows are never disturbed: it only
+//    acts when an APPROVED Loonars Coffee request exists whose amount is an
+//    exact match for the nominal read off the photo, and only when EXACTLY
+//    ONE such request matches. Anything else returns "not_applicable" and
+//    the caller falls through to the handlers that were already there.
+// ----------------------------------------------------------------------------
+export type LoonarsCoffeeTransferPhotoOutcome =
+  | { outcome: "not_applicable" }
+  | {
+      outcome: "posted";
+      requestId: string;
+      requestType: string;
+      description: string;
+      amount: number;
+      projectName: string;
+      partyName: string | null;
+      awaitingLaborPayment: boolean;
+      ai: TransferProofRecognition;
+      recipients: { name: string; phone: string }[];
+    };
+
+/**
+ * Who the bukti transfer gets forwarded to: the person who asked for the
+ * money (normally Vando), plus Vando himself as Kepala Cabang when the
+ * requester was somebody else -- same "forward the proof to the field"
+ * behaviour the salary and project-fund photo flows already have.
+ */
+async function loonarsCoffeeProofRecipients(requestedBy: string | null): Promise<{ name: string; phone: string }[]> {
+  const supabase = createAdminClient();
+  const recipients: { name: string; phone: string }[] = [];
+
+  if (requestedBy) {
+    const { data: requester } = await supabase.from("employees").select("full_name, phone").eq("id", requestedBy).maybeSingle();
+    if (requester?.phone) recipients.push({ name: requester.full_name, phone: requester.phone });
+  }
+
+  const { data: vandoRows } = await supabase
+    .from("employees")
+    .select("full_name, phone")
+    .is("deleted_at", null)
+    .eq("employment_status", "active")
+    .ilike("full_name", "%vando%");
+  for (const v of vandoRows ?? []) {
+    if (v.phone && !recipients.some((r) => r.phone === v.phone)) recipients.push({ name: v.full_name, phone: v.phone });
+  }
+
+  return recipients;
+}
+
+export async function tryConfirmLoonarsCoffeeTransferByPhoto(
+  sender: { id: string; name: string; roleKey: string | null },
+  imageUrl: string,
+): Promise<LoonarsCoffeeTransferPhotoOutcome> {
+  if (sender.roleKey !== "super_admin" && sender.roleKey !== "direktur_operasional") {
+    return { outcome: "not_applicable" };
+  }
+
+  const project = await getLoonarsCoffeeProject();
+  if (!project) return { outcome: "not_applicable" };
+
+  const supabase = createAdminClient();
+  const { data: approved } = await supabase
+    .from("construction_cost_requests")
+    .select("*")
+    .eq("project_id", project.id)
+    .eq("status", "approved")
+    .order("created_at", { ascending: true });
+
+  if (!approved || approved.length === 0) {
+    // Nothing waiting for money on this project -- never touch the photo.
+    return { outcome: "not_applicable" };
+  }
+
+  const image = await fetchImageAsBase64(imageUrl);
+  if (!image || image.fetchError) return { outcome: "not_applicable" };
+
+  const ai = await recognizeTransferProof({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(
+    (): TransferProofRecognition => ({ readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Analisa AI gagal." }),
+  );
+  if (!ai.readable || ai.nominal === null) return { outcome: "not_applicable" };
+
+  const candidates = approved.filter((row) => !isNominalMismatch(Number(row.amount), ai.nominal));
+  if (candidates.length !== 1) {
+    // Zero matches, or an ambiguous amount shared by several approved
+    // requests -- never guess which one the owner paid.
+    return { outcome: "not_applicable" };
+  }
+  const req = candidates[0];
+
+  // Claim the row atomically first, so two photos arriving together can
+  // never post the same request twice.
+  const { data: claimed } = await supabase
+    .from("construction_cost_requests")
+    .update({
+      status: "transferred",
+      transferred_at: new Date().toISOString(),
+      transfer_confirmed_by: sender.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", req.id)
+    .eq("status", "approved")
+    .select("id");
+  if (!claimed || claimed.length === 0) return { outcome: "not_applicable" };
+
+  const { data: projectRow } = await supabase.from("construction_projects").select("branch_id, name").eq("id", req.project_id).maybeSingle();
+
+  let awaitingLaborPayment = true;
+  if (req.request_type !== "contractor_payment" && projectRow) {
+    // Same posting rule as the "SUDAH TRANSFER <id>" text path: payment_method
+    // stays 'utang' (the money came from the owner, not from the project's own
+    // dana -- 'cash' would push the project's dana balance negative, see
+    // repositories/construction-finance.repository.ts), but because there IS a
+    // bukti transfer here, it is recorded as already settled, with the proof
+    // photo kept on the expense row.
+    const nowIso = new Date().toISOString();
+    const { data: expense } = await supabase
+      .from("construction_expenses")
+      .insert({
+        project_id: req.project_id,
+        branch_id: projectRow.branch_id,
+        expense_type: req.request_type === "material_purchase" ? "pembelian_material" : "pembelian_lain_lain",
+        party_name: req.party_name ?? "Loonars Coffee (WhatsApp)",
+        description: req.description,
+        amount: req.amount,
+        payment_method: "utang",
+        is_settled: true,
+        settled_at: nowIso,
+        settled_by: sender.id,
+        photo_url: imageUrl,
+        expense_date: new Date().toISOString().slice(0, 10),
+        created_by: sender.id,
+      })
+      .select("id")
+      .single();
+
+    if (expense) {
+      // 'posted' is what fires trg_construction_cost_request_sync -> sync_log
+      // -> mkh-properti's construction_project_financial_records + jurnal.
+      await supabase
+        .from("construction_cost_requests")
+        .update({ status: "posted", posted_expense_id: expense.id, updated_at: new Date().toISOString() })
+        .eq("id", req.id);
+      awaitingLaborPayment = false;
+    }
+  }
+
+  if (req.requested_by) {
+    await supabase.from("mkc_notifications").insert({
+      user_id: req.requested_by,
+      type: "system",
+      category: "construction_cost_request_decided",
+      title: "Pembayaran Sudah Ditransfer",
+      body: `${req.description} — ${formatRupiah(Number(req.amount))} sudah ditransfer${ai.tanggal ? ` (${ai.tanggal})` : ""} dan dicatat. Bukti transfernya menyusul di chat ini.`,
+      link: "/construction-finance",
+      metadata: { cost_request_id: req.id, transfer_proof_url: imageUrl },
+    });
+  }
+
+  const recipients = await loonarsCoffeeProofRecipients(req.requested_by as string | null);
+
+  return {
+    outcome: "posted",
+    requestId: req.id as string,
+    requestType: req.request_type as string,
+    description: req.description as string,
+    amount: Number(req.amount),
+    projectName: projectRow?.name ?? project.name,
+    partyName: (req.party_name as string | null) ?? null,
+    awaitingLaborPayment,
+    ai,
+    recipients,
   };
 }

@@ -36,6 +36,7 @@ import {
   tryHandleLoonarsCoffeeOwnerDecision,
   tryHandleLoonarsCoffeeProgressReport,
   tryHandleLoonarsCoffeePhotoEvidence,
+  tryConfirmLoonarsCoffeeTransferByPhoto,
   tryAnswerLoonarsCoffeeQuery,
 } from "./domains/loonars-coffee-field-ops";
 import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhatsApp } from "./domains/file-request";
@@ -449,6 +450,53 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       trace.push("getRoleKey:calling(image)");
       const imageRoleKey = await getRoleKey(employee.role_id);
       trace.push(`getRoleKey:${imageRoleKey ?? "null"}`);
+
+      // Loonars Coffee bukti transfer (owner's report): he approved a
+      // Loonars Coffee cost request, transferred the money, and sent the
+      // proof photo -- and got "nominal di foto tidak cocok dengan
+      // pengajuan manapun", because construction_cost_requests populates
+      // none of the tables the photo matchers below look at
+      // (finance_pending_transfers / construction_expenses /
+      // employee_salary_submissions). Runs first among the photo flows but
+      // is the narrowest gate of all of them: owner-role sender AND an
+      // APPROVED Loonars Coffee request whose amount is an exact match for
+      // the nominal read off the photo AND exactly one such request.
+      // Anything else returns not_applicable and every existing flow below
+      // behaves exactly as before.
+      trace.push("tryConfirmLoonarsCoffeeTransferByPhoto:calling");
+      const coffeeTransferProof = await tryConfirmLoonarsCoffeeTransferByPhoto(
+        { id: employee.id, name: employee.full_name, roleKey: imageRoleKey },
+        inbound.content.url,
+      );
+      trace.push(`tryConfirmLoonarsCoffeeTransferByPhoto:${coffeeTransferProof.outcome}`);
+      if (coffeeTransferProof.outcome === "posted") {
+        const recipientNames = coffeeTransferProof.recipients.map((r) => r.name);
+        const replyText =
+          `✅ Bukti transfer diterima — *${coffeeTransferProof.projectName}*\n\n${coffeeTransferProof.description}\n💰 Rp ${coffeeTransferProof.amount.toLocaleString("id-ID")}` +
+          (coffeeTransferProof.partyName ? `\n👤 ${coffeeTransferProof.partyName}` : "") +
+          (coffeeTransferProof.ai.tanggal ? `\n📅 ${coffeeTransferProof.ai.tanggal}` : "") +
+          (coffeeTransferProof.awaitingLaborPayment
+            ? "\n\n📝 Dicatat sebagai *transferred*. Pembayaran kontraktor masih perlu diposting dari dashboard Construction (kartu Kontraktor) supaya nilai earned-value-nya terhitung."
+            : "\n\n📊 Sudah diposting ke pengeluaran proyek dan tercatat lunas (otomatis tersinkron ke MKH Property).") +
+          (recipientNames.length > 0
+            ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.`
+            : "\n⚠️ Tidak ada nomor WA terdaftar untuk diteruskan otomatis.");
+        trace.push("sendWhatsAppText:calling(coffee-transfer-proof)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        trace.push("sendWhatsAppImage:forwarding(coffee-transfer-proof)");
+        for (const recipient of coffeeTransferProof.recipients) {
+          await sendWhatsAppImage(
+            recipient.phone,
+            inbound.content.url,
+            `📎 Bukti transfer ${coffeeTransferProof.projectName} — ${coffeeTransferProof.description} (Rp ${coffeeTransferProof.amount.toLocaleString("id-ID")}) sudah ditransfer Owner.`,
+          );
+        }
+        trace.push("sendWhatsAppImage:done(coffee-transfer-proof)");
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer loonars coffee]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
 
       // Loonars Coffee construction evidence photo -- caption-gated on
       // "coffee" (e.g. "progress cakar ayam coffee") so it can never
