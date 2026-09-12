@@ -201,10 +201,29 @@ const APPROVE_PATTERN = /^setujui\s+([a-f0-9]{6,})/i;
 const REJECT_PATTERN = /^tolak\s+([a-f0-9]{6,})(?:\s+(.*))?$/i;
 const TRANSFERRED_PATTERN = /^sudah\s+transfer\s+([a-f0-9]{6,})/i;
 
+/**
+ * Real production bug this replaced: the first version filtered with
+ * `.ilike("id", prefix + "%")`, but `id` is a uuid column and Postgres has
+ * no uuid ILIKE text operator ("operator does not exist: uuid ~~*
+ * unknown"). Every lookup therefore errored out server-side, came back
+ * empty, and the owner got "Pengajuan tidak ditemukan atau sudah
+ * diputuskan" for a request that was sitting there perfectly valid --
+ * SETUJUI/TOLAK/SUDAH TRANSFER could never work at all. PostgREST can't
+ * cast a column mid-filter, so the prefix match happens in code instead,
+ * over a bounded recent window (one project's request volume is small, and
+ * an owner only ever acts on a recent code).
+ */
 async function findCostRequestByPrefix(prefix: string) {
   const supabase = createAdminClient();
-  const { data } = await supabase.from("construction_cost_requests").select("*").ilike("id", `${prefix}%`).limit(2);
-  return data && data.length === 1 ? data[0] : null;
+  const { data } = await supabase
+    .from("construction_cost_requests")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const wanted = prefix.toLowerCase();
+  const matches = (data ?? []).filter((row) => String(row.id).toLowerCase().startsWith(wanted));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /**
