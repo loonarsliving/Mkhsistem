@@ -57,13 +57,20 @@ posted workflow layer in front of the existing money-moving RPCs).
   "SUDAH TRANSFER \<kode\>") or the existing `/construction-finance`
   dashboard. A requester can never approve their own request (enforced in
   code, not just UI).
-- **Bukti transfer photo accepted (added 2026-09-12)**: the owner can
-  approve a Loonars Coffee request and then simply send the transfer-proof
-  photo — no "SUDAH TRANSFER \<kode\>" text needed.
+- **Bukti transfer photo accepted (added 2026-09-12)**: the owner just
+  sends the transfer-proof photo — no "SETUJUI \<kode\>" and no
+  "SUDAH TRANSFER \<kode\>" text at all.
   `tryConfirmLoonarsCoffeeTransferByPhoto()` in
   `loonars-coffee-field-ops.ts` reads the nominal with the existing
-  `recognizeTransferProof()` assessor, matches it against Loonars Coffee's
-  **approved** requests, posts the expense (`payment_method = 'utang'`,
+  `recognizeTransferProof()` assessor and matches it against Loonars
+  Coffee's **open (submitted or approved)** requests — per the owner's
+  explicit rule that **transferring the money IS the approval** for this
+  project ("saya stujui dgan cara trf, tidak perlu ketik stujui"), so a
+  still-`submitted` request is approved (with him recorded as
+  `approved_by`/`approved_at`) and paid in that one step. The one exception
+  is a submitted request the sender raised himself: self-approval stays
+  blocked, so that row is skipped rather than paid. It then posts the
+  expense (`payment_method = 'utang'`,
   `is_settled = true`, proof kept in `construction_expenses.photo_url`),
   moves the request to `posted` (which fires the MKH Property sync
   trigger), and **forwards the proof photo to the requester and to Vando**.
