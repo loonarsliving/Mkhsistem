@@ -57,6 +57,29 @@ posted workflow layer in front of the existing money-moving RPCs).
   "SUDAH TRANSFER \<kode\>") or the existing `/construction-finance`
   dashboard. A requester can never approve their own request (enforced in
   code, not just UI).
+- **Bukti transfer photo accepted (added 2026-09-12)**: the owner can
+  approve a Loonars Coffee request and then simply send the transfer-proof
+  photo — no "SUDAH TRANSFER \<kode\>" text needed.
+  `tryConfirmLoonarsCoffeeTransferByPhoto()` in
+  `loonars-coffee-field-ops.ts` reads the nominal with the existing
+  `recognizeTransferProof()` assessor, matches it against Loonars Coffee's
+  **approved** requests, posts the expense (`payment_method = 'utang'`,
+  `is_settled = true`, proof kept in `construction_expenses.photo_url`),
+  moves the request to `posted` (which fires the MKH Property sync
+  trigger), and **forwards the proof photo to the requester and to Vando**.
+  Gated narrowly — owner role, an approved LNC request, an exact nominal
+  match, and exactly one matching request — so every pre-existing photo
+  handler (`finance_pending_transfers`, `construction_expenses`,
+  `employee_salary_submissions`) behaves exactly as before on anything
+  else. Contractor payments still stop at `transferred`: the earned-value
+  engine posts the real amount from the dashboard.
+- **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
+  `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
+  `uuid ~~* text` operator, so every lookup errored server-side and
+  SETUJUI/TOLAK/SUDAH TRANSFER **never worked at all** (the owner got
+  "Pengajuan tidak ditemukan" for a perfectly valid request). The prefix
+  match now happens in code over a bounded recent window. Typecheck
+  cannot catch this class of bug; no unit test covers the path yet.
 - **Weekly report live** (`0257`/`0258`): `construction_send_loonars_
   coffee_weekly_report()`, pg_cron Saturday 06:00 UTC — detailed report to
   every Super Admin, concise operational report to Vando, both from the
