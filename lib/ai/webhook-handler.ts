@@ -458,11 +458,14 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       // none of the tables the photo matchers below look at
       // (finance_pending_transfers / construction_expenses /
       // employee_salary_submissions). Runs first among the photo flows but
-      // is the narrowest gate of all of them: owner-role sender AND an
-      // APPROVED Loonars Coffee request whose amount is an exact match for
-      // the nominal read off the photo AND exactly one such request.
-      // Anything else returns not_applicable and every existing flow below
-      // behaves exactly as before.
+      // is the narrowest gate of all of them: owner-role sender AND an open
+      // (submitted or approved) Loonars Coffee request whose amount is an
+      // exact match for the nominal read off the photo AND exactly one such
+      // request. Anything else returns not_applicable and every existing
+      // flow below behaves exactly as before. Per the owner's rule for this
+      // project the transfer itself counts as the approval, so a request
+      // still in 'submitted' is approved (with him recorded as approver)
+      // and paid in this one step.
       trace.push("tryConfirmLoonarsCoffeeTransferByPhoto:calling");
       const coffeeTransferProof = await tryConfirmLoonarsCoffeeTransferByPhoto(
         { id: employee.id, name: employee.full_name, roleKey: imageRoleKey },
@@ -472,7 +475,7 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
       if (coffeeTransferProof.outcome === "posted") {
         const recipientNames = coffeeTransferProof.recipients.map((r) => r.name);
         const replyText =
-          `✅ Bukti transfer diterima — *${coffeeTransferProof.projectName}*\n\n${coffeeTransferProof.description}\n💰 Rp ${coffeeTransferProof.amount.toLocaleString("id-ID")}` +
+          `✅ Bukti transfer diterima — *${coffeeTransferProof.projectName}*\n${coffeeTransferProof.approvedByThisTransfer ? "Pengajuan otomatis disetujui karena Bapak sudah mentransfer." : "Pengajuan ini sudah disetujui sebelumnya."}\n\n${coffeeTransferProof.description}\n💰 Rp ${coffeeTransferProof.amount.toLocaleString("id-ID")}` +
           (coffeeTransferProof.partyName ? `\n👤 ${coffeeTransferProof.partyName}` : "") +
           (coffeeTransferProof.ai.tanggal ? `\n📅 ${coffeeTransferProof.ai.tanggal}` : "") +
           (coffeeTransferProof.awaitingLaborPayment

@@ -549,11 +549,16 @@ export async function tryAnswerLoonarsCoffeeQuery(employee: { id: string; full_n
 //    construction_expenses, employee_salary_submissions), and
 //    construction_cost_requests populates none of them.
 //
+//    The owner's rule for this project: transferring the money IS the
+//    approval, so the photo also decides a request still sitting in
+//    'submitted' -- no "SETUJUI <kode>" needed first.
+//
 //    Deliberately narrow so the existing flows are never disturbed: it only
-//    acts when an APPROVED Loonars Coffee request exists whose amount is an
-//    exact match for the nominal read off the photo, and only when EXACTLY
-//    ONE such request matches. Anything else returns "not_applicable" and
-//    the caller falls through to the handlers that were already there.
+//    acts when an open (submitted or approved) Loonars Coffee request exists
+//    whose amount is an exact match for the nominal read off the photo, and
+//    only when EXACTLY ONE such request matches. Anything else returns
+//    "not_applicable" and the caller falls through to the handlers that were
+//    already there.
 // ----------------------------------------------------------------------------
 export type LoonarsCoffeeTransferPhotoOutcome =
   | { outcome: "not_applicable" }
@@ -565,6 +570,7 @@ export type LoonarsCoffeeTransferPhotoOutcome =
       amount: number;
       projectName: string;
       partyName: string | null;
+      approvedByThisTransfer: boolean;
       awaitingLaborPayment: boolean;
       ai: TransferProofRecognition;
       recipients: { name: string; phone: string }[];
@@ -610,14 +616,21 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
   if (!project) return { outcome: "not_applicable" };
 
   const supabase = createAdminClient();
-  const { data: approved } = await supabase
+  // 'submitted' as well as 'approved': the owner's rule is that TRANSFERRING
+  // THE MONEY *IS* THE APPROVAL for this project -- he should never have to
+  // type "SETUJUI <kode>" first ("saya stujui dgan cara trf, tidak perlu
+  // ketik stujui", 2026-09-12). A still-submitted request therefore gets
+  // approved and paid in one step here, with approved_by set to him, so the
+  // audit trail still records who decided it. The "SETUJUI <kode>" text
+  // command stays available for deciding without (or before) transferring.
+  const { data: awaitingMoney } = await supabase
     .from("construction_cost_requests")
     .select("*")
     .eq("project_id", project.id)
-    .eq("status", "approved")
+    .in("status", ["submitted", "approved"])
     .order("created_at", { ascending: true });
 
-  if (!approved || approved.length === 0) {
+  if (!awaitingMoney || awaitingMoney.length === 0) {
     // Nothing waiting for money on this project -- never touch the photo.
     return { outcome: "not_applicable" };
   }
@@ -630,26 +643,40 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
   );
   if (!ai.readable || ai.nominal === null) return { outcome: "not_applicable" };
 
-  const candidates = approved.filter((row) => !isNominalMismatch(Number(row.amount), ai.nominal));
+  const candidates = awaitingMoney.filter(
+    (row) =>
+      !isNominalMismatch(Number(row.amount), ai.nominal) &&
+      // A still-submitted request the owner raised HIMSELF is the one case
+      // the transfer cannot double as the approval -- approving your own
+      // request is blocked by design (and by the SQL RPC). Already-approved
+      // ones are past that check, so they still go through.
+      !(row.status === "submitted" && row.requested_by === sender.id),
+  );
   if (candidates.length !== 1) {
-    // Zero matches, or an ambiguous amount shared by several approved
-    // requests -- never guess which one the owner paid.
+    // Zero matches, or an ambiguous amount shared by several open requests
+    // -- never guess which one the owner paid.
     return { outcome: "not_applicable" };
   }
   const req = candidates[0];
+  const approvedByThisTransfer = req.status === "submitted";
 
   // Claim the row atomically first, so two photos arriving together can
   // never post the same request twice.
+  const claimIso = new Date().toISOString();
   const { data: claimed } = await supabase
     .from("construction_cost_requests")
     .update({
       status: "transferred",
-      transferred_at: new Date().toISOString(),
+      transferred_at: claimIso,
       transfer_confirmed_by: sender.id,
-      updated_at: new Date().toISOString(),
+      // The transfer IS the approval when the request had not been decided
+      // yet -- record him as the approver rather than leaving the row paid
+      // but never approved by anyone.
+      ...(approvedByThisTransfer ? { approved_by: sender.id, approved_at: claimIso } : {}),
+      updated_at: claimIso,
     })
     .eq("id", req.id)
-    .eq("status", "approved")
+    .in("status", ["submitted", "approved"])
     .select("id");
   if (!claimed || claimed.length === 0) return { outcome: "not_applicable" };
 
@@ -700,8 +727,8 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
       user_id: req.requested_by,
       type: "system",
       category: "construction_cost_request_decided",
-      title: "Pembayaran Sudah Ditransfer",
-      body: `${req.description} — ${formatRupiah(Number(req.amount))} sudah ditransfer${ai.tanggal ? ` (${ai.tanggal})` : ""} dan dicatat. Bukti transfernya menyusul di chat ini.`,
+      title: approvedByThisTransfer ? "Pengajuan Disetujui & Ditransfer" : "Pembayaran Sudah Ditransfer",
+      body: `${req.description} — ${formatRupiah(Number(req.amount))} ${approvedByThisTransfer ? "disetujui dan langsung ditransfer" : "sudah ditransfer"}${ai.tanggal ? ` (${ai.tanggal})` : ""} dan dicatat. Bukti transfernya menyusul di chat ini.`,
       link: "/construction-finance",
       metadata: { cost_request_id: req.id, transfer_proof_url: imageUrl },
     });
@@ -717,6 +744,7 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
     amount: Number(req.amount),
     projectName: projectRow?.name ?? project.name,
     partyName: (req.party_name as string | null) ?? null,
+    approvedByThisTransfer,
     awaitingLaborPayment,
     ai,
     recipients,
