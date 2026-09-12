@@ -45,6 +45,7 @@ import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-con
 import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
+import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -146,6 +147,24 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryConfirmVillaPaymentViaWhatsApp:not_applicable");
+
+      // Promo villa: "PROMO <kode>" / "TOLAK <kode>" dari owner, dan
+      // "BERHENTI" dari tamu mana pun.
+      //
+      // Diletakkan di sini, bersama LUNAS, karena alasannya sama: polanya
+      // persis dan tidak mungkin bertabrakan dengan jalur kontraktor,
+      // karyawan, atau ad-lead di bawah. "BERHENTI" khususnya HARUS
+      // didahulukan -- kalau ia jatuh ke AI percakapan umum, orang yang
+      // minta berhenti dikirimi promo malah akan dibalas obrolan.
+      trace.push("tryVillaPromoViaWhatsApp:calling");
+      const villaPromo = await tryVillaPromoViaWhatsApp(inbound.sender, inbound.content.text);
+      if (villaPromo.outcome === "handled") {
+        trace.push("tryVillaPromoViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, villaPromo.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, villaPromo.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryVillaPromoViaWhatsApp:not_applicable");
     }
 
     // Contractor (non-employee) nota report (0237): Anang and future rows
