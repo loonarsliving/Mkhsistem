@@ -33,6 +33,14 @@ const PUBLIC_PATHS = [
   // to /login.
   "/privacy-policy",
   "/terms-of-service",
+  // Live siteplan status a sales rep shares with a prospective buyer's
+  // family over WhatsApp -- the whole point is they open it without an MK
+  // Connect account. Its own page (app/share/siteplan/[kode]/page.tsx)
+  // fetches only via loonars_public_siteplan_status (0265), which itself
+  // gates on loonars_projects.publicly_shareable and returns block/status
+  // only -- no price, no buyer data -- so this being reachable without a
+  // session is a deliberate, narrow exception, not a general auth bypass.
+  "/share/siteplan",
   "/api/health",
   "/api/push/send",
   "/api/ai/whatsapp-relay",
@@ -105,12 +113,6 @@ const PUBLIC_PATHS = [
   // way every route above was: a real automation_post() call to it landed
   // on the /login HTML page (200 OK) instead of ever reaching the handler.
   "/api/admin/send-wa-message",
-  // Called server-to-server by loonars-sales's own backend (never a browser)
-  // to redeem the one-time code minted by /api/sso/loonars-sales -- see
-  // app/api/sso/loonars-sales/exchange/route.ts and migration
-  // 0236_sso_exchange_codes.sql. Own auth: the code itself (unguessable,
-  // single-use, 60s TTL), same posture as /api/ai/process-job's claim-by-id.
-  "/api/sso/loonars-sales/exchange",
 ];
 
 function isPublicPath(pathname: string) {

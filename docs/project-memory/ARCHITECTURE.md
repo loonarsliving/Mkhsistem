@@ -123,8 +123,15 @@ directory listing):
 - `api/debug/*` (`instagram-config`, `meta-ads-config`, `whatsapp-config`,
   `zernio-connect`) — diagnostic endpoints, gated behind Super Admin auth
   per README and commit `310c522`.
-- `api/sso/loonars-sales` — SSO bridge to an external "Loonars Sales"
-  surface. Exact protocol `UNKNOWN — NEEDS CONFIRMATION`.
+- `api/sso/loonars-sales` — **removed 2026-09-15**: this was an SSO bridge
+  to the external "Loonars Sales" (Loonars 1) villa siteplan app, Jogja-only.
+  Owner's call: Loonars 1 is fully sold out, so the nav link, this route,
+  the `LOONARS_SALES_VIEW` permission, and its session auto-grant were all
+  deleted. The separate `loonars_closings`/`loonars_unit_fee_requests`
+  sync/verification pipeline that receives data FROM that same external app
+  (0174-0188) was deliberately left untouched — it's an unrelated,
+  DB-level, still-live reconciliation path for historical/in-flight
+  transactions, not part of "the siteplan module."
 - `api/villa/deploy`, `api/villa/secrets` — endpoints related to deploying
   or managing secrets for a separate "villa" system. Exact mechanism
   `UNKNOWN — NEEDS CONFIRMATION`.
