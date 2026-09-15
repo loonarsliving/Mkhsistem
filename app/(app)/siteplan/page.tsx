@@ -9,14 +9,14 @@ import { listSiteplanProjects } from "@/repositories/loonars-siteplan.repository
 export const metadata: Metadata = { title: "Siteplan" };
 
 export default async function SiteplanPage() {
-  await requirePermission("siteplan.view");
+  const session = await requirePermission("siteplan.view");
   const supabase = await createClient();
   const projects = await listSiteplanProjects(supabase);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Siteplan" description="Klik unit yang tersedia untuk mengajukan pembelian, atau lihat detail unit yang sudah diambil." />
-      <SiteplanViewerShell projects={projects} />
+      <SiteplanViewerShell projects={projects} userId={session.userId} />
     </div>
   );
 }

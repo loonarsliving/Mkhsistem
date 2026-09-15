@@ -11,10 +11,11 @@ import { SiteplanViewer } from "./siteplan-viewer";
 
 interface SiteplanViewerShellProps {
   projects: { id: string; nama: string; kode: string; publicly_shareable: boolean }[];
+  userId: string;
 }
 
 /** Project picker (only shown when there's more than one project) + the selected project's viewer. */
-export function SiteplanViewerShell({ projects }: SiteplanViewerShellProps) {
+export function SiteplanViewerShell({ projects, userId }: SiteplanViewerShellProps) {
   const [projectId, setProjectId] = React.useState<string | null>(projects[0]?.id ?? null);
   const selected = projects.find((p) => p.id === projectId);
 
@@ -41,7 +42,7 @@ export function SiteplanViewerShell({ projects }: SiteplanViewerShellProps) {
         )}
         {selected?.publicly_shareable && <ShareSiteplanButton kode={selected.kode} nama={selected.nama} />}
       </div>
-      {projectId && <SiteplanViewer projectId={projectId} />}
+      {projectId && <SiteplanViewer projectId={projectId} userId={userId} />}
     </div>
   );
 }
