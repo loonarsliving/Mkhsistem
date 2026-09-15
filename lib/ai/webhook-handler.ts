@@ -479,8 +479,10 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           (coffeeTransferProof.partyName ? `\n👤 ${coffeeTransferProof.partyName}` : "") +
           (coffeeTransferProof.ai.tanggal ? `\n📅 ${coffeeTransferProof.ai.tanggal}` : "") +
           (coffeeTransferProof.awaitingLaborPayment
-            ? "\n\n📝 Dicatat sebagai *transferred*. Pembayaran kontraktor masih perlu diposting dari dashboard Construction (kartu Kontraktor) supaya nilai earned-value-nya terhitung."
-            : "\n\n📊 Sudah diposting ke pengeluaran proyek dan tercatat lunas (otomatis tersinkron ke MKH Property).") +
+            ? "\n\n📝 Dicatat sebagai *transferred*. Belum ada kontrak kontraktor aktif untuk proyek ini, jadi posting akhirnya perlu diselesaikan dari dashboard Construction (kartu Kontraktor)."
+            : coffeeTransferProof.requestType === "contractor_payment"
+              ? "\n\n📝 Dicatat sebagai *uang muka kontraktor*. Akan otomatis diperhitungkan terhadap nilai kontrak saat progress minggu ini diverifikasi — tidak ada langkah lain yang Bapak perlu lakukan."
+              : "\n\n📊 Sudah diposting ke pengeluaran proyek dan tercatat lunas (otomatis tersinkron ke MKH Property).") +
           (recipientNames.length > 0
             ? `\n📤 Bukti sudah diteruskan ke ${recipientNames.join(" & ")}.`
             : "\n⚠️ Tidak ada nomor WA terdaftar untuk diteruskan otomatis.");
@@ -1041,7 +1043,7 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
             : coffeeOwnerDecision.outcome === "rejected"
               ? "❌ Pengajuan ditolak."
               : coffeeOwnerDecision.outcome === "transferred_and_posted"
-                ? "✅ Transfer dicatat. Untuk pembayaran kontraktor, selesaikan posting dari dashboard Construction (kartu Kontraktor)."
+                ? "✅ Transfer dicatat."
                 : coffeeOwnerDecision.outcome === "self_approval_blocked"
                   ? "⚠️ Tidak bisa menyetujui pengajuan milik sendiri."
                   : coffeeOwnerDecision.outcome === "not_authorized"

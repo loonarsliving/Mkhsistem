@@ -94,6 +94,52 @@ function formatRupiah(amount: number): string {
   return `Rp ${amount.toLocaleString("id-ID")}`;
 }
 
+/**
+ * Records a contractor_payment cost request's money as an ADVANCE against
+ * the project's labor contract -- the existing cm_labor_advances mechanism
+ * (0213), used here exactly as designed, just invoked from WhatsApp via the
+ * admin client instead of the permission-gated cm_apply_labor_advance RPC
+ * (same auth-bypass pattern every write in this file already uses).
+ *
+ * Why an advance and not a real construction_expenses cash-out: the actual
+ * amount owed to a contractor is EARNED value (contract_value * WBS weight
+ * * VERIFIED progress_pct, cm_labor_contract_summary/cm_generate_labor_
+ * payment), which this module must never compute from a WhatsApp message or
+ * a bukti transfer photo -- that would be exactly the "silently correct /
+ * invent progress" the owner explicitly forbade for the RAB. Recording an
+ * advance instead does two honest things and nothing more: books that the
+ * money genuinely left the company (cm_labor_contracts.outstanding_advance)
+ * and is visible in cm_labor_contract_summary/the weekly report, WITHOUT
+ * inventing an earned amount or posting a jurnal entry ahead of
+ * reconciliation. It is automatically recovered against the real payable
+ * the next time someone runs cm_generate_labor_payment/cm_approve_labor_
+ * payment from the dashboard once physical progress is verified -- that
+ * verification step is a separate job (checking Vando's progress
+ * reports/photos), not something blocking the owner's pay-by-transfer flow
+ * here. Returns null (caller falls back to the pre-advance "transferred,
+ * finish from dashboard" behaviour) when the project has no labor contract
+ * to advance against.
+ */
+async function recordLoonarsCoffeeLaborAdvance(projectId: string, amount: number, note: string, createdBy: string): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data: contract } = await supabase.from("cm_labor_contracts").select("id").eq("project_id", projectId).maybeSingle();
+  if (!contract) return false;
+
+  const { error } = await supabase.from("cm_labor_advances").insert({ contract_id: contract.id, amount, note, created_by: createdBy });
+  if (error) return false;
+
+  // Plain read-then-write (no atomic increment RPC exists for this column) --
+  // safe here because WhatsApp traffic against one project's single labor
+  // contract is effectively single-writer, unlike a high-concurrency path.
+  const { data: current } = await supabase.from("cm_labor_contracts").select("outstanding_advance").eq("id", contract.id).maybeSingle();
+  await supabase
+    .from("cm_labor_contracts")
+    .update({ outstanding_advance: Number(current?.outstanding_advance ?? 0) + amount })
+    .eq("id", contract.id);
+
+  return true;
+}
+
 // ----------------------------------------------------------------------------
 // 1. Cost requests — material purchase / contractor payment / other expense
 // ----------------------------------------------------------------------------
@@ -312,15 +358,23 @@ export async function tryHandleLoonarsCoffeeOwnerDecision(owner: { id: string; f
     if (!project) return { outcome: "not_found" };
 
     if (req.request_type === "contractor_payment") {
-      // Contractor payments still need the earned-value engine
-      // (cm_generate_labor_payment/cm_approve_labor_payment) to actually
-      // compute and post the amount -- WhatsApp only records that the
-      // request reached "transferred"; a Super Admin finishes posting it
-      // from the web dashboard (Kontraktor card), where the linked
-      // cm_labor_payments row is selected.
+      // Recorded as an advance against the labor contract (see
+      // recordLoonarsCoffeeLaborAdvance) so the owner never has to open the
+      // dashboard just to confirm he paid -- earned-value reconciliation
+      // (cm_generate_labor_payment/cm_approve_labor_payment) still happens
+      // separately once physical progress is verified, but that is not a
+      // step in HIS flow. Falls back to the old "transferred, finish from
+      // dashboard" behaviour only if the project has no labor contract at
+      // all to record the advance against.
+      const advanceRecorded = await recordLoonarsCoffeeLaborAdvance(req.project_id, Number(req.amount), req.description, owner.id);
       await supabase
         .from("construction_cost_requests")
-        .update({ status: "transferred", transferred_at: new Date().toISOString(), transfer_confirmed_by: owner.id, updated_at: new Date().toISOString() })
+        .update({
+          status: advanceRecorded ? "paid" : "transferred",
+          transferred_at: new Date().toISOString(),
+          transfer_confirmed_by: owner.id,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", req.id);
     } else {
       const { data: expense } = await supabase
@@ -683,7 +737,18 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
   const { data: projectRow } = await supabase.from("construction_projects").select("branch_id, name").eq("id", req.project_id).maybeSingle();
 
   let awaitingLaborPayment = true;
-  if (req.request_type !== "contractor_payment" && projectRow) {
+  if (req.request_type === "contractor_payment") {
+    // Same as the "SUDAH TRANSFER <id>" text path: record it as an advance
+    // against the labor contract (see recordLoonarsCoffeeLaborAdvance) so
+    // the owner is done the moment the photo is confirmed. Falls back to
+    // leaving it at 'transferred' only if the project has no labor contract
+    // to advance against.
+    const advanceRecorded = await recordLoonarsCoffeeLaborAdvance(req.project_id, Number(req.amount), req.description, sender.id);
+    if (advanceRecorded) {
+      await supabase.from("construction_cost_requests").update({ status: "paid", updated_at: new Date().toISOString() }).eq("id", req.id);
+      awaitingLaborPayment = false;
+    }
+  } else if (projectRow) {
     // Same posting rule as the "SUDAH TRANSFER <id>" text path: payment_method
     // stays 'utang' (the money came from the owner, not from the project's own
     // dana -- 'cash' would push the project's dana balance negative, see
