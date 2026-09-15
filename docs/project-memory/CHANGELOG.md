@@ -389,10 +389,41 @@ same number, sequence advances across purchases, all four refusal paths raise,
 and 8 concurrent issues produced 8 distinct gapless numbers. Also
 typecheck + lint + 243 unit tests + `next build` clean.
 
-**NOT applied to the live Supabase project** (`svcmybsziaelwwdrnzcv`) in this
-pass — unlike `0251`/`0256`, this migration is committed as an unapplied file
-and still needs the owner's go-ahead plus a `supabase db push` (or MCP
-`apply_migration`). The Loonars 2 unit prices also still need filling in.
+**Applied directly to the live production database** (`svcmybsziaelwwdrnzcv`)
+2026-09-15 via Supabase MCP `apply_migration`, per the owner's explicit
+go-ahead in chat ("sekarang bawa ke production mkhsistem"). Pre-flight
+checks before applying: confirmed the project ref against
+PROJECT_CONTEXT.md, diffed `loonars_projects`/`loonars_units`/
+`loonars_unit_purchases`' live column shapes against what the migration
+assumes (identical), confirmed no existing project used the `LNR2` kode
+(only `Cendana` existed), and confirmed `MAKASSAR_BRANCH_ID`/
+`JOGJA_BRANCH_ID` resolve to the real Makassar/Jogja branch rows. Verified
+post-apply: 20 units (10 AVARA + 10 BANYU) under `LNR2`, `authenticated`
+can execute `loonars_booking_receipt_issue`, zero receipts/counter rows
+(nothing fabricated), and the security advisor's only new finding is the
+intentional one (`loonars_receipt_counters` has RLS with no policies by
+design — only the security-definer function touches it). Confirmed 2 Sales
++ 1 Kepala Cabang already sit in the Jogja branch and will pick up
+`siteplan.view` once this branch deploys. **No test purchase or receipt
+was created against production** — doing so would have flipped a real
+unit's status and printed a fake receipt number, so the RPC itself was
+verified only in the earlier local-Postgres pass, not against prod.
+
+**Real logos added** (same day, follow-up commit): the header's typographic
+MKH/Loonars wordmarks were replaced with the owner's actual logo files
+(`public/branding/logo-mkh.png`, `logo-loonars.png`, plus a cropped
+`logo-loonars-icon.png` used as a faint bottom-right watermark), and the "A
+BETTER LIVING / BEGINS HERE" side note + solid dark footer bar were added
+to close the remaining gaps against the reference photo. Verified by
+rendering the component's exact markup against the project's own built
+Tailwind CSS and screenshotting it with Playwright for a side-by-side
+comparison, not from memory. Not reproduced: the paper form's diagonal
+cursive "Invest in a Better Living" script and its large pale background
+leaf outline — doing so would need a new script font import, left for the
+owner to decide rather than added silently.
+
+**Still open:** the Loonars 2 unit prices (`harga`/`luas`/`tipe`) are NULL
+and need filling in at `/siteplan/admin`.
 
 ## Documentation history (existing docs, for reference)
 

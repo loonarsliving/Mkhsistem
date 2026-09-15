@@ -26,22 +26,27 @@ for the full rationale. Short version for anyone picking this up:
   purchase's `booking_fee` (the paper form's pre-printed Rp 5.000.000 is
   gone), terbilang computed in code (`lib/utils/terbilang.ts`).
 
-**Open items (not done in this pass):**
+**Update 2026-09-15:** Migration `0261` has been **applied to the live
+Supabase project** (`svcmybsziaelwwdrnzcv`) via Supabase MCP, per the
+owner's explicit go-ahead — confirmed 20 units (10 AVARA + 10 BANYU) under
+project `LNR2`, `authenticated` can execute `loonars_booking_receipt_issue`,
+and no test/fake purchase or receipt was created against production. Real
+MKH/Loonars logo files were also added (`public/branding/`), replacing the
+typographic wordmark placeholders — see CHANGELOG.md for both entries.
 
-1. Migration `0261` is **committed but NOT applied** to the live Supabase
-   project — it needs the owner's go-ahead and a `supabase db push` / MCP
-   `apply_migration`. Everything below depends on that.
-2. **Loonars 2 unit prices/type/area are NULL** — deliberately not guessed.
+**Open items still remaining:**
+
+1. **Loonars 2 unit prices/type/area are NULL** — deliberately not guessed.
    A `siteplan.manage` holder must fill them in at `/siteplan/admin`.
-3. The receipt is issuable while the purchase is still
+2. The receipt is issuable while the purchase is still
    `pending_verification` (a tanda jadi is handed over at payment time, not
    after Finance confirms). The page warns the rep on screen; confirm with
    the owner whether that is the wanted policy or whether issue should be
    blocked until verified.
-4. No branding image assets exist in `public/` — the kwitansi header renders
-   the MKH and Loonars wordmarks typographically. Swap in the real logo files
-   if the owner wants a pixel match to the paper form.
-5. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
+3. The paper form's diagonal cursive "Invest in a Better Living" script and
+   its large pale background leaf outline are not reproduced — would need a
+   new script font import (a dependency decision), left for the owner.
+4. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
    fires on purchase submit, which already covers the closing). Add one only
    if asked.
 
