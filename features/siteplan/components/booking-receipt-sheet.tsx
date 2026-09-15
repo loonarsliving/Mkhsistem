@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -30,14 +31,18 @@ export interface BookingReceiptData {
 
 /**
  * The printable "Kwitansi Tanda Jadi" sheet, laid out to match the paper form PT Maha Karya
- * Haluoleo already uses for Loonars bookings (landscape, MKH wordmark left / Loonars wordmark
- * right, numbered field rows, two signature blocks).
+ * Haluoleo already uses for Loonars bookings: real MKH + Loonars wordmarks in the header (the same
+ * files the owner supplied, under public/branding/), the "A BETTER LIVING / BEGINS HERE" side note,
+ * a faint Loonars leaf-mark watermark bottom-right, numbered field rows, two signature blocks, and
+ * the dark footer bar.
  *
- * Two deliberate differences from that paper form:
+ * Three deliberate differences from that paper form:
  *   - The nominal is NOT the pre-printed Rp 5.000.000. It is the booking fee the rep entered on
  *     this purchase, snapshotted onto loonars_booking_receipts at issue time.
  *   - The "Terbilang" line is computed from that same stored number (lib/utils/terbilang), never
  *     typed by hand, so the words and the digits can never disagree.
+ *   - The paper form is a blank template (buyer fills it by hand); this one prints the actual
+ *     transaction data already filled in on each line instead of leaving it blank.
  *
  * Printing uses the app's existing native print support (app/globals.css: `.print-area` stays
  * visible, `.no-print` is hidden) rather than a server-side PDF dependency.
@@ -79,92 +84,109 @@ export function BookingReceiptSheet({ data }: { data: BookingReceiptData }) {
           viewport; wrapped in an overflow-x container so it still scrolls (rather than breaking the
           page) on a phone, which matters because this app also ships as a Capacitor mobile app. */}
       <div className="overflow-x-auto">
-        <div className="print-area mx-auto w-[1000px] bg-white p-10 text-[#3d3228] shadow-sm ring-1 ring-black/10 print:shadow-none print:ring-0">
-          {/* Header: company wordmark left, product wordmark right */}
-          <div className="flex items-start justify-between gap-8 border-b border-[#3d3228]/20 pb-6">
-            <div>
-              <p className="text-2xl font-black leading-tight tracking-tight text-[#1b3a6b]">MAHA KARYA</p>
-              <p className="text-2xl font-black leading-tight tracking-tight text-[#1b3a6b]">HALUOLEO</p>
-              <p className="mt-1 text-[10px] font-semibold tracking-[0.22em] text-[#1b3a6b]/70">BUILDING A BETTER TOMORROW</p>
+        <div className="print-area relative mx-auto w-[1000px] overflow-hidden bg-[#fdfbf8] pb-16 text-[#3d3228] shadow-sm ring-1 ring-black/10 print:shadow-none print:ring-0">
+          {/* Faint leaf-mark watermark, bottom-right -- the real Loonars icon (cropped from the
+              supplied logo) at low opacity, echoing the paper form's decorative background shape. */}
+          <Image
+            src="/branding/logo-loonars-icon.png"
+            alt=""
+            aria-hidden
+            width={425}
+            height={472}
+            className="pointer-events-none absolute -bottom-6 -right-10 h-[340px] w-auto opacity-[0.07]"
+          />
+
+          <div className="relative px-10 pt-10">
+            {/* Header: MKH wordmark left, Loonars wordmark + tagline right */}
+            <div className="flex items-start justify-between gap-8 border-b border-[#3d3228]/20 pb-6">
+              <Image src="/branding/logo-mkh.png" alt="Maha Karya Haluoleo" width={2000} height={483} className="h-14 w-auto" priority />
+              <div className="flex items-center gap-4">
+                <Image src="/branding/logo-loonars.png" alt="Loonars Excellent Living" width={628} height={704} className="h-16 w-auto" priority />
+                <div className="h-14 w-px bg-[#3d3228]/20" />
+                <p className="text-[10px] leading-tight tracking-[0.2em] text-[#6b533a]/80">
+                  A<br />
+                  BETTER
+                  <br />
+                  LIVING
+                  <br />
+                  BEGINS
+                  <br />
+                  HERE
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-semibold tracking-[0.18em] text-[#6b533a]">LOONARS</p>
-              <p className="text-[10px] font-medium tracking-[0.34em] text-[#6b533a]/80">EXCELLENT LIVING</p>
-              <p className="mt-2 text-[10px] leading-relaxed tracking-[0.18em] text-[#6b533a]/70">
-                A BETTER LIVING
+
+            {/* Title */}
+            <div className="mt-6 text-center">
+              <h1 className="text-3xl font-bold tracking-wide">KWITANSI TANDA JADI</h1>
+              <p className="mt-1 text-sm tracking-[0.2em] text-[#3d3228]/80">BOOKING PEMBELIAN VILLA</p>
+              <p className="text-sm tracking-[0.2em] text-[#3d3228]/80">{(data.projectName ?? "LOONARS EXCELLENT LIVING").toUpperCase()}</p>
+            </div>
+
+            {/* Receipt number + date */}
+            <div className="mt-6 space-y-1 text-sm">
+              <Field label="No. Kwitansi" value={data.receiptNo} />
+              <Field label="Tanggal" value={format(new Date(data.issuedAt), "dd MMMM yyyy", { locale: idLocale })} />
+            </div>
+
+            {/* Buyer block */}
+            <div className="mt-5 space-y-1 text-[15px]">
+              <Field label="Nama Pembeli" value={data.buyerName} wide />
+              <Field label="No. WhatsApp / Telp" value={data.buyerPhone ?? "-"} wide />
+              <Field label="Unit Villa" value={data.unitLabel} wide />
+              <Field label="Metode Pembayaran" value={paymentLabel} wide />
+            </div>
+
+            {/* Amount */}
+            <div className="mt-6 space-y-2 border-t border-[#3d3228]/20 pt-5">
+              <div className="flex items-center gap-4">
+                <span className="w-56 shrink-0 text-[15px]">Jumlah Pembayaran</span>
+                <span className="shrink-0">:</span>
+                <span className="flex-1 bg-[#e8e0d6] px-4 py-2 text-3xl font-bold tabular-nums">{formatCurrency(data.amount)},-</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="w-56 shrink-0 text-[15px]">Terbilang</span>
+                <span className="shrink-0">:</span>
+                <span className="flex-1 bg-[#e8e0d6] px-4 py-2 text-xl italic">{terbilangRupiah(data.amount)}</span>
+              </div>
+              <div className="flex gap-4 pt-1">
+                <span className="w-56 shrink-0 text-[15px]">Keterangan</span>
+                <span className="shrink-0">:</span>
+                <span className="flex-1 text-[15px] leading-relaxed">
+                  Pembayaran tanda jadi (booking) untuk pembelian Villa {data.unitLabel}
+                  {data.projectName ? ` — ${data.projectName}` : ""}.
+                </span>
+              </div>
+            </div>
+
+            {/* Signatures */}
+            <div className="mt-10 grid grid-cols-2 gap-12">
+              <div>
+                <p className="text-sm font-semibold tracking-[0.12em]">PENERIMA</p>
+                <p className="text-[11px] tracking-[0.2em] text-[#3d3228]/70">MAHA KARYA HALUOLEO</p>
+                <div className="mt-16 border-t border-[#3d3228]/50 pt-1 text-center text-xs">
+                  ( {data.marketingName ?? "Nama & Tanda Tangan"} )
+                </div>
+                <p className="mt-2 text-center text-[11px] text-[#3d3228]/60">Stempel Perusahaan</p>
+              </div>
+              <div>
+                <p className="text-right text-sm font-semibold tracking-[0.12em]">PEMBAYAR</p>
+                <div className="mt-[4.6rem] border-t border-[#3d3228]/50 pt-1 text-center text-xs">( Nama &amp; Tanda Tangan )</div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex items-end justify-between border-t border-[#3d3228]/20 pt-4">
+              <p className="text-sm font-semibold italic">Terima kasih atas kepercayaan Anda.</p>
+              <p className="text-right text-[11px] tracking-[0.2em] text-[#3d3228]/70">
+                EXCELLENT LIVING
                 <br />
-                BEGINS HERE
+                LASTING VALUE
               </p>
             </div>
           </div>
 
-          {/* Title */}
-          <div className="mt-6 text-center">
-            <h1 className="text-3xl font-bold tracking-wide">KWITANSI TANDA JADI</h1>
-            <p className="mt-1 text-sm tracking-[0.2em] text-[#3d3228]/80">BOOKING PEMBELIAN VILLA</p>
-            <p className="text-sm tracking-[0.2em] text-[#3d3228]/80">{(data.projectName ?? "LOONARS EXCELLENT LIVING").toUpperCase()}</p>
-          </div>
-
-          {/* Receipt number + date */}
-          <div className="mt-6 space-y-1 text-sm">
-            <Field label="No. Kwitansi" value={data.receiptNo} />
-            <Field label="Tanggal" value={format(new Date(data.issuedAt), "dd MMMM yyyy", { locale: idLocale })} />
-          </div>
-
-          {/* Buyer block */}
-          <div className="mt-5 space-y-1 text-[15px]">
-            <Field label="Nama Pembeli" value={data.buyerName} wide />
-            <Field label="No. WhatsApp / Telp" value={data.buyerPhone ?? "-"} wide />
-            <Field label="Unit Villa" value={data.unitLabel} wide />
-            <Field label="Metode Pembayaran" value={paymentLabel} wide />
-          </div>
-
-          {/* Amount */}
-          <div className="mt-6 space-y-2 border-t border-[#3d3228]/20 pt-5">
-            <div className="flex items-center gap-4">
-              <span className="w-56 shrink-0 text-[15px]">Jumlah Pembayaran</span>
-              <span className="shrink-0">:</span>
-              <span className="flex-1 bg-[#e8e0d6] px-4 py-2 text-3xl font-bold tabular-nums">{formatCurrency(data.amount)},-</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="w-56 shrink-0 text-[15px]">Terbilang</span>
-              <span className="shrink-0">:</span>
-              <span className="flex-1 bg-[#e8e0d6] px-4 py-2 text-xl italic">{terbilangRupiah(data.amount)}</span>
-            </div>
-            <div className="flex gap-4 pt-1">
-              <span className="w-56 shrink-0 text-[15px]">Keterangan</span>
-              <span className="shrink-0">:</span>
-              <span className="flex-1 text-[15px] leading-relaxed">
-                Pembayaran tanda jadi (booking) untuk pembelian Villa {data.unitLabel}
-                {data.projectName ? ` — ${data.projectName}` : ""}.
-              </span>
-            </div>
-          </div>
-
-          {/* Signatures */}
-          <div className="mt-10 grid grid-cols-2 gap-12">
-            <div>
-              <p className="text-sm font-semibold tracking-[0.12em]">PENERIMA</p>
-              <p className="text-[11px] tracking-[0.2em] text-[#3d3228]/70">MAHA KARYA HALUOLEO</p>
-              <div className="mt-16 border-t border-[#3d3228]/50 pt-1 text-center text-xs">
-                ( {data.marketingName ?? "Nama & Tanda Tangan"} )
-              </div>
-              <p className="mt-2 text-center text-[11px] text-[#3d3228]/60">Stempel Perusahaan</p>
-            </div>
-            <div>
-              <p className="text-right text-sm font-semibold tracking-[0.12em]">PEMBAYAR</p>
-              <div className="mt-[4.6rem] border-t border-[#3d3228]/50 pt-1 text-center text-xs">( Nama &amp; Tanda Tangan )</div>
-            </div>
-          </div>
-
-          <div className="mt-8 flex items-end justify-between border-t border-[#3d3228]/20 pt-4">
-            <p className="text-sm font-semibold italic">Terima kasih atas kepercayaan Anda.</p>
-            <p className="text-right text-[11px] tracking-[0.2em] text-[#3d3228]/70">
-              EXCELLENT LIVING
-              <br />
-              LASTING VALUE
-            </p>
-          </div>
+          {/* Solid dark footer bar, matching the paper form's bottom edge. */}
+          <div className="absolute inset-x-0 bottom-0 h-4 bg-[#3d2f26]" />
         </div>
       </div>
     </div>
