@@ -58,12 +58,27 @@ production**:
   the owner: `BANYU-*` = 1 Bedroom, **Rp 420.000.000**; `AVARA-*` = 2 Kamar,
   **Rp 520.000.000**. Scoped strictly to `kode = 'LNR2'`, so it can never
   touch Cendana or any future project reusing the same row names. "Kunci"
-  here means the price is now a real, owner-confirmed figure (replacing the
-  earlier placeholder NULL) — a `siteplan.manage` holder can still revise it
-  later through the normal admin unit form; nothing was made read-only at
-  the DB level.
+  here originally just meant "a real, owner-confirmed figure" — see 0264
+  below for the actual hard lock, added the same day once the owner
+  clarified the admin form could still edit it.
+- `0264_loonars_2_price_hard_lock.sql` — the owner's follow-up: "buat harga
+  tidak bisa diedit, karna posisi skrng harga masih bisa diedit". Adds
+  `loonars_units.price_locked` (per-unit, default `false`; set `true` for
+  all 20 Loonars 2 rows only) and a `BEFORE UPDATE` trigger
+  (`loonars_units_price_lock_guard`) that rejects any statement changing
+  `harga` on a locked row — `tipe`/`luas`/`status`/`blok` on the same row
+  stay freely editable. Deliberately **no `siteplan.manage` bypass**: the
+  owner's instruction was unconditional, so even Super Admin/Direktur
+  cannot change a locked price through the app — a genuine future price
+  change belongs in its own new numbered migration, matching how 0263
+  itself set the price and how this project treats other final,
+  owner-confirmed figures (e.g. the Loonars Coffee RAB in 0256). The trigger
+  fires for every role regardless of RLS. `/siteplan/admin`'s unit form now
+  disables the Harga field entirely (with a lock icon + note) for a locked
+  unit, and the unit table shows a lock icon next to its price, so the
+  admin never even reaches the database's rejection in normal use.
 
-Verified before applying: exercised both migrations end-to-end against a
+Verified before applying: exercised all four migrations end-to-end against a
 throwaway local Postgres 16 (branches seeded with the real Makassar/Jogja
 IDs, a real pre-existing `Cendana` row mirrored in) — a Makassar-branch
 employee sees only Cendana, a Jogja-branch employee sees only Loonars 2
@@ -73,10 +88,18 @@ raises the branch error, a same-branch purchase and an admin's
 `siteplan.manage`-bypassed cross-branch purchase both succeed, and receipt
 issuance/reprint idempotency still holds. typecheck, lint, 245 unit tests
 (2 new, covering the now-required `branchId` field) and `next build` all
-clean. Applied to production and re-verified there: Cendana's own
-pre-existing prices (750jt/600jt Atas/Bawah) are untouched, Loonars 2 shows
-exactly 420jt/1 Bedroom (BANYU) and 520jt/2 Kamar (AVARA), and the security
-advisor shows no new findings for either table.
+clean. 0264 specifically: confirmed an UPDATE changing `harga` on a locked
+row raises even for `siteplan.manage`, changing `tipe` alongside an
+unchanged `harga` on the same locked row succeeds, `harga` stays freely
+editable on an unlocked (Cendana) unit, and a fresh INSERT with a `harga` is
+unaffected (the trigger is `BEFORE UPDATE` only). Applied to production and
+re-verified there: Cendana's own pre-existing prices (750jt/600jt
+Atas/Bawah) are untouched and still editable (`price_locked = false` on all
+16 rows), all 20 Loonars 2 rows show `price_locked = true`, a real
+production `UPDATE ... SET harga = 999999999` against `AVARA-01` was
+attempted and rejected by the trigger with `AVARA-01`'s price confirmed
+unchanged at Rp520.000.000 afterward, and the security advisor shows no new
+findings for either table.
 
 **Open items still remaining:**
 

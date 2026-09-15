@@ -55,6 +55,12 @@ export const siteplanProjectSchema = z.object({
 });
 export type SiteplanProjectInput = z.infer<typeof siteplanProjectSchema>;
 
+/**
+ * harga has no lock-awareness here on purpose -- the schema only shapes what a form CAN submit.
+ * The actual lock is enforced by loonars_units_price_lock_guard (0264): submitting the unit's own
+ * unchanged harga is always accepted (NEW = OLD, nothing to reject), and the unit form dialog
+ * disables the harga input entirely for a locked unit so a value change is never even offered.
+ */
 export const siteplanUnitSchema = z.object({
   id: z.string().uuid().optional(),
   projectId: z.string().uuid(),
