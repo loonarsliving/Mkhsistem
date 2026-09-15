@@ -44,10 +44,12 @@ export const siteplanPurchaseSchema = z
   });
 export type SiteplanPurchaseInput = z.infer<typeof siteplanPurchaseSchema>;
 
+/** branchId is required since 0262: every siteplan project is exclusively visible/bookable by its own branch's Sales/Kepala Cabang (siteplan.manage and prospect.finance_verify still see every project). */
 export const siteplanProjectSchema = z.object({
   id: z.string().uuid().optional(),
   kode: z.string().min(1, "Kode wajib diisi").max(50),
   nama: z.string().min(2, "Nama minimal 2 karakter").max(200),
+  branchId: z.string().uuid({ message: "Cabang wajib dipilih" }),
   lokasi: z.string().max(300).optional(),
   warna: z.string().max(20).optional(),
 });

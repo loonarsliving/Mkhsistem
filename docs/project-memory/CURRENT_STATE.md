@@ -34,19 +34,61 @@ and no test/fake purchase or receipt was created against production. Real
 MKH/Loonars logo files were also added (`public/branding/`), replacing the
 typographic wordmark placeholders — see CHANGELOG.md for both entries.
 
+**Update 2026-09-15 (later same day) — projects are now branch-exclusive,
+Loonars 2 prices locked in.** Owner: "untuk loonars 2, kunci hanya untuk
+jogja" + a fixed price list. Two more migrations, both **applied to
+production**:
+
+- `0262_siteplan_project_branch_scoping.sql` — added
+  `loonars_projects.branch_id` (backfilled: `Cendana` → Makassar,
+  `LNR2` → Jogja, then set `NOT NULL`). `loonars_projects_select` and
+  `loonars_units_select` (both `using (true)` since 0202) are now
+  branch-scoped: a Sales/Kepala Cabang employee sees ONLY their own
+  branch's project — Makassar reps no longer see Loonars 2 in the picker,
+  and Jogja reps no longer see Cendana. `siteplan.manage` and
+  `prospect.finance_verify` still see every project (RLS bypass), matching
+  how Finance verification is already cross-branch. The same check was
+  added inside `loonars_unit_purchase_submit` itself (not just RLS/UI) — a
+  Sales/Kepala Cabang employee gets `"Unit ini bukan bagian dari project
+  cabang Anda"` if they somehow reach a unit outside their branch;
+  `siteplan.manage` bypasses this too. The admin "Tambah Project" form
+  (`siteplan-project-form-dialog.tsx`) now requires picking a branch — no
+  more "visible everywhere" default for a new project.
+- `0263_loonars_2_unit_prices.sql` — Loonars 2's two villa types priced per
+  the owner: `BANYU-*` = 1 Bedroom, **Rp 420.000.000**; `AVARA-*` = 2 Kamar,
+  **Rp 520.000.000**. Scoped strictly to `kode = 'LNR2'`, so it can never
+  touch Cendana or any future project reusing the same row names. "Kunci"
+  here means the price is now a real, owner-confirmed figure (replacing the
+  earlier placeholder NULL) — a `siteplan.manage` holder can still revise it
+  later through the normal admin unit form; nothing was made read-only at
+  the DB level.
+
+Verified before applying: exercised both migrations end-to-end against a
+throwaway local Postgres 16 (branches seeded with the real Makassar/Jogja
+IDs, a real pre-existing `Cendana` row mirrored in) — a Makassar-branch
+employee sees only Cendana, a Jogja-branch employee sees only Loonars 2
+(prices confirmed 420jt/520jt split correctly by row), `siteplan.manage`
+and `prospect.finance_verify` see both, a cross-branch purchase attempt
+raises the branch error, a same-branch purchase and an admin's
+`siteplan.manage`-bypassed cross-branch purchase both succeed, and receipt
+issuance/reprint idempotency still holds. typecheck, lint, 245 unit tests
+(2 new, covering the now-required `branchId` field) and `next build` all
+clean. Applied to production and re-verified there: Cendana's own
+pre-existing prices (750jt/600jt Atas/Bawah) are untouched, Loonars 2 shows
+exactly 420jt/1 Bedroom (BANYU) and 520jt/2 Kamar (AVARA), and the security
+advisor shows no new findings for either table.
+
 **Open items still remaining:**
 
-1. **Loonars 2 unit prices/type/area are NULL** — deliberately not guessed.
-   A `siteplan.manage` holder must fill them in at `/siteplan/admin`.
-2. The receipt is issuable while the purchase is still
+1. The receipt is issuable while the purchase is still
    `pending_verification` (a tanda jadi is handed over at payment time, not
    after Finance confirms). The page warns the rep on screen; confirm with
    the owner whether that is the wanted policy or whether issue should be
    blocked until verified.
-3. The paper form's diagonal cursive "Invest in a Better Living" script and
+2. The paper form's diagonal cursive "Invest in a Better Living" script and
    its large pale background leaf outline are not reproduced — would need a
    new script font import (a dependency decision), left for the owner.
-4. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
+3. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
    fires on purchase submit, which already covers the closing). Add one only
    if asked.
 

@@ -21,7 +21,7 @@ export async function getSiteplanProject(supabase: TypedSupabaseClient, projectI
 
 export async function createSiteplanProject(
   supabase: TypedSupabaseClient,
-  payload: { kode: string; nama: string; lokasi: string | null; warna: string | null },
+  payload: { kode: string; nama: string; branch_id: string; lokasi: string | null; warna: string | null },
 ) {
   const { data, error } = await supabase.from("loonars_projects").insert(payload).select("*").single();
   if (error) throw error;
@@ -31,7 +31,7 @@ export async function createSiteplanProject(
 export async function updateSiteplanProject(
   supabase: TypedSupabaseClient,
   id: string,
-  payload: Partial<{ kode: string; nama: string; lokasi: string | null; warna: string | null }>,
+  payload: Partial<{ kode: string; nama: string; branch_id: string; lokasi: string | null; warna: string | null }>,
 ) {
   const { data, error } = await supabase.from("loonars_projects").update(payload).eq("id", id).select("*").single();
   if (error) throw error;

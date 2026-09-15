@@ -102,7 +102,7 @@ export function SiteplanAdminPanel() {
                   }
                   initialValues={(() => {
                     const p = projects.find((x) => x.id === projectId);
-                    return p ? { id: p.id, kode: p.kode, nama: p.nama, lokasi: p.lokasi ?? "", warna: p.warna ?? "" } : undefined;
+                    return p ? { id: p.id, kode: p.kode, nama: p.nama, branchId: p.branch_id, lokasi: p.lokasi ?? "", warna: p.warna ?? "" } : undefined;
                   })()}
                   onSaved={invalidateProjects}
                 />

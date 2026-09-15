@@ -194,6 +194,7 @@ export async function saveSiteplanProjectAction(input: SiteplanProjectInput): Pr
   const payload = {
     kode: parsed.data.kode,
     nama: parsed.data.nama,
+    branch_id: parsed.data.branchId,
     lokasi: parsed.data.lokasi || null,
     warna: parsed.data.warna || null,
   };

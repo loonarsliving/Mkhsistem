@@ -2,14 +2,17 @@
 
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listBranchesAction } from "@/features/branches/actions/branch-query.actions";
 
 import { saveSiteplanProjectAction } from "../actions/siteplan.actions";
 import { siteplanProjectSchema, type SiteplanProjectInput } from "../schemas/siteplan.schema";
@@ -20,20 +23,29 @@ interface SiteplanProjectFormDialogProps {
   onSaved: () => void;
 }
 
+const EMPTY_VALUES: SiteplanProjectInput = { kode: "", nama: "", branchId: "", lokasi: "", warna: "" };
+
+/**
+ * Cabang is required (0262): every siteplan project is exclusively visible/bookable by its own
+ * branch's Sales/Kepala Cabang, so there is no more "visible to every branch" default the way
+ * Cendana and Loonars 2 both were before this picker existed.
+ */
 export function SiteplanProjectFormDialog({ trigger, initialValues, onSaved }: SiteplanProjectFormDialogProps) {
   const [open, setOpen] = React.useState(false);
+  const { data: branches } = useQuery({ queryKey: ["branches"], queryFn: listBranchesAction, enabled: open });
   const {
     register,
     handleSubmit,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<SiteplanProjectInput>({
     resolver: zodResolver(siteplanProjectSchema),
-    defaultValues: initialValues ?? { kode: "", nama: "", lokasi: "", warna: "" },
+    defaultValues: initialValues ?? EMPTY_VALUES,
   });
 
   React.useEffect(() => {
-    if (open) reset(initialValues ?? { kode: "", nama: "", lokasi: "", warna: "" });
+    if (open) reset(initialValues ?? EMPTY_VALUES);
   }, [open, initialValues, reset]);
 
   async function onSubmit(values: SiteplanProjectInput) {
@@ -66,6 +78,29 @@ export function SiteplanProjectFormDialog({ trigger, initialValues, onSaved }: S
               <Input id="nama" {...register("nama")} />
               {errors.nama && <p className="text-sm text-destructive">{errors.nama.message}</p>}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Cabang</Label>
+            <Controller
+              control={control}
+              name="branchId"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih cabang" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches?.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.branchId && <p className="text-sm text-destructive">{errors.branchId.message}</p>}
+            <p className="text-xs text-muted-foreground">Project ini hanya akan tampil untuk Sales/Kepala Cabang di cabang yang dipilih.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

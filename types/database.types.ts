@@ -4722,6 +4722,7 @@ export interface Database {
           id: string;
           kode: string;
           nama: string;
+          branch_id: string;
           lokasi: string | null;
           warna: string | null;
           created_at: string;
@@ -4731,13 +4732,21 @@ export interface Database {
           id?: string;
           kode: string;
           nama: string;
+          branch_id: string;
           lokasi?: string | null;
           warna?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["loonars_projects"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "loonars_projects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       loonars_units: {
         Row: {
