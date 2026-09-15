@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { SiteplanUnitStatus } from "@/constants/app";
 
 import { deleteSiteplanUnitAction, listSiteplanProjectsAction, listSiteplanUnitsAction } from "../actions/siteplan.actions";
+import { NotarisContactManager } from "./notaris-contact-manager";
 import { SiteplanFeeQueue } from "./siteplan-fee-queue";
 import { SiteplanProjectFormDialog } from "./siteplan-project-form-dialog";
 import { SiteplanRowEditor } from "./siteplan-row-editor";
@@ -203,6 +204,8 @@ export function SiteplanAdminPanel() {
           <SiteplanFeeQueue />
         </>
       )}
+
+      <NotarisContactManager />
 
       <ConfirmDialog
         open={deleteTarget !== null}

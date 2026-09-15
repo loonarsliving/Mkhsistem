@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { SiteplanUnitStatus } from "@/constants/app";
 
 import { getSiteplanPurchaseForUnitAction } from "../actions/siteplan.actions";
+import { AkadScheduleSection } from "./akad-schedule-section";
 
 interface UnitDetailModalProps {
   open: boolean;
@@ -21,9 +22,10 @@ interface UnitDetailModalProps {
   unitId: string | null;
   unitBlok: string;
   unitStatus: SiteplanUnitStatus;
+  userId: string;
 }
 
-export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStatus }: UnitDetailModalProps) {
+export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStatus, userId }: UnitDetailModalProps) {
   const { data: purchase, isLoading } = useQuery({
     queryKey: ["siteplan-unit-purchase", unitId],
     queryFn: () => getSiteplanPurchaseForUnitAction(unitId as string),
@@ -83,6 +85,8 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
               <p className="text-xs text-muted-foreground">Status Verifikasi</p>
               <p className="font-medium capitalize">{purchase.status.replace(/_/g, " ")}</p>
             </div>
+
+            {purchase.status === "verified" && <AkadScheduleSection userId={userId} purchase={purchase} />}
           </div>
         )}
 

@@ -322,3 +322,40 @@ export async function getPublicSiteplanStatus(supabase: TypedSupabaseClient, kod
   if (!result?.found) return null;
   return { kode: result.kode ?? kode, nama: result.nama ?? "", units: result.units ?? [] };
 }
+
+// ----------------------------------------------------------------------------
+// Notary contacts (0266) -- admin-managed, siteplan.manage only
+// ----------------------------------------------------------------------------
+
+export async function listNotaris(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase.from("loonars_notaris").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createNotaris(supabase: TypedSupabaseClient, payload: { full_name: string; phone: string; notes: string | null }) {
+  const { data, error } = await supabase.from("loonars_notaris").insert(payload).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateNotaris(
+  supabase: TypedSupabaseClient,
+  id: string,
+  payload: Partial<{ full_name: string; phone: string; active: boolean; notes: string | null }>,
+) {
+  const { data, error } = await supabase.from("loonars_notaris").update(payload).eq("id", id).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+// ----------------------------------------------------------------------------
+// Akad scheduling (0266)
+// ----------------------------------------------------------------------------
+
+/** The akad schedule for a purchase, if "Jadwalkan Akad" has ever been submitted for it. RLS (loonars_akad_schedules_select) already restricts this to the requesting rep or finance/siteplan admin. */
+export async function getAkadScheduleForPurchase(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase.from("loonars_akad_schedules").select("*").eq("purchase_id", purchaseId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
