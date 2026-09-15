@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
@@ -27,6 +28,7 @@ interface UnitPurchaseFormProps {
 }
 
 export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmitted }: UnitPurchaseFormProps) {
+  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -59,9 +61,20 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
       toast.error(result.error ?? "Gagal mengajukan pembelian");
       return;
     }
-    toast.success("Pembelian diajukan — menunggu verifikasi Finance");
     onOpenChange(false);
     onSubmitted();
+
+    // The unit is already locked at this point (the RPC flipped it to
+    // `verifikasi`), so the rep's next step is handing the buyer their
+    // kwitansi tanda jadi. Only booking-fee transactions get one -- a DP or
+    // akad purchase has no "tanda jadi" to receipt.
+    const purchaseId = result.data?.purchaseId;
+    if (values.transactionType === "booking" && purchaseId) {
+      toast.success("Booking tercatat — unit terkunci. Membuka kwitansi tanda jadi…");
+      router.push(`/siteplan/kwitansi/${purchaseId}`);
+      return;
+    }
+    toast.success("Pembelian diajukan — menunggu verifikasi Finance");
   }
 
   return (

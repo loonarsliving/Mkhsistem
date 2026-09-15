@@ -30,6 +30,7 @@ const VIEWER_PATH = "/siteplan";
 const FINANCE_PATH = "/crm/finance";
 const DASHBOARD_PATH = "/dashboard";
 const ADMIN_PATH = "/siteplan/admin";
+const RECEIPT_PATH = (purchaseId: string) => `/siteplan/kwitansi/${purchaseId}`;
 
 // ----------------------------------------------------------------------------
 // Reads
@@ -97,13 +98,22 @@ export async function listMySiteplanFeeRequestsAction() {
 // Purchases / verification / fee claims
 // ----------------------------------------------------------------------------
 
-export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput): Promise<ActionResult> {
+/**
+ * Declares a buyer for an available unit. The unit locks itself as part of this call: the RPC
+ * raises if the unit is no longer `tersedia`, flips it to `verifikasi`, and a partial unique index
+ * (loonars_unit_purchases_live_unit_idx) makes a second live purchase on the same unit impossible
+ * even if two reps submit at the same instant. Nothing client-side is relied on for that.
+ *
+ * Returns the new purchase id so the caller can send the rep straight to the kwitansi page for a
+ * booking-fee transaction.
+ */
+export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput): Promise<ActionResult<{ purchaseId: string }>> {
   await requireSession();
   const parsed = siteplanPurchaseSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("loonars_unit_purchase_submit", {
+  const { data, error } = await supabase.rpc("loonars_unit_purchase_submit", {
     p_unit_id: parsed.data.unitId,
     p_buyer_name: parsed.data.buyerName,
     p_nik: parsed.data.nik || null,
@@ -121,7 +131,7 @@ export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput)
   if (error) return actionError(error.message);
 
   revalidatePath(VIEWER_PATH);
-  return actionSuccess();
+  return actionSuccess({ purchaseId: data as string });
 }
 
 export async function verifySiteplanPurchaseAction(id: string): Promise<ActionResult> {
@@ -184,6 +194,7 @@ export async function saveSiteplanProjectAction(input: SiteplanProjectInput): Pr
   const payload = {
     kode: parsed.data.kode,
     nama: parsed.data.nama,
+    branch_id: parsed.data.branchId,
     lokasi: parsed.data.lokasi || null,
     warna: parsed.data.warna || null,
   };
@@ -316,4 +327,25 @@ export async function assignSiteplanUnitToRowAction(unitId: string, rowLabel: st
   revalidatePath(ADMIN_PATH);
   revalidatePath(VIEWER_PATH);
   return actionSuccess();
+}
+
+// ----------------------------------------------------------------------------
+// Booking receipt (Kwitansi Tanda Jadi) -- 0261
+// ----------------------------------------------------------------------------
+
+/**
+ * Issues the booking receipt for a purchase, or returns the already-issued one on a reprint --
+ * loonars_booking_receipt_issue is idempotent per purchase, so pressing "Cetak Kwitansi" twice
+ * never burns a second receipt number. The RPC re-checks the caller (owning rep / finance /
+ * siteplan admin) itself, since it is security definer and therefore bypasses RLS.
+ */
+export async function issueBookingReceiptAction(purchaseId: string): Promise<ActionResult<{ receiptNo: string }>> {
+  await requirePermission("siteplan.view");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("loonars_booking_receipt_issue", { p_purchase_id: purchaseId });
+  if (error) return actionError(error.message);
+  if (!data) return actionError("Kwitansi gagal diterbitkan");
+
+  revalidatePath(RECEIPT_PATH(purchaseId));
+  return actionSuccess({ receiptNo: data.receipt_no });
 }

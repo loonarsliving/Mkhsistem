@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -19,10 +19,12 @@ interface SiteplanUnitFormDialogProps {
   trigger: React.ReactNode;
   projectId: string;
   initialValues?: SiteplanUnitInput;
+  /** True for a unit whose harga is DB-locked (loonars_units.price_locked, 0264) -- disables the harga input entirely rather than letting the user hit the database's rejection. */
+  priceLocked?: boolean;
   onSaved: () => void;
 }
 
-export function SiteplanUnitFormDialog({ trigger, projectId, initialValues, onSaved }: SiteplanUnitFormDialogProps) {
+export function SiteplanUnitFormDialog({ trigger, projectId, initialValues, priceLocked = false, onSaved }: SiteplanUnitFormDialogProps) {
   const [open, setOpen] = React.useState(false);
   const {
     register,
@@ -71,8 +73,16 @@ export function SiteplanUnitFormDialog({ trigger, projectId, initialValues, onSa
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="harga">Harga</Label>
-              <Controller control={control} name="harga" render={({ field }) => <CurrencyInput id="harga" value={field.value} onValueChange={field.onChange} />} />
+              <Label htmlFor="harga" className="flex items-center gap-1">
+                Harga
+                {priceLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
+              <Controller
+                control={control}
+                name="harga"
+                render={({ field }) => <CurrencyInput id="harga" value={field.value} onValueChange={field.onChange} disabled={priceLocked} />}
+              />
+              {priceLocked && <p className="text-xs text-muted-foreground">Harga unit ini terkunci dan tidak dapat diubah dari sini.</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="luas">Luas (m²)</Label>
