@@ -230,8 +230,29 @@ posted workflow layer in front of the existing money-moving RPCs).
   match, and exactly one matching request — so every pre-existing photo
   handler (`finance_pending_transfers`, `construction_expenses`,
   `employee_salary_submissions`) behaves exactly as before on anything
-  else. Contractor payments still stop at `transferred`: the earned-value
-  engine posts the real amount from the dashboard.
+  else.
+- **Contractor payments also need no dashboard step (added 2026-09-15)**:
+  a `contractor_payment` request used to stop at `transferred` with a note
+  that a Super Admin had to finish posting it from the Construction
+  dashboard — a real gap the owner hit ("Harusnya ini kan sy tidak perlu
+  masuk ke dashboard lg" after paying Sarno Rp15,000,000 for Anang's week 1)
+  and a deliberate one: the amount actually owed a contractor is earned
+  value (`contract_value × WBS weight × VERIFIED progress_pct`), which this
+  module must never compute from a WhatsApp message or a transfer photo.
+  Fixed by using the labor-contract engine's own existing advance mechanism
+  instead (`cm_labor_advances` / `cm_labor_contracts.outstanding_advance`,
+  migration `0213`) — `recordLoonarsCoffeeLaborAdvance()` books that the
+  money genuinely left the company (visible in
+  `cm_labor_contract_summary`/the weekly report) without inventing an
+  earned amount or posting a jurnal entry ahead of reconciliation; the
+  request moves to `paid`. It is automatically recovered against the real
+  payable next time `cm_generate_labor_payment`/`cm_approve_labor_payment`
+  runs once physical progress is verified from the dashboard — a separate
+  job (checking Vando's progress reports), not a step in the owner's
+  pay-by-transfer flow. Falls back to the old `transferred`/dashboard
+  behaviour only if the project has no labor contract to advance against.
+  Manually applied to the one live request this had already affected
+  (Sarno's Rp15,000,000, contractor `Anang`'s contract).
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
