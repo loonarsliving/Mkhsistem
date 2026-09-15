@@ -44,15 +44,23 @@ export const siteplanPurchaseSchema = z
   });
 export type SiteplanPurchaseInput = z.infer<typeof siteplanPurchaseSchema>;
 
+/** branchId is required since 0262: every siteplan project is exclusively visible/bookable by its own branch's Sales/Kepala Cabang (siteplan.manage and prospect.finance_verify still see every project). */
 export const siteplanProjectSchema = z.object({
   id: z.string().uuid().optional(),
   kode: z.string().min(1, "Kode wajib diisi").max(50),
   nama: z.string().min(2, "Nama minimal 2 karakter").max(200),
+  branchId: z.string().uuid({ message: "Cabang wajib dipilih" }),
   lokasi: z.string().max(300).optional(),
   warna: z.string().max(20).optional(),
 });
 export type SiteplanProjectInput = z.infer<typeof siteplanProjectSchema>;
 
+/**
+ * harga has no lock-awareness here on purpose -- the schema only shapes what a form CAN submit.
+ * The actual lock is enforced by loonars_units_price_lock_guard (0264): submitting the unit's own
+ * unchanged harga is always accepted (NEW = OLD, nothing to reject), and the unit form dialog
+ * disables the harga input entirely for a locked unit so a value change is never even offered.
+ */
 export const siteplanUnitSchema = z.object({
   id: z.string().uuid().optional(),
   projectId: z.string().uuid(),
@@ -62,3 +70,49 @@ export const siteplanUnitSchema = z.object({
   luas: z.coerce.number().nonnegative().optional(),
 });
 export type SiteplanUnitInput = z.infer<typeof siteplanUnitSchema>;
+
+// ----------------------------------------------------------------------------
+// Notary contact (0266)
+// ----------------------------------------------------------------------------
+
+/** Reuses the messaging module's Indonesian phone regex -- same shape requirement for any number this app sends WhatsApp to. */
+const NOTARIS_PHONE_REGEX = /^(?:\+62|62|0)8[1-9][0-9]{6,10}$/;
+
+export const notarisContactSchema = z.object({
+  id: z.string().uuid().optional(),
+  fullName: z.string().min(2, "Nama minimal 2 karakter").max(200),
+  phone: z.string().min(1, "Nomor HP wajib diisi").regex(NOTARIS_PHONE_REGEX, "Nomor HP tidak valid (contoh: 081234567890)"),
+  notes: z.string().max(500).optional(),
+});
+export type NotarisContactInput = z.infer<typeof notarisContactSchema>;
+
+// ----------------------------------------------------------------------------
+// Akad scheduling (0266)
+// ----------------------------------------------------------------------------
+
+/**
+ * Buyer fields are re-validated here even though most already exist on the purchase row -- "Jadwalkan
+ * Akad" lets the rep complete/correct them at this stage (a booking-fee purchase often only has partial
+ * data), and what's submitted here is what gets snapshotted onto loonars_akad_schedules and sent to the
+ * notary, not whatever the original purchase happened to have.
+ */
+export const akadScheduleRequestSchema = z.object({
+  purchaseId: z.string().uuid(),
+  buyerName: z.string().min(2, "Nama pembeli minimal 2 karakter").max(200),
+  nik: z
+    .string()
+    .min(1, "NIK wajib diisi")
+    .regex(/^\d{16}$/, "NIK harus 16 digit angka"),
+  phone: z.string().min(1, "Nomor HP wajib diisi").regex(NOTARIS_PHONE_REGEX, "Nomor HP tidak valid (contoh: 081234567890)"),
+  address: z.string().min(5, "Alamat wajib diisi").max(500),
+  ktpPhotoPath: z.string().min(1, "Foto KTP wajib diunggah"),
+  tanggalAkad: z.string().min(1, "Tanggal akad wajib diisi"),
+  notes: z.string().max(1000).optional(),
+});
+export type AkadScheduleRequestInput = z.infer<typeof akadScheduleRequestSchema>;
+
+export const akadScheduleConfirmSchema = z.object({
+  id: z.string().uuid(),
+  tanggalAkadFinal: z.string().min(1, "Tanggal akad final wajib diisi"),
+});
+export type AkadScheduleConfirmInput = z.infer<typeof akadScheduleConfirmSchema>;

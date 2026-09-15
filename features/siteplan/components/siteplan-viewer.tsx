@@ -31,6 +31,7 @@ interface SiteplanUnit {
 
 interface SiteplanViewerProps {
   projectId: string;
+  userId: string;
 }
 
 /** Groups already-ordered units (row_label asc nulls-last, sort_order, blok) into named row sections, keeping the query's row order and putting null row_label units into a trailing "Belum dikelompokkan" bucket. */
@@ -51,7 +52,7 @@ function groupByRow(units: SiteplanUnit[]) {
   return Array.from(groups.entries());
 }
 
-export function SiteplanViewer({ projectId }: SiteplanViewerProps) {
+export function SiteplanViewer({ projectId, userId }: SiteplanViewerProps) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["siteplan-viewer", projectId],
@@ -141,6 +142,7 @@ export function SiteplanViewer({ projectId }: SiteplanViewerProps) {
         unitId={detailUnit?.id ?? null}
         unitBlok={detailUnit?.blok ?? ""}
         unitStatus={detailUnit?.status ?? "tersedia"}
+        userId={userId}
       />
     </div>
   );

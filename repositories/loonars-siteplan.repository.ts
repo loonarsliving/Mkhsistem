@@ -21,7 +21,7 @@ export async function getSiteplanProject(supabase: TypedSupabaseClient, projectI
 
 export async function createSiteplanProject(
   supabase: TypedSupabaseClient,
-  payload: { kode: string; nama: string; lokasi: string | null; warna: string | null },
+  payload: { kode: string; nama: string; branch_id: string; lokasi: string | null; warna: string | null },
 ) {
   const { data, error } = await supabase.from("loonars_projects").insert(payload).select("*").single();
   if (error) throw error;
@@ -31,7 +31,7 @@ export async function createSiteplanProject(
 export async function updateSiteplanProject(
   supabase: TypedSupabaseClient,
   id: string,
-  payload: Partial<{ kode: string; nama: string; lokasi: string | null; warna: string | null }>,
+  payload: Partial<{ kode: string; nama: string; branch_id: string; lokasi: string | null; warna: string | null }>,
 ) {
   const { data, error } = await supabase.from("loonars_projects").update(payload).eq("id", id).select("*").single();
   if (error) throw error;
@@ -258,4 +258,104 @@ export async function listMySiteplanFeeRequests(supabase: TypedSupabaseClient, e
     .order("requested_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+// ----------------------------------------------------------------------------
+// Booking receipts (Kwitansi Tanda Jadi) -- 0261
+// ----------------------------------------------------------------------------
+
+/**
+ * One purchase by id, with everything the printed kwitansi's header needs (project name + unit code)
+ * and the submitting rep's name for the internal "Penerima" line. RLS (loonars_unit_purchases_select)
+ * already limits this to the owning rep or a prospect.finance_verify holder, so a rep from another
+ * branch simply gets null back rather than another team's buyer data.
+ */
+export async function getSiteplanPurchaseById(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase
+    .from("loonars_unit_purchases")
+    .select(
+      "*, loonars_units(blok, tipe, project_id, loonars_projects(nama, kode, lokasi)), marketing:employees!loonars_unit_purchases_marketing_employee_id_fkey(full_name)",
+    )
+    .eq("id", purchaseId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * The issued receipt for a purchase, or null if "Cetak Kwitansi" has never been pressed for it.
+ * Deliberately a plain read -- issuing (which allocates the receipt number) is a mutation and only
+ * ever happens through the loonars_booking_receipt_issue RPC, never as a side effect of rendering.
+ */
+export async function getBookingReceiptForPurchase(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase
+    .from("loonars_booking_receipts")
+    .select("*")
+    .eq("purchase_id", purchaseId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// ----------------------------------------------------------------------------
+// Public live-status sharing (0265) -- unauthenticated, block/status only
+// ----------------------------------------------------------------------------
+
+export interface PublicSiteplanStatus {
+  kode: string;
+  nama: string;
+  units: { blok: string; status: string }[];
+}
+
+/**
+ * Backs the public /share/siteplan/[kode] page. Deliberately takes no session/permission check --
+ * loonars_public_siteplan_status (0265) is callable by `anon` and itself gates on the project's own
+ * publicly_shareable flag, returning `{ found: false }` for anything else (private project, wrong
+ * kode, typo) rather than raising, so this returns null cleanly instead of throwing. Never touches
+ * loonars_unit_purchases -- the RPC hands back block/status only, nothing about who bought what.
+ */
+export async function getPublicSiteplanStatus(supabase: TypedSupabaseClient, kode: string): Promise<PublicSiteplanStatus | null> {
+  const { data, error } = await supabase.rpc("loonars_public_siteplan_status", { p_kode: kode });
+  if (error) throw error;
+
+  const result = data as { found: boolean; kode?: string; nama?: string; units?: { blok: string; status: string }[] } | null;
+  if (!result?.found) return null;
+  return { kode: result.kode ?? kode, nama: result.nama ?? "", units: result.units ?? [] };
+}
+
+// ----------------------------------------------------------------------------
+// Notary contacts (0266) -- admin-managed, siteplan.manage only
+// ----------------------------------------------------------------------------
+
+export async function listNotaris(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase.from("loonars_notaris").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createNotaris(supabase: TypedSupabaseClient, payload: { full_name: string; phone: string; notes: string | null }) {
+  const { data, error } = await supabase.from("loonars_notaris").insert(payload).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateNotaris(
+  supabase: TypedSupabaseClient,
+  id: string,
+  payload: Partial<{ full_name: string; phone: string; active: boolean; notes: string | null }>,
+) {
+  const { data, error } = await supabase.from("loonars_notaris").update(payload).eq("id", id).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+// ----------------------------------------------------------------------------
+// Akad scheduling (0266)
+// ----------------------------------------------------------------------------
+
+/** The akad schedule for a purchase, if "Jadwalkan Akad" has ever been submitted for it. RLS (loonars_akad_schedules_select) already restricts this to the requesting rep or finance/siteplan admin. */
+export async function getAkadScheduleForPurchase(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase.from("loonars_akad_schedules").select("*").eq("purchase_id", purchaseId).maybeSingle();
+  if (error) throw error;
+  return data;
 }

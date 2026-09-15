@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { SiteplanUnitStatus } from "@/constants/app";
 
 import { deleteSiteplanUnitAction, listSiteplanProjectsAction, listSiteplanUnitsAction } from "../actions/siteplan.actions";
+import { NotarisContactManager } from "./notaris-contact-manager";
 import { SiteplanFeeQueue } from "./siteplan-fee-queue";
 import { SiteplanProjectFormDialog } from "./siteplan-project-form-dialog";
 import { SiteplanRowEditor } from "./siteplan-row-editor";
@@ -102,7 +103,7 @@ export function SiteplanAdminPanel() {
                   }
                   initialValues={(() => {
                     const p = projects.find((x) => x.id === projectId);
-                    return p ? { id: p.id, kode: p.kode, nama: p.nama, lokasi: p.lokasi ?? "", warna: p.warna ?? "" } : undefined;
+                    return p ? { id: p.id, kode: p.kode, nama: p.nama, branchId: p.branch_id, lokasi: p.lokasi ?? "", warna: p.warna ?? "" } : undefined;
                   })()}
                   onSaved={invalidateProjects}
                 />
@@ -152,7 +153,16 @@ export function SiteplanAdminPanel() {
                         <TableRow key={u.id}>
                           <TableCell className="font-medium">{u.blok}</TableCell>
                           <TableCell>{u.tipe ?? "-"}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatCurrency(u.harga ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            <span className="inline-flex items-center gap-1">
+                              {u.price_locked && (
+                                <span title="Harga terkunci">
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                </span>
+                              )}
+                              {formatCurrency(u.harga ?? 0)}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">{u.luas ?? "-"}</TableCell>
                           <TableCell>
                             <SiteplanUnitStatusBadge status={u.status as SiteplanUnitStatus} />
@@ -162,6 +172,7 @@ export function SiteplanAdminPanel() {
                               <SiteplanUnitFormDialog
                                 projectId={projectId}
                                 initialValues={{ id: u.id, projectId, blok: u.blok, tipe: u.tipe ?? "", harga: u.harga ?? undefined, luas: u.luas ?? undefined }}
+                                priceLocked={u.price_locked}
                                 trigger={
                                   <Button size="sm" variant="ghost">
                                     <Pencil className="h-4 w-4" />
@@ -193,6 +204,8 @@ export function SiteplanAdminPanel() {
           <SiteplanFeeQueue />
         </>
       )}
+
+      <NotarisContactManager />
 
       <ConfirmDialog
         open={deleteTarget !== null}

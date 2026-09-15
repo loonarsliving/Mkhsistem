@@ -288,6 +288,7 @@ export const STORAGE_BUCKETS = {
   LEAVE_ATTACHMENTS: "leave-attachments",
   SITEPLAN_IMAGES: "siteplan-images",
   PROJECT_PHOTOS: "project-photos",
+  KTP_PHOTOS: "ktp-photos",
 } as const;
 
 /** loonars_units.status -- see supabase/migrations/0202_siteplan_native_feature.sql. */
@@ -365,9 +366,21 @@ export const KENDARI_BRANCH_ID = "61a95bc6-23b0-408d-8439-f821251c56d4";
 
 /**
  * The Makassar branch. Owner's explicit call: the native Siteplan viewer
- * (0202/0203) is currently a Makassar-only project -- every branch shares
+ * (0202/0203) started as a Makassar-only project -- every branch shares
  * the "Kepala Cabang" and "Sales" roles, so getCurrentSession() strips
  * siteplan.view back out for any Kepala Cabang/Sales employee whose branch
- * isn't Makassar. Super Admin and the Direktur roles keep it everywhere.
+ * doesn't sell a siteplan project. Super Admin and the Direktur roles keep
+ * it everywhere.
  */
 export const MAKASSAR_BRANCH_ID = "40cdf547-d9cb-4d59-aba3-265a2ba04da8";
+
+/**
+ * Branches whose Kepala Cabang / Sales employees keep siteplan.view.
+ * Makassar has had it since 0202; Jogja was added 2026-09-15 when Loonars 2
+ * (migration 0261) went onto the same siteplan viewer, so the Jogja sales
+ * team picks its villa blocks there. Every other branch's Sales/Kepala
+ * Cabang has siteplan.view stripped in getCurrentSession() -- widen this
+ * list, not the role grant, when another branch starts selling from a
+ * siteplan.
+ */
+export const SITEPLAN_BRANCH_IDS = [MAKASSAR_BRANCH_ID, JOGJA_BRANCH_ID] as const;

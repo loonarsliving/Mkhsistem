@@ -2,34 +2,56 @@
 
 import { revalidatePath } from "next/cache";
 
+import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
+import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
   assignSiteplanUnitToRow,
+  createNotaris,
   createSiteplanProject,
   createSiteplanUnit,
   deleteSiteplanRow,
   deleteSiteplanUnit,
+  getAkadScheduleForPurchase,
   getSiteplanProject,
+  getSiteplanPurchaseById,
   getSiteplanPurchaseForUnit,
   listMySiteplanFeeRequests,
   listMySiteplanPurchases,
+  listNotaris,
   listPendingSiteplanFeeRequests,
   listPendingSiteplanPurchases,
   listSiteplanProjects,
   listSiteplanUnits,
   saveSiteplanRowOrdering,
+  updateNotaris,
   updateSiteplanProject,
   updateSiteplanUnit,
 } from "@/repositories/loonars-siteplan.repository";
+import { getSignedUrl } from "@/services/storage.service";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
-import { siteplanProjectSchema, siteplanPurchaseSchema, siteplanUnitSchema, type SiteplanProjectInput, type SiteplanPurchaseInput, type SiteplanUnitInput } from "../schemas/siteplan.schema";
+import {
+  akadScheduleConfirmSchema,
+  notarisContactSchema,
+  siteplanProjectSchema,
+  siteplanPurchaseSchema,
+  siteplanUnitSchema,
+  akadScheduleRequestSchema,
+  type AkadScheduleConfirmInput,
+  type AkadScheduleRequestInput,
+  type NotarisContactInput,
+  type SiteplanProjectInput,
+  type SiteplanPurchaseInput,
+  type SiteplanUnitInput,
+} from "../schemas/siteplan.schema";
 
 const VIEWER_PATH = "/siteplan";
 const FINANCE_PATH = "/crm/finance";
 const DASHBOARD_PATH = "/dashboard";
 const ADMIN_PATH = "/siteplan/admin";
+const RECEIPT_PATH = (purchaseId: string) => `/siteplan/kwitansi/${purchaseId}`;
 
 // ----------------------------------------------------------------------------
 // Reads
@@ -97,13 +119,22 @@ export async function listMySiteplanFeeRequestsAction() {
 // Purchases / verification / fee claims
 // ----------------------------------------------------------------------------
 
-export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput): Promise<ActionResult> {
+/**
+ * Declares a buyer for an available unit. The unit locks itself as part of this call: the RPC
+ * raises if the unit is no longer `tersedia`, flips it to `verifikasi`, and a partial unique index
+ * (loonars_unit_purchases_live_unit_idx) makes a second live purchase on the same unit impossible
+ * even if two reps submit at the same instant. Nothing client-side is relied on for that.
+ *
+ * Returns the new purchase id so the caller can send the rep straight to the kwitansi page for a
+ * booking-fee transaction.
+ */
+export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput): Promise<ActionResult<{ purchaseId: string }>> {
   await requireSession();
   const parsed = siteplanPurchaseSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("loonars_unit_purchase_submit", {
+  const { data, error } = await supabase.rpc("loonars_unit_purchase_submit", {
     p_unit_id: parsed.data.unitId,
     p_buyer_name: parsed.data.buyerName,
     p_nik: parsed.data.nik || null,
@@ -121,7 +152,7 @@ export async function submitSiteplanPurchaseAction(input: SiteplanPurchaseInput)
   if (error) return actionError(error.message);
 
   revalidatePath(VIEWER_PATH);
-  return actionSuccess();
+  return actionSuccess({ purchaseId: data as string });
 }
 
 export async function verifySiteplanPurchaseAction(id: string): Promise<ActionResult> {
@@ -184,6 +215,7 @@ export async function saveSiteplanProjectAction(input: SiteplanProjectInput): Pr
   const payload = {
     kode: parsed.data.kode,
     nama: parsed.data.nama,
+    branch_id: parsed.data.branchId,
     lokasi: parsed.data.lokasi || null,
     warna: parsed.data.warna || null,
   };
@@ -314,6 +346,171 @@ export async function assignSiteplanUnitToRowAction(unitId: string, rowLabel: st
   }
 
   revalidatePath(ADMIN_PATH);
+  revalidatePath(VIEWER_PATH);
+  return actionSuccess();
+}
+
+// ----------------------------------------------------------------------------
+// Booking receipt (Kwitansi Tanda Jadi) -- 0261
+// ----------------------------------------------------------------------------
+
+/**
+ * Issues the booking receipt for a purchase, or returns the already-issued one on a reprint --
+ * loonars_booking_receipt_issue is idempotent per purchase, so pressing "Cetak Kwitansi" twice
+ * never burns a second receipt number. The RPC re-checks the caller (owning rep / finance /
+ * siteplan admin) itself, since it is security definer and therefore bypasses RLS.
+ */
+export async function issueBookingReceiptAction(purchaseId: string): Promise<ActionResult<{ receiptNo: string }>> {
+  await requirePermission("siteplan.view");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("loonars_booking_receipt_issue", { p_purchase_id: purchaseId });
+  if (error) return actionError(error.message);
+  if (!data) return actionError("Kwitansi gagal diterbitkan");
+
+  revalidatePath(RECEIPT_PATH(purchaseId));
+  return actionSuccess({ receiptNo: data.receipt_no });
+}
+
+// ----------------------------------------------------------------------------
+// Notary contacts (0266) -- admin-managed, siteplan.manage only
+// ----------------------------------------------------------------------------
+
+export async function listNotarisAction() {
+  await requirePermission("siteplan.manage");
+  const supabase = await createClient();
+  return listNotaris(supabase);
+}
+
+export async function saveNotarisAction(input: NotarisContactInput): Promise<ActionResult> {
+  const parsed = notarisContactSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  await requirePermission("siteplan.manage");
+  const supabase = await createClient();
+  const payload = {
+    full_name: parsed.data.fullName,
+    phone: normalizeIndonesianPhone(parsed.data.phone),
+    notes: parsed.data.notes || null,
+  };
+
+  try {
+    if (parsed.data.id) {
+      await updateNotaris(supabase, parsed.data.id, payload);
+    } else {
+      await createNotaris(supabase, payload);
+    }
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan kontak notaris");
+  }
+
+  revalidatePath(ADMIN_PATH);
+  return actionSuccess();
+}
+
+/** Toggles a notary contact active/inactive -- loonars_akad_schedule_request only ever picks an active one. */
+export async function setNotarisActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  await requirePermission("siteplan.manage");
+  const supabase = await createClient();
+  try {
+    await updateNotaris(supabase, id, { active });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengubah status notaris");
+  }
+  revalidatePath(ADMIN_PATH);
+  return actionSuccess();
+}
+
+// ----------------------------------------------------------------------------
+// Akad scheduling (0266) -- "Jadwalkan Akad": collects buyer KTP/data and
+// sends it straight to the notary via WhatsApp, together with the date
+// marketing proposes.
+// ----------------------------------------------------------------------------
+
+export async function getAkadScheduleAction(purchaseId: string) {
+  await requireSession();
+  const supabase = await createClient();
+  return getAkadScheduleForPurchase(supabase, purchaseId);
+}
+
+/**
+ * Records the schedule (loonars_akad_schedule_request, upserts per purchase) then immediately sends
+ * the buyer's data as WhatsApp text and the KTP photo as a WhatsApp image to the notary the RPC
+ * resolved -- directly from this Server Action, same pattern as
+ * features/messaging/actions/messaging.actions.ts, since Postgres itself never makes outbound HTTP
+ * calls in this project. The schedule row is saved either way; if the WhatsApp send itself fails
+ * (WhatsApp not configured, gateway error), that failure is reported back so the rep knows to follow
+ * up manually instead of assuming the notary received it.
+ */
+export async function requestAkadScheduleAction(input: AkadScheduleRequestInput): Promise<ActionResult<{ notarisName: string }>> {
+  await requireSession();
+  const parsed = akadScheduleRequestSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { data: schedule, error } = await supabase.rpc("loonars_akad_schedule_request", {
+    p_purchase_id: parsed.data.purchaseId,
+    p_buyer_name: parsed.data.buyerName,
+    p_nik: parsed.data.nik,
+    p_phone: parsed.data.phone,
+    p_address: parsed.data.address,
+    p_ktp_photo_path: parsed.data.ktpPhotoPath,
+    p_tanggal_akad: parsed.data.tanggalAkad,
+    p_notes: parsed.data.notes || null,
+  });
+  if (error) return actionError(error.message);
+  if (!schedule) return actionError("Jadwal akad gagal disimpan");
+
+  const purchase = await getSiteplanPurchaseById(supabase, parsed.data.purchaseId).catch(() => null);
+  const unit = purchase?.loonars_units as { blok: string; loonars_projects: { nama: string } | null } | null | undefined;
+  const unitLabel = unit?.blok ?? "-";
+  const projectName = unit?.loonars_projects?.nama ?? "";
+  const tanggalFormatted = new Date(`${schedule.tanggal_akad_diusulkan}T00:00:00`).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const messageLines = [
+    `Halo Ibu ${schedule.notaris_name}, mohon bantuan penjadwalan akad jual beli villa berikut:`,
+    "",
+    `Nama Pembeli: ${schedule.buyer_name}`,
+    `NIK: ${schedule.nik}`,
+    `No. HP Pembeli: ${schedule.phone}`,
+    `Alamat: ${schedule.address}`,
+    `Unit: ${unitLabel}${projectName ? ` — ${projectName}` : ""}`,
+    `Tanggal Akad Diusulkan: ${tanggalFormatted}`,
+  ];
+  if (parsed.data.notes) messageLines.push(`Catatan: ${parsed.data.notes}`);
+  messageLines.push("", "Foto KTP menyusul di pesan berikutnya. Mohon konfirmasi kesediaan tanggal tersebut ke marketing kami. Terima kasih.");
+
+  const notarisPhone = normalizeIndonesianPhone(schedule.notaris_phone);
+  const textResult = await sendWhatsAppText(notarisPhone, messageLines.join("\n"));
+  if (!textResult.success) {
+    return actionError(`Jadwal tersimpan, tetapi pesan WhatsApp gagal terkirim ke notaris: ${textResult.error ?? "kesalahan tidak diketahui"}`);
+  }
+
+  const ktpUrl = await getSignedUrl("ktp-photos", schedule.ktp_photo_path);
+  if (ktpUrl) {
+    const imageResult = await sendWhatsAppImage(notarisPhone, ktpUrl, `Foto KTP — ${schedule.buyer_name}`);
+    if (!imageResult.success) {
+      return actionError(`Data terkirim, tetapi foto KTP gagal terkirim ke notaris: ${imageResult.error ?? "kesalahan tidak diketahui"}. Kirim ulang foto secara manual.`);
+    }
+  }
+
+  revalidatePath(VIEWER_PATH);
+  return actionSuccess({ notarisName: schedule.notaris_name });
+}
+
+/** Records the final akad date once the notary has confirmed by phone/WhatsApp directly to the requesting rep -- no automated reply parsing in this first version. */
+export async function confirmAkadScheduleAction(input: AkadScheduleConfirmInput): Promise<ActionResult> {
+  const parsed = akadScheduleConfirmSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("loonars_akad_schedule_confirm", { p_id: parsed.data.id, p_tanggal_akad_final: parsed.data.tanggalAkadFinal });
+  if (error) return actionError(error.message);
+
   revalidatePath(VIEWER_PATH);
   return actionSuccess();
 }

@@ -105,12 +105,22 @@ describe("siteplanPurchaseSchema", () => {
 });
 
 describe("siteplanProjectSchema", () => {
+  const branchId = "33333333-3333-3333-3333-333333333333";
+
   it("accepts a valid project", () => {
-    expect(siteplanProjectSchema.safeParse({ kode: "LV-01", nama: "Loonars Villa" }).success).toBe(true);
+    expect(siteplanProjectSchema.safeParse({ kode: "LV-01", nama: "Loonars Villa", branchId }).success).toBe(true);
   });
 
   it("rejects a missing kode", () => {
-    expect(siteplanProjectSchema.safeParse({ kode: "", nama: "Loonars Villa" }).success).toBe(false);
+    expect(siteplanProjectSchema.safeParse({ kode: "", nama: "Loonars Villa", branchId }).success).toBe(false);
+  });
+
+  it("rejects a missing branchId (0262: every project is branch-exclusive)", () => {
+    expect(siteplanProjectSchema.safeParse({ kode: "LV-01", nama: "Loonars Villa" }).success).toBe(false);
+  });
+
+  it("rejects a non-uuid branchId", () => {
+    expect(siteplanProjectSchema.safeParse({ kode: "LV-01", nama: "Loonars Villa", branchId: "not-a-uuid" }).success).toBe(false);
   });
 });
 

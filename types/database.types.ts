@@ -4722,8 +4722,10 @@ export interface Database {
           id: string;
           kode: string;
           nama: string;
+          branch_id: string;
           lokasi: string | null;
           warna: string | null;
+          publicly_shareable: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -4731,13 +4733,22 @@ export interface Database {
           id?: string;
           kode: string;
           nama: string;
+          branch_id: string;
           lokasi?: string | null;
           warna?: string | null;
+          publicly_shareable?: boolean;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["loonars_projects"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "loonars_projects_branch_id_fkey";
+            columns: ["branch_id"];
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       loonars_units: {
         Row: {
@@ -4750,6 +4761,7 @@ export interface Database {
           status: "tersedia" | "dp" | "verifikasi" | "terjual";
           row_label: string | null;
           sort_order: number;
+          price_locked: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -4763,6 +4775,7 @@ export interface Database {
           status?: "tersedia" | "dp" | "verifikasi" | "terjual";
           row_label?: string | null;
           sort_order?: number;
+          price_locked?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -4973,6 +4986,166 @@ export interface Database {
           {
             foreignKeyName: "loonars_unit_fee_requests_decided_by_fkey";
             columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_notaris: {
+        Row: {
+          id: string;
+          full_name: string;
+          phone: string;
+          active: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          full_name: string;
+          phone: string;
+          active?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_notaris"]["Insert"]>;
+        Relationships: [];
+      };
+      loonars_akad_schedules: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          unit_id: string;
+          buyer_name: string;
+          nik: string;
+          phone: string;
+          address: string;
+          ktp_photo_path: string;
+          notaris_id: string | null;
+          notaris_name: string;
+          notaris_phone: string;
+          tanggal_akad_diusulkan: string;
+          tanggal_akad_final: string | null;
+          status: "diajukan" | "dikonfirmasi" | "dibatalkan";
+          requested_by: string;
+          sent_to_notaris_at: string | null;
+          confirmed_by: string | null;
+          confirmed_at: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          unit_id: string;
+          buyer_name: string;
+          nik: string;
+          phone: string;
+          address: string;
+          ktp_photo_path: string;
+          notaris_id?: string | null;
+          notaris_name: string;
+          notaris_phone: string;
+          tanggal_akad_diusulkan: string;
+          tanggal_akad_final?: string | null;
+          status?: "diajukan" | "dikonfirmasi" | "dibatalkan";
+          requested_by: string;
+          sent_to_notaris_at?: string | null;
+          confirmed_by?: string | null;
+          confirmed_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_akad_schedules"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_akad_schedules_purchase_id_fkey";
+            columns: ["purchase_id"];
+            referencedRelation: "loonars_unit_purchases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_akad_schedules_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_akad_schedules_notaris_id_fkey";
+            columns: ["notaris_id"];
+            referencedRelation: "loonars_notaris";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_akad_schedules_requested_by_fkey";
+            columns: ["requested_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_akad_schedules_confirmed_by_fkey";
+            columns: ["confirmed_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      loonars_booking_receipts: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          unit_id: string;
+          receipt_no: string;
+          receipt_year: number;
+          receipt_seq: number;
+          amount: number;
+          buyer_name: string;
+          buyer_phone: string | null;
+          unit_label: string;
+          payment_method: string;
+          issued_by: string | null;
+          issued_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          unit_id: string;
+          receipt_no: string;
+          receipt_year: number;
+          receipt_seq: number;
+          amount: number;
+          buyer_name: string;
+          buyer_phone?: string | null;
+          unit_label: string;
+          payment_method: string;
+          issued_by?: string | null;
+          issued_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_booking_receipts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_booking_receipts_purchase_id_fkey";
+            columns: ["purchase_id"];
+            referencedRelation: "loonars_unit_purchases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_booking_receipts_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_booking_receipts_issued_by_fkey";
+            columns: ["issued_by"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
           },
@@ -5814,6 +5987,25 @@ export interface Database {
         Returns: string;
       };
       loonars_unit_position_upsert: { Args: { p_unit_id: string; p_x_pct: number; p_y_pct: number }; Returns: string };
+      loonars_booking_receipt_issue: {
+        Args: { p_purchase_id: string };
+        Returns: Database["public"]["Tables"]["loonars_booking_receipts"]["Row"];
+      };
+      loonars_public_siteplan_status: { Args: { p_kode: string }; Returns: Json };
+      loonars_akad_schedule_request: {
+        Args: {
+          p_purchase_id: string;
+          p_buyer_name: string;
+          p_nik: string;
+          p_phone: string;
+          p_address: string;
+          p_ktp_photo_path: string;
+          p_tanggal_akad: string;
+          p_notes?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["loonars_akad_schedules"]["Row"];
+      };
+      loonars_akad_schedule_confirm: { Args: { p_id: string; p_tanggal_akad_final: string }; Returns: undefined };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };

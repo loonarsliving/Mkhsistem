@@ -88,11 +88,6 @@ export const PERMISSIONS = {
   CRM_ANALYTICS_VIEW_ALL: "crm_analytics.view_all",
   CRM_ANALYTICS_VIEW_EXECUTIVE: "crm_analytics.view_executive",
   CRM_PROJECT_MANAGE: "crm_project.manage",
-  // Not a real DB-granted permission — injected in-session for Jogja branch
-  // employees only (see lib/rbac/session.ts), same pattern as
-  // KOS_OCCUPANCY_VIEW. Gates the "Siteplan Loonars Villa" nav link, since
-  // that project only exists in Jogja.
-  LOONARS_SALES_VIEW: "loonars_sales.view",
 
   KPI_TASK_VIEW_OWN: "kpi_task.view_own",
   KPI_TASK_VIEW_BRANCH: "kpi_task.view_branch",
@@ -262,11 +257,15 @@ export const KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS = [
  * Same pattern as MARKOM_KEPALA_CABANG_PERMISSIONS above, but for the native
  * Siteplan viewer -- granted at the role level to both Kepala Cabang and
  * Sales (every branch shares those roles), stripped back out in
- * getCurrentSession() for anyone whose branch isn't Makassar
- * (MAKASSAR_BRANCH_ID). Super Admin and the Direktur roles are unaffected --
+ * getCurrentSession() for anyone whose branch isn't one of
+ * SITEPLAN_BRANCH_IDS. Super Admin and the Direktur roles are unaffected --
  * they keep siteplan.view everywhere.
+ *
+ * Renamed from SITEPLAN_MAKASSAR_ONLY_PERMISSIONS (2026-09-15): the siteplan
+ * is no longer a single-branch feature now that Jogja sells Loonars 2 from it
+ * (migration 0261).
  */
-export const SITEPLAN_MAKASSAR_ONLY_PERMISSIONS = ["siteplan.view"] as const satisfies readonly PermissionKey[];
+export const SITEPLAN_BRANCH_SCOPED_PERMISSIONS = ["siteplan.view"] as const satisfies readonly PermissionKey[];
 
 /** Seed mapping of role -> permissions, mirrored in supabase/seed/02_rbac_seed.sql */
 export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
@@ -445,8 +444,9 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     //
     // siteplan.view stays granted at the role level for the same reason as
     // kpi_task/content_planner/construction_finance above -- see
-    // SITEPLAN_MAKASSAR_ONLY_PERMISSIONS -- and is stripped back out in
-    // getCurrentSession() for any Kepala Cabang whose branch isn't Makassar.
+    // SITEPLAN_BRANCH_SCOPED_PERMISSIONS -- and is stripped back out in
+    // getCurrentSession() for any Kepala Cabang whose branch doesn't sell a
+    // siteplan project (Makassar or Jogja today).
     PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.MANAGER]: [
@@ -477,7 +477,8 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.HR_EXPENSE_CREATE,
     // siteplan.view stays granted at the role level -- every branch shares
     // the "Sales" role. getCurrentSession() strips it back out for any Sales
-    // employee whose branch isn't Makassar (SITEPLAN_MAKASSAR_ONLY_PERMISSIONS).
+    // employee whose branch doesn't sell a siteplan project -- today Makassar
+    // and Jogja (Loonars 2). See SITEPLAN_BRANCH_SCOPED_PERMISSIONS.
     PERMISSIONS.SITEPLAN_VIEW,
   ],
   [ROLE_KEYS.FINANCE]: [

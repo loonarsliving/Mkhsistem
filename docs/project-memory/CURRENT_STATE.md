@@ -3,6 +3,158 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars 1 SSO module removed, public live-siteplan sharing added (2026-09-15, later same day)
+
+Two more owner-driven follow-ups on the Loonars 2 work below:
+
+1. **Loonars 1 (the external `loonars-sales` villa app) is sold out** —
+   removed the "Siteplan Loonars Villa" nav entry, `app/api/sso/loonars-
+   sales/route.ts`, the `LOONARS_SALES_VIEW` permission constant, and its
+   `getCurrentSession()` auto-grant for Jogja/Super Admin. See
+   ARCHITECTURE.md for what was deliberately left alone (the
+   `loonars_closings`/fee-claim sync pipeline from that same external app —
+   unrelated DB-level reconciliation, not "the siteplan module").
+2. **Public live-status sharing** (`0265_loonars_public_siteplan_status.sql`)
+   — a sales rep can now share Loonars 2's live siteplan with a buyer's
+   family with no MK Connect account needed. `loonars_projects
+   .publicly_shareable` (default false, true only for `LNR2`) gates a new
+   `SECURITY DEFINER` RPC granted to `anon`, returning only `{blok, status}`
+   per unit plus the project's `kode`/`nama` — never `harga`, never
+   anything from `loonars_unit_purchases`. `/share/siteplan/[kode]`
+   (`app/share/siteplan/[kode]/page.tsx`, added to `middleware.ts`'s
+   `PUBLIC_PATHS`) renders the owner's actual marketing render
+   (`public/siteplan/loonars-2-marketing.jpg`) with a color-coded overlay
+   at each of the 20 label positions, auto-refreshing every 30s. Marker
+   coordinates were read directly off that image (a 5%-gridline overlay
+   image was generated and visually checked against each label), not
+   guessed — verified with a Playwright screenshot showing every overlay
+   landing squarely on its label box. A "Bagikan Siteplan Live" button on
+   the internal `/siteplan` viewer (visible only when the selected
+   project is `publicly_shareable`) copies/shares the link via the Web
+   Share API. Verified before applying: `anon` role gets full unit data for
+   `LNR2`, `{"found":false}` for `Cendana` (not shareable) and for a
+   garbage kode, a status flip (`tersedia` → `terjual`) is reflected
+   immediately in the next anon call, and the returned JSON contains no
+   price/buyer-shaped keys. Re-verified identically against production
+   after applying. Adding a second publicly shareable project needs both
+   the DB flip AND a matching entry in
+   `SHARE_IMAGE_BY_KODE`/marker-position map in the page/component — the
+   marketing artwork and its coordinates are specific to one image, not
+   generated from `loonars_unit_positions` (that table stays unused, per
+   0203).
+
+## Loonars 2 siteplan + booking receipt (added 2026-09-15)
+
+Migration `0261_loonars_2_siteplan_booking_receipt.sql` — see CHANGELOG.md
+for the full rationale. Short version for anyone picking this up:
+
+- The Jogja sales team now sells **Loonars 2** (`loonars_projects.kode =
+  'LNR2'`, 20 units: `AVARA-01..10` / `BANYU-01..10`) from the existing
+  native Siteplan viewer. No second siteplan module was built — block
+  picking, the auto-lock on submit, Finance verification and the fee claim
+  are all 0202/0203/0204 behaviour, untouched.
+- **"Blok otomatis terkunci" was already true** before this change and is
+  worth not re-implementing: `loonars_unit_purchase_submit` raises unless the
+  unit is `tersedia`, flips it to `verifikasi`, and the partial unique index
+  `loonars_unit_purchases_live_unit_idx` blocks a second live purchase on the
+  same unit even under a race.
+- `siteplan.view` is no longer Makassar-only. It is driven by
+  `SITEPLAN_BRANCH_IDS` (`constants/app.ts`) — add a branch there, not to the
+  role grant, when another branch starts selling from a siteplan.
+- New: printable **Kwitansi Tanda Jadi** at `/siteplan/kwitansi/[purchaseId]`,
+  numbered `MKH/LNR/NNNN/YYYY`, idempotent per purchase, amount taken from the
+  purchase's `booking_fee` (the paper form's pre-printed Rp 5.000.000 is
+  gone), terbilang computed in code (`lib/utils/terbilang.ts`).
+
+**Update 2026-09-15:** Migration `0261` has been **applied to the live
+Supabase project** (`svcmybsziaelwwdrnzcv`) via Supabase MCP, per the
+owner's explicit go-ahead — confirmed 20 units (10 AVARA + 10 BANYU) under
+project `LNR2`, `authenticated` can execute `loonars_booking_receipt_issue`,
+and no test/fake purchase or receipt was created against production. Real
+MKH/Loonars logo files were also added (`public/branding/`), replacing the
+typographic wordmark placeholders — see CHANGELOG.md for both entries.
+
+**Update 2026-09-15 (later same day) — projects are now branch-exclusive,
+Loonars 2 prices locked in.** Owner: "untuk loonars 2, kunci hanya untuk
+jogja" + a fixed price list. Two more migrations, both **applied to
+production**:
+
+- `0262_siteplan_project_branch_scoping.sql` — added
+  `loonars_projects.branch_id` (backfilled: `Cendana` → Makassar,
+  `LNR2` → Jogja, then set `NOT NULL`). `loonars_projects_select` and
+  `loonars_units_select` (both `using (true)` since 0202) are now
+  branch-scoped: a Sales/Kepala Cabang employee sees ONLY their own
+  branch's project — Makassar reps no longer see Loonars 2 in the picker,
+  and Jogja reps no longer see Cendana. `siteplan.manage` and
+  `prospect.finance_verify` still see every project (RLS bypass), matching
+  how Finance verification is already cross-branch. The same check was
+  added inside `loonars_unit_purchase_submit` itself (not just RLS/UI) — a
+  Sales/Kepala Cabang employee gets `"Unit ini bukan bagian dari project
+  cabang Anda"` if they somehow reach a unit outside their branch;
+  `siteplan.manage` bypasses this too. The admin "Tambah Project" form
+  (`siteplan-project-form-dialog.tsx`) now requires picking a branch — no
+  more "visible everywhere" default for a new project.
+- `0263_loonars_2_unit_prices.sql` — Loonars 2's two villa types priced per
+  the owner: `BANYU-*` = 1 Bedroom, **Rp 420.000.000**; `AVARA-*` = 2 Kamar,
+  **Rp 520.000.000**. Scoped strictly to `kode = 'LNR2'`, so it can never
+  touch Cendana or any future project reusing the same row names. "Kunci"
+  here originally just meant "a real, owner-confirmed figure" — see 0264
+  below for the actual hard lock, added the same day once the owner
+  clarified the admin form could still edit it.
+- `0264_loonars_2_price_hard_lock.sql` — the owner's follow-up: "buat harga
+  tidak bisa diedit, karna posisi skrng harga masih bisa diedit". Adds
+  `loonars_units.price_locked` (per-unit, default `false`; set `true` for
+  all 20 Loonars 2 rows only) and a `BEFORE UPDATE` trigger
+  (`loonars_units_price_lock_guard`) that rejects any statement changing
+  `harga` on a locked row — `tipe`/`luas`/`status`/`blok` on the same row
+  stay freely editable. Deliberately **no `siteplan.manage` bypass**: the
+  owner's instruction was unconditional, so even Super Admin/Direktur
+  cannot change a locked price through the app — a genuine future price
+  change belongs in its own new numbered migration, matching how 0263
+  itself set the price and how this project treats other final,
+  owner-confirmed figures (e.g. the Loonars Coffee RAB in 0256). The trigger
+  fires for every role regardless of RLS. `/siteplan/admin`'s unit form now
+  disables the Harga field entirely (with a lock icon + note) for a locked
+  unit, and the unit table shows a lock icon next to its price, so the
+  admin never even reaches the database's rejection in normal use.
+
+Verified before applying: exercised all four migrations end-to-end against a
+throwaway local Postgres 16 (branches seeded with the real Makassar/Jogja
+IDs, a real pre-existing `Cendana` row mirrored in) — a Makassar-branch
+employee sees only Cendana, a Jogja-branch employee sees only Loonars 2
+(prices confirmed 420jt/520jt split correctly by row), `siteplan.manage`
+and `prospect.finance_verify` see both, a cross-branch purchase attempt
+raises the branch error, a same-branch purchase and an admin's
+`siteplan.manage`-bypassed cross-branch purchase both succeed, and receipt
+issuance/reprint idempotency still holds. typecheck, lint, 245 unit tests
+(2 new, covering the now-required `branchId` field) and `next build` all
+clean. 0264 specifically: confirmed an UPDATE changing `harga` on a locked
+row raises even for `siteplan.manage`, changing `tipe` alongside an
+unchanged `harga` on the same locked row succeeds, `harga` stays freely
+editable on an unlocked (Cendana) unit, and a fresh INSERT with a `harga` is
+unaffected (the trigger is `BEFORE UPDATE` only). Applied to production and
+re-verified there: Cendana's own pre-existing prices (750jt/600jt
+Atas/Bawah) are untouched and still editable (`price_locked = false` on all
+16 rows), all 20 Loonars 2 rows show `price_locked = true`, a real
+production `UPDATE ... SET harga = 999999999` against `AVARA-01` was
+attempted and rejected by the trigger with `AVARA-01`'s price confirmed
+unchanged at Rp520.000.000 afterward, and the security advisor shows no new
+findings for either table.
+
+**Open items still remaining:**
+
+1. The receipt is issuable while the purchase is still
+   `pending_verification` (a tanda jadi is handed over at payment time, not
+   after Finance confirms). The page warns the rep on screen; confirm with
+   the owner whether that is the wanted policy or whether issue should be
+   blocked until verified.
+2. The paper form's diagonal cursive "Invest in a Better Living" script and
+   its large pale background leaf outline are not reproduced — would need a
+   new script font import (a dependency decision), left for the owner.
+3. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
+   fires on purchase submit, which already covers the closing). Add one only
+   if asked.
+
 ## Loonars Coffee construction pilot (added 2026-09-10)
 
 First real project on the existing Construction Management module (cm_*
