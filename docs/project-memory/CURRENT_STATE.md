@@ -3,6 +3,46 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars 1 SSO module removed, public live-siteplan sharing added (2026-09-15, later same day)
+
+Two more owner-driven follow-ups on the Loonars 2 work below:
+
+1. **Loonars 1 (the external `loonars-sales` villa app) is sold out** —
+   removed the "Siteplan Loonars Villa" nav entry, `app/api/sso/loonars-
+   sales/route.ts`, the `LOONARS_SALES_VIEW` permission constant, and its
+   `getCurrentSession()` auto-grant for Jogja/Super Admin. See
+   ARCHITECTURE.md for what was deliberately left alone (the
+   `loonars_closings`/fee-claim sync pipeline from that same external app —
+   unrelated DB-level reconciliation, not "the siteplan module").
+2. **Public live-status sharing** (`0265_loonars_public_siteplan_status.sql`)
+   — a sales rep can now share Loonars 2's live siteplan with a buyer's
+   family with no MK Connect account needed. `loonars_projects
+   .publicly_shareable` (default false, true only for `LNR2`) gates a new
+   `SECURITY DEFINER` RPC granted to `anon`, returning only `{blok, status}`
+   per unit plus the project's `kode`/`nama` — never `harga`, never
+   anything from `loonars_unit_purchases`. `/share/siteplan/[kode]`
+   (`app/share/siteplan/[kode]/page.tsx`, added to `middleware.ts`'s
+   `PUBLIC_PATHS`) renders the owner's actual marketing render
+   (`public/siteplan/loonars-2-marketing.jpg`) with a color-coded overlay
+   at each of the 20 label positions, auto-refreshing every 30s. Marker
+   coordinates were read directly off that image (a 5%-gridline overlay
+   image was generated and visually checked against each label), not
+   guessed — verified with a Playwright screenshot showing every overlay
+   landing squarely on its label box. A "Bagikan Siteplan Live" button on
+   the internal `/siteplan` viewer (visible only when the selected
+   project is `publicly_shareable`) copies/shares the link via the Web
+   Share API. Verified before applying: `anon` role gets full unit data for
+   `LNR2`, `{"found":false}` for `Cendana` (not shareable) and for a
+   garbage kode, a status flip (`tersedia` → `terjual`) is reflected
+   immediately in the next anon call, and the returned JSON contains no
+   price/buyer-shaped keys. Re-verified identically against production
+   after applying. Adding a second publicly shareable project needs both
+   the DB flip AND a matching entry in
+   `SHARE_IMAGE_BY_KODE`/marker-position map in the page/component — the
+   marketing artwork and its coordinates are specific to one image, not
+   generated from `loonars_unit_positions` (that table stays unused, per
+   0203).
+
 ## Loonars 2 siteplan + booking receipt (added 2026-09-15)
 
 Migration `0261_loonars_2_siteplan_booking_receipt.sql` — see CHANGELOG.md

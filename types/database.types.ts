@@ -4725,6 +4725,7 @@ export interface Database {
           branch_id: string;
           lokasi: string | null;
           warna: string | null;
+          publicly_shareable: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -4735,6 +4736,7 @@ export interface Database {
           branch_id: string;
           lokasi?: string | null;
           warna?: string | null;
+          publicly_shareable?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -5886,6 +5888,7 @@ export interface Database {
         Args: { p_purchase_id: string };
         Returns: Database["public"]["Tables"]["loonars_booking_receipts"]["Row"];
       };
+      loonars_public_siteplan_status: { Args: { p_kode: string }; Returns: Json };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };

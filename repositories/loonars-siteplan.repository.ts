@@ -296,3 +296,29 @@ export async function getBookingReceiptForPurchase(supabase: TypedSupabaseClient
   if (error) throw error;
   return data;
 }
+
+// ----------------------------------------------------------------------------
+// Public live-status sharing (0265) -- unauthenticated, block/status only
+// ----------------------------------------------------------------------------
+
+export interface PublicSiteplanStatus {
+  kode: string;
+  nama: string;
+  units: { blok: string; status: string }[];
+}
+
+/**
+ * Backs the public /share/siteplan/[kode] page. Deliberately takes no session/permission check --
+ * loonars_public_siteplan_status (0265) is callable by `anon` and itself gates on the project's own
+ * publicly_shareable flag, returning `{ found: false }` for anything else (private project, wrong
+ * kode, typo) rather than raising, so this returns null cleanly instead of throwing. Never touches
+ * loonars_unit_purchases -- the RPC hands back block/status only, nothing about who bought what.
+ */
+export async function getPublicSiteplanStatus(supabase: TypedSupabaseClient, kode: string): Promise<PublicSiteplanStatus | null> {
+  const { data, error } = await supabase.rpc("loonars_public_siteplan_status", { p_kode: kode });
+  if (error) throw error;
+
+  const result = data as { found: boolean; kode?: string; nama?: string; units?: { blok: string; status: string }[] } | null;
+  if (!result?.found) return null;
+  return { kode: result.kode ?? kode, nama: result.nama ?? "", units: result.units ?? [] };
+}

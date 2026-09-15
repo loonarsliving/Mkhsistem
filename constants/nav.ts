@@ -121,13 +121,6 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: BarChart3,
         permission: [PERMISSIONS.CRM_ANALYTICS_VIEW_BRANCH, PERMISSIONS.CRM_ANALYTICS_VIEW_ALL],
       },
-      {
-        label: "Siteplan Loonars Villa",
-        href: "/api/sso/loonars-sales",
-        icon: MapPinned,
-        permission: PERMISSIONS.LOONARS_SALES_VIEW,
-        external: true,
-      },
       { label: "Siteplan", href: "/siteplan", icon: MapPinned, permission: PERMISSIONS.SITEPLAN_VIEW },
       { label: "Kelola Siteplan", href: "/siteplan/admin", icon: MapPinned, permission: PERMISSIONS.SITEPLAN_MANAGE },
     ],
