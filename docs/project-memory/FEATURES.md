@@ -85,7 +85,7 @@ Never marked DONE without direct source evidence (route + repository/action
 |---|---|---|
 | Loonars Beauty | DONE | `app/(app)/loonars-beauty/*`, `features/loonars-beauty/` (11 files), `repositories/loonars-beauty.repository.ts`, `loonars-closing.repository.ts`; migrations `0112_loonars_beauty_module.sql` and later |
 | Kos Occupancy | DONE | `app/(app)/kos-occupancy`, `repositories/kos-occupancy.repository.ts`, migrations `0145_kos_occupancy_module.sql`, `0146_kos_fdw_integration.sql` (FDW = foreign data wrapper — cross-database integration, see `INTEGRATIONS.md`) |
-| Siteplan | DONE | `app/(app)/siteplan`, `siteplan/admin`, `features/siteplan/` (13 files), `repositories/loonars-siteplan.repository.ts`, migrations `0202_siteplan_native_feature.sql` onward |
+| Siteplan | DONE | `app/(app)/siteplan`, `siteplan/admin`, `siteplan/kwitansi/[purchaseId]`, `features/siteplan/` (14 files), `repositories/loonars-siteplan.repository.ts`, migrations `0202_siteplan_native_feature.sql` onward (`0261` = Loonars 2 Jogja project + printable Kwitansi Tanda Jadi) |
 | Lead Knowledge / Knowledge Bank | DONE | `features/lead-knowledge/` (4 files), `repositories/knowledge-base.repository.ts`, migrations `0115_ai_knowledge_bank.sql`, `0116`, `0117`, `0126`, `0127` |
 | Assistant (voice) | PARTIAL | `app/(app)/asisten`, `features/assistant/` (3 files), `app/api/ai/voice-assistant`, `app/api/ai/voice-bridge`, `lib/ai/voice-bridge/`; small file count relative to breadth of `app/api` surface suggests this may be thinner than other modules — depth not fully verified |
 | Messaging | DONE | `app/(app)/messaging`, `features/messaging/` (3 files), migration `0066_messaging_send_permission.sql` |

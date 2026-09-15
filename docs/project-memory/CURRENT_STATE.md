@@ -3,6 +3,48 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars 2 siteplan + booking receipt (added 2026-09-15)
+
+Migration `0261_loonars_2_siteplan_booking_receipt.sql` — see CHANGELOG.md
+for the full rationale. Short version for anyone picking this up:
+
+- The Jogja sales team now sells **Loonars 2** (`loonars_projects.kode =
+  'LNR2'`, 20 units: `AVARA-01..10` / `BANYU-01..10`) from the existing
+  native Siteplan viewer. No second siteplan module was built — block
+  picking, the auto-lock on submit, Finance verification and the fee claim
+  are all 0202/0203/0204 behaviour, untouched.
+- **"Blok otomatis terkunci" was already true** before this change and is
+  worth not re-implementing: `loonars_unit_purchase_submit` raises unless the
+  unit is `tersedia`, flips it to `verifikasi`, and the partial unique index
+  `loonars_unit_purchases_live_unit_idx` blocks a second live purchase on the
+  same unit even under a race.
+- `siteplan.view` is no longer Makassar-only. It is driven by
+  `SITEPLAN_BRANCH_IDS` (`constants/app.ts`) — add a branch there, not to the
+  role grant, when another branch starts selling from a siteplan.
+- New: printable **Kwitansi Tanda Jadi** at `/siteplan/kwitansi/[purchaseId]`,
+  numbered `MKH/LNR/NNNN/YYYY`, idempotent per purchase, amount taken from the
+  purchase's `booking_fee` (the paper form's pre-printed Rp 5.000.000 is
+  gone), terbilang computed in code (`lib/utils/terbilang.ts`).
+
+**Open items (not done in this pass):**
+
+1. Migration `0261` is **committed but NOT applied** to the live Supabase
+   project — it needs the owner's go-ahead and a `supabase db push` / MCP
+   `apply_migration`. Everything below depends on that.
+2. **Loonars 2 unit prices/type/area are NULL** — deliberately not guessed.
+   A `siteplan.manage` holder must fill them in at `/siteplan/admin`.
+3. The receipt is issuable while the purchase is still
+   `pending_verification` (a tanda jadi is handed over at payment time, not
+   after Finance confirms). The page warns the rep on screen; confirm with
+   the owner whether that is the wanted policy or whether issue should be
+   blocked until verified.
+4. No branding image assets exist in `public/` — the kwitansi header renders
+   the MKH and Loonars wordmarks typographically. Swap in the real logo files
+   if the owner wants a pixel match to the paper form.
+5. No WhatsApp notification on receipt issue (0204's Kepala Cabang alert
+   fires on purchase submit, which already covers the closing). Add one only
+   if asked.
+
 ## Loonars Coffee construction pilot (added 2026-09-10)
 
 First real project on the existing Construction Management module (cm_*

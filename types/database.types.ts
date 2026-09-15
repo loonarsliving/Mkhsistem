@@ -4978,6 +4978,63 @@ export interface Database {
           },
         ];
       };
+      loonars_booking_receipts: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          unit_id: string;
+          receipt_no: string;
+          receipt_year: number;
+          receipt_seq: number;
+          amount: number;
+          buyer_name: string;
+          buyer_phone: string | null;
+          unit_label: string;
+          payment_method: string;
+          issued_by: string | null;
+          issued_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          unit_id: string;
+          receipt_no: string;
+          receipt_year: number;
+          receipt_seq: number;
+          amount: number;
+          buyer_name: string;
+          buyer_phone?: string | null;
+          unit_label: string;
+          payment_method: string;
+          issued_by?: string | null;
+          issued_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_booking_receipts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_booking_receipts_purchase_id_fkey";
+            columns: ["purchase_id"];
+            referencedRelation: "loonars_unit_purchases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_booking_receipts_unit_id_fkey";
+            columns: ["unit_id"];
+            referencedRelation: "loonars_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_booking_receipts_issued_by_fkey";
+            columns: ["issued_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       loonars_fee_wa_requests: {
         Row: {
           fee_id: number;
@@ -5814,6 +5871,10 @@ export interface Database {
         Returns: string;
       };
       loonars_unit_position_upsert: { Args: { p_unit_id: string; p_x_pct: number; p_y_pct: number }; Returns: string };
+      loonars_booking_receipt_issue: {
+        Args: { p_purchase_id: string };
+        Returns: Database["public"]["Tables"]["loonars_booking_receipts"]["Row"];
+      };
       crm_reject_payment: { Args: { p_payment_id: string; p_reason?: string | null }; Returns: undefined };
       crm_review_sp1_warning: { Args: { p_id: string; p_decision: string; p_note?: string | null }; Returns: undefined };
       markom_request_ads_research: { Args: { p_project_id: string; p_branch_id: string }; Returns: undefined };

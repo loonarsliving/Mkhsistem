@@ -259,3 +259,40 @@ export async function listMySiteplanFeeRequests(supabase: TypedSupabaseClient, e
   if (error) throw error;
   return data ?? [];
 }
+
+// ----------------------------------------------------------------------------
+// Booking receipts (Kwitansi Tanda Jadi) -- 0261
+// ----------------------------------------------------------------------------
+
+/**
+ * One purchase by id, with everything the printed kwitansi's header needs (project name + unit code)
+ * and the submitting rep's name for the internal "Penerima" line. RLS (loonars_unit_purchases_select)
+ * already limits this to the owning rep or a prospect.finance_verify holder, so a rep from another
+ * branch simply gets null back rather than another team's buyer data.
+ */
+export async function getSiteplanPurchaseById(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase
+    .from("loonars_unit_purchases")
+    .select(
+      "*, loonars_units(blok, tipe, project_id, loonars_projects(nama, kode, lokasi)), marketing:employees!loonars_unit_purchases_marketing_employee_id_fkey(full_name)",
+    )
+    .eq("id", purchaseId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * The issued receipt for a purchase, or null if "Cetak Kwitansi" has never been pressed for it.
+ * Deliberately a plain read -- issuing (which allocates the receipt number) is a mutation and only
+ * ever happens through the loonars_booking_receipt_issue RPC, never as a side effect of rendering.
+ */
+export async function getBookingReceiptForPurchase(supabase: TypedSupabaseClient, purchaseId: string) {
+  const { data, error } = await supabase
+    .from("loonars_booking_receipts")
+    .select("*")
+    .eq("purchase_id", purchaseId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

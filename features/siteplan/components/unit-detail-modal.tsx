@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { Loader2 } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SITEPLAN_PAYMENT_METHOD_LABEL, SITEPLAN_TRANSACTION_TYPE_LABEL, type SiteplanPaymentMethod, type SiteplanTransactionType } from "@/constants/app";
 import { SiteplanUnitStatusBadge } from "@/components/shared/status-badge";
 import { formatCurrency } from "@/lib/utils";
@@ -82,6 +84,20 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
               <p className="font-medium capitalize">{purchase.status.replace(/_/g, " ")}</p>
             </div>
           </div>
+        )}
+
+        {/* Reprint path for a booking already recorded. The kwitansi page issues the number on the
+            first visit and returns that same number on every later one, so this is safe to open
+            repeatedly -- it never produces a second receipt for the same booking. */}
+        {!isLoading && purchase && purchase.transaction_type === "booking" && purchase.status !== "rejected" && (
+          <DialogFooter>
+            <Button variant="outline" asChild>
+              <Link href={`/siteplan/kwitansi/${purchase.id}`}>
+                <Printer className="h-4 w-4" />
+                Kwitansi Tanda Jadi
+              </Link>
+            </Button>
+          </DialogFooter>
         )}
       </DialogContent>
     </Dialog>

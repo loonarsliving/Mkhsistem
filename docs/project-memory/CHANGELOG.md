@@ -333,6 +333,67 @@ provider's (Zernio) actual API capabilities verified first, which wasn't
 possible in this pass. Multi-platform expansion (Facebook/YouTube/LinkedIn/X)
 was also flagged as out of scope -- it's an integration gap, not an AI one.
 
+## 2026-09-15 — Loonars 2 (Jogja) siteplan + printable booking receipt
+
+Migration `0261_loonars_2_siteplan_booking_receipt.sql`. Built ON TOP of the
+existing native Siteplan feature (0202/0203/0204) rather than as a second
+module — block picking, auto-locking, Finance verification and the fee claim
+are all pre-existing behaviour and are unchanged.
+
+1. **Loonars 2 project seeded as catalog data** — `loonars_projects` row
+   `LNR2` plus 20 units, `AVARA-01..10` and `BANYU-01..10`, grouped with the
+   0203 `row_label`/`sort_order` grid layout (two facing rows, numbered from
+   the Loonars Coffee/parking entrance inwards) so the siteplan renders
+   without an admin row-editor pass. `harga`/`luas`/`tipe` deliberately left
+   NULL — the Loonars 2 price list is not in this repository and was not
+   guessed; a `siteplan.manage` holder fills them in via `/siteplan/admin`.
+   Seed is idempotent (`on conflict do nothing`), verified by re-running it.
+
+2. **Jogja opened up on the siteplan viewer** — `siteplan.view` was scoped to
+   Makassar only (`SITEPLAN_MAKASSAR_ONLY_PERMISSIONS` + a
+   `branch_id !== MAKASSAR_BRANCH_ID` strip in `getCurrentSession()`).
+   Renamed to `SITEPLAN_BRANCH_SCOPED_PERMISSIONS` and driven by a new
+   `SITEPLAN_BRANCH_IDS` list (Makassar + Jogja), so Jogja's Sales/Kepala
+   Cabang keep the permission. Every other branch is unchanged, and the
+   role-level grant was not widened.
+
+3. **Kwitansi Tanda Jadi** (`loonars_booking_receipts`,
+   `loonars_receipt_counters`, `loonars_booking_receipt_issue()`) — a
+   numbered, audit-stamped booking receipt, printed at
+   `/siteplan/kwitansi/[purchaseId]` through the app's existing
+   `.print-area`/`.no-print` CSS (browser print-to-PDF, no new PDF
+   dependency). Design decisions worth keeping:
+   - **The nominal is NOT the pre-printed Rp 5.000.000** the paper form
+     carried — it is whatever booking fee the rep entered, per the owner.
+   - `amount`/`buyer_name`/`buyer_phone`/`unit_label`/`payment_method` are
+     **snapshotted onto the receipt row at issue time**, so a later edit to
+     the purchase can't silently change an already-printed document.
+   - **Issue is idempotent per purchase** — a reprint returns the identical
+     number rather than burning a second one.
+   - Numbering is `MKH/LNR/NNNN/YYYY`, per calendar year, allocated by an
+     atomic `insert .. on conflict do update .. returning` against
+     `loonars_receipt_counters` — deliberately NOT `max(seq)+1`, which would
+     hand two simultaneous reps the same number. Counter table has RLS on
+     with **no policies**: only the security-definer function reaches it.
+   - Refused for non-`booking` transaction types, rejected purchases, and
+     purchases with no `booking_fee`.
+   - `terbilang` (the spelled-out rupiah line) is computed in application
+     code (`lib/utils/terbilang.ts`) from the same stored `amount` the
+     digits render from, so words and figures can never disagree. Unit
+     tested (`tests/unit/lib/terbilang.test.ts`).
+
+**Verified before commit** by applying `0261` to a throwaway local Postgres 16
+against stub definitions of the tables it depends on: migration applies clean,
+seed produces exactly 10+10 units and is a no-op on re-run, reissue returns the
+same number, sequence advances across purchases, all four refusal paths raise,
+and 8 concurrent issues produced 8 distinct gapless numbers. Also
+typecheck + lint + 243 unit tests + `next build` clean.
+
+**NOT applied to the live Supabase project** (`svcmybsziaelwwdrnzcv`) in this
+pass — unlike `0251`/`0256`, this migration is committed as an unapplied file
+and still needs the owner's go-ahead plus a `supabase db push` (or MCP
+`apply_migration`). The Loonars 2 unit prices also still need filling in.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,
