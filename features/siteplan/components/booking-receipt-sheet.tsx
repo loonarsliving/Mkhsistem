@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { Loader2, Printer } from "lucide-react";
+import { BadgeCheck, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -36,13 +36,19 @@ export interface BookingReceiptData {
  * a faint Loonars leaf-mark watermark bottom-right, numbered field rows, two signature blocks, and
  * the dark footer bar.
  *
- * Three deliberate differences from that paper form:
+ * Four deliberate differences from that paper form:
  *   - The nominal is NOT the pre-printed Rp 5.000.000. It is the booking fee the rep entered on
  *     this purchase, snapshotted onto loonars_booking_receipts at issue time.
  *   - The "Terbilang" line is computed from that same stored number (lib/utils/terbilang), never
  *     typed by hand, so the words and the digits can never disagree.
  *   - The paper form is a blank template (buyer fills it by hand); this one prints the actual
  *     transaction data already filled in on each line instead of leaving it blank.
+ *   - PENERIMA no longer has a blank line waiting for a wet-ink signature. Owner's explicit call:
+ *     "tidak perlu di tanda tangan olehku lagi, jadi seperti kwitansi digital yg sdh tertanda" --
+ *     the receipt is issued through loonars_booking_receipt_issue with an authenticated
+ *     issued_by/issued_at already recorded, so that recorded issuance IS the signature; it's shown
+ *     as an already-applied electronic signature badge instead of an empty line to fill in later.
+ *     PEMBAYAR (the buyer) still gets a blank signature line -- only the company side changed.
  *
  * Printing uses the app's existing native print support (app/globals.css: `.print-area` stays
  * visible, `.no-print` is hidden) rather than a server-side PDF dependency.
@@ -159,15 +165,25 @@ export function BookingReceiptSheet({ data }: { data: BookingReceiptData }) {
               </div>
             </div>
 
-            {/* Signatures */}
-            <div className="mt-10 grid grid-cols-2 gap-12">
+            {/* Signatures. PENERIMA is pre-signed electronically (no wet-ink line) -- PEMBAYAR
+                (the buyer) still signs by hand. */}
+            <div className="mt-10 grid grid-cols-2 items-start gap-12">
               <div>
                 <p className="text-sm font-semibold tracking-[0.12em]">PENERIMA</p>
                 <p className="text-[11px] tracking-[0.2em] text-[#3d3228]/70">MAHA KARYA HALUOLEO</p>
-                <div className="mt-16 border-t border-[#3d3228]/50 pt-1 text-center text-xs">
-                  ( {data.marketingName ?? "Nama & Tanda Tangan"} )
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-[#3d3228]/25 bg-[#f2ece2] px-3 py-2.5">
+                  <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#3d6b4a]" />
+                  <div className="text-xs leading-relaxed">
+                    <p className="font-semibold text-[#3d3228]">Ditandatangani secara elektronik</p>
+                    <p>{data.marketingName ?? "-"}</p>
+                    <p className="text-[#3d3228]/60">
+                      {formatSignedTimestamp(data.issuedAt)} · No. {data.receiptNo}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-2 text-center text-[11px] text-[#3d3228]/60">Stempel Perusahaan</p>
+                <p className="mt-2 text-center text-[10px] italic text-[#3d3228]/50">
+                  Dokumen ini sah tanpa tanda tangan dan cap basah.
+                </p>
               </div>
               <div>
                 <p className="text-right text-sm font-semibold tracking-[0.12em]">PEMBAYAR</p>
@@ -191,6 +207,12 @@ export function BookingReceiptSheet({ data }: { data: BookingReceiptData }) {
       </div>
     </div>
   );
+}
+
+/** "15 September 2026, 14.30 WIB" -- explicit Asia/Jakarta, matching the project's convention for timestamps that must read correctly regardless of the viewer's own device timezone (see construction-progress-assessment-card.tsx). This is the electronic-signature timestamp, so it needs to be unambiguous. */
+function formatSignedTimestamp(iso: string): string {
+  const formatted = new Date(iso).toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" });
+  return `${formatted} WIB`;
 }
 
 function Field({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
