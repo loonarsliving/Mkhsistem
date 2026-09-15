@@ -43,12 +43,15 @@ export interface BookingReceiptData {
  *     typed by hand, so the words and the digits can never disagree.
  *   - The paper form is a blank template (buyer fills it by hand); this one prints the actual
  *     transaction data already filled in on each line instead of leaving it blank.
- *   - PENERIMA no longer has a blank line waiting for a wet-ink signature. Owner's explicit call:
- *     "tidak perlu di tanda tangan olehku lagi, jadi seperti kwitansi digital yg sdh tertanda" --
- *     the receipt is issued through loonars_booking_receipt_issue with an authenticated
- *     issued_by/issued_at already recorded, so that recorded issuance IS the signature; it's shown
- *     as an already-applied electronic signature badge instead of an empty line to fill in later.
- *     PEMBAYAR (the buyer) still gets a blank signature line -- only the company side changed.
+ *   - Only PENERIMA (the receiving company) signs, and it no longer has a blank line waiting for
+ *     a wet-ink signature. Owner's explicit calls, same conversation: first "tidak perlu di tanda
+ *     tangan olehku lagi, jadi seperti kwitansi digital yg sdh tertanda" -- the receipt is issued
+ *     through loonars_booking_receipt_issue with an authenticated issued_by/issued_at already
+ *     recorded, so that recorded issuance IS the signature, shown as an already-applied electronic
+ *     signature badge instead of an empty line. Then a PEMBAYAR (buyer) signature line was removed
+ *     entirely: "yg mesti ttd mmg harus dari perusahaan penerima" -- the party certifying a receipt
+ *     is the one who received the money, not the one who handed it over, so there was never a
+ *     buyer signature to keep.
  *
  * Printing uses the app's existing native print support (app/globals.css: `.print-area` stays
  * visible, `.no-print` is hidden) rather than a server-side PDF dependency.
@@ -165,13 +168,15 @@ export function BookingReceiptSheet({ data }: { data: BookingReceiptData }) {
               </div>
             </div>
 
-            {/* Signatures. PENERIMA is pre-signed electronically (no wet-ink line) -- PEMBAYAR
-                (the buyer) still signs by hand. */}
-            <div className="mt-10 grid grid-cols-2 items-start gap-12">
-              <div>
+            {/* Signature. Only PENERIMA (the receiving company) signs a booking receipt --
+                owner's explicit call: a PEMBAYAR line for the buyer never belonged here, since
+                the party certifying the receipt is the one who received the money, not the one
+                who handed it over. PENERIMA is pre-signed electronically, no wet-ink line. */}
+            <div className="mt-10 flex justify-center">
+              <div className="w-full max-w-sm text-center">
                 <p className="text-sm font-semibold tracking-[0.12em]">PENERIMA</p>
                 <p className="text-[11px] tracking-[0.2em] text-[#3d3228]/70">MAHA KARYA HALUOLEO</p>
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-[#3d3228]/25 bg-[#f2ece2] px-3 py-2.5">
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-[#3d3228]/25 bg-[#f2ece2] px-3 py-2.5 text-left">
                   <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#3d6b4a]" />
                   <div className="text-xs leading-relaxed">
                     <p className="font-semibold text-[#3d3228]">Ditandatangani secara elektronik</p>
@@ -181,13 +186,7 @@ export function BookingReceiptSheet({ data }: { data: BookingReceiptData }) {
                     </p>
                   </div>
                 </div>
-                <p className="mt-2 text-center text-[10px] italic text-[#3d3228]/50">
-                  Dokumen ini sah tanpa tanda tangan dan cap basah.
-                </p>
-              </div>
-              <div>
-                <p className="text-right text-sm font-semibold tracking-[0.12em]">PEMBAYAR</p>
-                <div className="mt-[4.6rem] border-t border-[#3d3228]/50 pt-1 text-center text-xs">( Nama &amp; Tanda Tangan )</div>
+                <p className="mt-2 text-[10px] italic text-[#3d3228]/50">Dokumen ini sah tanpa tanda tangan dan cap basah.</p>
               </div>
             </div>
 
