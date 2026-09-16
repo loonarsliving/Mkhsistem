@@ -3,6 +3,29 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Sales closing-tips broadcast and Sales Teaching Engine weekly briefing turned off (2026-09-16)
+
+Owner: "Matikan tips closing dan tips2 untuk sales dan kepala cabang."
+Migration `0268_disable_sales_closing_tips_and_teaching_weekly.sql`
+unschedules both `pg_cron` jobs:
+
+- `crm-sales-closing-tips-2x-weekly` (0118) — the per-Sales-employee
+  personalized closing-tip WhatsApp broadcast (`crm_dispatch_sales_closing_tips`,
+  0117), 2x/week (Sunday + Wednesday).
+- `crm-sales-teaching-weekly` (0128, retimed by 0130) — the branch-wide
+  Weekly Coaching briefing sent to Kepala Cabang
+  (`crm_run_sales_teaching_weekly`, 0128), weekly (Monday).
+
+Unschedule only — the underlying functions, `ai_job_queue` job types
+(`sales_closing_tips_broadcast`, `sales_teaching_weekly`), and
+`crm_sales_teaching_log` table are untouched, so either broadcast can be
+re-enabled (re-add the `cron.schedule` call) or dispatched manually by
+calling the function directly. Migration committed to
+`claude/tips-closing-sales-branch-3avdgi`; not yet applied to the live
+Supabase project as of this entry — needs `supabase db push` (or the
+Supabase MCP) once merged, per the normal migration-apply step, for the
+crons to actually stop firing in production.
+
 ## Loonars 1 SSO module removed, public live-siteplan sharing added (2026-09-15, later same day)
 
 Two more owner-driven follow-ups on the Loonars 2 work below:
