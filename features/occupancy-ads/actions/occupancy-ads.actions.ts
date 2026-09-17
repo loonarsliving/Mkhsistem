@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { askOccupancyCopilot, generateOccupancyAdsBrief, generateOccupancyCreativeVariants, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
 import { decideCampaignAction, type DecisionEngineMetaInsights } from "@/lib/occupancy/decision-engine";
-import { isAllowedOccupancyDestinationUrl } from "@/lib/occupancy/campaign-rules";
+import { checkWeeklyBudgetCeiling, isAllowedOccupancyDestinationUrl } from "@/lib/occupancy/campaign-rules";
 import { classifyOccupancyCalendar, classifyOccupancyDay, selectAdvertisableDates, summarizeGap, type OccupancyThresholds } from "@/lib/occupancy/gap-engine";
 import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
 import { isMetaConfigured } from "@/lib/meta/config";
@@ -13,6 +13,7 @@ import { getAdInsights, getLeaseholdTargetGeoLocations, launchLinkClickCampaign,
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getActiveWeeklyCommittedBudgetIdr,
   getCreativeAsset,
   getOccupancyCampaign,
   getPreviousCampaignRecommendationSnapshot,
@@ -94,7 +95,11 @@ export async function saveOccupancyTargetAction(input: UpsertOccupancyTargetInpu
   const session = await requirePermission("occupancy_ads.manage");
   if (input.targetOccupancyPct <= 0 || input.targetOccupancyPct > 100) return actionError("Target okupansi harus antara 0-100%");
   if (input.criticalOccupancyPct < input.targetOccupancyPct) return actionError("Ambang kritis harus >= target okupansi");
-  if (input.maxDailyBudgetIdr < 0) return actionError("Plafon budget tidak boleh negatif");
+  if (input.maxDailyBudgetIdr < 0) return actionError("Plafon budget harian tidak boleh negatif");
+  if (input.maxWeeklyBudgetIdr !== null && input.maxWeeklyBudgetIdr < 0) return actionError("Plafon budget mingguan tidak boleh negatif");
+  if (input.maxWeeklyBudgetIdr !== null && input.maxWeeklyBudgetIdr > 0 && input.maxWeeklyBudgetIdr < input.maxDailyBudgetIdr) {
+    return actionError("Plafon budget mingguan tidak boleh lebih kecil dari plafon budget harian");
+  }
 
   const supabase = await createClient();
   try {
@@ -337,6 +342,16 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
     return actionError("Plafon budget harian untuk properti ini tidak ditemukan/0 -- tidak bisa meluncurkan tanpa plafon yang valid.");
   }
   const dailyBudgetIdr = Math.min(campaign.daily_budget_idr, maxDailyBudgetIdr);
+
+  const alreadyCommittedWeeklyIdr = target ? await getActiveWeeklyCommittedBudgetIdr(supabase, target.id, campaign.id) : 0;
+  const weeklyCheck = checkWeeklyBudgetCeiling(alreadyCommittedWeeklyIdr, dailyBudgetIdr, target?.max_weekly_budget_idr ?? null);
+  if (!weeklyCheck.allowed) {
+    return actionError(
+      `Melebihi plafon budget mingguan untuk properti ini: campaign aktif minggu ini sudah Rp${alreadyCommittedWeeklyIdr.toLocaleString("id-ID")}/hari total, ` +
+        `ditambah campaign ini Rp${dailyBudgetIdr.toLocaleString("id-ID")}/hari akan jadi Rp${weeklyCheck.wouldBeTotalIdr.toLocaleString("id-ID")}, ` +
+        `melebihi plafon mingguan Rp${(target?.max_weekly_budget_idr ?? 0).toLocaleString("id-ID")}. Jeda campaign lain atau naikkan plafon mingguan dulu.`,
+    );
+  }
 
   try {
     const result = await launchLinkClickCampaign({

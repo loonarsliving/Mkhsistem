@@ -275,7 +275,14 @@ function TargetForm({
   targetsLoading,
 }: {
   propertyName: string;
-  existing: { id: string; target_occupancy_pct: number; critical_occupancy_pct: number; max_daily_budget_idr: number; is_active: boolean } | null;
+  existing: {
+    id: string;
+    target_occupancy_pct: number;
+    critical_occupancy_pct: number;
+    max_daily_budget_idr: number;
+    max_weekly_budget_idr: number | null;
+    is_active: boolean;
+  } | null;
   canManage: boolean;
   targetsLoading: boolean;
 }) {
@@ -283,12 +290,14 @@ function TargetForm({
   const [targetPct, setTargetPct] = React.useState(String(existing?.target_occupancy_pct ?? 60));
   const [criticalPct, setCriticalPct] = React.useState(String(existing?.critical_occupancy_pct ?? 90));
   const [maxBudget, setMaxBudget] = React.useState(String(existing?.max_daily_budget_idr ?? 0));
+  const [maxWeeklyBudget, setMaxWeeklyBudget] = React.useState(String(existing?.max_weekly_budget_idr ?? ""));
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     setTargetPct(String(existing?.target_occupancy_pct ?? 60));
     setCriticalPct(String(existing?.critical_occupancy_pct ?? 90));
     setMaxBudget(String(existing?.max_daily_budget_idr ?? 0));
+    setMaxWeeklyBudget(String(existing?.max_weekly_budget_idr ?? ""));
   }, [existing]);
 
   if (targetsLoading) return <p className="text-sm text-muted-foreground">Memuat target...</p>;
@@ -312,6 +321,10 @@ function TargetForm({
           <label className="text-xs text-muted-foreground">Plafon Budget Harian (Rp)</label>
           <Input type="number" value={maxBudget} onChange={(e) => setMaxBudget(e.target.value)} />
         </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Plafon Budget Mingguan (Rp) -- opsional, misal 1.000.000/minggu. Kosongkan jika hanya ingin plafon harian.</label>
+          <Input type="number" placeholder="Tidak ada plafon mingguan terpisah" value={maxWeeklyBudget} onChange={(e) => setMaxWeeklyBudget(e.target.value)} />
+        </div>
         <Button
           disabled={saving}
           onClick={async () => {
@@ -322,6 +335,7 @@ function TargetForm({
               targetOccupancyPct: Number(targetPct),
               criticalOccupancyPct: Number(criticalPct),
               maxDailyBudgetIdr: Number(maxBudget),
+              maxWeeklyBudgetIdr: maxWeeklyBudget.trim() === "" ? null : Number(maxWeeklyBudget),
               isActive: true,
             });
             setSaving(false);

@@ -86,6 +86,49 @@ export function clampToBudgetCeiling(recommendedDailyBudgetIdr: number, maxDaily
 }
 
 /**
+ * Optional weekly spend ceiling, on top of the daily ceiling above (spec
+ * follow-up: admin wants e.g. "max Rp1jt/minggu" in addition to a daily
+ * cap). `maxWeeklyBudgetIdr` null/0 means no separate weekly cap is
+ * configured -- only the daily ceiling applies, and this always allows.
+ * `alreadyCommittedWeeklyIdr` is the sum of daily_budget_idr for every
+ * OTHER campaign under the same target already 'active' this ISO week
+ * (repositories/occupancy-ads.repository.ts's
+ * getActiveWeeklyCommittedBudgetIdr) -- never the AI's own estimate.
+ * Pure/deterministic so it's independently unit tested; the launch action
+ * is the only caller and must refuse the launch (not silently clamp) when
+ * this returns allowed: false, since silently shrinking a campaign's
+ * budget mid-review would surprise the human who approved a specific
+ * number.
+ */
+export function checkWeeklyBudgetCeiling(
+  alreadyCommittedWeeklyIdr: number,
+  newDailyBudgetIdr: number,
+  maxWeeklyBudgetIdr: number | null,
+): { allowed: boolean; wouldBeTotalIdr: number } {
+  const committed = Number.isFinite(alreadyCommittedWeeklyIdr) && alreadyCommittedWeeklyIdr > 0 ? alreadyCommittedWeeklyIdr : 0;
+  const addition = Number.isFinite(newDailyBudgetIdr) && newDailyBudgetIdr > 0 ? newDailyBudgetIdr : 0;
+  const wouldBeTotalIdr = committed + addition;
+  if (maxWeeklyBudgetIdr === null || !Number.isFinite(maxWeeklyBudgetIdr) || maxWeeklyBudgetIdr <= 0) {
+    return { allowed: true, wouldBeTotalIdr };
+  }
+  return { allowed: wouldBeTotalIdr <= maxWeeklyBudgetIdr, wouldBeTotalIdr };
+}
+
+/**
+ * Monday 00:00:00 UTC of the ISO week containing referenceDate -- the
+ * window repositories/occupancy-ads.repository.ts's
+ * getActiveWeeklyCommittedBudgetIdr sums 'active' campaigns' daily
+ * budgets over. Pure/UTC so it's deterministic and independently unit
+ * tested, no reliance on server-local timezone.
+ */
+export function startOfIsoWeekUtc(referenceDate: Date): Date {
+  const d = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate()));
+  const isoDayOfWeek = d.getUTCDay() === 0 ? 7 : d.getUTCDay(); // Monday=1 .. Sunday=7
+  d.setUTCDate(d.getUTCDate() - (isoDayOfWeek - 1));
+  return d;
+}
+
+/**
  * Minimum-sample-size gate for loonars_campaign_learnings (spec) -- a
  * "learning" derived from fewer than this many completed campaigns for the
  * same market+persona+creative-angle combination must not be treated as a
