@@ -191,10 +191,19 @@ export async function tryHandleLoonarsCoffeeCostRequest(
     return { outcome: "needs_clarification", ai };
   }
 
-  const description =
-    ai.items.length > 0
-      ? ai.items.map((it) => `${it.nama} (${formatRupiah(it.nilai)})`).join("; ")
-      : trimmed.slice(0, 200);
+  // Real incident: "Biaya lain Coffee: sewa alat berat 36 jam ... rekening
+  // Bank BCA 8466119208 Anang Joko P" got summarized down to just "sewa
+  // alat berat 36 jam (Rp 9.080.000)" once the AI successfully parsed an
+  // item out of it -- the rekening number (which the owner actually needs
+  // to pay) was silently dropped, both from the confirmation echoed back to
+  // the submitter and from the notification sent to Super Admin. items[]
+  // only ever captures name+price, never a bank account or anything else
+  // Vando wrote in free text, so the raw message must always be kept
+  // somewhere visible -- never replaced by the itemized summary, only
+  // supplemented by it when it adds real readability for a multi-item list.
+  const rawText = trimmed.slice(0, 300);
+  const itemSummary = ai.items.length > 0 ? ai.items.map((it) => `${it.nama} (${formatRupiah(it.nilai)})`).join("; ") : null;
+  const description = itemSummary ? `${itemSummary}\n\n📩 Pesan asli: ${rawText}` : rawText;
 
   const supabase = createAdminClient();
   const waRequestId = `wa:${employee.id}:${Date.now()}`;
