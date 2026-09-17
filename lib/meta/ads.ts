@@ -444,6 +444,184 @@ export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Pr
   }
 }
 
+// ---------------------------------------------------------------------------
+// Link-click (traffic) campaigns -- Loonars AI Occupancy Ads' destination is
+// a plain URL (https://loonars.id), never WhatsApp, so the OUTCOME_ENGAGEMENT
+// / destination_type: WHATSAPP shape above doesn't fit. These are new,
+// additive functions for that objective -- none of the WhatsApp functions
+// above are modified or reused for this path.
+// ---------------------------------------------------------------------------
+
+/** OUTCOME_TRAFFIC is the objective family for driving clicks to an external URL (as opposed to OUTCOME_ENGAGEMENT/WHATSAPP above). No campaign-level daily_budget here either -- same ad-set-owns-budget shape as createAdCampaign. */
+export async function createTrafficAdCampaign(input: CreateCampaignInput): Promise<{ id: string }> {
+  return metaGraphRequest(
+    `/${META_CONFIG.adAccountId}/campaigns`,
+    {
+      name: input.name,
+      objective: "OUTCOME_TRAFFIC",
+      special_ad_categories: [],
+      status: input.status ?? "PAUSED",
+      is_adset_budget_sharing_enabled: false,
+    },
+    "POST",
+  );
+}
+
+export interface CreateTrafficAdSetInput {
+  name: string;
+  campaignId: string;
+  dailyBudgetIdr: number;
+  targeting: AdSetTargeting;
+  status?: "ACTIVE" | "PAUSED";
+}
+
+/** optimization_goal: LINK_CLICKS -- Meta optimizes delivery for people likely to click through to destinationUrl, no WhatsApp-specific fields (destination_type/promoted_object) here. */
+export async function createTrafficAdSet(input: CreateTrafficAdSetInput): Promise<{ id: string }> {
+  return metaGraphRequest(
+    `/${META_CONFIG.adAccountId}/adsets`,
+    {
+      name: input.name,
+      campaign_id: input.campaignId,
+      daily_budget: Math.round(input.dailyBudgetIdr),
+      billing_event: "IMPRESSIONS",
+      optimization_goal: "LINK_CLICKS",
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+      targeting: {
+        geo_locations: {
+          ...(input.targeting.countries?.length ? { countries: input.targeting.countries } : {}),
+          ...(input.targeting.cities?.length
+            ? { cities: input.targeting.cities.map((c) => ({ key: c.key, radius: c.radiusKm ?? 25, distance_unit: "kilometer" })) }
+            : {}),
+          ...(input.targeting.regions?.length ? { regions: input.targeting.regions.map((r) => ({ key: r.key })) } : {}),
+        },
+        age_min: input.targeting.ageMin ?? 21,
+        age_max: Math.max(input.targeting.ageMax ?? 55, 65),
+        targeting_automation: { advantage_audience: 1 },
+      },
+      status: input.status ?? "PAUSED",
+    },
+    "POST",
+  );
+}
+
+export interface CreateLinkAdCreativeInput {
+  name: string;
+  imageHashes: string[];
+  video?: UploadedAdVideo;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  /** Real page a person lands on after the click -- validated by the caller (Server Action) with isAllowedOccupancyDestinationUrl (lib/occupancy/campaign-rules.ts) before this is ever reached, since destination validation is a launch-blocking guardrail, not just a UI nicety. */
+  destinationUrl: string;
+  cta?: string;
+}
+
+const LINK_CTA_TYPES = new Set(["LEARN_MORE", "BOOK_TRAVEL", "SHOP_NOW", "SIGN_UP", "CONTACT_US"]);
+
+/** object_story_spec.link_data with a plain `link` (the real destination URL) + call_to_action LEARN_MORE-family type, instead of the WHATSAPP_MESSAGE CTA createAdCreative uses. */
+export async function createLinkAdCreative(input: CreateLinkAdCreativeInput): Promise<{ id: string }> {
+  if (!input.video && input.imageHashes.length === 0) throw new Error("createLinkAdCreative requires at least one image hash or a video");
+
+  const ctaType = input.cta && LINK_CTA_TYPES.has(input.cta.toUpperCase()) ? input.cta.toUpperCase() : "LEARN_MORE";
+  const callToAction = { type: ctaType, value: { link: input.destinationUrl } };
+
+  const objectStorySpec = input.video
+    ? {
+        page_id: META_CONFIG.pageId,
+        video_data: {
+          video_id: input.video.videoId,
+          image_url: input.video.thumbnailUrl,
+          title: input.headline,
+          message: input.primaryText,
+          link_description: input.description,
+          call_to_action: { type: ctaType, value: { link: input.destinationUrl } },
+        },
+      }
+    : {
+        page_id: META_CONFIG.pageId,
+        link_data:
+          input.imageHashes.length === 1
+            ? {
+                image_hash: input.imageHashes[0],
+                link: input.destinationUrl,
+                message: input.primaryText,
+                name: input.headline,
+                description: input.description,
+                call_to_action: callToAction,
+              }
+            : {
+                link: input.destinationUrl,
+                message: input.primaryText,
+                child_attachments: input.imageHashes.slice(0, 10).map((hash) => ({
+                  link: input.destinationUrl,
+                  image_hash: hash,
+                  name: input.headline,
+                  description: input.description,
+                  call_to_action: callToAction,
+                })),
+              },
+      };
+
+  return metaGraphRequest(`/${META_CONFIG.adAccountId}/adcreatives`, { name: input.name, object_story_spec: objectStorySpec }, "POST");
+}
+
+export interface LaunchLinkClickCampaignInput {
+  campaignName: string;
+  photoUrls: string[];
+  videoUrl?: string;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  destinationUrl: string;
+  cta?: string;
+  dailyBudgetIdr: number;
+  targeting?: AdSetTargeting;
+}
+
+/**
+ * Full Campaign -> AdSet -> Creative -> Ad sequence for a link-click
+ * (traffic) ad -- the Loonars AI Occupancy Ads equivalent of
+ * launchWhatsAppLeadCampaign above, sharing its orphan-cleanup-on-failure
+ * behavior but never its WhatsApp-specific fields. Pure Meta orchestration
+ * only -- no DB writes (the caller, features/occupancy-ads/actions, does
+ * its own bookkeeping around this call, same split as the Ads Specialist
+ * module).
+ */
+export async function launchLinkClickCampaign(input: LaunchLinkClickCampaignInput): Promise<LaunchCampaignResult> {
+  if (!input.videoUrl && input.photoUrls.length === 0) throw new Error("launchLinkClickCampaign requires at least one photo or a video");
+
+  const [imageHashes, video] = await Promise.all([
+    input.videoUrl ? Promise.resolve([]) : Promise.all(input.photoUrls.map((url) => uploadAdImageFromUrl(url))),
+    input.videoUrl ? uploadAdVideoFromUrl(input.videoUrl) : Promise.resolve(undefined),
+  ]);
+  const campaign = await createTrafficAdCampaign({ name: input.campaignName, status: "ACTIVE" });
+
+  try {
+    const adSet = await createTrafficAdSet({
+      name: `${input.campaignName} - Ad Set`,
+      campaignId: campaign.id,
+      dailyBudgetIdr: input.dailyBudgetIdr,
+      targeting: input.targeting ?? { countries: ["ID"] },
+      status: "ACTIVE",
+    });
+    const creative = await createLinkAdCreative({
+      name: `${input.campaignName} - Creative`,
+      imageHashes,
+      video,
+      headline: input.headline,
+      primaryText: input.primaryText,
+      description: input.description,
+      destinationUrl: input.destinationUrl,
+      cta: input.cta,
+    });
+    const ad = await createAd({ name: `${input.campaignName} - Ad`, adSetId: adSet.id, creativeId: creative.id, status: "ACTIVE" });
+    return { campaignId: campaign.id, adSetId: adSet.id, creativeId: creative.id, adId: ad.id };
+  } catch (err) {
+    await deleteAdCampaign(campaign.id).catch(() => undefined);
+    throw err;
+  }
+}
+
 /** Human override from the Ads Specialist page -- pause/resume an ad AI already launched. */
 export async function setAdStatus(adId: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: boolean }> {
   return metaGraphRequest(`/${adId}`, { status }, "POST");

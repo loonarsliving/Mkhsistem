@@ -92,6 +92,91 @@ Never marked DONE without direct source evidence (route + repository/action
 | Monitoring (error tracking, Web Vitals) | DONE | `app/(app)/monitoring`, `features/monitoring/` (10 files), `instrumentation.ts`, `components/shared/web-vitals-reporter.tsx`, migration `0014_monitoring.sql` |
 | AI Module (admin/settings for AI) | DONE | `app/(app)/ai`, `features/ai-module/` (3 files), migration `0067_ai_module_permission.sql`, `0068_ai_system_prompts.sql` |
 
+## Loonars AI Occupancy Ads (added 2026-09-17, branch `claude/loonars-ai-occupancy-ads-e1m2on`)
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Occupancy provider + gap/classification engine | DONE (unit tested) | `lib/occupancy/villa-provider.ts` (GET-only villa-api client, `/public/availability` primary + `/bridge/occupancy` secondary/caveated), `lib/occupancy/gap-engine.ts` (pure TS classification LOW/HEALTHY/HIGH/FULL + budget recommendation), `lib/occupancy/campaign-rules.ts` (fixed market/persona/campaign-type candidate sets, destination-URL + budget-ceiling validators); tests `tests/unit/lib/occupancy-gap-engine.test.ts`, `tests/unit/lib/occupancy-campaign-rules.test.ts` |
+| AI campaign brief engine | DONE (unit tested) | `lib/ai/domains/occupancy-ads.ts` -- hand-rolled JSON parse convention (mirrors `markom.ts`), never trusts the AI's numbers past `resolveLaunchBudgetIdr`'s re-clamp; `askOccupancyCopilot` for the "Ask Occupancy AI" panel; test `tests/unit/lib/occupancy-ads-ai-parser.test.ts` |
+| Server Actions + repository | DONE (not integration-tested — no live DB) | `features/occupancy-ads/actions/occupancy-ads.actions.ts`, `repositories/occupancy-ads.repository.ts`; two-step draft-research (`requestOccupancyAdsBriefAction`) -> human-approve -> `launchOccupancyCampaignAction` (real Meta spend) flow, mirroring `features/markom/actions/ads.actions.ts` |
+| New Meta link-click (traffic) primitives | DONE, additive only | `lib/meta/ads.ts`: `createTrafficAdCampaign`/`createTrafficAdSet`/`createLinkAdCreative`/`launchLinkClickCampaign` -- new functions for `OUTCOME_TRAFFIC`/`LINK_CLICKS` destination-URL ads to `https://loonars.id`; the existing Click-to-WhatsApp functions are untouched |
+| Dashboard UI | DONE for what's built | `app/(app)/occupancy-ads/page.tsx`, `features/occupancy-ads/components/occupancy-dashboard.tsx` -- occupancy calendar, gap summary, campaign board, target config, and the copilot panel are all wired to real Server Actions |
+| Creative Asset Library UI (added 2026-09-17) | DONE | `app/(app)/occupancy-ads/assets/page.tsx`, `features/occupancy-ads/components/occupancy-asset-library.tsx` + `occupancy-asset-upload-dialog.tsx` -- REAL file upload (jpg/jpeg/png/webp, mp4/mov) via `lib/supabase/storage.ts`'s `uploadEntityFile` into the `occupancy-ads-assets` bucket, adapted from `features/kontenai/asset-library`'s upload pattern; preview, rename, archive/delete, the spec's fixed 15-tag vocabulary + custom tags (`lib/occupancy/campaign-rules.ts`'s `OCCUPANCY_ASSET_FIXED_TAGS`) plus free-text property assignment, and one-click lifecycle advance through draft -> ai_generated -> review -> approved -> ready_for_meta -> active |
+| Creative variant generation (added 2026-09-17) | DONE (unit tested) | `lib/ai/domains/occupancy-ads.ts`'s `generateOccupancyCreativeVariants` -- 1-3 variants (default 3, `DEFAULT_CREATIVE_VARIANT_COUNT`/`clampCreativeVariantCount` in `campaign-rules.ts`) pairing a REAL selected asset with a distinct angle/hook + its own copy; the parser (`parseOccupancyCreativeVariantsJson`, exported + tested) hard-throws if the model references an asset id outside the ones it was given -- no image is ever generated. Wired via `generateCreativeVariantsAction`/`createSingleCreativeVariationAction`, rendered in `features/occupancy-ads/components/creative-variants-list.tsx` with per-variant approve/reject |
+| Meta Ad Preview UI (added 2026-09-17) | DONE | `features/occupancy-ads/components/meta-ad-preview.tsx` -- Meta-style card (selected asset, primary text, headline/description, CTA, destination URL) shown for draft/review/rejected/approved/ready_for_meta campaigns, with regenerate-copy, change-asset, create-variation, approve, and reject actions wired to real Server Actions; which asset is "the" primary one is tracked via migration 0270's `loonars_occupancy_campaigns.primary_asset_id` |
+| Campaign Decision Engine (added 2026-09-17) | DONE (unit tested) | `lib/occupancy/decision-engine.ts`'s `decideCampaignAction` -- pure TS, no AI arithmetic, mirrors `gap-engine.ts`'s discipline: PAUSE if occupancy is now HIGH/FULL, REDUCE if inventory is thin or CPC worsened >25% vs. the last check, SCALE if still LOW + CTR healthy, else MAINTAIN; test `tests/unit/lib/occupancy-decision-engine.test.ts`. Wired via `requestCampaignDecisionAction` (stores a row in `loonars_campaign_recommendations`) + `applyCampaignRecommendationAction` (RECOMMENDS only -- applying a PAUSE only flips this module's own local status, exactly like the existing `pauseOccupancyCampaignAction`; it never calls the Meta API itself, matching the module's ASSISTED-only automation mode), rendered in `features/occupancy-ads/components/campaign-decision-panel.tsx` |
+| AI Learning wiring | DONE | Already present in the first commit and hardened 2026-09-17: `completeOccupancyCampaignAction` writes a `loonars_campaign_learnings` row on completion; `requestOccupancyAdsBriefAction` and `askOccupancyCopilotAction` both query `listReliableLearnings` (repository) before calling the AI. The minimum-sample-size gate is a pure, independently-tested function (`meetsMinLearningSampleSize`, `MIN_LEARNING_SAMPLE_SIZE = 3`, `lib/occupancy/campaign-rules.ts`) -- a market/persona/creative-angle combination below that sample size is filtered out of `listReliableLearnings` entirely and never reaches the AI prompt as a "reliable"/"winning" signal, in code, not just via prompt wording |
+| Database schema | **NOT YET APPLIED to production** | `supabase/migrations/0268_loonars_occupancy_ads_rbac.sql`, `0269_loonars_occupancy_ads_schema.sql`, `0270_loonars_occupancy_ads_preview_variants.sql` (added 2026-09-17: `loonars_occupancy_campaigns.primary_asset_id` + widens its status check to add `rejected`, needed by the Meta Ad Preview screen) -- 7 `loonars_*` tables + 2 small additive columns/constraint, 2 permissions (`occupancy_ads.view/.manage`, Super Admin only per the `ad_campaign.*` precedent), new `occupancy-ads-assets` storage bucket, widened `ai_integration_logs.connector` (+`villa`) and `mkc_notifications` category check. All three files committed for review, deliberately not run against `svcmybsziaelwwdrnzcv` -- see "Open items" below for the exact approval gate. |
+
+**Villa-api dependency (read-only)**: this module reads `villa-api`
+(`https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api`), a
+Supabase Edge Function that lives in the separate villa repo, not this one.
+Only `GET /public/availability` (no auth) and optionally `GET
+/bridge/occupancy` (header `x-internal-secret`, env `VILLA_BRIDGE_SECRET`)
+are ever called -- no POST/PUT/PATCH/DELETE anywhere in this module. If
+villa-api is unreachable or errors, every `OccupancyProvider` method returns
+`{ ok: false, reason }` and every caller (Server Actions, AI brief
+generation) stops and surfaces that reason rather than falling back to
+estimated/fabricated numbers. The `/bridge/occupancy` snapshot carries a
+known data-quality caveat inherited from the villa repo's own project
+memory (its `okupansi_persen` divides by all 13 units rather than the 8
+actually offered for sale) -- the UI/types label it explicitly rather than
+treating it as equivalent in trust to the `/public/availability`-derived
+calendar.
+
+**Open items / two pending approval gates before this is live:**
+
+1. **DB migration apply** -- `0268`/`0269`/`0270` must be reviewed and
+   applied by a human via Supabase MCP or the CLI against
+   `svcmybsziaelwwdrnzcv` (same process as every other migration in this
+   repo's history, e.g. `0261`). Until then, `/occupancy-ads` will 500 on
+   every real data call (the RBAC permissions don't exist yet either, so in
+   practice nobody can reach the page). After applying, run `npm run
+   supabase:types` to regenerate `types/database.types.ts` --
+   `repositories/occupancy-ads.repository.ts` and `lib/ai/integration-log.ts`
+   both use a small, clearly-commented `db()`/`as never` type-cast escape
+   hatch for the new tables/connector value specifically because the
+   generated types don't know about them yet; both casts can be removed
+   once types regenerate (no logic change needed).
+2. **Live Meta launch test** -- `launchLinkClickCampaign` (the new
+   link-click/traffic orchestration in `lib/meta/ads.ts`) has never been
+   called against a real Meta ad account (forbidden by this task's own
+   constraints). Verify it end-to-end with one real manual launch (small
+   budget, a human reviewing the draft first, same discipline
+   `uploadAdVideoFromUrl`'s own doc comment asks for) before relying on it
+   for unattended use.
+
+**Judgment calls worth flagging to the owner before merge:**
+- `occupancy_ads.view`/`.manage` were scoped Super Admin-only from the
+  start, mirroring `ad_campaign.*`'s 0088 precedent (this module can also
+  spend real Meta budget) -- widen deliberately later if Markom/Direktur
+  roles should have access.
+- The system prompt/JSON schema for `lib/ai/domains/occupancy-ads.ts` is a
+  local string constant, NOT registered in the `PROMPT_KEYS`/`ai_system_prompts`
+  DB-editable registry `lib/ai/domains/prompts.ts` uses for `markom`/`hr`/etc.
+  -- kept local to avoid an extra migration/admin-UI surface for a first
+  version; can be migrated into that registry later if the prompt needs
+  non-developer editing.
+- Automation mode is ASSISTED only (spec §41) -- there is no code path that
+  calls `launchLinkClickCampaign` without `launchOccupancyCampaignAction`'s
+  explicit human confirmation; a "fully automated" mode is a deliberate
+  future step, not built here.
+- (2026-09-17) `applyCampaignRecommendationAction` only changes a real
+  campaign's status for a PAUSE decision (and only the local DB status,
+  mirroring `pauseOccupancyCampaignAction` -- neither ever calls Meta to
+  pause the live ad set). SCALE/REDUCE/MAINTAIN have no automated effect at
+  all today; the UI tells the reviewer to adjust budget on Meta Business
+  Manager manually. A "push the recommended budget change to Meta" flow was
+  deliberately NOT built -- it would be the first code path in this module
+  that changes real ad spend without a human typing a new number in
+  somewhere, which felt like a bigger judgment call than this task should
+  make unilaterally.
+- (2026-09-17) The Meta Ad Preview's "Reject" action uses a new `rejected`
+  campaign status (migration `0270`), kept distinct from `archived`
+  (soft-delete/cleanup, pre-existing) and `failed` (a real Meta API error
+  during launch, pre-existing) -- a human declining a draft/review copy is
+  a normal editorial decision, not an error state or a deletion.
+
 ## Roadmap-only / not yet implemented
 
 The README's "Roadmap ERP" section states the schema/folder structure is

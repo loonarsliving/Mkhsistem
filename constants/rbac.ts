@@ -131,6 +131,10 @@ export const PERMISSIONS = {
 
   KOS_OCCUPANCY_VIEW: "kos_occupancy.view",
 
+  /** Loonars AI Occupancy Ads (/occupancy-ads) -- Super Admin only for now, same risk-class precedent as ad_campaign.* (0088), since this module can also spend real Meta ad budget. */
+  OCCUPANCY_ADS_VIEW: "occupancy_ads.view",
+  OCCUPANCY_ADS_MANAGE: "occupancy_ads.manage",
+
   /**
    * FRIDAY — the executive intelligence layer (/friday).
    *
