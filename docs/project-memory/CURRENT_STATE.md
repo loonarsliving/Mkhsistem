@@ -253,6 +253,21 @@ posted workflow layer in front of the existing money-moving RPCs).
   behaviour only if the project has no labor contract to advance against.
   Manually applied to the one live request this had already affected
   (Sarno's Rp15,000,000, contractor `Anang`'s contract).
+- **Real bug fixed 2026-09-17**: cost-request `description` used to be
+  rebuilt entirely from the AI-parsed `items[]` (name+price only) whenever
+  parsing succeeded — any other detail in Vando's free text, most
+  importantly a bank account number, silently disappeared from both the
+  confirmation echoed back to him and the notification forwarded to Super
+  Admin. Real case: "...rekening Bank BCA 8466119208 Anang Joko P"
+  collapsed to "sewa alat berat 36 jam (Rp 9.080.000)" with no account
+  number anywhere — the owner asked why. It was only ever preserved by
+  accident, on messages where the AI happened to parse zero items and
+  `description` fell back to the raw text. Fixed in
+  `tryHandleLoonarsCoffeeCostRequest()`: the raw message (up to 300 chars)
+  is now always kept, with the itemized summary supplementing rather than
+  replacing it for a multi-item list. Backfilled the one live request this
+  had affected (`e87b5b12`) and sent the owner a follow-up WhatsApp
+  notification with the missing account number.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
