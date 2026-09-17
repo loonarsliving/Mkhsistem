@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { clampCreativeVariantCount, clampToBudgetCeiling, isAllowedOccupancyDestinationUrl, meetsMinLearningSampleSize, MIN_LEARNING_SAMPLE_SIZE } from "@/lib/occupancy/campaign-rules";
+import {
+  checkWeeklyBudgetCeiling,
+  clampCreativeVariantCount,
+  clampToBudgetCeiling,
+  isAllowedOccupancyDestinationUrl,
+  meetsMinLearningSampleSize,
+  MIN_LEARNING_SAMPLE_SIZE,
+  startOfIsoWeekUtc,
+} from "@/lib/occupancy/campaign-rules";
 
 describe("isAllowedOccupancyDestinationUrl", () => {
   it("allows the bare loonars.id origin", () => {
@@ -87,5 +95,54 @@ describe("clampCreativeVariantCount", () => {
 
   it("falls back to the default (3) for a non-finite request", () => {
     expect(clampCreativeVariantCount(NaN)).toBe(3);
+  });
+});
+
+describe("checkWeeklyBudgetCeiling", () => {
+  it("always allows when no weekly cap is configured (null)", () => {
+    const result = checkWeeklyBudgetCeiling(900_000, 200_000, null);
+    expect(result.allowed).toBe(true);
+    expect(result.wouldBeTotalIdr).toBe(1_100_000);
+  });
+
+  it("always allows when the weekly cap is 0/unset", () => {
+    expect(checkWeeklyBudgetCeiling(900_000, 200_000, 0).allowed).toBe(true);
+  });
+
+  it("allows a launch that stays at/under the weekly cap", () => {
+    const result = checkWeeklyBudgetCeiling(500_000, 300_000, 1_000_000);
+    expect(result.wouldBeTotalIdr).toBe(800_000);
+    expect(result.allowed).toBe(true);
+  });
+
+  it("allows a launch that lands exactly on the weekly cap", () => {
+    expect(checkWeeklyBudgetCeiling(700_000, 300_000, 1_000_000).allowed).toBe(true);
+  });
+
+  it("refuses a launch that would exceed the weekly cap (e.g. Rp1jt/minggu already committed)", () => {
+    const result = checkWeeklyBudgetCeiling(1_000_000, 100_000, 1_000_000);
+    expect(result.wouldBeTotalIdr).toBe(1_100_000);
+    expect(result.allowed).toBe(false);
+  });
+
+  it("treats a negative/non-finite already-committed figure as 0, never subtracting", () => {
+    expect(checkWeeklyBudgetCeiling(-500, 300_000, 1_000_000).wouldBeTotalIdr).toBe(300_000);
+    expect(checkWeeklyBudgetCeiling(NaN, 300_000, 1_000_000).wouldBeTotalIdr).toBe(300_000);
+  });
+});
+
+describe("startOfIsoWeekUtc", () => {
+  it("returns the same Monday for any day within that ISO week", () => {
+    const monday = startOfIsoWeekUtc(new Date("2026-09-14T10:00:00Z")); // a Monday
+    const wednesday = startOfIsoWeekUtc(new Date("2026-09-16T23:59:00Z"));
+    const sunday = startOfIsoWeekUtc(new Date("2026-09-20T00:00:00Z")); // that week's Sunday
+    expect(monday.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+    expect(wednesday.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+    expect(sunday.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+  });
+
+  it("rolls over correctly across a month boundary", () => {
+    const result = startOfIsoWeekUtc(new Date("2026-10-01T05:00:00Z")); // a Thursday
+    expect(result.toISOString()).toBe("2026-09-28T00:00:00.000Z");
   });
 });

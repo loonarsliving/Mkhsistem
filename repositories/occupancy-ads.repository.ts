@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
-import { meetsMinLearningSampleSize } from "@/lib/occupancy/campaign-rules";
+import { meetsMinLearningSampleSize, startOfIsoWeekUtc } from "@/lib/occupancy/campaign-rules";
 import type { OccupancyAdsBrief, OccupancyCreativeVariant } from "@/lib/ai/domains/occupancy-ads";
 
 /**
@@ -46,6 +46,8 @@ export interface UpsertOccupancyTargetInput {
   targetOccupancyPct: number;
   criticalOccupancyPct: number;
   maxDailyBudgetIdr: number;
+  /** Optional, on top of maxDailyBudgetIdr. null/0 = no separate weekly cap. */
+  maxWeeklyBudgetIdr: number | null;
   isActive: boolean;
 }
 
@@ -55,6 +57,7 @@ export async function upsertOccupancyTarget(supabase: TypedSupabaseClient, input
     target_occupancy_pct: input.targetOccupancyPct,
     critical_occupancy_pct: input.criticalOccupancyPct,
     max_daily_budget_idr: input.maxDailyBudgetIdr,
+    max_weekly_budget_idr: input.maxWeeklyBudgetIdr,
     is_active: input.isActive,
     updated_by: employeeId,
   };
@@ -70,6 +73,29 @@ export async function upsertOccupancyTarget(supabase: TypedSupabaseClient, input
     .single();
   if (error) throw error;
   return data.id as string;
+}
+
+/**
+ * Sum of daily_budget_idr for every campaign under this target already
+ * 'active' this ISO week (launched_at >= Monday 00:00 UTC), excluding
+ * excludeCampaignId (the campaign being launched now, if it happens to
+ * already carry an earlier launched_at from a prior attempt). Feeds
+ * lib/occupancy/campaign-rules.ts's checkWeeklyBudgetCeiling -- never
+ * trusted as a spend total, only as committed daily budgets.
+ */
+export async function getActiveWeeklyCommittedBudgetIdr(supabase: TypedSupabaseClient, targetId: string, excludeCampaignId?: string): Promise<number> {
+  const weekStart = startOfIsoWeekUtc(new Date()).toISOString();
+  let query = db(supabase)
+    .from("loonars_occupancy_campaigns")
+    .select("daily_budget_idr")
+    .eq("target_id", targetId)
+    .eq("status", "active")
+    .gte("launched_at", weekStart)
+    .is("deleted_at", null);
+  if (excludeCampaignId) query = query.neq("id", excludeCampaignId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).reduce((sum: number, row: { daily_budget_idr: number | null }) => sum + (row.daily_budget_idr ?? 0), 0);
 }
 
 // ---------------------------------------------------------------------------
