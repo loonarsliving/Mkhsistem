@@ -2,12 +2,14 @@ import "server-only";
 
 import { generateAIText } from "../service";
 import {
+  DEFAULT_CREATIVE_VARIANT_COUNT,
   MIN_LEARNING_SAMPLE_SIZE,
   OCCUPANCY_ADS_ALLOWED_DESTINATION_ORIGIN,
   OCCUPANCY_CAMPAIGN_TYPES,
   OCCUPANCY_CAMPAIGN_TYPE_TEMPLATES,
   OCCUPANCY_MARKET_CANDIDATES,
   OCCUPANCY_PERSONA_CANDIDATES,
+  clampCreativeVariantCount,
   clampToBudgetCeiling,
   type OccupancyCampaignType,
   type OccupancyMarket,
@@ -227,6 +229,137 @@ export async function generateOccupancyAdsBrief(input: OccupancyAdsBriefInput): 
 /** Re-clamps a brief's raw AI budget suggestion to the admin ceiling -- the ONLY value callers may pass on to anything that spends real money. */
 export function resolveLaunchBudgetIdr(brief: Pick<OccupancyAdsBrief, "recommendedDailyBudgetIdrRaw">, maxDailyBudgetIdr: number): number {
   return clampToBudgetCeiling(brief.recommendedDailyBudgetIdrRaw, maxDailyBudgetIdr);
+}
+
+// ---------------------------------------------------------------------------
+// Creative variant generation (spec: 1-3 variants per brief, default 3,
+// admin-configurable) -- pairs a REAL selected asset (never a fabricated
+// one) with a distinct creative angle/hook + its own headline/primary text.
+// Same hand-rolled JSON-in-JSON-out convention as the brief generator
+// above; NO image/video is ever generated here, the model only picks among
+// the asset ids it's handed and writes copy.
+// ---------------------------------------------------------------------------
+
+const VARIANT_FORMATS = ["square_1x1", "portrait_4x5", "story_9x16", "landscape_16x9"] as const;
+export type OccupancyCreativeVariantFormat = (typeof VARIANT_FORMATS)[number];
+
+export interface OccupancyCreativeVariantAsset {
+  id: string;
+  filename: string;
+  tags: string[];
+}
+
+export interface OccupancyCreativeVariantsInput {
+  campaignObjective: OccupancyCampaignType;
+  targetMarket: OccupancyMarket;
+  audiencePersona: OccupancyPersona;
+  offer: string;
+  /** The real, ready-status assets the AI may pick from -- one asset per variant, it never invents an asset id outside this list. Must be non-empty (callers refuse to call this function with zero assets). */
+  availableAssets: OccupancyCreativeVariantAsset[];
+  /** Clamped server-side to [MIN_CREATIVE_VARIANT_COUNT, MAX_CREATIVE_VARIANT_COUNT] regardless of what's requested (default 3, spec). */
+  variantCount?: number;
+}
+
+export interface OccupancyCreativeVariant {
+  assetId: string;
+  format: OccupancyCreativeVariantFormat;
+  angle: string;
+  generatedHeadline: string;
+  generatedPrimaryText: string;
+}
+
+const VARIANT_SYSTEM_PROMPT = `Kamu adalah AI Creative Strategist untuk Loonars Occupancy Ads. Tugasmu: dari brief campaign yang sudah ditentukan dan daftar ASET KREATIF NYATA yang tersedia, buat beberapa VARIAN iklan -- masing-masing memasangkan SATU aset nyata dengan SATU sudut pandang/hook kreatif berbeda dan copy pendek sendiri.
+
+ATURAN KERAS:
+- asset_id setiap varian HARUS PERSIS salah satu id dari daftar aset yang diberikan -- JANGAN PERNAH mengarang id aset baru, dan JANGAN PERNAH mendeskripsikan/menghasilkan gambar baru.
+- Setiap varian harus punya angle/hook yang BERBEDA dari varian lain (jangan mengulang sudut pandang yang sama).
+- format HARUS salah satu dari: square_1x1, portrait_4x5, story_9x16, landscape_16x9.
+- Tulis headline dan primary_text dalam Bahasa Indonesia yang natural.`;
+
+/** Exported for direct unit testing (tests/unit/lib/occupancy-ads-ai-parser.test.ts) without needing to mock a real AI call. */
+export function parseOccupancyCreativeVariantsJson(text: string, allowedAssetIds: Set<string>, expectedCount: number): OccupancyCreativeVariant[] {
+  const parsed = stripFenceAndParse(text) as Record<string, unknown>;
+  const rawVariants = Array.isArray(parsed.variants) ? parsed.variants : [];
+  if (rawVariants.length === 0) {
+    throw new Error("AI occupancy creative variants response missing variants array");
+  }
+
+  const variants: OccupancyCreativeVariant[] = [];
+  for (const raw of rawVariants.slice(0, expectedCount)) {
+    const v = raw as Record<string, unknown>;
+    const assetId = typeof v.asset_id === "string" ? v.asset_id.trim() : "";
+    if (!assetId || !allowedAssetIds.has(assetId)) {
+      // Never accept a variant pointing at an asset id we didn't offer --
+      // fabricating/hallucinating an asset id is treated as a hard parse
+      // failure, not silently dropped, so the caller sees the model
+      // misbehaved instead of quietly getting fewer variants than asked.
+      throw new Error(`AI occupancy creative variant referenced an asset_id outside the provided asset list: "${assetId || "(kosong)"}"`);
+    }
+    const format = typeof v.format === "string" && (VARIANT_FORMATS as readonly string[]).includes(v.format) ? (v.format as OccupancyCreativeVariantFormat) : "square_1x1";
+    const angle = typeof v.angle === "string" && v.angle.trim().length > 0 ? v.angle.trim().slice(0, 200) : "";
+    const generatedHeadline = typeof v.headline === "string" && v.headline.trim().length > 0 ? v.headline.trim().slice(0, 200) : "";
+    const generatedPrimaryText = typeof v.primary_text === "string" && v.primary_text.trim().length > 0 ? v.primary_text.trim().slice(0, 2000) : "";
+    if (!angle || !generatedHeadline || !generatedPrimaryText) {
+      throw new Error("AI occupancy creative variant missing angle/headline/primary_text");
+    }
+    variants.push({ assetId, format, angle, generatedHeadline, generatedPrimaryText });
+  }
+
+  if (variants.length === 0) {
+    throw new Error("AI occupancy creative variants response produced zero valid variants");
+  }
+  return variants;
+}
+
+function buildCreativeVariantsPrompt(input: OccupancyCreativeVariantsInput, variantCount: number): string {
+  const assetsBlock = input.availableAssets.map((a) => `- id="${a.id}" file="${a.filename}" tags=[${a.tags.join(", ")}]`).join("\n");
+  const templateGuidance = OCCUPANCY_CAMPAIGN_TYPE_TEMPLATES[input.campaignObjective].guidance;
+
+  return `Tipe campaign: ${input.campaignObjective} (${templateGuidance})
+Pasar: ${input.targetMarket}
+Persona: ${input.audiencePersona}
+Penawaran: ${input.offer || "(tidak ada penawaran khusus)"}
+
+Aset kreatif NYATA yang tersedia (WAJIB pilih dari daftar ini, JANGAN mengarang id lain):
+${assetsBlock}
+
+Buat TEPAT ${variantCount} varian iklan, masing-masing dengan asset_id berbeda dari daftar di atas (kalau aset lebih sedikit dari ${variantCount}, boleh reuse aset yang sama untuk angle berbeda) dan angle/hook kreatif yang berbeda-beda satu sama lain.
+
+Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tambahan):
+{
+  "variants": [
+    {
+      "asset_id": "id aset PERSIS dari daftar di atas",
+      "format": "square_1x1, portrait_4x5, story_9x16, atau landscape_16x9",
+      "angle": "1 kalimat sudut pandang/hook kreatif untuk varian ini",
+      "headline": "headline singkat untuk varian ini",
+      "primary_text": "teks utama iklan untuk varian ini, Bahasa Indonesia, natural"
+    }
+  ]
+}`;
+}
+
+/**
+ * Generates 1-3 (default DEFAULT_CREATIVE_VARIANT_COUNT, clamped server-
+ * side) creative variants for an already-drafted campaign. Throws (never
+ * silently returns a fabricated asset pairing) if the model references an
+ * asset id outside `input.availableAssets` or omits required fields.
+ * Callers MUST pass a non-empty availableAssets list -- with zero ready
+ * assets there is nothing real to pair a variant with.
+ */
+export async function generateOccupancyCreativeVariants(input: OccupancyCreativeVariantsInput): Promise<OccupancyCreativeVariant[]> {
+  if (input.availableAssets.length === 0) {
+    throw new Error("Tidak ada aset kreatif siap pakai -- unggah dan setujui aset di Creative Asset Library dulu sebelum membuat varian.");
+  }
+  const variantCount = clampCreativeVariantCount(input.variantCount ?? DEFAULT_CREATIVE_VARIANT_COUNT);
+  const response = await generateAIText({
+    systemPrompt: VARIANT_SYSTEM_PROMPT,
+    userPrompt: buildCreativeVariantsPrompt(input, variantCount),
+    maxOutputTokens: 1536,
+    temperature: 0.7,
+  });
+  const allowedAssetIds = new Set(input.availableAssets.map((a) => a.id));
+  return parseOccupancyCreativeVariantsJson(response.text, allowedAssetIds, variantCount);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseOccupancyAdsBriefJson, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
+import { parseOccupancyAdsBriefJson, parseOccupancyCreativeVariantsJson, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
 
 const validResponse = {
   campaign_objective: "last_minute_gap_fill",
@@ -89,5 +89,61 @@ describe("resolveLaunchBudgetIdr", () => {
   it("clamps the brief's raw AI budget suggestion to the admin ceiling", () => {
     expect(resolveLaunchBudgetIdr({ recommendedDailyBudgetIdrRaw: 900_000 }, 300_000)).toBe(300_000);
     expect(resolveLaunchBudgetIdr({ recommendedDailyBudgetIdrRaw: 100_000 }, 300_000)).toBe(100_000);
+  });
+});
+
+describe("parseOccupancyCreativeVariantsJson", () => {
+  const allowedAssetIds = new Set(["asset-1", "asset-2"]);
+  const validVariantsResponse = {
+    variants: [
+      { asset_id: "asset-1", format: "square_1x1", angle: "Kolam privat untuk pasangan", headline: "Kolam Privat, Momen Berdua", primary_text: "Nikmati waktu berdua di kolam privat." },
+      { asset_id: "asset-2", format: "story_9x16", angle: "Sarapan santai bersama keluarga", headline: "Sarapan Santai Sekeluarga", primary_text: "Mulai pagi dengan sarapan hangat bersama keluarga." },
+    ],
+  };
+
+  it("parses a well-formed variants response, only from allowed asset ids", () => {
+    const variants = parseOccupancyCreativeVariantsJson(JSON.stringify(validVariantsResponse), allowedAssetIds, 2);
+    expect(variants).toHaveLength(2);
+    expect(variants[0].assetId).toBe("asset-1");
+    expect(variants[0].format).toBe("square_1x1");
+    expect(variants[1].assetId).toBe("asset-2");
+  });
+
+  it("throws when a variant references an asset_id outside the allowed set (never fabricates an asset)", () => {
+    const bad = { variants: [{ ...validVariantsResponse.variants[0], asset_id: "made-up-asset" }] };
+    expect(() => parseOccupancyCreativeVariantsJson(JSON.stringify(bad), allowedAssetIds, 1)).toThrow(/asset_id/);
+  });
+
+  it("throws when asset_id is missing entirely", () => {
+    const bad = { variants: [{ ...validVariantsResponse.variants[0], asset_id: undefined }] };
+    expect(() => parseOccupancyCreativeVariantsJson(JSON.stringify(bad), allowedAssetIds, 1)).toThrow(/asset_id/);
+  });
+
+  it("throws when the variants array is missing/empty", () => {
+    expect(() => parseOccupancyCreativeVariantsJson(JSON.stringify({ variants: [] }), allowedAssetIds, 2)).toThrow(/variants/);
+    expect(() => parseOccupancyCreativeVariantsJson(JSON.stringify({}), allowedAssetIds, 2)).toThrow(/variants/);
+  });
+
+  it("throws when a variant is missing angle/headline/primary_text", () => {
+    const bad = { variants: [{ asset_id: "asset-1", format: "square_1x1" }] };
+    expect(() => parseOccupancyCreativeVariantsJson(JSON.stringify(bad), allowedAssetIds, 1)).toThrow(/angle\/headline\/primary_text/);
+  });
+
+  it("defaults an invalid/missing format to square_1x1", () => {
+    const bad = { variants: [{ ...validVariantsResponse.variants[0], format: "made_up_format" }] };
+    const variants = parseOccupancyCreativeVariantsJson(JSON.stringify(bad), allowedAssetIds, 1);
+    expect(variants[0].format).toBe("square_1x1");
+  });
+
+  it("truncates to expectedCount even if the model returns more", () => {
+    const many = { variants: [...validVariantsResponse.variants, { ...validVariantsResponse.variants[0], angle: "another angle" }] };
+    const variants = parseOccupancyCreativeVariantsJson(JSON.stringify(many), allowedAssetIds, 1);
+    expect(variants).toHaveLength(1);
+  });
+
+  it("strips a markdown code fence before parsing", () => {
+    const fenced = "```json\n" + JSON.stringify(validVariantsResponse) + "\n```";
+    const variants = parseOccupancyCreativeVariantsJson(fenced, allowedAssetIds, 2);
+    expect(variants).toHaveLength(2);
   });
 });

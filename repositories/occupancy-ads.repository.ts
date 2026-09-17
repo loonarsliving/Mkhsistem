@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
-import { MIN_LEARNING_SAMPLE_SIZE } from "@/lib/occupancy/campaign-rules";
-import type { OccupancyAdsBrief } from "@/lib/ai/domains/occupancy-ads";
+import { meetsMinLearningSampleSize } from "@/lib/occupancy/campaign-rules";
+import type { OccupancyAdsBrief, OccupancyCreativeVariant } from "@/lib/ai/domains/occupancy-ads";
 
 /**
  * Loonars AI Occupancy Ads — pure DB-access repository, mirroring
@@ -136,9 +136,20 @@ export async function updateCreativeAssetStatus(supabase: TypedSupabaseClient, i
   if (error) throw error;
 }
 
+export async function renameCreativeAsset(supabase: TypedSupabaseClient, id: string, filename: string, employeeId: string) {
+  const { error } = await db(supabase).from("loonars_creative_assets").update({ filename, updated_by: employeeId }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function updateCreativeAssetTags(supabase: TypedSupabaseClient, id: string, tags: string[], propertyName: string | null, employeeId: string) {
   const { error } = await db(supabase).from("loonars_creative_assets").update({ tags, property_name: propertyName, updated_by: employeeId }).eq("id", id);
   if (error) throw error;
+}
+
+export async function getCreativeAsset(supabase: TypedSupabaseClient, id: string) {
+  const { data, error } = await db(supabase).from("loonars_creative_assets").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
 }
 
 export async function softDeleteCreativeAsset(supabase: TypedSupabaseClient, id: string) {
@@ -277,7 +288,7 @@ export async function softDeleteDraftCampaign(supabase: TypedSupabaseClient, id:
 }
 
 // ---------------------------------------------------------------------------
-// Recommendations
+// Recommendations (Campaign Decision Engine -- lib/occupancy/decision-engine.ts)
 // ---------------------------------------------------------------------------
 
 export async function insertCampaignRecommendation(
@@ -293,6 +304,130 @@ export async function insertCampaignRecommendation(
     reasoning,
     metrics_snapshot: metricsSnapshot as never,
   });
+  if (error) throw error;
+}
+
+export async function listCampaignRecommendations(supabase: TypedSupabaseClient, campaignId: string) {
+  const { data, error } = await db(supabase)
+    .from("loonars_campaign_recommendations")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** The immediately-previous recommendation's metrics_snapshot -- the Decision Engine's ONLY source of "what was the trend last time", never re-derived from anything else. Null when this is the first check for this campaign. */
+export async function getPreviousCampaignRecommendationSnapshot(supabase: TypedSupabaseClient, campaignId: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await db(supabase)
+    .from("loonars_campaign_recommendations")
+    .select("metrics_snapshot")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.metrics_snapshot as Record<string, unknown> | null) ?? null;
+}
+
+export async function markRecommendationApplied(supabase: TypedSupabaseClient, id: string, employeeId: string) {
+  const { error } = await db(supabase)
+    .from("loonars_campaign_recommendations")
+    .update({ applied: true, applied_at: new Date().toISOString(), applied_by: employeeId })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Creative variants
+// ---------------------------------------------------------------------------
+
+export async function listCreativeVariantsForCampaign(supabase: TypedSupabaseClient, campaignId: string) {
+  const { data, error } = await db(supabase)
+    .from("loonars_creative_variants")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function insertCreativeVariants(supabase: TypedSupabaseClient, campaignId: string, variants: OccupancyCreativeVariant[], employeeId: string) {
+  const { data, error } = await db(supabase)
+    .from("loonars_creative_variants")
+    .insert(
+      variants.map((v) => ({
+        asset_id: v.assetId,
+        campaign_id: campaignId,
+        format: v.format,
+        generated_headline: v.generatedHeadline,
+        generated_primary_text: v.generatedPrimaryText,
+        approval_state: "pending",
+        created_by: employeeId,
+      })),
+    )
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).map((r) => r.id as string);
+}
+
+export async function updateCreativeVariantApprovalState(supabase: TypedSupabaseClient, id: string, approvalState: "pending" | "approved" | "rejected", employeeId: string) {
+  const { error } = await db(supabase).from("loonars_creative_variants").update({ approval_state: approvalState, updated_by: employeeId }).eq("id", id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Ad Preview support -- copy regeneration + primary asset selection
+// ---------------------------------------------------------------------------
+
+/** Overwrites the campaign row's editable copy fields from a freshly re-generated brief (regenerate-copy action on the Meta Ad Preview) -- the brief row itself is still inserted separately (insertCampaignBriefOnly) so the previous AI output is never lost. */
+export async function updateCampaignCopyFromBrief(supabase: TypedSupabaseClient, id: string, brief: OccupancyAdsBrief, employeeId: string) {
+  const { error } = await db(supabase)
+    .from("loonars_occupancy_campaigns")
+    .update({
+      headline: brief.headline,
+      primary_text: brief.primaryText,
+      description: brief.description,
+      cta: brief.cta,
+      creative_angle: brief.creativeAngle,
+      offer: brief.offer,
+      updated_by: employeeId,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Persists a re-generated brief's raw AI output as its own loonars_campaign_briefs row (history), without touching loonars_occupancy_campaigns -- callers pair this with updateCampaignCopyFromBrief. */
+export async function insertCampaignBriefOnly(supabase: TypedSupabaseClient, campaignId: string, brief: OccupancyAdsBrief, employeeId: string) {
+  const { error } = await db(supabase).from("loonars_campaign_briefs").insert({
+    campaign_id: campaignId,
+    raw_ai_response: brief as unknown as Record<string, unknown>,
+    campaign_objective: brief.campaignObjective,
+    target_dates: brief.targetDates,
+    target_market: brief.targetMarket,
+    audience_persona: brief.audiencePersona,
+    creative_angle: brief.creativeAngle,
+    offer: brief.offer,
+    recommended_budget_idr_raw: brief.recommendedDailyBudgetIdrRaw,
+    duration_days: brief.durationDays,
+    primary_text: brief.primaryText,
+    headline: brief.headline,
+    description: brief.description,
+    cta: brief.cta,
+    destination_url: brief.destinationUrl,
+    selected_asset_ids: brief.selectedAssetIds,
+    reasoning: brief.reasoning,
+    confidence: brief.confidence,
+    created_by: employeeId,
+  });
+  if (error) throw error;
+}
+
+/** Sets which single creative asset is "the" one shown in the Meta Ad Preview / used on launch (migration 0270's primary_asset_id) -- null clears it (e.g. the asset was archived). */
+export async function setCampaignPrimaryAsset(supabase: TypedSupabaseClient, id: string, assetId: string | null, employeeId: string) {
+  const { error } = await db(supabase).from("loonars_occupancy_campaigns").update({ primary_asset_id: assetId, updated_by: employeeId }).eq("id", id);
   if (error) throw error;
 }
 
@@ -337,7 +472,7 @@ export async function listReliableLearnings(supabase: TypedSupabaseClient): Prom
   const avg = (nums: number[]) => (nums.length > 0 ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100 : null);
 
   return Array.from(groups.values())
-    .filter((g) => g.cacs.length + g.ctrs.length >= MIN_LEARNING_SAMPLE_SIZE || Math.max(g.cacs.length, g.ctrs.length) >= MIN_LEARNING_SAMPLE_SIZE)
+    .filter((g) => meetsMinLearningSampleSize(Math.max(g.cacs.length, g.ctrs.length)))
     .map((g) => ({
       market: g.market,
       persona: g.persona,

@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Gauge, Loader2, Rocket, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { CalendarDays, Gauge, ImageIcon, Loader2, Rocket, Sparkles, TrendingDown, TrendingUp, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +14,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatTile } from "@/components/shared/stat-tile";
+import { CampaignDecisionPanel } from "./campaign-decision-panel";
+import { CreativeVariantsList } from "./creative-variants-list";
+import { MetaAdPreview } from "./meta-ad-preview";
 import {
-  approveOccupancyCampaignAction,
   askOccupancyCopilotAction,
   deleteOccupancyCampaignDraftAction,
+  generateCreativeVariantsAction,
   getOccupancyCalendarAction,
   launchOccupancyCampaignAction,
   listOccupancyCampaignsAction,
@@ -38,6 +42,7 @@ const STATUS_LABEL: Record<string, string> = {
   draft: "Draft (AI)",
   review: "Review",
   approved: "Disetujui",
+  rejected: "Ditolak",
   ready_for_meta: "Siap Luncur",
   active: "Aktif",
   paused: "Dijeda",
@@ -96,11 +101,31 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
     queryClient.invalidateQueries({ queryKey: ["occupancy-campaigns"] });
   }
 
+  async function handleGenerateVariants(id: string) {
+    setBusy(id);
+    const result = await generateCreativeVariantsAction(id);
+    setBusy(null);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Varian kreatif dibuat");
+    queryClient.invalidateQueries({ queryKey: ["occupancy-creative-variants", id] });
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">Properti:</span>
-        <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} className="w-64" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Properti:</span>
+          <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} className="w-64" />
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/occupancy-ads/assets">
+            <ImageIcon className="mr-1.5 h-4 w-4" />
+            Creative Asset Library
+          </Link>
+        </Button>
       </div>
 
       {calendar && !calendar.ok && (
@@ -171,21 +196,26 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                 </div>
                 <Badge variant="secondary">{STATUS_LABEL[c.status] ?? c.status}</Badge>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {c.headline && <p className="font-medium">{c.headline}</p>}
-                {c.primary_text && <p className="text-muted-foreground">{c.primary_text}</p>}
-                <p className="text-xs text-muted-foreground">Tujuan: {c.destination_url}</p>
+              <CardContent className="space-y-3 text-sm">
                 {c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
+
+                {["draft", "review", "rejected", "approved", "ready_for_meta"].includes(c.status) && <MetaAdPreview campaign={c} canManage={canManage} />}
+
+                {canManage && ["draft", "review", "rejected"].includes(c.status) && (
+                  <Button size="sm" variant="outline" disabled={busy === c.id} onClick={() => handleGenerateVariants(c.id)}>
+                    {busy === c.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
+                    Buat Varian Kreatif (AI)
+                  </Button>
+                )}
+                <CreativeVariantsList campaignId={c.id} canManage={canManage} />
+
+                {(c.status === "active" || c.status === "paused") && <CampaignDecisionPanel campaignId={c.id} campaignStatus={c.status} />}
+
                 {canManage && (
                   <div className="flex flex-wrap gap-2 pt-2">
                     {c.status === "draft" && (
                       <Button size="sm" variant="secondary" disabled={busy === c.id} onClick={() => handleCampaignAction(moveOccupancyCampaignToReviewAction, c.id, "Dipindah ke review")}>
                         Kirim ke Review
-                      </Button>
-                    )}
-                    {c.status === "review" && (
-                      <Button size="sm" disabled={busy === c.id} onClick={() => handleCampaignAction(approveOccupancyCampaignAction, c.id, "Campaign disetujui")}>
-                        Setujui
                       </Button>
                     )}
                     {c.status === "approved" && (
@@ -214,7 +244,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                         Jeda
                       </Button>
                     )}
-                    {(c.status === "draft" || c.status === "review" || c.status === "failed") && (
+                    {(c.status === "draft" || c.status === "review" || c.status === "failed" || c.status === "rejected") && (
                       <Button size="sm" variant="destructive" disabled={busy === c.id} onClick={() => handleCampaignAction(deleteOccupancyCampaignDraftAction, c.id, "Draft dihapus")}>
                         Hapus
                       </Button>

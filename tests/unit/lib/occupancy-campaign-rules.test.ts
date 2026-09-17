@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampToBudgetCeiling, isAllowedOccupancyDestinationUrl } from "@/lib/occupancy/campaign-rules";
+import { clampCreativeVariantCount, clampToBudgetCeiling, isAllowedOccupancyDestinationUrl, meetsMinLearningSampleSize, MIN_LEARNING_SAMPLE_SIZE } from "@/lib/occupancy/campaign-rules";
 
 describe("isAllowedOccupancyDestinationUrl", () => {
   it("allows the bare loonars.id origin", () => {
@@ -50,5 +50,42 @@ describe("clampToBudgetCeiling", () => {
   it("fails closed (0) for a negative or non-finite recommended budget", () => {
     expect(clampToBudgetCeiling(-1, 500_000)).toBe(0);
     expect(clampToBudgetCeiling(NaN, 500_000)).toBe(0);
+  });
+});
+
+describe("meetsMinLearningSampleSize", () => {
+  it("refuses a 'winner' framing below MIN_LEARNING_SAMPLE_SIZE", () => {
+    expect(meetsMinLearningSampleSize(MIN_LEARNING_SAMPLE_SIZE - 1)).toBe(false);
+    expect(meetsMinLearningSampleSize(0)).toBe(false);
+    expect(meetsMinLearningSampleSize(1)).toBe(false);
+  });
+
+  it("allows it once the sample size meets/exceeds the threshold", () => {
+    expect(meetsMinLearningSampleSize(MIN_LEARNING_SAMPLE_SIZE)).toBe(true);
+    expect(meetsMinLearningSampleSize(MIN_LEARNING_SAMPLE_SIZE + 10)).toBe(true);
+  });
+
+  it("refuses non-finite/garbage sample sizes", () => {
+    expect(meetsMinLearningSampleSize(NaN)).toBe(false);
+    expect(meetsMinLearningSampleSize(Infinity)).toBe(false);
+  });
+});
+
+describe("clampCreativeVariantCount", () => {
+  it("clamps a too-high request down to the max (3)", () => {
+    expect(clampCreativeVariantCount(10)).toBe(3);
+  });
+
+  it("clamps a too-low/zero/negative request up to the min (1)", () => {
+    expect(clampCreativeVariantCount(0)).toBe(1);
+    expect(clampCreativeVariantCount(-5)).toBe(1);
+  });
+
+  it("passes a value inside the range through unchanged", () => {
+    expect(clampCreativeVariantCount(2)).toBe(2);
+  });
+
+  it("falls back to the default (3) for a non-finite request", () => {
+    expect(clampCreativeVariantCount(NaN)).toBe(3);
   });
 });

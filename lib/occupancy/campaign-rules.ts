@@ -92,3 +92,66 @@ export function clampToBudgetCeiling(recommendedDailyBudgetIdr: number, maxDaily
  * reliable signal. Enforced here in code, not left as a docs-only note.
  */
 export const MIN_LEARNING_SAMPLE_SIZE = 3;
+
+/**
+ * Pure gate function wrapping MIN_LEARNING_SAMPLE_SIZE -- the single place
+ * that decides whether a market/persona/creative-angle combination's
+ * historical outcomes are reliable enough to be handed to the AI as a
+ * "this is a proven pattern" signal (repositories/occupancy-ads.repository.ts's
+ * listReliableLearnings) or surfaced anywhere else as a "winner". Kept as
+ * its own function (not just an inline `>=`) so it's independently unit
+ * tested and so every future caller reads the SAME rule instead of
+ * re-implementing the comparison.
+ */
+export function meetsMinLearningSampleSize(sampleSize: number): boolean {
+  return Number.isFinite(sampleSize) && sampleSize >= MIN_LEARNING_SAMPLE_SIZE;
+}
+
+// ----------------------------------------------------------------------------
+// Creative variants (spec: "1-3 creative variants, default 3, admin-
+// configurable") -- fixed bounds the AI/Server Action must clamp any
+// requested count into, never trusting a raw client-supplied number.
+// ----------------------------------------------------------------------------
+export const MIN_CREATIVE_VARIANT_COUNT = 1;
+export const MAX_CREATIVE_VARIANT_COUNT = 3;
+export const DEFAULT_CREATIVE_VARIANT_COUNT = 3;
+
+/** Clamps any requested variant count into [MIN_CREATIVE_VARIANT_COUNT, MAX_CREATIVE_VARIANT_COUNT]. */
+export function clampCreativeVariantCount(requested: number): number {
+  if (!Number.isFinite(requested)) return DEFAULT_CREATIVE_VARIANT_COUNT;
+  return Math.min(MAX_CREATIVE_VARIANT_COUNT, Math.max(MIN_CREATIVE_VARIANT_COUNT, Math.round(requested)));
+}
+
+/** Fixed tag vocabulary for the Creative Asset Library (spec) -- the UI offers these as one-click chips, plus a free-text field for custom tags on top of this list (never a replacement for it). */
+export const OCCUPANCY_ASSET_FIXED_TAGS = [
+  "villa exterior",
+  "bedroom",
+  "private pool",
+  "bathroom",
+  "living room",
+  "family",
+  "couple",
+  "breakfast",
+  "night",
+  "daytime",
+  "garden",
+  "facility",
+  "view",
+  "promo",
+  "lifestyle",
+] as const;
+
+// ----------------------------------------------------------------------------
+// Campaign Decision Engine (spec §36) -- deterministic thresholds only, no
+// AI arithmetic. lib/occupancy/decision-engine.ts is the pure function that
+// consumes these; kept here alongside the module's other fixed guardrails.
+// ----------------------------------------------------------------------------
+
+/** Below this many available units across a campaign's target dates, inventory is "thin" -- REDUCE regardless of how well the ad is otherwise performing (don't advertise your way into an overselling risk). */
+export const INVENTORY_THIN_AVAILABLE_UNITS_THRESHOLD = 2;
+
+/** CAC/CPC counted as "worsening" once it rises by more than this fraction versus the previous recommendation's snapshot (e.g. 0.25 = +25%). */
+export const CAC_WORSENING_THRESHOLD_FRACTION = 0.25;
+
+/** Minimum CTR (%) counted as "healthy" performance for a SCALE decision -- below this, more budget on the same creative/targeting is unlikely to convert better, just spend faster. */
+export const MIN_HEALTHY_CTR_PERCENT = 1.0;

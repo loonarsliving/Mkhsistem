@@ -2,32 +2,45 @@
 
 import { revalidatePath } from "next/cache";
 
-import { askOccupancyCopilot, generateOccupancyAdsBrief, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
+import { askOccupancyCopilot, generateOccupancyAdsBrief, generateOccupancyCreativeVariants, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
+import { decideCampaignAction, type DecisionEngineMetaInsights } from "@/lib/occupancy/decision-engine";
 import { isAllowedOccupancyDestinationUrl } from "@/lib/occupancy/campaign-rules";
-import { classifyOccupancyCalendar, selectAdvertisableDates, summarizeGap, type OccupancyThresholds } from "@/lib/occupancy/gap-engine";
+import { classifyOccupancyCalendar, classifyOccupancyDay, selectAdvertisableDates, summarizeGap, type OccupancyThresholds } from "@/lib/occupancy/gap-engine";
 import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { MetaApiError } from "@/lib/meta/client";
-import { getLeaseholdTargetGeoLocations, launchLinkClickCampaign, resolveGeoLocationsFromNames } from "@/lib/meta/ads";
+import { getAdInsights, getLeaseholdTargetGeoLocations, launchLinkClickCampaign, resolveGeoLocationsFromNames } from "@/lib/meta/ads";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getCreativeAsset,
   getOccupancyCampaign,
+  getPreviousCampaignRecommendationSnapshot,
+  insertCampaignBriefOnly,
   insertCampaignLearning,
+  insertCampaignRecommendation,
   insertCreativeAsset,
+  insertCreativeVariants,
   insertDraftCampaignFromBrief,
+  listCampaignRecommendations,
   listCreativeAssets,
+  listCreativeVariantsForCampaign,
   listOccupancyCampaigns,
   listOccupancyTargets,
   listReadyCreativeAssets,
   listReliableLearnings,
   markCampaignFailed,
   markCampaignLaunched,
+  markRecommendationApplied,
+  renameCreativeAsset,
+  setCampaignPrimaryAsset,
   softDeleteCreativeAsset,
   softDeleteDraftCampaign,
+  updateCampaignCopyFromBrief,
   updateCampaignStatus,
   updateCreativeAssetStatus,
   updateCreativeAssetTags,
+  updateCreativeVariantApprovalState,
   upsertOccupancyTarget,
   type InsertCreativeAssetInput,
   type UpsertOccupancyTargetInput,
@@ -140,6 +153,19 @@ export async function updateCreativeAssetTagsAction(id: string, tags: string[], 
   return actionSuccess();
 }
 
+export async function renameCreativeAssetAction(id: string, filename: string): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  if (!filename.trim()) return actionError("Nama file tidak boleh kosong");
+  const supabase = await createClient();
+  try {
+    await renameCreativeAsset(supabase, id, filename.trim().slice(0, 255), session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengubah nama aset");
+  }
+  revalidatePath("/occupancy-ads/assets");
+  return actionSuccess();
+}
+
 export async function deleteCreativeAssetAction(id: string): Promise<ActionResult> {
   await requirePermission("occupancy_ads.manage");
   const supabase = await createClient();
@@ -239,6 +265,19 @@ export async function approveOccupancyCampaignAction(id: string): Promise<Action
     await updateCampaignStatus(supabase, id, "approved", session.employee.id);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal menyetujui campaign");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+/** Meta Ad Preview's "Reject" action -- distinct from deleteOccupancyCampaignDraftAction (hard soft-delete) and markCampaignFailed (a real Meta API failure): a human reviewing the draft/review copy decided not to move forward with it, migration 0270's 'rejected' status. */
+export async function rejectOccupancyCampaignAction(id: string): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+  try {
+    await updateCampaignStatus(supabase, id, "rejected", session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menolak campaign");
   }
   revalidatePath("/occupancy-ads");
   return actionSuccess();
@@ -408,4 +447,272 @@ export async function askOccupancyCopilotAction(question: string): Promise<Actio
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "AI Copilot gagal menjawab");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Creative variant generation (spec: 1-3 per brief, default 3) -- pairs a
+// real asset with an angle/hook, never fabricates an image (see
+// lib/ai/domains/occupancy-ads.ts's generateOccupancyCreativeVariants).
+// ---------------------------------------------------------------------------
+
+export async function listCreativeVariantsAction(campaignId: string) {
+  await requirePermission("occupancy_ads.view");
+  const supabase = await createClient();
+  return listCreativeVariantsForCampaign(supabase, campaignId);
+}
+
+export async function generateCreativeVariantsAction(campaignId: string, variantCount?: number): Promise<ActionResult<{ variantIds: string[] }>> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  let campaign: Awaited<ReturnType<typeof getOccupancyCampaign>>;
+  try {
+    campaign = await getOccupancyCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Campaign tidak ditemukan");
+  }
+
+  const assets = await listReadyCreativeAssets(supabase);
+  if (assets.length === 0) {
+    return actionError("Belum ada aset kreatif siap pakai (status approved/ready/active) -- unggah dan setujui aset dulu di Creative Asset Library.");
+  }
+
+  let variants;
+  try {
+    variants = await generateOccupancyCreativeVariants({
+      campaignObjective: campaign.objective as Parameters<typeof generateOccupancyCreativeVariants>[0]["campaignObjective"],
+      targetMarket: campaign.target_market as Parameters<typeof generateOccupancyCreativeVariants>[0]["targetMarket"],
+      audiencePersona: campaign.audience_persona as Parameters<typeof generateOccupancyCreativeVariants>[0]["audiencePersona"],
+      offer: campaign.offer ?? "",
+      availableAssets: assets.map((a) => ({ id: a.id, filename: a.filename, tags: a.tags ?? [] })),
+      variantCount,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "AI gagal membuat varian kreatif");
+  }
+
+  let variantIds: string[];
+  try {
+    variantIds = await insertCreativeVariants(supabase, campaignId, variants, session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan varian kreatif");
+  }
+
+  revalidatePath("/occupancy-ads");
+  return actionSuccess({ variantIds });
+}
+
+/** "Create a variation" on the Meta Ad Preview -- a single extra variant on top of whatever already exists for this campaign. */
+export async function createSingleCreativeVariationAction(campaignId: string): Promise<ActionResult<{ variantIds: string[] }>> {
+  return generateCreativeVariantsAction(campaignId, 1);
+}
+
+export async function approveCreativeVariantAction(id: string): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+  try {
+    await updateCreativeVariantApprovalState(supabase, id, "approved", session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyetujui varian");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+export async function rejectCreativeVariantAction(id: string): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+  try {
+    await updateCreativeVariantApprovalState(supabase, id, "rejected", session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menolak varian");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+// ---------------------------------------------------------------------------
+// Meta Ad Preview support -- regenerate copy, change primary asset
+// ---------------------------------------------------------------------------
+
+/** "Regenerate copy" on the Meta Ad Preview: re-runs the same AI brief generator against the campaign's already-fixed target dates/market/persona/offer, then overwrites the campaign's copy fields -- never touches target_dates/market/persona/budget (those are what got it drafted in the first place, only the copy is being redone). Re-validates villa-api data is still available (never regenerates copy against stale/fabricated occupancy context). */
+export async function regenerateOccupancyCampaignCopyAction(campaignId: string): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  let campaign: Awaited<ReturnType<typeof getOccupancyCampaign>>;
+  try {
+    campaign = await getOccupancyCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Campaign tidak ditemukan");
+  }
+  if (!["draft", "review", "rejected"].includes(campaign.status)) {
+    return actionError("Copy hanya bisa dibuat ulang untuk campaign berstatus draft, review, atau rejected.");
+  }
+
+  const targets = await listOccupancyTargets(supabase);
+  const target = targets.find((t) => t.id === campaign.target_id) ?? targets.find((t) => t.property_name === campaign.property_name);
+  const maxDailyBudgetIdr = target?.max_daily_budget_idr ?? campaign.daily_budget_idr;
+
+  const assets = await listReadyCreativeAssets(supabase);
+  const reliableLearnings = await listReliableLearnings(supabase);
+
+  const gapSummary = { totalDays: campaign.target_dates.length, lowDays: campaign.target_dates.length, healthyDays: 0, highDays: 0, fullDays: 0, averageOccupancyPct: 0, averageGapPct: 0 };
+
+  let brief;
+  try {
+    brief = await generateOccupancyAdsBrief({
+      propertyName: campaign.property_name,
+      gapSummary,
+      lowDates: (campaign.target_dates as string[]).map((date: string) => ({ date, occupancyPct: 0, availableUnits: 0 })),
+      maxDailyBudgetIdr,
+      availableAssets: assets.map((a) => ({ id: a.id, filename: a.filename, tags: a.tags ?? [] })),
+      reliableLearnings,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "AI gagal membuat ulang copy campaign");
+  }
+
+  try {
+    await insertCampaignBriefOnly(supabase, campaignId, brief, session.employee.id);
+    await updateCampaignCopyFromBrief(supabase, campaignId, brief, session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan copy baru");
+  }
+
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+/** "Change asset" on the Meta Ad Preview -- sets which real, ready-status asset is shown/launched as this campaign's primary creative (migration 0270's primary_asset_id). Refuses an asset id that isn't a real, non-archived row. */
+export async function setCampaignPrimaryAssetAction(campaignId: string, assetId: string | null): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  if (assetId) {
+    try {
+      const asset = await getCreativeAsset(supabase, assetId);
+      if (asset.deleted_at) return actionError("Aset ini sudah diarsipkan -- pilih aset lain.");
+    } catch (err) {
+      return actionError(err instanceof Error ? err.message : "Aset tidak ditemukan");
+    }
+  }
+
+  try {
+    await setCampaignPrimaryAsset(supabase, campaignId, assetId, session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengubah aset utama campaign");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+// ---------------------------------------------------------------------------
+// Campaign Decision Engine (spec §36) -- lib/occupancy/decision-engine.ts.
+// RECOMMENDS ONLY: this action stores a recommendation row and, when a
+// human applies it, changes at most the campaign's local status (PAUSE) --
+// it NEVER calls the Meta API itself (ASSISTED mode, root CLAUDE.md /
+// villa CLAUDE.md's merge-authority spirit applied here: a human decides
+// before anything that touches real ad spend changes).
+// ---------------------------------------------------------------------------
+
+export async function listCampaignRecommendationsAction(campaignId: string) {
+  await requirePermission("occupancy_ads.view");
+  const supabase = await createClient();
+  return listCampaignRecommendations(supabase, campaignId);
+}
+
+export async function requestCampaignDecisionAction(campaignId: string): Promise<ActionResult<{ decision: string; reasoning: string[] }>> {
+  await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  let campaign: Awaited<ReturnType<typeof getOccupancyCampaign>>;
+  try {
+    campaign = await getOccupancyCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Campaign tidak ditemukan");
+  }
+  if (!campaign.meta_ad_id) {
+    return actionError("Campaign ini belum pernah diluncurkan ke Meta -- belum ada performa untuk dianalisis.");
+  }
+
+  // Re-classify TODAY's real occupancy for the campaign's still-upcoming target dates -- never reuse the classification from when the campaign was first drafted.
+  const targets = await listOccupancyTargets(supabase);
+  const target = targets.find((t) => t.id === campaign.target_id) ?? targets.find((t) => t.property_name === campaign.property_name);
+  if (!target) return actionError("Target okupansi untuk campaign ini tidak ditemukan/sudah dihapus.");
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const upcomingDates = (campaign.target_dates as string[]).filter((d: string) => d >= todayIso).sort();
+  if (upcomingDates.length === 0) {
+    return actionError("Semua tanggal target campaign ini sudah lewat -- tidak ada okupansi masa depan untuk dianalisis.");
+  }
+  const rangeEnd = new Date(new Date(upcomingDates[upcomingDates.length - 1]).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const provider = getOccupancyProvider();
+  const calendarResult = await provider.getForwardAvailability(upcomingDates[0], rangeEnd);
+  if (!calendarResult.ok) {
+    return actionError(`Data okupansi villa-api tidak tersedia: ${calendarResult.reason}. Rekomendasi dihentikan -- tidak akan memakai data perkiraan/palsu.`);
+  }
+
+  const thresholds: OccupancyThresholds = { targetOccupancyPct: Number(target.target_occupancy_pct), criticalOccupancyPct: Number(target.critical_occupancy_pct) };
+  const relevantDays = calendarResult.data.filter((d) => upcomingDates.includes(d.date)).map((d) => classifyOccupancyDay(d, thresholds));
+  if (relevantDays.length === 0) {
+    return actionError("villa-api tidak mengembalikan data okupansi untuk tanggal target campaign ini.");
+  }
+
+  const classificationRank: Record<string, number> = { LOW: 0, HEALTHY: 1, HIGH: 2, FULL: 3 };
+  const worstDay = relevantDays.reduce((worst, d) => (classificationRank[d.classification] > classificationRank[worst.classification] ? d : worst));
+  const minAvailableUnits = Math.min(...relevantDays.map((d) => d.availableUnits));
+
+  let insights;
+  try {
+    insights = await getAdInsights(campaign.meta_ad_id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal mengambil data performa iklan dari Meta");
+  }
+  const metaInsights: DecisionEngineMetaInsights = { spendIdr: insights.spendIdr, clicks: insights.clicks, ctrPercent: insights.ctrPercent };
+
+  const previousSnapshot = await getPreviousCampaignRecommendationSnapshot(supabase, campaignId);
+  const previousInsights: DecisionEngineMetaInsights | null =
+    previousSnapshot && typeof previousSnapshot.spendIdr === "number" && typeof previousSnapshot.clicks === "number" && typeof previousSnapshot.ctrPercent === "number"
+      ? { spendIdr: previousSnapshot.spendIdr, clicks: previousSnapshot.clicks, ctrPercent: previousSnapshot.ctrPercent }
+      : null;
+
+  const result = decideCampaignAction({
+    currentClassification: worstDay.classification,
+    minAvailableUnits,
+    insights: metaInsights,
+    previousInsights,
+  });
+
+  try {
+    await insertCampaignRecommendation(supabase, campaignId, result.decision.toLowerCase() as "scale" | "maintain" | "reduce" | "pause", result.reasoning.join(" "), {
+      ...metaInsights,
+      cpcIdr: result.cpcIdr,
+      currentClassification: worstDay.classification,
+      minAvailableUnits,
+    });
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan rekomendasi");
+  }
+
+  revalidatePath("/occupancy-ads");
+  return actionSuccess({ decision: result.decision, reasoning: result.reasoning });
+}
+
+/** Applies a stored recommendation -- the ONLY effect on a real campaign is a local status change to 'paused' for a PAUSE decision (mirrors pauseOccupancyCampaignAction, which itself never calls Meta). SCALE/REDUCE/MAINTAIN have no automated effect: a human adjusts budget on Meta Business Manager directly, matching this module's ASSISTED-only automation mode -- this module never pushes a budget change to Meta on its own. */
+export async function applyCampaignRecommendationAction(recommendationId: string, campaignId: string, decision: "scale" | "maintain" | "reduce" | "pause"): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  try {
+    if (decision === "pause") {
+      await updateCampaignStatus(supabase, campaignId, "paused", session.employee.id);
+    }
+    await markRecommendationApplied(supabase, recommendationId, session.employee.id);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menerapkan rekomendasi");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
 }
