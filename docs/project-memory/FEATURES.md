@@ -92,6 +92,71 @@ Never marked DONE without direct source evidence (route + repository/action
 | Monitoring (error tracking, Web Vitals) | DONE | `app/(app)/monitoring`, `features/monitoring/` (10 files), `instrumentation.ts`, `components/shared/web-vitals-reporter.tsx`, migration `0014_monitoring.sql` |
 | AI Module (admin/settings for AI) | DONE | `app/(app)/ai`, `features/ai-module/` (3 files), migration `0067_ai_module_permission.sql`, `0068_ai_system_prompts.sql` |
 
+## Loonars AI Occupancy Ads (added 2026-09-17, branch `claude/loonars-ai-occupancy-ads-e1m2on`)
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Occupancy provider + gap/classification engine | DONE (unit tested) | `lib/occupancy/villa-provider.ts` (GET-only villa-api client, `/public/availability` primary + `/bridge/occupancy` secondary/caveated), `lib/occupancy/gap-engine.ts` (pure TS classification LOW/HEALTHY/HIGH/FULL + budget recommendation), `lib/occupancy/campaign-rules.ts` (fixed market/persona/campaign-type candidate sets, destination-URL + budget-ceiling validators); tests `tests/unit/lib/occupancy-gap-engine.test.ts`, `tests/unit/lib/occupancy-campaign-rules.test.ts` |
+| AI campaign brief engine | DONE (unit tested) | `lib/ai/domains/occupancy-ads.ts` -- hand-rolled JSON parse convention (mirrors `markom.ts`), never trusts the AI's numbers past `resolveLaunchBudgetIdr`'s re-clamp; `askOccupancyCopilot` for the "Ask Occupancy AI" panel; test `tests/unit/lib/occupancy-ads-ai-parser.test.ts` |
+| Server Actions + repository | DONE (not integration-tested — no live DB) | `features/occupancy-ads/actions/occupancy-ads.actions.ts`, `repositories/occupancy-ads.repository.ts`; two-step draft-research (`requestOccupancyAdsBriefAction`) -> human-approve -> `launchOccupancyCampaignAction` (real Meta spend) flow, mirroring `features/markom/actions/ads.actions.ts` |
+| New Meta link-click (traffic) primitives | DONE, additive only | `lib/meta/ads.ts`: `createTrafficAdCampaign`/`createTrafficAdSet`/`createLinkAdCreative`/`launchLinkClickCampaign` -- new functions for `OUTCOME_TRAFFIC`/`LINK_CLICKS` destination-URL ads to `https://loonars.id`; the existing Click-to-WhatsApp functions are untouched |
+| Dashboard UI | PARTIAL | `app/(app)/occupancy-ads/page.tsx`, `features/occupancy-ads/components/occupancy-dashboard.tsx` -- occupancy calendar, gap summary, campaign board, target config, and the copilot panel are all wired to real Server Actions; the Creative Asset Library has repository/action support (`recordCreativeAssetAction` etc.) but no dedicated upload UI page yet (asset URLs are entered manually when launching) -- see open items below |
+| Database schema | **NOT YET APPLIED to production** | `supabase/migrations/0268_loonars_occupancy_ads_rbac.sql`, `0269_loonars_occupancy_ads_schema.sql` -- 7 new `loonars_*` tables, 2 new permissions (`occupancy_ads.view/.manage`, Super Admin only per the `ad_campaign.*` precedent), new `occupancy-ads-assets` storage bucket, widened `ai_integration_logs.connector` (+`villa`) and `mkc_notifications` category check. Committed for review, deliberately not run against `svcmybsziaelwwdrnzcv` -- see "Open items" below for the exact approval gate. |
+
+**Villa-api dependency (read-only)**: this module reads `villa-api`
+(`https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api`), a
+Supabase Edge Function that lives in the separate villa repo, not this one.
+Only `GET /public/availability` (no auth) and optionally `GET
+/bridge/occupancy` (header `x-internal-secret`, env `VILLA_BRIDGE_SECRET`)
+are ever called -- no POST/PUT/PATCH/DELETE anywhere in this module. If
+villa-api is unreachable or errors, every `OccupancyProvider` method returns
+`{ ok: false, reason }` and every caller (Server Actions, AI brief
+generation) stops and surfaces that reason rather than falling back to
+estimated/fabricated numbers. The `/bridge/occupancy` snapshot carries a
+known data-quality caveat inherited from the villa repo's own project
+memory (its `okupansi_persen` divides by all 13 units rather than the 8
+actually offered for sale) -- the UI/types label it explicitly rather than
+treating it as equivalent in trust to the `/public/availability`-derived
+calendar.
+
+**Open items / two pending approval gates before this is live:**
+
+1. **DB migration apply** -- `0268`/`0269` must be reviewed and applied by a
+   human via Supabase MCP or the CLI against `svcmybsziaelwwdrnzcv` (same
+   process as every other migration in this repo's history, e.g. `0261`).
+   Until then, `/occupancy-ads` will 500 on every real data call (the RBAC
+   permissions don't exist yet either, so in practice nobody can reach the
+   page). After applying, run `npm run supabase:types` to regenerate
+   `types/database.types.ts` -- `repositories/occupancy-ads.repository.ts`
+   and `lib/ai/integration-log.ts` both use a small, clearly-commented
+   `db()`/`as never` type-cast escape hatch for the new tables/connector
+   value specifically because the generated types don't know about them
+   yet; both casts can be removed once types regenerate (no logic change
+   needed).
+2. **Live Meta launch test** -- `launchLinkClickCampaign` (the new
+   link-click/traffic orchestration in `lib/meta/ads.ts`) has never been
+   called against a real Meta ad account (forbidden by this task's own
+   constraints). Verify it end-to-end with one real manual launch (small
+   budget, a human reviewing the draft first, same discipline
+   `uploadAdVideoFromUrl`'s own doc comment asks for) before relying on it
+   for unattended use.
+
+**Judgment calls worth flagging to the owner before merge:**
+- `occupancy_ads.view`/`.manage` were scoped Super Admin-only from the
+  start, mirroring `ad_campaign.*`'s 0088 precedent (this module can also
+  spend real Meta budget) -- widen deliberately later if Markom/Direktur
+  roles should have access.
+- The system prompt/JSON schema for `lib/ai/domains/occupancy-ads.ts` is a
+  local string constant, NOT registered in the `PROMPT_KEYS`/`ai_system_prompts`
+  DB-editable registry `lib/ai/domains/prompts.ts` uses for `markom`/`hr`/etc.
+  -- kept local to avoid an extra migration/admin-UI surface for a first
+  version; can be migrated into that registry later if the prompt needs
+  non-developer editing.
+- Automation mode is ASSISTED only (spec §41) -- there is no code path that
+  calls `launchLinkClickCampaign` without `launchOccupancyCampaignAction`'s
+  explicit human confirmation; a "fully automated" mode is a deliberate
+  future step, not built here.
+
 ## Roadmap-only / not yet implemented
 
 The README's "Roadmap ERP" section states the schema/folder structure is

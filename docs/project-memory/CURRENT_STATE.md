@@ -3,6 +3,20 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars AI Occupancy Ads built, NOT applied/merged yet (2026-09-17)
+
+New module on branch `claude/loonars-ai-occupancy-ads-e1m2on` (not merged
+into `claude/mk-connect-app-o9zw2p` as of this entry): AI reads real
+forward-looking occupancy from villa-api, classifies each date LOW/HEALTHY/
+HIGH/FULL against admin-configured targets (all arithmetic in plain
+TypeScript, never the model), and drafts a Meta link-click ad campaign
+(destination fixed to `https://loonars.id`) for LOW dates only -- a human
+must review/approve/launch before any real Meta spend happens (two-step
+flow mirroring the existing Ads Specialist module). See FEATURES.md's
+"Loonars AI Occupancy Ads" entry for full detail, file list, and the two
+explicit approval gates (DB migration apply, live Meta launch test) still
+open before this is usable in production.
+
 ## Loonars 1 SSO module removed, public live-siteplan sharing added (2026-09-15, later same day)
 
 Two more owner-driven follow-ups on the Loonars 2 work below:

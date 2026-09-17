@@ -3,7 +3,7 @@ import "server-only";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type ConnectorType = "whatsapp" | "meta";
+export type ConnectorType = "whatsapp" | "meta" | "villa";
 export type IntegrationDirection = "outgoing" | "incoming";
 
 export interface IntegrationLogEntry {
@@ -27,8 +27,14 @@ export interface IntegrationLogEntry {
  */
 export async function saveIntegrationLog(entry: IntegrationLogEntry): Promise<void> {
   const supabase = createAdminClient();
+  // `connector: entry.connector as never` -- 'villa' is only a valid value
+  // once migration 0268 (Loonars AI Occupancy Ads) is applied to the live
+  // database and types/database.types.ts is regenerated (see that
+  // migration's header); types/database.types.ts still only knows
+  // 'whatsapp' | 'meta' until then. Narrow, mechanical cast for exactly
+  // that gap -- remove once the migration lands and types regenerate.
   const { error } = await supabase.from("ai_integration_logs").insert({
-    connector: entry.connector,
+    connector: entry.connector as never,
     direction: entry.direction,
     payload: entry.payload as never,
     status: entry.status,
