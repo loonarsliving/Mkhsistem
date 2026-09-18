@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AttendanceStatsCard } from "@/features/dashboard/components/attendance-stats-card";
 import { ConstructionSaldoCard } from "@/features/construction-finance/components/construction-saldo-card";
 import { ConstructionTargetCard } from "@/features/construction-finance/components/construction-target-card";
+import { KalkulatorInvestasiLoonarsCard } from "@/features/dashboard/components/kalkulator-investasi-loonars-card";
 import { LoonarsFeeCard } from "@/features/dashboard/components/loonars-fee-card";
 import { ProfileSummaryCard } from "@/features/dashboard/components/profile-summary-card";
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
@@ -27,6 +28,7 @@ import { AiHealthStatusCard } from "@/features/monitoring/components/ai-health-s
 import { MetaHealthStatusCard } from "@/features/monitoring/components/meta-health-status-card";
 import { TikTokHealthStatusCard } from "@/features/monitoring/components/tiktok-health-status-card";
 import { WhatsAppHealthStatusCard } from "@/features/monitoring/components/whatsapp-health-status-card";
+import { JOGJA_BRANCH_ID } from "@/constants/app";
 import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
@@ -77,6 +79,11 @@ export default async function DashboardPage() {
   // Admin, but Markom's team widget is only that role's actual primary job.
   const isMarkomRole = session.roleKey === ROLE_KEYS.MARKOM;
   const isSalesRole = session.roleKey === ROLE_KEYS.SALES;
+  // Kalkulator Investasi Loonars: Jogja Sales' own quick-answer tool for
+  // WhatsApp/telepon/tatap muka investor questions (currently Yudha & Ayu).
+  // Branch-gated like SITEPLAN_BRANCH_IDS, not a new permission -- this is a
+  // pure-frontend calculator, nothing to enforce at the RLS layer.
+  const isJogjaSales = isSalesRole && session.employee.branch_id === JOGJA_BRANCH_ID;
   const isSuperAdmin = session.roleKey === ROLE_KEYS.SUPER_ADMIN;
   // Kendari's Kepala Cabang has a deliberately reduced menu (dashboard +
   // construction finance only, see KENDARI_KEPALA_CABANG_ALLOWED_PERMISSIONS)
@@ -149,6 +156,8 @@ export default async function DashboardPage() {
           </div>
 
           <SalesDashboardSection userId={session.userId} />
+
+          {isJogjaSales && <KalkulatorInvestasiLoonarsCard />}
         </>
       )}
 
