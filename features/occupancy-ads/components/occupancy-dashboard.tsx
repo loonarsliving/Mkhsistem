@@ -23,6 +23,7 @@ import {
   generateCreativeVariantsAction,
   getOccupancyCalendarAction,
   launchOccupancyCampaignAction,
+  listCreativeAssetsAction,
   listOccupancyCampaignsAction,
   listOccupancyTargetsAction,
   moveOccupancyCampaignToReviewAction,
@@ -65,6 +66,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
 
   const { data: targets, isLoading: targetsLoading } = useQuery({ queryKey: ["occupancy-targets"], queryFn: listOccupancyTargetsAction });
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({ queryKey: ["occupancy-campaigns"], queryFn: listOccupancyCampaignsAction });
+  const { data: creativeAssets } = useQuery({ queryKey: ["occupancy-creative-assets"], queryFn: () => listCreativeAssetsAction() });
 
   const activeTargetId = React.useMemo(() => targets?.find((t) => t.property_name === propertyName && t.is_active)?.id ?? null, [targets, propertyName]);
 
@@ -223,10 +225,14 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                         size="sm"
                         disabled={busy === c.id}
                         onClick={async () => {
-                          const mediaUrl = window.prompt("URL gambar/video aset kreatif untuk diluncurkan (dari Creative Asset Library):");
-                          if (!mediaUrl) return;
+                          const primaryAsset = creativeAssets?.find((a) => a.id === c.primary_asset_id);
+                          if (!primaryAsset) {
+                            toast.error('Belum ada aset terpilih untuk campaign ini -- pilih dulu lewat "Ganti Aset" di Meta Ad Preview sebelum meluncurkan.');
+                            return;
+                          }
+                          if (!window.confirm(`Luncurkan campaign ini ke Meta dengan budget Rp${c.daily_budget_idr.toLocaleString("id-ID")}/hari? Ini akan mengeluarkan biaya iklan nyata.`)) return;
                           setBusy(c.id);
-                          const result = await launchOccupancyCampaignAction(c.id, [mediaUrl], "image");
+                          const result = await launchOccupancyCampaignAction(c.id, [primaryAsset.public_url], primaryAsset.media_type as "image" | "video");
                           setBusy(null);
                           if (!result.success) toast.error(result.error);
                           else {
