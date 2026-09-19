@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { SiteplanUnitStatus } from "@/constants/app";
 
 import { getSiteplanPurchaseForUnitAction } from "../actions/siteplan.actions";
+import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 import { AkadScheduleSection } from "./akad-schedule-section";
 
 interface UnitDetailModalProps {
@@ -73,9 +74,15 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
                 <p className="font-medium">{SITEPLAN_PAYMENT_METHOD_LABEL[purchase.payment_method as SiteplanPaymentMethod] ?? purchase.payment_method}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Harga</p>
+                <p className="text-xs text-muted-foreground">Harga Unit</p>
                 <p className="font-medium tabular-nums">{formatCurrency(purchase.price ?? 0)}</p>
               </div>
+              {purchase.transaction_type !== "akad" && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Dana Diterima</p>
+                  <p className="font-medium tabular-nums">{formatCurrency(getSiteplanReceivedAmount(purchase))}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">Tanggal Transaksi</p>
                 <p className="font-medium">{format(new Date(purchase.transaction_date), "dd MMM yyyy", { locale: idLocale })}</p>

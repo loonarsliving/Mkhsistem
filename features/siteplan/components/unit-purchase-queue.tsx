@@ -17,6 +17,7 @@ import { SITEPLAN_PAYMENT_METHOD_LABEL, SITEPLAN_TRANSACTION_TYPE_LABEL, type Si
 import { formatCurrency } from "@/lib/utils";
 
 import { listPendingSiteplanPurchasesAction, rejectSiteplanPurchaseAction, verifySiteplanPurchaseAction } from "../actions/siteplan.actions";
+import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 
 export function UnitPurchaseQueue() {
   const queryClient = useQueryClient();
@@ -76,7 +77,7 @@ export function UnitPurchaseQueue() {
                   <TableHead>Marketing</TableHead>
                   <TableHead>Jenis</TableHead>
                   <TableHead>Metode</TableHead>
-                  <TableHead className="text-right">Nilai</TableHead>
+                  <TableHead className="text-right">Dana Masuk</TableHead>
                   <TableHead>Tanggal</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -96,7 +97,12 @@ export function UnitPurchaseQueue() {
                     <TableCell>{p.marketing?.full_name ?? "-"}</TableCell>
                     <TableCell>{SITEPLAN_TRANSACTION_TYPE_LABEL[p.transaction_type as SiteplanTransactionType] ?? p.transaction_type}</TableCell>
                     <TableCell>{SITEPLAN_PAYMENT_METHOD_LABEL[p.payment_method as SiteplanPaymentMethod] ?? p.payment_method}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(p.price ?? 0)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <div>{formatCurrency(getSiteplanReceivedAmount(p))}</div>
+                      {p.transaction_type !== "akad" && (
+                        <p className="text-xs font-normal text-muted-foreground">dari harga {formatCurrency(p.price ?? 0)}</p>
+                      )}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">{format(new Date(p.transaction_date), "dd MMM yyyy", { locale: idLocale })}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
