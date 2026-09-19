@@ -3,13 +3,15 @@
 import * as React from "react";
 import Image from "next/image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, Film, ImageIcon, Loader2, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, Film, ImageIcon, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   approveOccupancyCampaignAction,
   createSingleCreativeVariationAction,
@@ -17,6 +19,7 @@ import {
   regenerateOccupancyCampaignCopyAction,
   rejectOccupancyCampaignAction,
   setCampaignPrimaryAssetAction,
+  updateOccupancyCampaignCopyManualAction,
 } from "../actions/occupancy-ads.actions";
 
 export interface MetaAdPreviewCampaign {
@@ -43,6 +46,11 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
   const queryClient = useQueryClient();
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const [changingAsset, setChangingAsset] = React.useState(false);
+  const [editingCopy, setEditingCopy] = React.useState(false);
+  const [draftHeadline, setDraftHeadline] = React.useState(campaign.headline ?? "");
+  const [draftPrimaryText, setDraftPrimaryText] = React.useState(campaign.primary_text ?? "");
+  const [draftDescription, setDraftDescription] = React.useState(campaign.description ?? "");
+  const [draftCta, setDraftCta] = React.useState(campaign.cta ?? "");
 
   const { data: assets } = useQuery({ queryKey: ["occupancy-creative-assets"], queryFn: () => listCreativeAssetsAction() });
   const readyAssets = React.useMemo(() => (assets ?? []).filter((a) => ["approved", "ready", "active"].includes(a.status)), [assets]);
@@ -62,6 +70,32 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
       return;
     }
     toast.success("Copy iklan dibuat ulang oleh AI");
+    invalidateCampaigns();
+  }
+
+  function handleStartEditCopy() {
+    setDraftHeadline(campaign.headline ?? "");
+    setDraftPrimaryText(campaign.primary_text ?? "");
+    setDraftDescription(campaign.description ?? "");
+    setDraftCta(campaign.cta ?? "");
+    setEditingCopy(true);
+  }
+
+  async function handleSaveCopy() {
+    setBusyAction("save-copy");
+    const result = await updateOccupancyCampaignCopyManualAction(campaign.id, {
+      headline: draftHeadline,
+      primaryText: draftPrimaryText,
+      description: draftDescription,
+      cta: draftCta,
+    });
+    setBusyAction(null);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Copy iklan disimpan");
+    setEditingCopy(false);
     invalidateCampaigns();
   }
 
@@ -148,22 +182,54 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
             )}
           </div>
           <div className="space-y-2 p-4">
-            <p className="text-sm">{campaign.primary_text || <span className="text-muted-foreground">(belum ada primary text)</span>}</p>
-            <div className="rounded-md border bg-muted/40 p-2.5">
-              <p className="truncate text-[11px] uppercase text-muted-foreground">{campaign.destination_url}</p>
-              <p className="text-sm font-semibold">{campaign.headline || <span className="font-normal text-muted-foreground">(belum ada headline)</span>}</p>
-              {campaign.description && <p className="text-xs text-muted-foreground">{campaign.description}</p>}
-              <div className="mt-2 flex items-center justify-between">
-                <Button size="sm" variant="secondary" disabled>
-                  {campaign.cta || "Pelajari Selengkapnya"}
-                </Button>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            {editingCopy ? (
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[11px] uppercase text-muted-foreground">Primary Text</label>
+                  <Textarea rows={3} value={draftPrimaryText} onChange={(e) => setDraftPrimaryText(e.target.value)} placeholder="Isi caption utama..." />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase text-muted-foreground">Headline</label>
+                  <Input value={draftHeadline} onChange={(e) => setDraftHeadline(e.target.value)} placeholder="Judul singkat..." />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase text-muted-foreground">Description</label>
+                  <Textarea rows={2} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="Teks pendukung (opsional)..." />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase text-muted-foreground">CTA</label>
+                  <Input value={draftCta} onChange={(e) => setDraftCta(e.target.value)} placeholder="mis. BOOK_NOW" />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" disabled={busyAction === "save-copy"} onClick={handleSaveCopy}>
+                    {busyAction === "save-copy" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
+                    Simpan
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busyAction === "save-copy"} onClick={() => setEditingCopy(false)}>
+                    Batal
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <p className="text-sm">{campaign.primary_text || <span className="text-muted-foreground">(belum ada primary text)</span>}</p>
+                <div className="rounded-md border bg-muted/40 p-2.5">
+                  <p className="truncate text-[11px] uppercase text-muted-foreground">{campaign.destination_url}</p>
+                  <p className="text-sm font-semibold">{campaign.headline || <span className="font-normal text-muted-foreground">(belum ada headline)</span>}</p>
+                  {campaign.description && <p className="text-xs text-muted-foreground">{campaign.description}</p>}
+                  <div className="mt-2 flex items-center justify-between">
+                    <Button size="sm" variant="secondary" disabled>
+                      {campaign.cta || "Pelajari Selengkapnya"}
+                    </Button>
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {canManage && (
+        {canManage && !editingCopy && (
           <div className="space-y-2 border-t p-3">
             {changingAsset ? (
               <Select onValueChange={handleChangeAsset} disabled={busyAction === "asset"}>
@@ -185,7 +251,11 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" disabled={!canEdit || busyAction === "regenerate"} onClick={handleRegenerateCopy}>
                   {busyAction === "regenerate" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-                  Buat Ulang Copy
+                  Buat Ulang Copy (AI)
+                </Button>
+                <Button size="sm" variant="outline" disabled={!canEdit} onClick={handleStartEditCopy}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Edit Manual
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setChangingAsset(true)}>
                   <ImageIcon className="mr-1 h-3.5 w-3.5" />

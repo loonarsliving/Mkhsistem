@@ -430,6 +430,28 @@ export async function updateCampaignCopyFromBrief(supabase: TypedSupabaseClient,
   if (error) throw error;
 }
 
+export interface ManualCampaignCopyInput {
+  headline: string;
+  primaryText: string;
+  description: string;
+  cta: string;
+}
+
+/** A human directly editing the copy on the Meta Ad Preview, as an alternative to "Buat Ulang Copy" (AI regenerate) -- same status gate as regenerate, enforced by the caller Server Action. */
+export async function updateCampaignCopyManual(supabase: TypedSupabaseClient, id: string, input: ManualCampaignCopyInput, employeeId: string) {
+  const { error } = await db(supabase)
+    .from("loonars_occupancy_campaigns")
+    .update({
+      headline: input.headline,
+      primary_text: input.primaryText,
+      description: input.description,
+      cta: input.cta,
+      updated_by: employeeId,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** Persists a re-generated brief's raw AI output as its own loonars_campaign_briefs row (history), without touching loonars_occupancy_campaigns -- callers pair this with updateCampaignCopyFromBrief. */
 export async function insertCampaignBriefOnly(supabase: TypedSupabaseClient, campaignId: string, brief: OccupancyAdsBrief, employeeId: string) {
   const { error } = await db(supabase).from("loonars_campaign_briefs").insert({

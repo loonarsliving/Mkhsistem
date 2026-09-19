@@ -38,6 +38,7 @@ import {
   softDeleteCreativeAsset,
   softDeleteDraftCampaign,
   updateCampaignCopyFromBrief,
+  updateCampaignCopyManual,
   updateCampaignStatus,
   updateCreativeAssetStatus,
   updateCreativeAssetTags,
@@ -617,6 +618,41 @@ export async function setCampaignPrimaryAssetAction(campaignId: string, assetId:
     await setCampaignPrimaryAsset(supabase, campaignId, assetId, session.employee.id);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal mengubah aset utama campaign");
+  }
+  revalidatePath("/occupancy-ads");
+  return actionSuccess();
+}
+
+/** Direct human edit of the campaign's copy on the Meta Ad Preview -- alternative to "Buat Ulang Copy" (AI regenerate) when the admin just wants to tweak wording themselves. Same status gate as regenerate: only before a human has approved the campaign, so an edit can never silently change what's already been signed off. */
+export async function updateOccupancyCampaignCopyManualAction(
+  campaignId: string,
+  input: { headline: string; primaryText: string; description: string; cta: string },
+): Promise<ActionResult> {
+  const session = await requirePermission("occupancy_ads.manage");
+  const supabase = await createClient();
+
+  let campaign: Awaited<ReturnType<typeof getOccupancyCampaign>>;
+  try {
+    campaign = await getOccupancyCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Campaign tidak ditemukan");
+  }
+  if (!["draft", "review", "rejected"].includes(campaign.status)) {
+    return actionError("Copy hanya bisa diedit untuk campaign berstatus draft, review, atau rejected.");
+  }
+  if (!input.headline.trim()) return actionError("Headline tidak boleh kosong");
+  if (!input.primaryText.trim()) return actionError("Primary text tidak boleh kosong");
+  if (!input.cta.trim()) return actionError("CTA tidak boleh kosong");
+
+  try {
+    await updateCampaignCopyManual(
+      supabase,
+      campaignId,
+      { headline: input.headline.trim(), primaryText: input.primaryText.trim(), description: input.description.trim(), cta: input.cta.trim() },
+      session.employee.id,
+    );
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan perubahan copy");
   }
   revalidatePath("/occupancy-ads");
   return actionSuccess();
