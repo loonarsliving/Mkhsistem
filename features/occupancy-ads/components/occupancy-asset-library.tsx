@@ -21,14 +21,23 @@ import {
   updateCreativeAssetTagsAction,
 } from "../actions/occupancy-ads.actions";
 
-/** draft -> ai_generated -> review -> approved -> ready_for_meta -> active lifecycle (migration 0269) -- this array is the order the "advance" button walks through; archived is reachable via a separate action, never via "advance". */
-const LIFECYCLE_ORDER = ["draft", "ai_generated", "review", "approved", "ready_for_meta", "active"] as const;
+/**
+ * draft -> ai_generated -> review -> approved -> ready -> active lifecycle
+ * (migration 0269's loonars_creative_assets.status check constraint) --
+ * this array is the order the "advance" button walks through; archived is
+ * reachable via a separate action, never via "advance". NOTE: the asset
+ * lifecycle's post-approved step is 'ready', NOT 'ready_for_meta' -- that
+ * name belongs to loonars_occupancy_campaigns.status (migration 0270)
+ * only. Using 'ready_for_meta' here previously violated this table's
+ * check constraint and made every "advance past approved" action fail.
+ */
+const LIFECYCLE_ORDER = ["draft", "ai_generated", "review", "approved", "ready", "active"] as const;
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
   ai_generated: "AI Generated",
   review: "Review",
   approved: "Disetujui",
-  ready_for_meta: "Siap ke Meta",
+  ready: "Siap ke Meta",
   active: "Aktif",
   archived: "Arsip",
 };
@@ -37,7 +46,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "success" | "dest
   ai_generated: "secondary",
   review: "secondary",
   approved: "default",
-  ready_for_meta: "default",
+  ready: "default",
   active: "success",
   archived: "destructive",
 };
