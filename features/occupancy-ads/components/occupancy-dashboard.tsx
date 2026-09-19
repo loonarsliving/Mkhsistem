@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatTile } from "@/components/shared/stat-tile";
 import { CampaignDecisionPanel } from "./campaign-decision-panel";
+import { CampaignMetaReviewStatus } from "./campaign-meta-review-status";
 import { CreativeVariantsList } from "./creative-variants-list";
 import { MetaAdPreview } from "./meta-ad-preview";
 import {
@@ -212,6 +213,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                 <CreativeVariantsList campaignId={c.id} canManage={canManage} />
 
                 {(c.status === "active" || c.status === "paused") && <CampaignDecisionPanel campaignId={c.id} campaignStatus={c.status} />}
+                <CampaignMetaReviewStatus campaignId={c.id} hasMetaAdId={Boolean(c.meta_ad_id)} />
 
                 {canManage && (
                   <div className="flex flex-wrap gap-2 pt-2">

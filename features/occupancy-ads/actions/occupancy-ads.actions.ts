@@ -9,7 +9,7 @@ import { classifyOccupancyCalendar, classifyOccupancyDay, selectAdvertisableDate
 import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
 import { isMetaConfigured } from "@/lib/meta/config";
 import { MetaApiError } from "@/lib/meta/client";
-import { getAdInsights, getLeaseholdTargetGeoLocations, launchLinkClickCampaign, resolveGeoLocationsFromNames } from "@/lib/meta/ads";
+import { getAdInsights, getAdReviewStatus, getLeaseholdTargetGeoLocations, launchLinkClickCampaign, resolveGeoLocationsFromNames } from "@/lib/meta/ads";
 import { requirePermission } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -389,6 +389,42 @@ export async function pauseOccupancyCampaignAction(id: string): Promise<ActionRe
   }
   revalidatePath("/occupancy-ads");
   return actionSuccess();
+}
+
+/**
+ * Meta's own review/delivery status for an already-launched campaign --
+ * distinct from our local campaign.status ("Aktif" here only means our
+ * launch API call succeeded, not that Meta has finished reviewing it or
+ * started actually delivering it). Read-only, no DB write; the admin
+ * triggers this on demand rather than it being auto-polled, since Meta
+ * review can take minutes to ~24h and there's no automation dispatch for
+ * this module yet.
+ */
+export async function getOccupancyCampaignMetaStatusAction(campaignId: string): Promise<ActionResult<{ effectiveStatus: string; configuredStatus: string; rejectionReasons: string[] }>> {
+  await requirePermission("occupancy_ads.view");
+  const supabase = await createClient();
+
+  if (!isMetaConfigured()) {
+    return actionError("Meta integration belum dikonfigurasi");
+  }
+
+  let campaign: Awaited<ReturnType<typeof getOccupancyCampaign>>;
+  try {
+    campaign = await getOccupancyCampaign(supabase, campaignId);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Campaign tidak ditemukan");
+  }
+  if (!campaign.meta_ad_id) {
+    return actionError("Campaign ini belum pernah diluncurkan ke Meta -- belum ada status review untuk dicek.");
+  }
+
+  try {
+    const status = await getAdReviewStatus(campaign.meta_ad_id);
+    return actionSuccess(status);
+  } catch (err) {
+    const reason = err instanceof MetaApiError ? err.message : err instanceof Error ? err.message : "Gagal mengambil status dari Meta";
+    return actionError(reason);
+  }
 }
 
 /** Records a completed campaign's real outcome as a learning row -- feeds listReliableLearnings for future briefs once enough samples accumulate (MIN_LEARNING_SAMPLE_SIZE). */

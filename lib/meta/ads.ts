@@ -751,3 +751,44 @@ export async function getAdInsights(adId: string): Promise<AdInsights> {
     ctrPercent: Number(row?.inline_link_click_ctr ?? "0"),
   };
 }
+
+export interface AdReviewStatus {
+  /** Meta's actual delivery/review state -- e.g. "ACTIVE", "PENDING_REVIEW", "DISAPPROVED", "PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED", "WITH_ISSUES". This is the field that answers "is it actually running yet", distinct from our own local campaign.status. */
+  effectiveStatus: string;
+  /** The status we (or the advertiser) explicitly set -- "ACTIVE" or "PAUSED". Differs from effectiveStatus when e.g. we set ACTIVE but Meta still has it PENDING_REVIEW. */
+  configuredStatus: string;
+  /** Human-readable rejection reason(s), only present when Meta disapproved the ad -- summarized from ad_review_feedback, never fabricated if Meta didn't return one. */
+  rejectionReasons: string[];
+}
+
+/**
+ * Meta's own review/delivery status for an already-launched ad -- separate
+ * from our local loonars_occupancy_campaigns.status (which only reflects
+ * whether OUR system successfully called the launch API, not whether Meta
+ * has approved/started actually delivering it). Read-only, no side effect.
+ */
+export async function getAdReviewStatus(adId: string): Promise<AdReviewStatus> {
+  const ad = await metaGraphRequest<{
+    effective_status?: string;
+    configured_status?: string;
+    ad_review_feedback?: unknown;
+  }>(`/${adId}`, { fields: "effective_status,configured_status,ad_review_feedback" });
+
+  const rejectionReasons: string[] = [];
+  if (ad.ad_review_feedback && typeof ad.ad_review_feedback === "object") {
+    for (const value of Object.values(ad.ad_review_feedback as Record<string, unknown>)) {
+      if (typeof value === "string") rejectionReasons.push(value);
+      else if (value && typeof value === "object") {
+        for (const inner of Object.values(value as Record<string, unknown>)) {
+          if (typeof inner === "string") rejectionReasons.push(inner);
+        }
+      }
+    }
+  }
+
+  return {
+    effectiveStatus: ad.effective_status ?? "UNKNOWN",
+    configuredStatus: ad.configured_status ?? "UNKNOWN",
+    rejectionReasons,
+  };
+}
