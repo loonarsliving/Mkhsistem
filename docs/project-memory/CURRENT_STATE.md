@@ -291,6 +291,29 @@ posted workflow layer in front of the existing money-moving RPCs).
   replacing it for a multi-item list. Backfilled the one live request this
   had affected (`e87b5b12`) and sent the owner a follow-up WhatsApp
   notification with the missing account number.
+- **Real bug fixed 2026-09-19** (migration `0272`): the weekly report's
+  "Aktual sudah dikeluarkan"/"Sisa anggaran"/"Kontraktor ... sudah dibayar"
+  never read `cm_labor_contracts.outstanding_advance` at all — an advance
+  is deliberately kept out of `construction_expenses` until earned-value
+  reconciliation (see the 2026-09-15 entry above), but `v_committed` also
+  only checked `status in ('approved','transferred')`, never `'paid'` (the
+  status an advance-recorded request moves to). Net effect: the owner paid
+  Sarno Rp15,000,000 toward Anang's contract and the same weekly report
+  said "Aktual sudah dikeluarkan: Rp 13,122,000" and "Kontraktor (Anang):
+  ... sudah dibayar Rp 0" — technically correct by each field's own narrow
+  definition, but read together it looked like the money had vanished, and
+  Sisa anggaran was overstated by the full advance. Owner: "Knpa pgeluaran
+  hanya 13 jt smntra kt sdh membayar kontraktor 15 jt jga". Fixed by reading
+  `outstanding_advance` directly (kept in sync by
+  `recordLoonarsCoffeeLaborAdvance`) and showing it as its own explicit
+  "Uang muka kontraktor (belum direkonsiliasi)" line, subtracted from Sisa
+  anggaran like any other money that already left the company. Same fix
+  applied to the "kontraktor" WhatsApp query reply
+  (`tryAnswerLoonarsCoffeeQuery`), which had the identical gap. Nothing
+  about how the advance itself is recorded changed — still no
+  `construction_expenses`/jurnal entry until reconciled; this only fixed
+  what gets displayed. Applied to production and verified inside a
+  rolled-back transaction before pushing the code.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
