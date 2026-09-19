@@ -235,6 +235,11 @@ export async function insertDraftCampaignFromBrief(supabase: TypedSupabaseClient
       destination_url: brief.destinationUrl,
       status: "draft",
       launched_by: "ai",
+      // Default the Meta Ad Preview's primary asset to the AI's own first
+      // pick, so the preview isn't empty right after a brief is generated.
+      // Still just a starting point -- "Ganti Aset" on the preview lets a
+      // human override it before approving, same as any other AI output here.
+      primary_asset_id: brief.selectedAssetIds[0] ?? null,
       created_by: employeeId,
     })
     .select("id")
