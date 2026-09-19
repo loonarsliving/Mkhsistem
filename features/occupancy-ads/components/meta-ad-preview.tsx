@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { OCCUPANCY_PERSONA_CANDIDATES, OCCUPANCY_PERSONA_LABELS, type OccupancyPersona } from "@/lib/occupancy/campaign-rules";
 import {
   approveOccupancyCampaignAction,
   createSingleCreativeVariationAction,
@@ -46,6 +47,7 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
   const queryClient = useQueryClient();
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const [changingAsset, setChangingAsset] = React.useState(false);
+  const [choosingPersona, setChoosingPersona] = React.useState(false);
   const [editingCopy, setEditingCopy] = React.useState(false);
   const [draftHeadline, setDraftHeadline] = React.useState(campaign.headline ?? "");
   const [draftPrimaryText, setDraftPrimaryText] = React.useState(campaign.primary_text ?? "");
@@ -61,15 +63,16 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
     queryClient.invalidateQueries({ queryKey: ["occupancy-creative-variants", campaign.id] });
   }
 
-  async function handleRegenerateCopy() {
+  async function handleRegenerateCopy(persona?: OccupancyPersona) {
     setBusyAction("regenerate");
-    const result = await regenerateOccupancyCampaignCopyAction(campaign.id);
+    const result = await regenerateOccupancyCampaignCopyAction(campaign.id, persona);
     setBusyAction(null);
+    setChoosingPersona(false);
     if (!result.success) {
       toast.error(result.error);
       return;
     }
-    toast.success("Copy iklan dibuat ulang oleh AI");
+    toast.success(persona ? `Copy dibuat ulang dengan persona "${OCCUPANCY_PERSONA_LABELS[persona]}"` : "Copy iklan dibuat ulang oleh AI (persona baru dipilih otomatis)");
     invalidateCampaigns();
   }
 
@@ -247,11 +250,34 @@ export function MetaAdPreview({ campaign, canManage }: { campaign: MetaAdPreview
                   ))}
                 </SelectContent>
               </Select>
+            ) : choosingPersona ? (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Pilih persona/angle untuk copy baru -- AI akan menulis ulang menyesuaikan pilihan ini:</p>
+                <Select onValueChange={(v) => handleRegenerateCopy(v as OccupancyPersona)} disabled={busyAction === "regenerate"}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih persona..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OCCUPANCY_PERSONA_CANDIDATES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {OCCUPANCY_PERSONA_LABELS[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="ghost" disabled={busyAction === "regenerate"} onClick={() => setChoosingPersona(false)}>
+                  Batal
+                </Button>
+              </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={!canEdit || busyAction === "regenerate"} onClick={handleRegenerateCopy}>
+                <Button size="sm" variant="outline" disabled={!canEdit || busyAction === "regenerate"} onClick={() => handleRegenerateCopy()}>
                   {busyAction === "regenerate" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
                   Buat Ulang Copy (AI)
+                </Button>
+                <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => setChoosingPersona(true)}>
+                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  Ganti Persona/Angle
                 </Button>
                 <Button size="sm" variant="outline" disabled={!canEdit} onClick={handleStartEditCopy}>
                   <Pencil className="mr-1 h-3.5 w-3.5" />

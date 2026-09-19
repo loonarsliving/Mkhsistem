@@ -9,6 +9,8 @@ import {
   OCCUPANCY_CAMPAIGN_TYPE_TEMPLATES,
   OCCUPANCY_MARKET_CANDIDATES,
   OCCUPANCY_PERSONA_CANDIDATES,
+  OCCUPANCY_PERSONA_LABELS,
+  OCCUPANCY_PERSONA_TAG_HINTS,
   clampCreativeVariantCount,
   clampToBudgetCeiling,
   type OccupancyCampaignType,
@@ -56,6 +58,10 @@ export interface OccupancyAdsBriefInput {
   availableAssets: { id: string; filename: string; tags: string[] }[];
   /** Past learnings meeting MIN_LEARNING_SAMPLE_SIZE, if any -- otherwise omitted so the AI doesn't lean on an unreliable single data point. */
   reliableLearnings?: { market: string; persona: string; creativeAngle: string; avgCac: number | null; avgCtr: number | null; sampleSize: number }[];
+  /** Admin explicitly picked this persona (the "Ganti Persona" control on the Meta Ad Preview) -- when set, the AI is told to use exactly this one, overriding its own tag-matching judgment. */
+  preferredPersona?: OccupancyPersona;
+  /** The persona the previous brief for this campaign already used (regenerate flow) -- steers the AI toward a genuinely different angle instead of converging on the same persona every time, unless preferredPersona overrides this. */
+  avoidPersona?: OccupancyPersona;
 }
 
 export interface OccupancyAdsBrief {
@@ -155,12 +161,52 @@ export function parseOccupancyAdsBriefJson(text: string): OccupancyAdsBrief {
   };
 }
 
+/**
+ * Suggests which personas the AVAILABLE assets' tags best support, by
+ * simple overlap count against OCCUPANCY_PERSONA_TAG_HINTS -- fed into the
+ * prompt as a hint so the AI's chosen persona actually matches what the
+ * photos show (a couple-dining photo shouldn't produce "digital nomad
+ * workation" copy). Only returns personas with at least one matching tag;
+ * empty when the asset library has no tags to go on.
+ */
+function suggestPersonasFromAssetTags(availableAssets: OccupancyAdsBriefInput["availableAssets"]): OccupancyPersona[] {
+  const allTags = new Set(availableAssets.flatMap((a) => a.tags.map((t) => t.toLowerCase())));
+  if (allTags.size === 0) return [];
+  const scored = OCCUPANCY_PERSONA_CANDIDATES.map((persona) => ({
+    persona,
+    score: OCCUPANCY_PERSONA_TAG_HINTS[persona].filter((tag) => allTags.has(tag.toLowerCase())).length,
+  })).filter((s) => s.score > 0);
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.persona);
+}
+
 function buildBriefPrompt(input: OccupancyAdsBriefInput): string {
   const lowDatesBlock = input.lowDates.map((d) => `- ${d.date}: okupansi ${d.occupancyPct}%, ${d.availableUnits} unit tersedia`).join("\n");
   const assetsBlock =
     input.availableAssets.length > 0
       ? input.availableAssets.map((a) => `- id="${a.id}" file="${a.filename}" tags=[${a.tags.join(", ")}]`).join("\n")
       : "(belum ada aset kreatif siap pakai -- boleh kosongkan selected_assets)";
+
+  const suggestedPersonas = suggestPersonasFromAssetTags(input.availableAssets);
+  let personaGuidance: string;
+  if (input.preferredPersona) {
+    personaGuidance = `audience_persona HARUS PERSIS "${input.preferredPersona}" -- admin sudah menentukan persona ini secara manual, jangan pilih persona lain.`;
+  } else {
+    const parts: string[] = [];
+    if (suggestedPersonas.length > 0) {
+      parts.push(
+        `Berdasarkan tag foto/video yang tersedia, persona yang paling COCOK secara visual (urutan dari paling cocok): ${suggestedPersonas
+          .map((p) => `${p} (${OCCUPANCY_PERSONA_LABELS[p]})`)
+          .join(", ")}. Utamakan persona yang benar-benar sesuai dengan isi foto yang ada -- jangan menulis angle "kerja/workation" kalau tidak ada foto yang menunjukkan suasana kerja, dan jangan menulis angle "keluarga" kalau fotonya jelas menunjukkan pasangan berdua, dst.`,
+      );
+    }
+    if (input.avoidPersona) {
+      parts.push(
+        `Brief sebelumnya untuk campaign ini sudah memakai persona "${input.avoidPersona}" -- kali ini PILIH PERSONA LAIN yang berbeda dan tetap sesuai foto, supaya tidak mengulang angle yang sama terus-menerus.`,
+      );
+    }
+    personaGuidance = parts.length > 0 ? parts.join(" ") : "Pilih persona yang paling relevan dengan konteks properti dan tanggal yang diiklankan.";
+  }
   const learningsBlock =
     input.reliableLearnings && input.reliableLearnings.length > 0
       ? `Data historis campaign serupa (sample size >= ${MIN_LEARNING_SAMPLE_SIZE}, cukup diandalkan):\n${input.reliableLearnings
@@ -188,6 +234,7 @@ ${templateGuidance}
 
 Pasar yang boleh dipilih (pilih salah satu): ${OCCUPANCY_MARKET_CANDIDATES.join(", ")}
 Persona yang boleh dipilih (pilih salah satu): ${OCCUPANCY_PERSONA_CANDIDATES.join(", ")}
+${personaGuidance}
 
 Aset kreatif yang tersedia (pilih 0+ dari daftar ini untuk selected_assets, JANGAN mengarang id):
 ${assetsBlock}

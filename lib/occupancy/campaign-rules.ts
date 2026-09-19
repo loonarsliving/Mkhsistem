@@ -30,6 +30,35 @@ export const OCCUPANCY_PERSONA_CANDIDATES = [
 ] as const;
 export type OccupancyPersona = (typeof OCCUPANCY_PERSONA_CANDIDATES)[number];
 
+/** Indonesian label for each persona -- used by the AI prompt's persona-matching hint and the "Ganti Persona" dropdown in the Meta Ad Preview UI. */
+export const OCCUPANCY_PERSONA_LABELS: Record<OccupancyPersona, string> = {
+  family_leisure_traveler: "Liburan Keluarga",
+  weekend_couple_getaway: "Weekend Escape Pasangan",
+  corporate_offsite_group: "Acara/Offsite Kantor",
+  digital_nomad_long_stay: "Kerja Jarak Jauh (Long Stay)",
+  student_group_gathering: "Gathering Grup/Mahasiswa",
+  domestic_tourist_first_time: "Wisatawan Baru Pertama Kali",
+};
+
+/**
+ * Which OCCUPANCY_ASSET_FIXED_TAGS best signal each persona -- fed into the
+ * AI prompt so the brief's audience_persona is chosen to actually match
+ * what the selected creative assets show (a couple-dining photo tagged
+ * "couple"/"private pool" should not produce "digital_nomad_long_stay"
+ * copy just because that persona happened to be picked before). Purely a
+ * prompt hint, not a hard constraint -- the AI still picks from the full
+ * OCCUPANCY_PERSONA_CANDIDATES list, this only steers it toward the
+ * available visuals when there's a clear match.
+ */
+export const OCCUPANCY_PERSONA_TAG_HINTS: Record<OccupancyPersona, readonly string[]> = {
+  family_leisure_traveler: ["family", "living room", "breakfast", "garden", "daytime"],
+  weekend_couple_getaway: ["couple", "private pool", "night", "view", "lifestyle"],
+  corporate_offsite_group: ["living room", "facility", "daytime"],
+  digital_nomad_long_stay: ["facility", "living room", "daytime"],
+  student_group_gathering: ["living room", "facility", "garden"],
+  domestic_tourist_first_time: ["villa exterior", "view", "facility", "promo"],
+};
+
 export const OCCUPANCY_CAMPAIGN_TYPES = ["last_minute_gap_fill", "weekend_boost", "seasonal_push", "long_stay_offer"] as const;
 export type OccupancyCampaignType = (typeof OCCUPANCY_CAMPAIGN_TYPES)[number];
 

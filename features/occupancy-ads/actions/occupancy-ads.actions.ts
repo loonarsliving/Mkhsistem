@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { askOccupancyCopilot, generateOccupancyAdsBrief, generateOccupancyCreativeVariants, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
 import { decideCampaignAction, type DecisionEngineMetaInsights } from "@/lib/occupancy/decision-engine";
-import { checkWeeklyBudgetCeiling, isAllowedOccupancyDestinationUrl } from "@/lib/occupancy/campaign-rules";
+import { checkWeeklyBudgetCeiling, isAllowedOccupancyDestinationUrl, type OccupancyPersona } from "@/lib/occupancy/campaign-rules";
 import { classifyOccupancyCalendar, classifyOccupancyDay, selectAdvertisableDates, summarizeGap, type OccupancyThresholds } from "@/lib/occupancy/gap-engine";
 import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
 import { isMetaConfigured } from "@/lib/meta/config";
@@ -552,7 +552,7 @@ export async function rejectCreativeVariantAction(id: string): Promise<ActionRes
 // ---------------------------------------------------------------------------
 
 /** "Regenerate copy" on the Meta Ad Preview: re-runs the same AI brief generator against the campaign's already-fixed target dates/market/persona/offer, then overwrites the campaign's copy fields -- never touches target_dates/market/persona/budget (those are what got it drafted in the first place, only the copy is being redone). Re-validates villa-api data is still available (never regenerates copy against stale/fabricated occupancy context). */
-export async function regenerateOccupancyCampaignCopyAction(campaignId: string): Promise<ActionResult> {
+export async function regenerateOccupancyCampaignCopyAction(campaignId: string, preferredPersona?: OccupancyPersona): Promise<ActionResult> {
   const session = await requirePermission("occupancy_ads.manage");
   const supabase = await createClient();
 
@@ -584,6 +584,11 @@ export async function regenerateOccupancyCampaignCopyAction(campaignId: string):
       maxDailyBudgetIdr,
       availableAssets: assets.map((a) => ({ id: a.id, filename: a.filename, tags: a.tags ?? [] })),
       reliableLearnings,
+      preferredPersona,
+      // Without an explicit persona pick, steer the AI away from the
+      // exact same persona it already used -- this is precisely what
+      // "Buat Ulang Copy" always converging on the same angle looked like.
+      avoidPersona: preferredPersona ? undefined : (campaign.audience_persona as OccupancyPersona),
     });
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "AI gagal membuat ulang copy campaign");
