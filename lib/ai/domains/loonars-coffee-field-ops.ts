@@ -594,9 +594,17 @@ export async function tryAnswerLoonarsCoffeeQuery(employee: { id: string; full_n
   const { data: summaryRows } = await supabase.rpc("cm_labor_contract_summary", { p_contract_id: contract.id });
   const summary = summaryRows?.[0];
   if (!summary) return { outcome: "answered", reply: "Data pembayaran kontraktor belum tersedia." };
+  const advance = Number(summary.outstanding_advance ?? 0);
   return {
     outcome: "answered",
-    reply: `LOONARS COFFEE — Kontraktor\n\n📄 Nilai kontrak: ${formatRupiah(Number(summary.contract_value))}\n✅ Sudah dibayar: ${formatRupiah(Number(summary.cumulative_paid))}\n⏳ Earned (belum dibayar): ${formatRupiah(Number(summary.payable))}`,
+    // outstanding_advance (uang muka yang sudah ditransfer tapi belum
+    // direkonsiliasi ke progress terverifikasi -- lihat migrasi 0272)
+    // sengaja dipisah dari "Sudah dibayar" (cumulative_paid, dari
+    // cm_labor_payments yang sudah direkonsiliasi), bukan digabung --
+    // supaya tidak pernah tampak seolah nilainya sudah earned value.
+    reply:
+      `LOONARS COFFEE — Kontraktor\n\n📄 Nilai kontrak: ${formatRupiah(Number(summary.contract_value))}\n✅ Sudah dibayar (direkonsiliasi): ${formatRupiah(Number(summary.cumulative_paid))}\n⏳ Earned (belum dibayar): ${formatRupiah(Number(summary.payable))}` +
+      (advance > 0 ? `\n🔸 Uang muka belum direkonsiliasi: ${formatRupiah(advance)}` : ""),
   };
 }
 
