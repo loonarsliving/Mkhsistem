@@ -12,6 +12,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatCurrency } from "@/lib/utils";
 
 import { listMySiteplanPurchasesAction, requestSiteplanFeeAction } from "../actions/siteplan.actions";
+import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 
 type MyPurchase = NonNullable<Awaited<ReturnType<typeof listMySiteplanPurchasesAction>>>[number];
 
@@ -47,7 +48,8 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
           {projectName} — Unit {blok}
         </p>
         <p className="text-xs text-muted-foreground">
-          {purchase.buyer_name} · {formatCurrency(purchase.price ?? 0)}
+          {purchase.buyer_name} · {formatCurrency(getSiteplanReceivedAmount(purchase))}
+          {purchase.transaction_type !== "akad" && ` dari harga ${formatCurrency(purchase.price ?? 0)}`}
         </p>
       </div>
 
