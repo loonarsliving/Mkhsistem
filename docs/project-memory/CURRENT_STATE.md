@@ -314,6 +314,28 @@ posted workflow layer in front of the existing money-moving RPCs).
   `construction_expenses`/jurnal entry until reconciled; this only fixed
   what gets displayed. Applied to production and verified inside a
   rolled-back transaction before pushing the code.
+- **Real bug fixed 2026-09-20** (migration `0273`): the generic, older
+  `construction_send_weekly_report()` (0195, built for Kendari) loops every
+  active `construction_projects` row with `where p.status = 'active'` —
+  including Loonars Coffee, since it predates that module entirely and has
+  no idea it exists. Its financial model doesn't fit Loonars Coffee at all:
+  "Dana Sudah Ditransfer" only sums `construction_fund_transfers` (never
+  used by Loonars Coffee — money moves through WhatsApp-approved
+  `construction_cost_requests`), and "Total Gaji Tukang"/"Total Pembelian
+  Material" only count `expense_type in ('gaji_tukang',
+  'pembelian_material')` (Loonars Coffee posts `pembelian_lain_lain` for
+  anything but a material purchase, and labor moves through the separate
+  `cm_labor_*` advance/earned-value engine, never `gaji_tukang`). Every
+  field was therefore guaranteed to read `Rp 0`/`0x` for this project. The
+  owner got this all-zero report on the same Sunday as the correctly-fixed
+  detailed one and asked why, given the fix the day before ("Knpa kluar
+  pemberitahuan sperti ini untuk loonars cafe padahal kt sdh benahi
+  kmrin"). Fixed by excluding branch `LNC` from 0195's loop — Loonars
+  Coffee already has its own dedicated, correct report
+  (`construction_send_loonars_coffee_weekly_report`); Kendari (0195's
+  original and still-valid use case) is unaffected. Applied to production
+  and verified inside a rolled-back transaction: the function now produces
+  only a Kendari row, no Loonars Coffee row.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
