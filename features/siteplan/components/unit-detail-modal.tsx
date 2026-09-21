@@ -1,7 +1,8 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { Loader2, Printer } from "lucide-react";
@@ -16,6 +17,7 @@ import type { SiteplanUnitStatus } from "@/constants/app";
 import { getSiteplanPurchaseForUnitAction } from "../actions/siteplan.actions";
 import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 import { AkadScheduleSection } from "./akad-schedule-section";
+import { DpFollowupDialog } from "./dp-followup-dialog";
 
 interface UnitDetailModalProps {
   open: boolean;
@@ -27,11 +29,17 @@ interface UnitDetailModalProps {
 }
 
 export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStatus, userId }: UnitDetailModalProps) {
+  const queryClient = useQueryClient();
+  const [dpFollowupOpen, setDpFollowupOpen] = React.useState(false);
   const { data: purchase, isLoading } = useQuery({
     queryKey: ["siteplan-unit-purchase", unitId],
     queryFn: () => getSiteplanPurchaseForUnitAction(unitId as string),
     enabled: open && Boolean(unitId),
   });
+
+  function invalidatePurchase() {
+    queryClient.invalidateQueries({ queryKey: ["siteplan-unit-purchase", unitId] });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,7 +101,17 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
               <p className="font-medium capitalize">{purchase.status.replace(/_/g, " ")}</p>
             </div>
 
-            {purchase.status === "verified" && <AkadScheduleSection userId={userId} purchase={purchase} />}
+            {purchase.status === "verified" && purchase.transaction_type === "booking" && (
+              <div className="border-t pt-3">
+                <Button size="sm" variant="outline" onClick={() => setDpFollowupOpen(true)}>
+                  Lanjutkan ke DP
+                </Button>
+              </div>
+            )}
+
+            {purchase.status === "verified" && purchase.transaction_type === "akad" && <AkadScheduleSection userId={userId} purchase={purchase} />}
+
+            <DpFollowupDialog open={dpFollowupOpen} onOpenChange={setDpFollowupOpen} purchaseId={purchase.id} onRecorded={invalidatePurchase} />
           </div>
         )}
 

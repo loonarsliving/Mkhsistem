@@ -5980,6 +5980,16 @@ export interface Database {
       };
       loonars_unit_purchase_verify: { Args: { p_id: string }; Returns: undefined };
       loonars_unit_purchase_reject: { Args: { p_id: string; p_reason?: string | null }; Returns: undefined };
+      loonars_unit_purchase_record_dp_followup: {
+        Args: {
+          p_purchase_id: string;
+          p_dp_amount: number;
+          p_handover_date: string;
+          p_pelunasan_amount?: number | null;
+          p_notes?: string | null;
+        };
+        Returns: undefined;
+      };
       loonars_unit_fee_request: { Args: { p_purchase_id: string; p_fee_amount: number; p_phone?: string | null }; Returns: string };
       loonars_unit_fee_decide: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
       loonars_siteplan_image_save: {

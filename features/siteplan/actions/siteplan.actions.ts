@@ -35,6 +35,7 @@ import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 import {
   akadScheduleConfirmSchema,
   notarisContactSchema,
+  siteplanDpFollowupSchema,
   siteplanProjectSchema,
   siteplanPurchaseSchema,
   siteplanUnitSchema,
@@ -42,6 +43,7 @@ import {
   type AkadScheduleConfirmInput,
   type AkadScheduleRequestInput,
   type NotarisContactInput,
+  type SiteplanDpFollowupInput,
   type SiteplanProjectInput,
   type SiteplanPurchaseInput,
   type SiteplanUnitInput,
@@ -188,6 +190,33 @@ export async function requestSiteplanFeeAction(purchaseId: string, feeAmount: nu
   if (error) return actionError(error.message);
 
   revalidatePath(DASHBOARD_PATH);
+  return actionSuccess();
+}
+
+/**
+ * One-off correction path (0273): moves a verified Booking Fee purchase to DP once the buyer pays
+ * more on top of the booking fee -- see loonars_unit_purchase_record_dp_followup's own comment for
+ * why this exists and why it's deliberately scoped to just this transition (not a general
+ * multi-stage payment ledger).
+ */
+export async function recordSiteplanDpFollowupAction(input: SiteplanDpFollowupInput): Promise<ActionResult> {
+  await requireSession();
+  const parsed = siteplanDpFollowupSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("loonars_unit_purchase_record_dp_followup", {
+    p_purchase_id: parsed.data.purchaseId,
+    p_dp_amount: parsed.data.dpAmount,
+    p_handover_date: parsed.data.handoverDate,
+    p_pelunasan_amount: parsed.data.pelunasanAmount ?? null,
+    p_notes: parsed.data.notes || null,
+  });
+  if (error) return actionError(error.message);
+
+  revalidatePath(VIEWER_PATH);
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(FINANCE_PATH);
   return actionSuccess();
 }
 

@@ -44,6 +44,21 @@ export const siteplanPurchaseSchema = z
   });
 export type SiteplanPurchaseInput = z.infer<typeof siteplanPurchaseSchema>;
 
+/**
+ * One-off correction path (0273): moves a verified Booking Fee purchase to DP once the buyer pays
+ * more on top of the booking fee -- not a general payment-stage ledger, see the migration's own
+ * comment. Mirrors dp's own field requirements in siteplanPurchaseSchema above (dpAmount +
+ * handoverDate required, pelunasanAmount optional).
+ */
+export const siteplanDpFollowupSchema = z.object({
+  purchaseId: z.string().uuid(),
+  dpAmount: z.coerce.number().positive("Nominal DP wajib diisi"),
+  handoverDate: z.string().min(1, "Tanggal serah terima wajib diisi"),
+  pelunasanAmount: z.coerce.number().nonnegative().optional(),
+  notes: z.string().max(1000).optional(),
+});
+export type SiteplanDpFollowupInput = z.infer<typeof siteplanDpFollowupSchema>;
+
 /** branchId is required since 0262: every siteplan project is exclusively visible/bookable by its own branch's Sales/Kepala Cabang (siteplan.manage and prospect.finance_verify still see every project). */
 export const siteplanProjectSchema = z.object({
   id: z.string().uuid().optional(),
