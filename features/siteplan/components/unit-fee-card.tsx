@@ -40,6 +40,10 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
 
   const projectName = purchase.loonars_units?.loonars_projects?.nama ?? "-";
   const blok = purchase.loonars_units?.blok ?? "-";
+  // 0274: a project with fee_claimable_at_dp = true (Loonars 2) accepts dp or akad, mirroring
+  // loonars_unit_fee_request's own gate; every other project still requires akad (0204).
+  const feeClaimableAtDp = purchase.loonars_units?.loonars_projects?.fee_claimable_at_dp ?? false;
+  const feeClaimable = feeClaimableAtDp ? purchase.transaction_type === "dp" || purchase.transaction_type === "akad" : purchase.transaction_type === "akad";
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -55,18 +59,15 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
 
       {purchase.status === "pending_verification" && <Badge variant="outline">Menunggu Verifikasi</Badge>}
       {purchase.status === "rejected" && <Badge variant="destructive">Ditolak</Badge>}
-      {/* Fee is only claimable once the transaction is a full payment (akad) -- a verified Booking Fee/DP is not fee-claimable yet, mirroring the loonars_unit_fee_request RPC's own check (0204). */}
-      {purchase.status === "verified" && purchase.transaction_type !== "akad" && (
-        <Badge variant="outline">Terverifikasi — Menunggu Pelunasan</Badge>
-      )}
+      {purchase.status === "verified" && !feeClaimable && <Badge variant="outline">Terverifikasi — Menunggu Pelunasan</Badge>}
 
-      {purchase.status === "verified" && purchase.transaction_type === "akad" && !claiming && (
+      {purchase.status === "verified" && feeClaimable && !claiming && (
         <Button size="sm" onClick={() => setClaiming(true)}>
           Ajukan Fee
         </Button>
       )}
 
-      {purchase.status === "verified" && purchase.transaction_type === "akad" && claiming && (
+      {purchase.status === "verified" && feeClaimable && claiming && (
         <div className="flex items-center gap-2">
           <CurrencyInput className="h-8 w-40" value={amount} onValueChange={setAmount} />
           <Button size="sm" disabled={busy} onClick={handleClaim}>

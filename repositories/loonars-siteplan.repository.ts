@@ -225,7 +225,7 @@ export async function getSiteplanPurchaseForUnit(supabase: TypedSupabaseClient, 
 export async function listMySiteplanPurchases(supabase: TypedSupabaseClient, employeeId: string) {
   const { data, error } = await supabase
     .from("loonars_unit_purchases")
-    .select("*, loonars_units(blok, project_id, loonars_projects(nama))")
+    .select("*, loonars_units(blok, project_id, loonars_projects(nama, fee_claimable_at_dp))")
     .eq("marketing_employee_id", employeeId)
     .order("created_at", { ascending: false });
   if (error) throw error;
