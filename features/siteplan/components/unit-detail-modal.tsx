@@ -14,7 +14,7 @@ import { SiteplanUnitStatusBadge } from "@/components/shared/status-badge";
 import { formatCurrency } from "@/lib/utils";
 import type { SiteplanUnitStatus } from "@/constants/app";
 
-import { getSiteplanPurchaseForUnitAction } from "../actions/siteplan.actions";
+import { getBookingReceiptForPurchaseAction, getSiteplanPurchaseForUnitAction } from "../actions/siteplan.actions";
 import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 import { AkadScheduleSection } from "./akad-schedule-section";
 import { DpFollowupDialog } from "./dp-followup-dialog";
@@ -35,6 +35,14 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
     queryKey: ["siteplan-unit-purchase", unitId],
     queryFn: () => getSiteplanPurchaseForUnitAction(unitId as string),
     enabled: open && Boolean(unitId),
+  });
+  // Keyed off whether a receipt was ever issued, not the purchase's *current* transaction_type --
+  // 0273's booking -> DP followup moves transaction_type on, but an already-issued kwitansi stays
+  // a real document that still needs to be reprintable.
+  const { data: receipt } = useQuery({
+    queryKey: ["siteplan-booking-receipt", purchase?.id],
+    queryFn: () => getBookingReceiptForPurchaseAction(purchase!.id),
+    enabled: Boolean(purchase?.id),
   });
 
   function invalidatePurchase() {
@@ -115,10 +123,11 @@ export function UnitDetailModal({ open, onOpenChange, unitId, unitBlok, unitStat
           </div>
         )}
 
-        {/* Reprint path for a booking already recorded. The kwitansi page issues the number on the
-            first visit and returns that same number on every later one, so this is safe to open
-            repeatedly -- it never produces a second receipt for the same booking. */}
-        {!isLoading && purchase && purchase.transaction_type === "booking" && purchase.status !== "rejected" && (
+        {/* Reprint path for a purchase that already has a kwitansi issued -- stays available even
+            after 0273's booking -> DP followup moves the purchase past "booking". The kwitansi
+            page itself is idempotent (issues once, then always hands back the same number), so
+            this is safe to open repeatedly. */}
+        {!isLoading && purchase && receipt && (
           <DialogFooter>
             <Button variant="outline" asChild>
               <Link href={`/siteplan/kwitansi/${purchase.id}`}>
