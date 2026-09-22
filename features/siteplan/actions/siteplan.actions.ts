@@ -14,6 +14,7 @@ import {
   deleteSiteplanRow,
   deleteSiteplanUnit,
   getAkadScheduleForPurchase,
+  getBookingReceiptForPurchase,
   getSiteplanProject,
   getSiteplanPurchaseById,
   getSiteplanPurchaseForUnit,
@@ -91,6 +92,18 @@ export async function getSiteplanPurchaseForUnitAction(unitId: string) {
   await requireSession();
   const supabase = await createClient();
   return getSiteplanPurchaseForUnit(supabase, unitId);
+}
+
+/**
+ * Whether a purchase already has a "Kwitansi Tanda Jadi" issued. A receipt, once issued, stays
+ * reproducible even if the purchase's transaction_type later moves on (0273's booking -> DP
+ * followup) -- so the UI's reprint link should key off this, not off the purchase's *current*
+ * transaction_type.
+ */
+export async function getBookingReceiptForPurchaseAction(purchaseId: string) {
+  await requireSession();
+  const supabase = await createClient();
+  return getBookingReceiptForPurchase(supabase, purchaseId);
 }
 
 export async function listPendingSiteplanPurchasesAction() {
