@@ -4726,6 +4726,7 @@ export interface Database {
           lokasi: string | null;
           warna: string | null;
           publicly_shareable: boolean;
+          fee_claimable_at_dp: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -4737,6 +4738,7 @@ export interface Database {
           lokasi?: string | null;
           warna?: string | null;
           publicly_shareable?: boolean;
+          fee_claimable_at_dp?: boolean;
           created_at?: string;
           updated_at?: string;
         };
