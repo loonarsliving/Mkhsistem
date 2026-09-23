@@ -23,6 +23,7 @@ import { tryAutoForwardPhoto } from "./domains/photo-auto-forward";
 import { tryRecordConstructionFundTransferViaWhatsApp } from "./domains/construction-fund-transfer-confirmation";
 import { tryConfirmConstructionExpenseSettlementViaWhatsApp } from "./domains/construction-expense-settlement";
 import { tryRecordConstructionOutflowPhoto } from "./domains/construction-outflow-photo";
+import { tryConfirmLoonarsFeeTransferViaWhatsApp } from "./domains/loonars-fee-transfer-confirmation";
 import {
   findContractorByPhone,
   trySubmitContractorReceiptReport,
@@ -698,6 +699,39 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dana proyek]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Loonars fee payout proof (owner's ask): loonars_unit_fee_requests
+        // is a separate module from mkh-properti's pengajuan, so a bukti
+        // transfer paying out an approved sales fee used to come back "tidak
+        // cocok dengan pengajuan manapun" (or land in an unrelated group
+        // chat that only knows about pengajuan gaji tukang/pembelian bahan).
+        // Checked before the mkh-properti flow below on nominal + recipient
+        // name match; anything short of that falls through unchanged.
+        trace.push("tryConfirmLoonarsFeeTransferViaWhatsApp:calling");
+        const loonarsFeeTransferResult = await tryConfirmLoonarsFeeTransferViaWhatsApp({ id: employee.id, name: employee.full_name, roleKey: imageRoleKey }, inbound.content.url);
+        trace.push(`tryConfirmLoonarsFeeTransferViaWhatsApp:${loonarsFeeTransferResult.outcome}`);
+        if (loonarsFeeTransferResult.outcome === "confirmed") {
+          const replyText =
+            `✅ Bukti transfer fee ${loonarsFeeTransferResult.marketingName} (Rp ${loonarsFeeTransferResult.feeAmount.toLocaleString("id-ID")}, unit ${loonarsFeeTransferResult.unitBlok} — ${loonarsFeeTransferResult.projectName}) diterima.` +
+            (loonarsFeeTransferResult.marketingPhone
+              ? `\n📤 Bukti sudah diteruskan ke ${loonarsFeeTransferResult.marketingName}.`
+              : `\n⚠️ ${loonarsFeeTransferResult.marketingName} tidak punya nomor WA terdaftar, jadi bukti tidak bisa diteruskan otomatis.`);
+          trace.push("sendWhatsAppText:calling(loonars-fee-transfer-confirm)");
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          if (loonarsFeeTransferResult.marketingPhone) {
+            trace.push("sendWhatsAppImage:forwarding(loonars-fee)");
+            await sendWhatsAppImage(
+              loonarsFeeTransferResult.marketingPhone,
+              inbound.content.url,
+              `📎 Bukti transfer fee Anda — unit ${loonarsFeeTransferResult.unitBlok} (${loonarsFeeTransferResult.projectName}), Rp ${loonarsFeeTransferResult.feeAmount.toLocaleString("id-ID")} (dari Super Admin)`,
+            );
+            trace.push("sendWhatsAppImage:done(loonars-fee)");
+          }
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer fee]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
 
