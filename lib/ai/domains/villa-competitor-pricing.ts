@@ -25,6 +25,14 @@ export interface VillaCompetitorResearchInput {
   location_label: string;
   room_type_name: string;
   room_type_description: string;
+  /**
+   * Opsional (villa, 2026-09-24): minta harga untuk MALAM TERTENTU, bukan
+   * harga malam biasa. Dipakai villa untuk tanggal puncak (malam tahun baru,
+   * Lebaran) -- harga malam biasa tidak bisa dibandingkan dengan harga
+   * puncak. Tanpa ini perilakunya sama persis seperti sebelumnya.
+   */
+  stay_date?: string;
+  occasion?: string;
 }
 
 export interface VillaCompetitorResult {
@@ -64,7 +72,10 @@ export async function researchVillaCompetitorRates(input: VillaCompetitorResearc
   const systemPrompt =
     "Kamu asisten riset harga akomodasi. Tugasmu HANYA melaporkan harga per malam hotel/villa NYATA di sekitar lokasi yang diberikan, berdasarkan hasil pencarian Google publik (situs resmi, OTA/booking listing publik, atau halaman info umum) -- JANGAN PERNAH mengarang nama atau harga. Kalau kamu tidak yakin suatu tempat benar-benar ada atau tidak menemukan info harga publiknya, jangan masukkan ke daftar sama sekali. Ini data referensi untuk admin manusia yang akan mereview manual sebelum dipakai, bukan keputusan otomatis.";
 
-  const userPrompt = `Riset lewat Google Search: cari 3-8 hotel/villa NYATA yang beroperasi di sekitar lokasi "${input.location_label}", lalu laporkan harga per malam publik mereka (dalam Rupiah) untuk kamar/unit yang paling sebanding dengan unit kami berikut:
+  const stayLine = input.stay_date
+    ? `\nPENTING: laporkan harga untuk menginap MALAM TANGGAL ${input.stay_date}${input.occasion ? ` (${input.occasion})` : ""}, BUKAN harga malam biasa. Hanya masukkan tempat yang harga untuk tanggal itu (atau periode liburan yang mencakupnya) benar-benar terlihat di hasil pencarian; kalau yang kamu temukan hanya harga malam biasa, JANGAN masukkan tempat itu. Sebutkan di source_note tanggal/periode yang tertera di sumbernya.\n`
+    : "";
+  const userPrompt = `Riset lewat Google Search: cari 3-8 hotel/villa NYATA yang beroperasi di sekitar lokasi "${input.location_label}", lalu laporkan harga per malam publik mereka (dalam Rupiah) untuk kamar/unit yang paling sebanding dengan unit kami berikut:${stayLine}
 - Tipe unit kami: ${input.room_type_name}
 - Deskripsi: ${input.room_type_description || "-"}
 
