@@ -5,6 +5,9 @@ export const updateProfileSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   avatarUrl: z.string().optional(),
+  bankName: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankAccountHolder: z.string().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

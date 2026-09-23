@@ -13,6 +13,9 @@ export const createEmployeeSchema = z.object({
   birthDate: z.string().optional(),
   joinDate: z.string().min(1, "Tanggal bergabung wajib diisi"),
   address: z.string().optional(),
+  bankName: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankAccountHolder: z.string().optional(),
 });
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 

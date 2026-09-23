@@ -21,6 +21,9 @@ export async function updateProfileAction(input: UpdateProfileInput): Promise<Ac
       phone: parsed.data.phone || null,
       address: parsed.data.address || null,
       avatar_url: parsed.data.avatarUrl || null,
+      bank_name: parsed.data.bankName || null,
+      bank_account_number: parsed.data.bankAccountNumber || null,
+      bank_account_holder: parsed.data.bankAccountHolder || null,
       updated_by: session.userId,
     });
   } catch (err) {

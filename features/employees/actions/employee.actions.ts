@@ -43,6 +43,9 @@ export async function createEmployeeAction(input: CreateEmployeeInput): Promise<
       birth_date: parsed.data.birthDate || null,
       join_date: parsed.data.joinDate,
       address: parsed.data.address || null,
+      bank_name: parsed.data.bankName || null,
+      bank_account_number: parsed.data.bankAccountNumber || null,
+      bank_account_holder: parsed.data.bankAccountHolder || null,
       created_by: session.userId,
       updated_by: session.userId,
     });
@@ -78,6 +81,9 @@ export async function updateEmployeeAction(input: UpdateEmployeeInput): Promise<
       birth_date: parsed.data.birthDate || null,
       join_date: parsed.data.joinDate,
       address: parsed.data.address || null,
+      bank_name: parsed.data.bankName || null,
+      bank_account_number: parsed.data.bankAccountNumber || null,
+      bank_account_holder: parsed.data.bankAccountHolder || null,
       updated_by: session.userId,
     });
   } catch (err) {
