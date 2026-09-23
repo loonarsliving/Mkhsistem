@@ -4957,6 +4957,9 @@ export interface Database {
           requested_at: string;
           created_at: string;
           updated_at: string;
+          transfer_confirmed_at: string | null;
+          transfer_confirmed_by: string | null;
+          transfer_proof_url: string | null;
         };
         Insert: {
           id?: string;
@@ -4972,6 +4975,9 @@ export interface Database {
           requested_at?: string;
           created_at?: string;
           updated_at?: string;
+          transfer_confirmed_at?: string | null;
+          transfer_confirmed_by?: string | null;
+          transfer_proof_url?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["loonars_unit_fee_requests"]["Insert"]>;
         Relationships: [
@@ -4996,6 +5002,12 @@ export interface Database {
           {
             foreignKeyName: "loonars_unit_fee_requests_decided_by_fkey";
             columns: ["decided_by"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loonars_unit_fee_requests_transfer_confirmed_by_fkey";
+            columns: ["transfer_confirmed_by"];
             referencedRelation: "employees";
             referencedColumns: ["id"];
           },
