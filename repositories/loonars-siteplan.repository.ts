@@ -225,7 +225,7 @@ export async function getSiteplanPurchaseForUnit(supabase: TypedSupabaseClient, 
 export async function listMySiteplanPurchases(supabase: TypedSupabaseClient, employeeId: string) {
   const { data, error } = await supabase
     .from("loonars_unit_purchases")
-    .select("*, loonars_units(blok, project_id, loonars_projects(nama, fee_claimable_at_dp))")
+    .select("*, loonars_units(blok, project_id, loonars_projects(nama, fee_claimable_at_dp, fee_rate_based))")
     .eq("marketing_employee_id", employeeId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -356,6 +356,41 @@ export async function updateNotaris(
 /** The akad schedule for a purchase, if "Jadwalkan Akad" has ever been submitted for it. RLS (loonars_akad_schedules_select) already restricts this to the requesting rep or finance/siteplan admin. */
 export async function getAkadScheduleForPurchase(supabase: TypedSupabaseClient, purchaseId: string) {
   const { data, error } = await supabase.from("loonars_akad_schedules").select("*").eq("purchase_id", purchaseId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// ----------------------------------------------------------------------------
+// Sales commission rates (0275) -- admin-managed, siteplan.manage only
+// (except getMyCommissionRate, which a rep reads for their own row)
+// ----------------------------------------------------------------------------
+
+export async function listCommissionRates(supabase: TypedSupabaseClient) {
+  const { data, error } = await supabase
+    .from("loonars_sales_commission_rates")
+    .select("*, employees(full_name)")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** The calling employee's own commission rate, if set -- used to preview the fee_rate_based fee amount before submitting. RLS restricts this to the row's own employee_id or a siteplan.manage holder. */
+export async function getMyCommissionRate(supabase: TypedSupabaseClient, employeeId: string) {
+  const { data, error } = await supabase
+    .from("loonars_sales_commission_rates")
+    .select("*")
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCommissionRate(supabase: TypedSupabaseClient, employeeId: string, commissionRatePercent: number) {
+  const { data, error } = await supabase
+    .from("loonars_sales_commission_rates")
+    .upsert({ employee_id: employeeId, commission_rate_percent: commissionRatePercent }, { onConflict: "employee_id" })
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }

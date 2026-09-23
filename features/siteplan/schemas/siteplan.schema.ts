@@ -131,3 +131,17 @@ export const akadScheduleConfirmSchema = z.object({
   tanggalAkadFinal: z.string().min(1, "Tanggal akad final wajib diisi"),
 });
 export type AkadScheduleConfirmInput = z.infer<typeof akadScheduleConfirmSchema>;
+
+// ----------------------------------------------------------------------------
+// Sales commission rate (0275) -- fee_rate_based projects (Loonars 2) compute
+// the fee amount from this instead of letting the rep type it in.
+// ----------------------------------------------------------------------------
+
+export const commissionRateSchema = z.object({
+  employeeId: z.string().uuid({ message: "Sales wajib dipilih" }),
+  commissionRatePercent: z.coerce
+    .number()
+    .positive("Rate komisi wajib diisi")
+    .max(100, "Rate komisi maksimal 100%"),
+});
+export type CommissionRateInput = z.infer<typeof commissionRateSchema>;
