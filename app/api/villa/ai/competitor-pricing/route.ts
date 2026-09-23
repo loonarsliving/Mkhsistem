@@ -32,6 +32,8 @@ interface Body {
   location_label?: unknown;
   room_type_name?: unknown;
   room_type_description?: unknown;
+  stay_date?: unknown;
+  occasion?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -68,6 +70,8 @@ export async function POST(request: Request) {
       location_label: body.location_label.slice(0, 200),
       room_type_name: body.room_type_name.slice(0, 200),
       room_type_description: typeof body.room_type_description === "string" ? body.room_type_description.slice(0, 500) : "",
+      stay_date: typeof body.stay_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.stay_date) ? body.stay_date : undefined,
+      occasion: typeof body.occasion === "string" ? body.occasion.slice(0, 100) : undefined,
     });
     return NextResponse.json({ success: true, results });
   } catch (e) {
