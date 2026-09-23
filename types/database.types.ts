@@ -4727,6 +4727,7 @@ export interface Database {
           warna: string | null;
           publicly_shareable: boolean;
           fee_claimable_at_dp: boolean;
+          fee_rate_based: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -4739,6 +4740,7 @@ export interface Database {
           warna?: string | null;
           publicly_shareable?: boolean;
           fee_claimable_at_dp?: boolean;
+          fee_rate_based?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -5014,6 +5016,31 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["loonars_notaris"]["Insert"]>;
         Relationships: [];
+      };
+      loonars_sales_commission_rates: {
+        Row: {
+          id: string;
+          employee_id: string;
+          commission_rate_percent: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          commission_rate_percent: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["loonars_sales_commission_rates"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "loonars_sales_commission_rates_employee_id_fkey";
+            columns: ["employee_id"];
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       loonars_akad_schedules: {
         Row: {
@@ -5992,7 +6019,7 @@ export interface Database {
         };
         Returns: undefined;
       };
-      loonars_unit_fee_request: { Args: { p_purchase_id: string; p_fee_amount: number; p_phone?: string | null }; Returns: string };
+      loonars_unit_fee_request: { Args: { p_purchase_id: string; p_fee_amount?: number | null; p_phone?: string | null }; Returns: string };
       loonars_unit_fee_decide: { Args: { p_id: string; p_approve: boolean; p_reason?: string | null }; Returns: undefined };
       loonars_siteplan_image_save: {
         Args: { p_project_id: string; p_image_path: string; p_image_width?: number | null; p_image_height?: number | null };

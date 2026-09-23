@@ -15,9 +15,11 @@ import {
   deleteSiteplanUnit,
   getAkadScheduleForPurchase,
   getBookingReceiptForPurchase,
+  getMyCommissionRate,
   getSiteplanProject,
   getSiteplanPurchaseById,
   getSiteplanPurchaseForUnit,
+  listCommissionRates,
   listMySiteplanFeeRequests,
   listMySiteplanPurchases,
   listNotaris,
@@ -25,6 +27,7 @@ import {
   listPendingSiteplanPurchases,
   listSiteplanProjects,
   listSiteplanUnits,
+  saveCommissionRate,
   saveSiteplanRowOrdering,
   updateNotaris,
   updateSiteplanProject,
@@ -35,6 +38,7 @@ import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
   akadScheduleConfirmSchema,
+  commissionRateSchema,
   notarisContactSchema,
   siteplanDpFollowupSchema,
   siteplanProjectSchema,
@@ -43,6 +47,7 @@ import {
   akadScheduleRequestSchema,
   type AkadScheduleConfirmInput,
   type AkadScheduleRequestInput,
+  type CommissionRateInput,
   type NotarisContactInput,
   type SiteplanDpFollowupInput,
   type SiteplanProjectInput,
@@ -192,12 +197,18 @@ export async function rejectSiteplanPurchaseAction(id: string, reason?: string):
   return actionSuccess();
 }
 
-export async function requestSiteplanFeeAction(purchaseId: string, feeAmount: number, phone?: string): Promise<ActionResult> {
+/**
+ * feeAmount is omitted for a fee_rate_based project (Loonars 2, 0275) -- the RPC computes and
+ * inserts the authoritative amount itself from the rep's own commission rate, ignoring whatever a
+ * client might send, so there's nothing here worth trusting from the caller for that path anyway.
+ * Every other project still requires it (0204's original manual-amount flow).
+ */
+export async function requestSiteplanFeeAction(purchaseId: string, feeAmount?: number, phone?: string): Promise<ActionResult> {
   await requireSession();
   const supabase = await createClient();
   const { error } = await supabase.rpc("loonars_unit_fee_request", {
     p_purchase_id: purchaseId,
-    p_fee_amount: feeAmount,
+    p_fee_amount: feeAmount ?? null,
     p_phone: phone ?? null,
   });
   if (error) return actionError(error.message);
@@ -230,6 +241,40 @@ export async function recordSiteplanDpFollowupAction(input: SiteplanDpFollowupIn
   revalidatePath(VIEWER_PATH);
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(FINANCE_PATH);
+  return actionSuccess();
+}
+
+// ----------------------------------------------------------------------------
+// Sales commission rates (0275) -- admin-managed, siteplan.manage only,
+// except getMyCommissionRateAction which a rep uses to preview their own
+// fee_rate_based fee amount before submitting.
+// ----------------------------------------------------------------------------
+
+export async function listCommissionRatesAction() {
+  await requirePermission("siteplan.manage");
+  const supabase = await createClient();
+  return listCommissionRates(supabase);
+}
+
+export async function getMyCommissionRateAction() {
+  const session = await requireSession();
+  const supabase = await createClient();
+  return getMyCommissionRate(supabase, session.userId);
+}
+
+export async function saveCommissionRateAction(input: CommissionRateInput): Promise<ActionResult> {
+  const parsed = commissionRateSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  await requirePermission("siteplan.manage");
+  const supabase = await createClient();
+  try {
+    await saveCommissionRate(supabase, parsed.data.employeeId, parsed.data.commissionRatePercent);
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menyimpan rate komisi");
+  }
+
+  revalidatePath(ADMIN_PATH);
   return actionSuccess();
 }
 

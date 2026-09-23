@@ -11,23 +11,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatCurrency } from "@/lib/utils";
 
-import { listMySiteplanPurchasesAction, requestSiteplanFeeAction } from "../actions/siteplan.actions";
+import { getMyCommissionRateAction, listMySiteplanPurchasesAction, requestSiteplanFeeAction } from "../actions/siteplan.actions";
 import { getSiteplanReceivedAmount } from "../utils/purchase-amount";
 
 type MyPurchase = NonNullable<Awaited<ReturnType<typeof listMySiteplanPurchasesAction>>>[number];
 
-function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: () => void }) {
+function FeeRow({ purchase, myCommissionRatePercent, onRequested }: { purchase: MyPurchase; myCommissionRatePercent: number | null; onRequested: () => void }) {
   const [claiming, setClaiming] = React.useState(false);
   const [amount, setAmount] = React.useState<number | undefined>();
   const [busy, setBusy] = React.useState(false);
 
-  async function handleClaim() {
-    if (!amount || amount <= 0) {
+  async function handleClaim(computedAmount?: number) {
+    if (computedAmount === undefined && (!amount || amount <= 0)) {
       toast.error("Nominal fee tidak valid");
       return;
     }
     setBusy(true);
-    const result = await requestSiteplanFeeAction(purchase.id, amount);
+    const result = await requestSiteplanFeeAction(purchase.id, computedAmount ?? amount);
     setBusy(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal mengajukan fee");
@@ -44,6 +44,12 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
   // loonars_unit_fee_request's own gate; every other project still requires akad (0204).
   const feeClaimableAtDp = purchase.loonars_units?.loonars_projects?.fee_claimable_at_dp ?? false;
   const feeClaimable = feeClaimableAtDp ? purchase.transaction_type === "dp" || purchase.transaction_type === "akad" : purchase.transaction_type === "akad";
+  // 0275: a fee_rate_based project (Loonars 2) computes the amount itself from the rep's own
+  // commission rate -- no free-text input, just a preview + single-click submit.
+  const feeRateBased = purchase.loonars_units?.loonars_projects?.fee_rate_based ?? false;
+  // Mirrors loonars_unit_fee_request's own round(price * rate / 100) exactly, so the preview always
+  // matches what actually gets inserted server-side.
+  const computedFee = feeRateBased && myCommissionRatePercent ? Math.round(((purchase.price ?? 0) * myCommissionRatePercent) / 100) : null;
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -61,16 +67,31 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
       {purchase.status === "rejected" && <Badge variant="destructive">Ditolak</Badge>}
       {purchase.status === "verified" && !feeClaimable && <Badge variant="outline">Terverifikasi — Menunggu Pelunasan</Badge>}
 
-      {purchase.status === "verified" && feeClaimable && !claiming && (
+      {purchase.status === "verified" && feeClaimable && feeRateBased && myCommissionRatePercent === null && (
+        <Badge variant="outline">Rate komisi belum diatur — hubungi admin</Badge>
+      )}
+
+      {purchase.status === "verified" && feeClaimable && feeRateBased && computedFee !== null && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Fee ({myCommissionRatePercent}%): <span className="font-medium text-foreground">{formatCurrency(computedFee)}</span>
+          </span>
+          <Button size="sm" disabled={busy} onClick={() => handleClaim(computedFee)}>
+            Ajukan Fee
+          </Button>
+        </div>
+      )}
+
+      {purchase.status === "verified" && feeClaimable && !feeRateBased && !claiming && (
         <Button size="sm" onClick={() => setClaiming(true)}>
           Ajukan Fee
         </Button>
       )}
 
-      {purchase.status === "verified" && feeClaimable && claiming && (
+      {purchase.status === "verified" && feeClaimable && !feeRateBased && claiming && (
         <div className="flex items-center gap-2">
           <CurrencyInput className="h-8 w-40" value={amount} onValueChange={setAmount} />
-          <Button size="sm" disabled={busy} onClick={handleClaim}>
+          <Button size="sm" disabled={busy} onClick={() => handleClaim()}>
             Kirim
           </Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setClaiming(false)}>
@@ -86,6 +107,8 @@ function FeeRow({ purchase, onRequested }: { purchase: MyPurchase; onRequested: 
 export function SiteplanFeeCard() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["my-siteplan-purchases"], queryFn: listMySiteplanPurchasesAction });
+  // Fetched once for the whole card -- same rate applies to every fee_rate_based row this rep owns.
+  const { data: myRate } = useQuery({ queryKey: ["my-commission-rate"], queryFn: getMyCommissionRateAction });
 
   const items = (data ?? []).filter((p) => p.status !== "rejected");
   if (!isLoading && items.length === 0) return null;
@@ -99,7 +122,14 @@ export function SiteplanFeeCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         {items.map((p) => (
-          <FeeRow key={p.id} purchase={p} onRequested={() => queryClient.invalidateQueries({ queryKey: ["my-siteplan-purchases"] })} />
+          <FeeRow
+            key={p.id}
+            purchase={p}
+            myCommissionRatePercent={myRate?.commission_rate_percent ?? null}
+            onRequested={() => {
+              queryClient.invalidateQueries({ queryKey: ["my-siteplan-purchases"] });
+            }}
+          />
         ))}
       </CardContent>
     </Card>
