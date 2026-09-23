@@ -216,6 +216,21 @@ export function EmployeeEditForm({ initialValues }: { initialValues: UpdateEmplo
             <Label htmlFor="address">Alamat</Label>
             <Textarea id="address" rows={2} {...register("address")} />
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="bankName">Nama Bank</Label>
+              <Input id="bankName" placeholder="mis. BCA" {...register("bankName")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bankAccountNumber">Nomor Rekening</Label>
+              <Input id="bankAccountNumber" {...register("bankAccountNumber")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bankAccountHolder">Nama Pemilik Rekening</Label>
+              <Input id="bankAccountHolder" placeholder="Kosongkan jika sama dengan nama karyawan" {...register("bankAccountHolder")} />
+            </div>
+          </div>
         </CardContent>
       </Card>
 

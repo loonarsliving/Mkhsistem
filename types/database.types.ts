@@ -345,6 +345,9 @@ export interface Database {
           birth_date: string | null;
           join_date: string;
           address: string | null;
+          bank_name: string | null;
+          bank_account_number: string | null;
+          bank_account_holder: string | null;
           is_root_owner: boolean;
           approval_status: "pending" | "approved" | "rejected";
           is_active: boolean;
@@ -377,6 +380,9 @@ export interface Database {
           birth_date?: string | null;
           join_date?: string;
           address?: string | null;
+          bank_name?: string | null;
+          bank_account_number?: string | null;
+          bank_account_holder?: string | null;
           is_root_owner?: boolean;
           approval_status?: "pending" | "approved" | "rejected";
           is_active?: boolean;
@@ -5783,6 +5789,9 @@ export interface Database {
           gender: "male" | "female" | null;
           birth_date: string | null;
           address: string | null;
+          bank_name: string | null;
+          bank_account_number: string | null;
+          bank_account_holder: string | null;
           join_date: string;
           branch_id: string;
           branch_name: string;

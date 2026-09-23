@@ -16,6 +16,9 @@ export default async function ProfilePage() {
     phone: session.employee.phone ?? "",
     address: session.employee.address ?? "",
     avatarUrl: session.employee.avatar_url ?? "",
+    bankName: session.employee.bank_name ?? "",
+    bankAccountNumber: session.employee.bank_account_number ?? "",
+    bankAccountHolder: session.employee.bank_account_holder ?? "",
   };
 
   return (

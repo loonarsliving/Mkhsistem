@@ -83,6 +83,20 @@ export function ProfileForm({ userId, initialValues }: ProfileFormProps) {
         <Textarea id="address" rows={3} {...register("address")} />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="bankName">Nama Bank</Label>
+        <Input id="bankName" placeholder="mis. BCA" {...register("bankName")} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="bankAccountNumber">Nomor Rekening</Label>
+        <Input id="bankAccountNumber" {...register("bankAccountNumber")} />
+        <p className="text-xs text-muted-foreground">Dipakai untuk transfer fee/reimbursement, mis. klaim fee siteplan.</p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="bankAccountHolder">Nama Pemilik Rekening</Label>
+        <Input id="bankAccountHolder" placeholder="Kosongkan jika sama dengan nama Anda" {...register("bankAccountHolder")} />
+      </div>
+
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         Simpan Perubahan

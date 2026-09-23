@@ -46,6 +46,9 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     joinDate: employee.join_date,
     address: employee.address ?? "",
     avatarUrl: employee.avatar_url ?? "",
+    bankName: employee.bank_name ?? "",
+    bankAccountNumber: employee.bank_account_number ?? "",
+    bankAccountHolder: employee.bank_account_holder ?? "",
   };
 
   return (
