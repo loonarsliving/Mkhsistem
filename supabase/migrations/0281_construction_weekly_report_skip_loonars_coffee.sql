@@ -1,6 +1,9 @@
 -- ============================================================================
--- MK Connect — 0273: construction_send_weekly_report() no longer fires for
--- Loonars Coffee.
+-- MK Connect — 0281: construction_send_weekly_report() no longer fires for
+-- Loonars Coffee. (Originally applied to production as 0273; renumbered in
+-- git after a merge collision with another branch's own unrelated 0273 --
+-- see GIT_WORKFLOW.md. The function body actually running in production is
+-- unaffected by this filename change.)
 --
 -- Real incident: on the same Sunday, the owner got TWO weekly reports for
 -- Loonars Coffee back to back --

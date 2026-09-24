@@ -69,6 +69,14 @@ function mentionsLoonarsCoffee(text: string): boolean {
   return /coffee/i.test(text);
 }
 
+/**
+ * A thousands-grouped number ("5.700.000", "5,700,000") or one prefixed
+ * with "Rp" -- used as a safety net (see its call site in
+ * tryHandleLoonarsCoffeeCostRequest) for when the AI recognizer fails
+ * silently on a message that otherwise clearly belongs to this project.
+ */
+const RUPIAH_AMOUNT_PATTERN = /rp\.?\s*\d[\d.,]{3,}|\b\d{1,3}(?:[.,]\d{3}){1,4}\b/i;
+
 async function notifySuperAdmins(category: NotificationCategoryDb, title: string, body: string, metadata: Json) {
   const supabase = createAdminClient();
   const { data: admins } = await supabase
@@ -185,6 +193,27 @@ export async function tryHandleLoonarsCoffeeCostRequest(
   );
 
   if (!ai.isRequest || ai.nominal === null) {
+    // Real incident: "Belanja Coffee: batu merapi 2 rit, pasir ngori 2 rit.
+    // Rp. 5.700.000 transfer ke rekening BCA ... a/n Anang Joko P" -- a
+    // completely ordinary message -- hit this branch (Gemini/the JSON
+    // parse failed silently; recognizeConstructionCostRequest's error is
+    // swallowed above into the same isRequest:false as "genuinely not a
+    // request"). This function then returned not_applicable, the message
+    // fell all the way through to the GENERIC WhatsApp AI assistant (which
+    // has no idea Loonars Coffee or its "coffee"-gated financial flow
+    // exists), and it replied "Laporan belanja material ... telah dicatat"
+    // -- a false confirmation. Nothing was ever written to
+    // construction_cost_requests.
+    //
+    // The mentionsLoonarsCoffee/branch gate above has already established
+    // this message is meant for this project; if it also clearly names a
+    // Rupiah amount, this function must own the reply either way -- a real
+    // submission, or an honest "couldn't read this clearly, please resend"
+    // -- never silence that hands a message believed to be about this
+    // project to a system that knows nothing about it.
+    if (RUPIAH_AMOUNT_PATTERN.test(trimmed)) {
+      return { outcome: "needs_clarification", ai };
+    }
     return { outcome: "not_applicable" };
   }
   if (!ai.requestType) {
