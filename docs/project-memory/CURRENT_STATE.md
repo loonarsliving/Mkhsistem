@@ -314,7 +314,9 @@ posted workflow layer in front of the existing money-moving RPCs).
   `construction_expenses`/jurnal entry until reconciled; this only fixed
   what gets displayed. Applied to production and verified inside a
   rolled-back transaction before pushing the code.
-- **Real bug fixed 2026-09-20** (migration `0273`): the generic, older
+- **Real bug fixed 2026-09-20** (migration `0273` in production, renamed
+  to `0281` in git after a later filename collision with another branch --
+  see the 2026-09-24 entry below): the generic, older
   `construction_send_weekly_report()` (0195, built for Kendari) loops every
   active `construction_projects` row with `where p.status = 'active'` —
   including Loonars Coffee, since it predates that module entirely and has
@@ -336,6 +338,34 @@ posted workflow layer in front of the existing money-moving RPCs).
   original and still-valid use case) is unaffected. Applied to production
   and verified inside a rolled-back transaction: the function now produces
   only a Kendari row, no Loonars Coffee row.
+- **Real bug fixed 2026-09-24** — a message believed to be for this project
+  could silently be handed to a system that knows nothing about it. Vando
+  sent an ordinary "Belanja Coffee: batu merapi 2 rit, pasir ngori 2 rit.
+  Rp. 5.700.000 transfer ke rekening BCA ... a/n Anang Joko P" and got back
+  "Diterima. Laporan belanja material ... telah dicatat. Mohon informasikan
+  cabang mana..." — generic, branch-unaware phrasing that never appears
+  anywhere in this project's own reply text. Confirmed against
+  `ai_conversations`/`ai_integration_logs`: nothing was ever written to
+  `construction_cost_requests`. Root cause:
+  `recognizeConstructionCostRequest`'s Gemini call (or its JSON parse)
+  failed silently, and the `.catch()` in `tryHandleLoonarsCoffeeCostRequest`
+  turns ANY such failure into the same `isRequest:false` as "genuinely not
+  a request" — so the function returned `not_applicable` even though the
+  earlier `mentionsLoonarsCoffee`/branch gate had already established the
+  message belonged to Loonars Coffee, and it fell through every other
+  handler to the generic WhatsApp AI assistant, which fabricated a "telah
+  dicatat" confirmation for something never recorded anywhere. Owner: "Knpa
+  lg ini". Fixed: when the AI recognizer comes back empty on a message this
+  function has already claimed via the coffee-mention gate, and the raw
+  text matches a Rupiah-amount pattern (`RUPIAH_AMOUNT_PATTERN`), it now
+  owns the reply — `needs_clarification` (an honest "couldn't read this
+  clearly, please resend") instead of `not_applicable`. Manually backfilled
+  the one live request this affected from the raw WhatsApp log, notified
+  Super Admin, and sent Vando an honest correction admitting the earlier
+  reply was wrong. Same commit also renumbered the day-before's `0273`
+  migration file to `0281` in git — an unrelated `0273` from another
+  branch landed in the same merge; the function already applied to
+  production (tracked by migration name, not filename) was unaffected.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
