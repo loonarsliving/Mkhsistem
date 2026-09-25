@@ -23,8 +23,8 @@ import { logger } from "@/lib/logger";
 
 const VILLA_API_BASE = "https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api";
 
-/** Caption is the unit code alone, e.g. "A2", "C10". */
-const UNIT_CODE_RE = /^\s*([A-Za-z]\d{1,2})\s*$/;
+/** Caption is the unit code alone (e.g. "A2", "C10"), or "TETAP" for a fixed-income account (unit_nomor "Pemasukan Tetap", not a real unit code -- see villa-api's /bridge/dividend-proof-forward). */
+const UNIT_CODE_RE = /^\s*([A-Za-z]\d{1,2}|TETAP)\s*$/i;
 
 export type VillaDividendProofForwardOutcome =
   | { outcome: "not_applicable" }
