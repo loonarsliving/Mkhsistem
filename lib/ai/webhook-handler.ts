@@ -47,6 +47,7 @@ import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-pro
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
+import { tryForwardVillaDividendProofViaWhatsApp } from "./domains/villa-dividend-proof-forward";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
 
@@ -166,6 +167,24 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryVillaPromoViaWhatsApp:not_applicable");
+    }
+
+    // Villa: owner forwards a dividend transfer proof photo to the investor
+    // it belongs to, caption is the unit code alone (owner request
+    // 2026-09-25, e.g. "A2"). Checked before every other image route for
+    // the same reason as LUNAS/PROMO above: owner-only and the caption
+    // pattern is exact, so this cannot shadow the contractor nota, employee
+    // photo-relay, or any other image flow below.
+    if (inbound.content.kind === "image") {
+      trace.push("tryForwardVillaDividendProofViaWhatsApp:calling");
+      const dividendProof = await tryForwardVillaDividendProofViaWhatsApp(inbound.sender, inbound.content.url, inbound.content.caption);
+      if (dividendProof.outcome === "handled") {
+        trace.push("tryForwardVillaDividendProofViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, dividendProof.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer dividen]", dividendProof.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryForwardVillaDividendProofViaWhatsApp:not_applicable");
     }
 
     // Contractor (non-employee) nota report (0237): Anang and future rows
