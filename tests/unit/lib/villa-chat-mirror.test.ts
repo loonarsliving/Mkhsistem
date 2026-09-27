@@ -19,7 +19,7 @@ describe("forwardToVillaChat", () => {
   });
 
   it("forwards the raw Whacenter body unchanged, with the shared secret", async () => {
-    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    fetchMock.mockResolvedValue(Response.json({ ok: true, villa: false }));
     await forwardToVillaChat(RAW);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -30,24 +30,34 @@ describe("forwardToVillaChat", () => {
     expect(init.headers["x-internal-secret"]).toBe("rahasia-uji");
   });
 
-  it("does nothing without the secret", async () => {
+  it("true only when villa says the receptionist owns the conversation", async () => {
+    fetchMock.mockResolvedValue(Response.json({ ok: true, villa: true, tercatat: true }));
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(true);
+
+    fetchMock.mockResolvedValue(Response.json({ ok: true, villa: false }));
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
+  });
+
+  it("false (existing behavior) when villa's answer is missing or unrecognized", async () => {
+    fetchMock.mockResolvedValue(Response.json({ ok: true, tercatat: true }));
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
+
+    fetchMock.mockResolvedValue(new Response("not json", { status: 200 }));
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
+  });
+
+  it("does nothing without the secret or for an empty body", async () => {
+    await expect(forwardToVillaChat("")).resolves.toBe(false);
     vi.stubEnv("VILLA_BRIDGE_SECRET", "");
-    await forwardToVillaChat(RAW);
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does nothing for an empty body", async () => {
-    await forwardToVillaChat("");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("never throws when villa is down", async () => {
+  it("never throws, and falls back to false, when villa is down or rejects", async () => {
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
-    await expect(forwardToVillaChat(RAW)).resolves.toBeUndefined();
-  });
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
 
-  it("never throws when villa rejects the request", async () => {
-    fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
-    await expect(forwardToVillaChat(RAW)).resolves.toBeUndefined();
+    fetchMock.mockResolvedValue(Response.json({ villa: true }, { status: 401 }));
+    await expect(forwardToVillaChat(RAW)).resolves.toBe(false);
   });
 });

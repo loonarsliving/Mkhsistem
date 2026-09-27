@@ -164,13 +164,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "ok", reason: "empty or non-JSON body acknowledged", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 200 });
   }
 
-  // Copy to villa's receptionist chat, in parallel with (never instead of)
-  // the handling below; awaited before responding so the serverless
-  // function isn't frozen mid-request. forwardToVillaChat never throws.
+  // Copy to villa's receptionist chat, started in parallel with the handling
+  // below. The handler awaits villa's verdict only once it has passed the
+  // owner commands (see "villaChat" in webhook-handler.ts), and it's awaited
+  // again before responding so the serverless function isn't frozen
+  // mid-request. forwardToVillaChat never throws.
   const villaChatMirror = forwardToVillaChat(rawBody);
 
   try {
-    const result = await handleWhatsAppWebhookEvent(body);
+    const result = await handleWhatsAppWebhookEvent(body, { villaChat: villaChatMirror });
     await villaChatMirror;
     logger.info("WhatsApp webhook POST handled", { status: result.status, reason: result.reason, replySent: result.replySent, trace: result.trace });
     // TEMPORARY: env snapshot + full step trace returned in the response
