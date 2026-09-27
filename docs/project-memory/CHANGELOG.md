@@ -439,6 +439,17 @@ replies come back through the existing `/api/wa/send`. Heads-up: every chat
 on this number, not only villa guests, now also appears in villa's
 receptionist inbox. The owner accepted this.
 
+**Update (same night):** villa's receptionist now owns villa guest chats
+outright. Villa's `/api/wa/mirror` answers `{ villa: boolean }`, and it
+already excludes this app's active employees and contractors (unless they
+wrote through a loonars.id Private Living button). When `villa` is true,
+`handleWhatsAppWebhookEvent` stops right after the owner commands
+(LUNAS/PROMO/dividend proof) and sends nothing: no LEON, no "pilih proyek",
+no nurture bot. Villa sends its own one-time greeting instead. The owner
+asked for this after seeing LEON answer a stay question with a placeholder
+number and a skincare pitch. If villa is unreachable, the verdict falls back
+to `false` and everything behaves as before.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

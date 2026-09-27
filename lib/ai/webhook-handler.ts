@@ -111,7 +111,10 @@ export async function saveAiConversationTurn(sender: string, inboundText: string
  * app/api/ai/process-job/route.ts, dispatched by a DB trigger/pg_cron sweep
  * (migration 0065), independent of this webhook request's lifetime.
  */
-export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<WhatsAppWebhookHandlerResult> {
+export async function handleWhatsAppWebhookEvent(
+  rawPayload: unknown,
+  options: { villaChat?: Promise<boolean> } = {},
+): Promise<WhatsAppWebhookHandlerResult> {
   const trace: string[] = ["handler:entry"];
 
   try {
@@ -185,6 +188,22 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryForwardVillaDividendProofViaWhatsApp:not_applicable");
+    }
+
+    // Villa guest chat (owner decision 2026-09-27): a villa guest or someone
+    // asking about a stay is answered by villa's receptionist, never by any
+    // AI or "pilih proyek" flow below. Villa decides (see
+    // lib/ai/domains/villa-chat-mirror.ts), already excludes our employees
+    // and contractors, and sends the one-time greeting itself. Checked after
+    // the owner commands above so LUNAS/PROMO keep working.
+    if (options.villaChat) {
+      trace.push("villaChat:awaiting");
+      if (await options.villaChat) {
+        trace.push("villaChat:receptionist_owns_conversation");
+        await saveAiConversationTurn(inbound.sender, inbound.content.kind === "text" ? inbound.content.text : "[non-text message]", null, null);
+        return { status: "ignored", sender: inbound.sender, reason: "villa guest chat -- answered by villa receptionist", trace };
+      }
+      trace.push("villaChat:not_villa");
     }
 
     // Contractor (non-employee) nota report (0237): Anang and future rows
