@@ -450,6 +450,18 @@ asked for this after seeing LEON answer a stay question with a placeholder
 number and a skincare pitch. If villa is unreachable, the verdict falls back
 to `false` and everything behaves as before.
 
+## 2026-09-28 — Translation bridge for villa's receptionist chat
+
+`POST /api/villa/ai/translate` (`lib/ai/domains/villa-chat-translate.ts`),
+behind the same `VILLA_BRIDGE_SECRET` as the other `app/api/villa/ai/*`
+bridges. It takes `{ text, target }` and returns
+`{ detected_language, translation }` (ISO 639-1). Villa uses it both ways:
+guest messages become Indonesian for the receptionist, and receptionist
+replies go out in the guest's language. The prompt is translation only
+(never answers, adds, or drops content, and keeps names, numbers, dates,
+prices, and emojis intact). An unparseable model reply throws, which gives
+a 502, so villa never sends garbage to a guest. Owner-approved.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,
