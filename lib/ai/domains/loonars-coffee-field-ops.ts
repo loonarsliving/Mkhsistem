@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assessConstructionProgress, fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-vision";
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
+import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
 import { isNominalMismatch } from "@/lib/ai/domains/transfer-proof-confirmation";
 import type { Json, NotificationCategoryDb } from "@/types/database.types";
@@ -267,6 +268,114 @@ export async function tryHandleLoonarsCoffeeCostRequest(
   );
 
   return { outcome: "submitted", requestId: inserted.id as string, requestType: ai.requestType, amount: ai.nominal, description };
+}
+
+// ----------------------------------------------------------------------------
+// 1b. Cost requests submitted as a NOTA/RECEIPT PHOTO instead of typed text
+// ----------------------------------------------------------------------------
+export type LoonarsCoffeeReceiptPhotoOutcome =
+  | { outcome: "not_applicable" }
+  | { outcome: "no_active_project" }
+  | { outcome: "unreadable" }
+  | { outcome: "submitted"; requestId: string; requestType: string; amount: number; description: string };
+
+/** "Belanja coffee:" / "Biaya lain Coffee:" / "Bayar kontraktor coffee" -- the same prefixes Vando already types for a TEXT cost request (see tryHandleLoonarsCoffeeCostRequest's own examples), now recognized on a PHOTO caption instead so a nota photo routes here rather than to progress-vision. */
+const RECEIPT_CAPTION_REQUEST_TYPE: { re: RegExp; requestType: "material_purchase" | "contractor_payment" | "other_expense" }[] = [
+  { re: /^bayar\s+kontraktor/i, requestType: "contractor_payment" },
+  { re: /^belanja/i, requestType: "material_purchase" },
+  { re: /^biaya\s+lain/i, requestType: "other_expense" },
+];
+
+/**
+ * Real incident: Vando captioned a nota (purchase receipt) photo "Biaya
+ * lain coffee:" -- exactly the same prefix he already types for a text cost
+ * request, just with the amount/items in the photo instead of the message.
+ * tryHandleLoonarsCoffeePhotoEvidence (construction-progress evidence) ran
+ * unconditionally on every Loonars Coffee photo and had no way to tell a
+ * receipt from a jobsite photo, so it fed the nota into the PROGRESS
+ * assessor, which correctly said "Foto yang dilampirkan adalah nota
+ * pembelian batu split, bukan foto progres fisik" and gave up -- nothing
+ * was ever recorded as a cost request, and Vando had no way to submit it
+ * as one.
+ *
+ * Mirrors tryHandleLoonarsCoffeeCostRequest exactly (same gating, same
+ * construction_cost_requests insert, same Super Admin notification) but
+ * reads items/nominal/supplier off the PHOTO via the same Gemini receipt
+ * reader material-receipt-submission.ts already uses for Endy/Rebecca's
+ * "nota" photos, instead of parsing free text. Gated on the caption
+ * matching one of the same request-type prefixes Vando's text messages
+ * already use, so this can never misfire on an uncaptioned or
+ * differently-worded photo -- those still fall through to
+ * tryHandleLoonarsCoffeePhotoEvidence exactly as before. Must run BEFORE
+ * that function in webhook-handler.ts.
+ */
+export async function tryHandleLoonarsCoffeeReceiptPhoto(
+  employee: { id: string; full_name: string; branch_id: string | null },
+  imageUrl: string,
+  caption: string | null | undefined,
+): Promise<LoonarsCoffeeReceiptPhotoOutcome> {
+  const trimmedCaption = (caption ?? "").trim();
+  const match = RECEIPT_CAPTION_REQUEST_TYPE.find((p) => p.re.test(trimmedCaption));
+  if (!match) return { outcome: "not_applicable" };
+
+  const project = await getLoonarsCoffeeProject();
+  if (!project) return { outcome: "no_active_project" };
+
+  if (!(await isAuthorizedLoonarsCoffeeSubmitter(employee, project.branchId))) {
+    return { outcome: "not_applicable" };
+  }
+  if (employee.branch_id !== project.branchId && !mentionsLoonarsCoffee(trimmedCaption)) {
+    return { outcome: "not_applicable" };
+  }
+
+  const image = await fetchImageAsBase64(imageUrl);
+  const ai: ExpenseReceiptRecognition =
+    image && !image.fetchError
+      ? await recognizeExpenseReceipt({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(
+          (): ExpenseReceiptRecognition => ({ readable: false, items: [], nominal: null, tanggal: null, supplier: null, notes: "Analisa AI gagal." }),
+        )
+      : { readable: false, items: [], nominal: null, tanggal: null, supplier: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI." };
+
+  if (!ai.readable || ai.nominal === null) {
+    return { outcome: "unreadable" };
+  }
+
+  const itemSummary = ai.items.length > 0 ? ai.items.map((it) => `${it.nama} (${formatRupiah(it.harga)})`).join("; ") : null;
+  const description = itemSummary ? `${itemSummary}\n\n📩 ${trimmedCaption}` : trimmedCaption;
+
+  const supabase = createAdminClient();
+  const waRequestId = `wa-photo:${employee.id}:${Date.now()}`;
+  const { data: inserted, error } = await supabase
+    .from("construction_cost_requests")
+    .insert({
+      project_id: project.id,
+      request_type: match.requestType,
+      description,
+      items: ai.items.length > 0 ? (ai.items.map((it) => ({ nama: it.nama, nilai: it.harga })) as unknown as Json) : null,
+      amount: ai.nominal,
+      party_name: ai.supplier,
+      cost_code: match.requestType === "contractor_payment" ? "LAB-001" : null,
+      status: "submitted",
+      requested_by: employee.id,
+      requested_at: new Date().toISOString(),
+      source: "whatsapp",
+      wa_request_id: waRequestId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !inserted) {
+    return { outcome: "not_applicable" };
+  }
+
+  await notifySuperAdmins(
+    "construction_cost_request_submitted",
+    `Pengajuan Baru (Foto Nota) — ${project.name}`,
+    `${description}\n💰 ${formatRupiah(ai.nominal)}${ai.tanggal ? `\n📅 ${ai.tanggal}` : ""}\n👤 Diajukan oleh: ${employee.full_name}\n\nBalas "SETUJUI ${inserted.id.slice(0, 8)}" atau buka dashboard Construction untuk memutuskan.`,
+    { cost_request_id: inserted.id, project_id: project.id },
+  );
+
+  return { outcome: "submitted", requestId: inserted.id as string, requestType: match.requestType, amount: ai.nominal, description };
 }
 
 // ----------------------------------------------------------------------------

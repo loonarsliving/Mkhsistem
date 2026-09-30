@@ -34,6 +34,7 @@ import {
 import { tryHandleContractorFundRequest, tryCaptureContractorBankAccount, tryForwardContractorCorrectionRequest } from "./domains/contractor-fund-request";
 import {
   tryHandleLoonarsCoffeeCostRequest,
+  tryHandleLoonarsCoffeeReceiptPhoto,
   tryHandleLoonarsCoffeeOwnerDecision,
   tryHandleLoonarsCoffeeProgressReport,
   tryHandleLoonarsCoffeePhotoEvidence,
@@ -519,6 +520,39 @@ export async function handleWhatsAppWebhookEvent(rawPayload: unknown): Promise<W
         }
         trace.push("sendWhatsAppImage:done(coffee-transfer-proof)");
         await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer loonars coffee]", replyText, employee.id);
+        trace.push("saveAiConversationTurn:done");
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+
+      // Loonars Coffee cost request submitted as a NOTA/RECEIPT PHOTO
+      // instead of typed text -- real incident: Vando captioned a batu
+      // split purchase receipt "Biaya lain coffee:" (the same prefix he
+      // already types for a text cost request) and it fell into the
+      // progress-evidence handler below, which correctly recognized it was
+      // a nota rather than a jobsite photo and gave up, so nothing was ever
+      // recorded. Gated on the SAME request-type caption prefixes
+      // ("Belanja"/"Biaya lain"/"Bayar kontraktor") his text messages
+      // already use, so it only ever intercepts a photo he explicitly meant
+      // as a cost submission -- every other Loonars Coffee photo (progress,
+      // bukti transfer, an uncaptioned or differently-worded photo) falls
+      // through to the flows below exactly as before. Must run before
+      // tryHandleLoonarsCoffeePhotoEvidence for that reason.
+      trace.push("tryHandleLoonarsCoffeeReceiptPhoto:calling");
+      const coffeeReceiptPhoto = await tryHandleLoonarsCoffeeReceiptPhoto(
+        { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id },
+        inbound.content.url,
+        inbound.content.caption,
+      );
+      trace.push(`tryHandleLoonarsCoffeeReceiptPhoto:${coffeeReceiptPhoto.outcome}`);
+      if (coffeeReceiptPhoto.outcome === "submitted" || coffeeReceiptPhoto.outcome === "unreadable") {
+        const replyText =
+          coffeeReceiptPhoto.outcome === "submitted"
+            ? `LOONARS COFFEE\n\n${coffeeReceiptPhoto.description}\nTotal: Rp ${coffeeReceiptPhoto.amount.toLocaleString("id-ID")}\n\nStatus: MENUNGGU APPROVAL\nKode: ${coffeeReceiptPhoto.requestId.slice(0, 8)}`
+            : "Foto nota ini tidak bisa dibaca AI dengan jelas -- tolong kirim ulang foto yang lebih jelas, atau ketik manual: \"Belanja Coffee: <barang> <nominal>\".";
+        trace.push("sendWhatsAppText:calling(coffee-receipt-photo)");
+        const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+        trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[nota loonars coffee]", replyText, employee.id);
         trace.push("saveAiConversationTurn:done");
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
