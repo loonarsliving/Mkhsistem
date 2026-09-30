@@ -366,6 +366,50 @@ posted workflow layer in front of the existing money-moving RPCs).
   migration file to `0281` in git — an unrelated `0273` from another
   branch landed in the same merge; the function already applied to
   production (tracked by migration name, not filename) was unaffected.
+- **Manual cross-system reconciliation, 2026-09-28**: the owner combined a
+  Loonars Coffee payment with several Loonars Living ones in one Rp1,537,500
+  transfer to Sarno. Neither transfer-photo matcher (Loonars Coffee's
+  exact-single-match, or mkh-properti's own subset-sum matcher over
+  `finance_pending_transfers`) can combine across BOTH sources at once, so
+  it correctly refused to guess rather than silently misposting. Reconciled
+  by hand: 6 Loonars Living `finance_pending_transfers` rows
+  (Rp1,212,500 total) confirmed the same way `confirmGroup()` in
+  `transfer-proof-confirmation.ts` would (claim + `sync_log` insert +
+  `sync_dispatch_pending()`), verified against mkh-properti's `jurnal`; 1
+  Loonars Coffee `construction_cost_requests` row (Rp325,000, gas
+  regulator) approved+posted the same way the photo-confirm flow would.
+  Owner confirmed this is a one-off, not a recurring pattern — declined a
+  standing cross-source matching feature (asked, per
+  `AskUserQuestion`) — so no code change was made for it, only this record
+  of how to redo it if it recurs. Forwarded the bukti transfer to Vando via
+  `automation_post('/api/admin/send-wa-message', ...)` (Postgres-triggered,
+  same as every other automation-only endpoint in this app) since it was
+  reconciled directly in the database, not through the normal WhatsApp flow.
+- **Real bug fixed 2026-09-30**: `tryHandleLoonarsCoffeePhotoEvidence` ran
+  unconditionally on every Loonars Coffee photo with no way to tell a nota
+  (purchase receipt) from a jobsite progress photo. Vando captioned a batu
+  split receipt "Biaya lain coffee:" — the same prefix he already types for
+  a text cost request — and it went through the progress-vision assessor,
+  which correctly said "Foto yang dilampirkan adalah nota pembelian batu
+  split, bukan foto progres fisik di lapangan" and gave up; nothing was
+  ever recorded, and Vando had no way to submit a nota photo at all. Fixed
+  by adding `tryHandleLoonarsCoffeeReceiptPhoto()` (mirrors
+  `tryHandleLoonarsCoffeeCostRequest` — same gating, same
+  `construction_cost_requests` insert, same Super Admin notification — but
+  reads items/nominal/supplier off the photo via the same Gemini receipt
+  reader `material-receipt-submission.ts` already uses for Endy/Rebecca's
+  "nota" photos), gated on the caption matching one of the same
+  request-type prefixes his text messages already use
+  (Belanja/Biaya lain/Bayar kontraktor) so it only intercepts a photo he
+  explicitly meant as a cost submission. Wired in before
+  `tryHandleLoonarsCoffeePhotoEvidence` for that reason; every other
+  Loonars Coffee photo (progress, bukti transfer, uncaptioned,
+  differently-worded) still falls through exactly as before. The specific
+  nota that triggered this (batu split, caption "Biaya lain coffee:") was
+  not backfilled — its image couldn't be fetched from this environment
+  (egress-proxy policy blocks `app.whacenter.com`) to read the real
+  amount, so Vando needs to resend that same photo once this fix is live;
+  it will now be read correctly.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
