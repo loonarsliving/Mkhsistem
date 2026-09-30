@@ -425,6 +425,43 @@ owner to decide rather than added silently.
 **Still open:** the Loonars 2 unit prices (`harga`/`luas`/`tipe`) are NULL
 and need filling in at `/siteplan/admin`.
 
+## 2026-09-27 — Inbound WhatsApp copied to villa's receptionist chat
+
+The owner chose 082228885223 (this app's Whacenter device) as the number
+villa's receptionist chats with guests on. This device's webhook points
+here, so `/api/integrations/whatsapp/webhook` now also forwards every raw
+inbound payload to villa's `POST https://living.haluoleo.id/api/wa/mirror`
+(`lib/ai/domains/villa-chat-mirror.ts`, header `x-internal-secret` =
+`VILLA_BRIDGE_SECRET`). The forward runs in parallel with the normal
+handling and never throws. Villa only records the message there; LUNAS,
+PROMO and other commands are still handled here only. The receptionist's
+replies come back through the existing `/api/wa/send`. Heads-up: every chat
+on this number, not only villa guests, now also appears in villa's
+receptionist inbox. The owner accepted this.
+
+**Update (same night):** villa's receptionist now owns villa guest chats
+outright. Villa's `/api/wa/mirror` answers `{ villa: boolean }`, and it
+already excludes this app's active employees and contractors (unless they
+wrote through a loonars.id Private Living button). When `villa` is true,
+`handleWhatsAppWebhookEvent` stops right after the owner commands
+(LUNAS/PROMO/dividend proof) and sends nothing: no LEON, no "pilih proyek",
+no nurture bot. Villa sends its own one-time greeting instead. The owner
+asked for this after seeing LEON answer a stay question with a placeholder
+number and a skincare pitch. If villa is unreachable, the verdict falls back
+to `false` and everything behaves as before.
+
+## 2026-09-28 — Translation bridge for villa's receptionist chat
+
+`POST /api/villa/ai/translate` (`lib/ai/domains/villa-chat-translate.ts`),
+behind the same `VILLA_BRIDGE_SECRET` as the other `app/api/villa/ai/*`
+bridges. It takes `{ text, target }` and returns
+`{ detected_language, translation }` (ISO 639-1). Villa uses it both ways:
+guest messages become Indonesian for the receptionist, and receptionist
+replies go out in the guest's language. The prompt is translation only
+(never answers, adds, or drops content, and keeps names, numbers, dates,
+prices, and emojis intact). An unparseable model reply throws, which gives
+a 502, so villa never sends garbage to a guest. Owner-approved.
+
 ## Documentation history (existing docs, for reference)
 
 `docs/AUTOMATION.md` and `docs/BACKUP.md` are themselves existing,

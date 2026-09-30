@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { verifyWhatsAppWebhookChallenge } from "@/lib/ai/connectors/manager";
 import { handleWhatsAppWebhookEvent } from "@/lib/ai/webhook-handler";
 import { saveIntegrationLog } from "@/lib/ai/integration-log";
+import { forwardToVillaChat } from "@/lib/ai/domains/villa-chat-mirror";
 
 export const dynamic = "force-dynamic";
 
@@ -163,8 +164,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "ok", reason: "empty or non-JSON body acknowledged", trace: ["entry", "json_parse:failed"], env: envSnapshot }, { status: 200 });
   }
 
+  // Copy to villa's receptionist chat, started in parallel with the handling
+  // below. The handler awaits villa's verdict only once it has passed the
+  // owner commands (see "villaChat" in webhook-handler.ts), and it's awaited
+  // again before responding so the serverless function isn't frozen
+  // mid-request. forwardToVillaChat never throws.
+  const villaChatMirror = forwardToVillaChat(rawBody);
+
   try {
-    const result = await handleWhatsAppWebhookEvent(body);
+    const result = await handleWhatsAppWebhookEvent(body, { villaChat: villaChatMirror });
+    await villaChatMirror;
     logger.info("WhatsApp webhook POST handled", { status: result.status, reason: result.reason, replySent: result.replySent, trace: result.trace });
     // TEMPORARY: env snapshot + full step trace returned in the response
     // body itself (not just the server log), since runtime log access has
@@ -172,6 +181,7 @@ export async function POST(request: NextRequest) {
     // provable from the HTTP response of any test POST, Meta's or manual.
     return NextResponse.json({ ...result, env: envSnapshot }, { status: 200 });
   } catch (err) {
+    await villaChatMirror;
     logger.error("WhatsApp webhook handling failed", { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ status: "error", trace: ["entry", "json_parse:ok", "handleWhatsAppWebhookEvent:threw"], env: envSnapshot }, { status: 200 });
   }

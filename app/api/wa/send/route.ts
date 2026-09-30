@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
+import { sendWhatsAppText, sendWhatsAppImage } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { getClientIp, recordAuthFailure } from "@/lib/security/rate-limit";
 
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { phone?: unknown; message?: unknown; booking_id?: unknown; unit_id?: unknown; template_type?: unknown };
+  let body: { phone?: unknown; message?: unknown; file?: unknown; booking_id?: unknown; unit_id?: unknown; template_type?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -56,6 +56,11 @@ export async function POST(request: Request) {
 
   const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const message = typeof body.message === "string" ? body.message.trim() : "";
+  // Attachment URL (e.g. villa's dividend transfer proof photo) -- was
+  // silently dropped before (body.file was never read), so a caller relying
+  // on it got a text-only message with no error to explain why the photo
+  // never arrived.
+  const file = typeof body.file === "string" && body.file.trim() ? body.file.trim() : undefined;
   if (!phone || !message) {
     return NextResponse.json({ success: false, error: "phone and message are required" }, { status: 400 });
   }
@@ -66,7 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "message exceeds 4096 characters" }, { status: 400 });
   }
 
-  const result = await sendWhatsAppText(phone, message);
+  const result = file ? await sendWhatsAppImage(phone, file, message) : await sendWhatsAppText(phone, message);
   if (!result.success) {
     logger.warn("wa/send: WhatsApp send failed", {
       template_type: typeof body.template_type === "string" ? body.template_type : undefined,
