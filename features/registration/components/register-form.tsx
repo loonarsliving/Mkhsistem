@@ -35,11 +35,25 @@ export function RegisterForm() {
     register,
     handleSubmit,
     control,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
     defaultValues: { fullName: "", email: "", phone: "", password: "", confirmPassword: "", branchId: "", divisionId: "" },
   });
+
+  const selectedBranchId = watch("branchId");
+  // A branch with its own divisions shows only those; every other branch shows the company-wide list.
+  const visibleDivisions = React.useMemo(() => {
+    const all = divisions ?? [];
+    const scoped = all.filter((d) => d.branchId && d.branchId === selectedBranchId);
+    return scoped.length > 0 ? scoped : all.filter((d) => !d.branchId);
+  }, [divisions, selectedBranchId]);
+
+  React.useEffect(() => {
+    setValue("divisionId", "");
+  }, [selectedBranchId, setValue]);
 
   async function onSubmit(values: RegisterInput) {
     const result = await registerAction(values);
@@ -175,7 +189,7 @@ export function RegisterForm() {
                 <SelectValue placeholder="Pilih divisi" />
               </SelectTrigger>
               <SelectContent>
-                {divisions?.map((d) => (
+                {visibleDivisions.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
                     {d.name}
                   </SelectItem>

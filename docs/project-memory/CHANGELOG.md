@@ -6,6 +6,12 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-01 — Loonars Private Living registration category
+
+Migration `0282` (data-only): branch `LPL` + divisions Front Office,
+Security, Head of Loonars Villa. `/register` shows the branch and filters
+divisions by selected branch (`features/registration`). Not yet applied to production.
+
 ## 2026-07-09 — Project scaffold (day 1, 22 commits)
 
 Initial build of the "V1" scope in a single day: Next.js 15 app shell,

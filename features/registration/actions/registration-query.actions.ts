@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
 
 /** Branches open for self-registration — deliberately a fixed subset, not every branch (e.g. Head Office isn't). */
-const REGISTRATION_BRANCH_NAMES = ["Makassar", "Jabodetabek", "Kendari", "Jogja"] as const;
+const REGISTRATION_BRANCH_NAMES = ["Makassar", "Jabodetabek", "Kendari", "Jogja", "Loonars Private Living"] as const;
 /** The "Jogja" branch is displayed as "Yogyakarta" on the registration form. */
 const BRANCH_DISPLAY_NAME: Record<string, string> = { Jogja: "Yogyakarta" };
 
@@ -33,9 +33,15 @@ export async function listRegistrationBranchesAction() {
 
 export async function listRegistrationDivisionsAction() {
   const admin = createAdminClient();
-  const { data, error } = await admin.from("divisions").select("id, name").is("deleted_at", null).order("name");
+  const { data, error } = await admin
+    .from("divisions")
+    .select("id, name, branch_id")
+    .is("deleted_at", null)
+    .order("name");
   if (error) throw error;
-  return data ?? [];
+  // branchId is null for the company-wide divisions; branch-scoped ones (e.g. Loonars Private Living's
+  // Front Office/Security/Head of Loonars Villa) are only offered once that branch is picked.
+  return (data ?? []).map((d) => ({ id: d.id, name: d.name, branchId: d.branch_id as string | null }));
 }
 
 /**
