@@ -10,7 +10,7 @@ line below corresponds to one or more actual commit messages.
 
 Migration `0282` (data-only): branch `LPL` + divisions Front Office,
 Security, Head of Loonars Villa. `/register` shows the branch and filters
-divisions by selected branch (`features/registration`). Not yet applied to production.
+divisions by selected branch (`features/registration`). Applied to production 2026-10-01.
 
 ## 2026-07-09 — Project scaffold (day 1, 22 commits)
 
