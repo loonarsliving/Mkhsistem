@@ -3,6 +3,17 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Private Living registration category — built, migration NOT applied yet (2026-10-01)
+
+Hospitality villa staff (Front Office, Security, Head of Loonars Villa) can
+now self-register at `/register`. Modelled like Loonars Coffee (0256): a new
+branch `LPL` "Loonars Private Living" plus three branch-scoped divisions,
+via data-only migration `0282_loonars_private_living_branch_and_divisions.sql`
+(no schema change). The form lists the branch; picking it shows only those
+three divisions (company-wide divisions otherwise). New accounts still land
+as `pending` until approved. **Open gate:** `0282` has not been applied to
+the live Supabase project — until it is, the branch won't appear on the form.
+
 ## Loonars AI Occupancy Ads built, NOT applied/merged yet (2026-09-17, extended same day)
 
 New module on branch `claude/loonars-ai-occupancy-ads-e1m2on` (not merged
