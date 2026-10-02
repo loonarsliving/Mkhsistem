@@ -56,6 +56,19 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     permissions.push(PERMISSIONS.KOS_OCCUPANCY_VIEW);
   }
 
+  // Kode referral villa (owner 2026-10-02) is Vando's -- Jogja's own Kepala
+  // Cabang. Same branch-based grant as kos_occupancy above, because every
+  // branch head shares the role. The codes themselves live in villa-api
+  // (reached with VILLA_BRIDGE_SECRET from server code only), so there is no
+  // Mkhsistem table/RLS to mirror this on.
+  if (
+    employee.role_key === ROLE_KEYS.KEPALA_CABANG &&
+    employee.branch_id === JOGJA_BRANCH_ID &&
+    !permissions.includes(PERMISSIONS.VILLA_REFERRAL_MANAGE)
+  ) {
+    permissions.push(PERMISSIONS.VILLA_REFERRAL_MANAGE);
+  }
+
   // Markom pages are scoped to Jogja's own Kepala Cabang -- every branch
   // shares the role, so any OTHER branch's head has these permissions
   // stripped back out here (see MARKOM_KEPALA_CABANG_PERMISSIONS). The

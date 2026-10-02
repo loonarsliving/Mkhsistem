@@ -6,6 +6,27 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-02 — Kode referral villa (Vando) — BELUM LIVE
+
+Owner: Vando membuat kode referral karyawan untuk villa Loonars Private
+Living, mengirimkannya ke karyawan lewat WA, dan bisa memintanya lewat WA
+sistem. Tamu dapat diskon 10% di loonars.id, karyawan dapat fee sebesar
+diskon setelah tamu lunas (dicatat di Finance villa).
+
+- `/villa-referral` (nav "Kode Referral Villa"): daftar kode + rekap fee,
+  "Tambah kode" (langsung dikirim ke WA karyawan), "Kirim WA", nonaktifkan.
+- Perintah WA `REFERAL <nama karyawan>` dari Vando/super admin
+  (`lib/ai/domains/villa-referral-request.ts`, dipasang di
+  `webhook-handler.ts` setelah PROMO): ambil/buat kode, kirim ke karyawan,
+  balas pengirim. Dari nomor lain diabaikan.
+- Permission `villa_referral.manage` (migrasi `0283`, super_admin) + grant
+  berbasis cabang untuk Kepala Cabang Jogja di `getCurrentSession()`.
+- Data tidak disimpan di Mkhsistem: semua lewat villa-api
+  `/bridge/referral/*` (`lib/villa/referral.ts`, `VILLA_BRIDGE_SECRET`).
+- **Belum diterapkan:** migrasi 0283 belum di-apply dan belum di-merge --
+  menunggu persetujuan owner karena terkait harga tamu dan fee (lihat repo
+  villa, CHANGELOG 2026-10-02).
+
 ## 2026-10-01 — Loonars Private Living registration category
 
 Migration `0282` (data-only): branch `LPL` + divisions Front Office,
