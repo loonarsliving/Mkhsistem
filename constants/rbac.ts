@@ -136,6 +136,15 @@ export const PERMISSIONS = {
   OCCUPANCY_ADS_MANAGE: "occupancy_ads.manage",
 
   /**
+   * Kode referral karyawan untuk villa Loonars Private Living (/villa-referral,
+   * owner 2026-10-02). Super Admin lewat role_permissions (0283); Kepala
+   * Cabang Jogja (Vando) lewat pemeriksaan cabang di getCurrentSession() --
+   * peran Kepala Cabang dipakai bersama semua cabang, jadi TIDAK diberikan di
+   * level peran. Datanya tinggal di villa-api, bukan di tabel Mkhsistem.
+   */
+  VILLA_REFERRAL_MANAGE: "villa_referral.manage",
+
+  /**
    * FRIDAY — the executive intelligence layer (/friday).
    *
    * Three permissions rather than one, because reading FRIDAY's analysis,

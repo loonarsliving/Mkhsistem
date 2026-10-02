@@ -48,6 +48,7 @@ import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-pro
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
+import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
 import { tryForwardVillaDividendProofViaWhatsApp } from "./domains/villa-dividend-proof-forward";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
 import { enqueueAdminAnswerRelayJob, enqueueLeadNurtureReplyJob, enqueueWhatsAppAiReplyJob } from "./queue/ai-job-queue";
@@ -171,6 +172,20 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryVillaPromoViaWhatsApp:not_applicable");
+
+      // Kode referral villa: "REFERAL <nama karyawan>" dari Vando/super
+      // admin (owner 2026-10-02). Polanya persis dan dikunci ke pengirim
+      // berwenang, sama seperti LUNAS/PROMO, jadi tidak membayangi jalur
+      // kontraktor, karyawan, atau ad-lead di bawah.
+      trace.push("tryVillaReferralRequestViaWhatsApp:calling");
+      const villaReferral = await tryVillaReferralRequestViaWhatsApp(inbound.sender, inbound.content.text);
+      if (villaReferral.outcome === "handled") {
+        trace.push("tryVillaReferralRequestViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, villaReferral.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, villaReferral.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryVillaReferralRequestViaWhatsApp:not_applicable");
     }
 
     // Villa: owner forwards a dividend transfer proof photo to the investor
