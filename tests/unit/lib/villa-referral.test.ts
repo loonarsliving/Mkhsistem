@@ -19,10 +19,12 @@ describe("parseReferralCommand", () => {
 });
 
 describe("buildReferralWaMessage", () => {
-  it("contains the code, the discount, and that the fee waits for payment", () => {
+  it("contains the code, the fee, that the guest pays normal price, and that the fee waits for payment", () => {
     const text = buildReferralWaMessage("Budi", "REF-BUDI27", 10);
     expect(text).toContain("REF-BUDI27");
-    expect(text).toContain("diskon 10%");
+    expect(text).toContain("fee 10% dari nilai booking");
+    expect(text).toContain("harga normal");
+    expect(text).not.toContain("diskon");
     expect(text).toContain("setelah tamu melunasi");
     expect(text).toContain("loonars.id");
   });

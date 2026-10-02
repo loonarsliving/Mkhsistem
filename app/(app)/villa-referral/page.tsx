@@ -31,7 +31,7 @@ export default async function VillaReferralPage() {
     <div className="space-y-6">
       <PageHeader
         title="Kode Referral Villa"
-        description="Kode referral karyawan untuk Loonars Private Living. Tamu yang memakai kode di loonars.id dapat diskon 10%, dan karyawan pemilik kode dapat fee sebesar diskon itu setelah tamu lunas."
+        description="Kode referral karyawan untuk Loonars Private Living. Tamu yang memesan di loonars.id dengan kode ini tetap membayar harga normal; karyawan pemilik kode dapat fee 10% dari nilai booking setelah tamu lunas."
       />
       <ReferralBoard
         codes={referrals.ok ? referrals.data.kode : []}

@@ -105,7 +105,7 @@ export async function tryVillaReferralRequestViaWhatsApp(
     };
 
   const kode = issued.data.kode;
-  const sent = await sendReferralToEmployee(chosen.id, kode.kode, Number(kode.diskon_persen));
+  const sent = await sendReferralToEmployee(chosen.id, kode.kode, Number(kode.fee_persen));
   const status = issued.data.baru ? "dibuat" : "sudah ada";
   return {
     outcome: "handled",

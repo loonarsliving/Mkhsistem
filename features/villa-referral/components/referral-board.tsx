@@ -103,7 +103,7 @@ export function ReferralBoard({
     const result = await sendVillaReferralWaAction({
       employeeId: c.employee_id,
       kode: c.kode,
-      diskonPersen: Number(c.diskon_persen),
+      feePersen: Number(c.fee_persen),
     });
     setBusyId(null);
     if (!result.success) {
@@ -188,7 +188,8 @@ export function ReferralBoard({
                     placeholder="Kosongkan untuk dibuat otomatis, mis. REF-BUDI27"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Selalu diawali REF-. Diskon tamu 10%, fee karyawan sebesar diskon.
+                    Selalu diawali REF-. Tamu bayar harga normal, karyawan dapat fee 10% dari nilai
+                    booking.
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground">

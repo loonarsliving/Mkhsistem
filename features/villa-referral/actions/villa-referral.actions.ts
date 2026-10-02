@@ -58,7 +58,7 @@ export async function createVillaReferralAction(
     const sent = await sendReferralToEmployee(
       employee.id,
       created.data.kode.kode,
-      Number(created.data.kode.diskon_persen),
+      Number(created.data.kode.fee_persen),
     );
     waNote = sent.ok
       ? `Kode sudah dikirim ke WA ${sent.name}.`
@@ -72,21 +72,21 @@ export async function createVillaReferralAction(
 export async function sendVillaReferralWaAction(input: {
   employeeId: string;
   kode: string;
-  diskonPersen: number;
+  feePersen: number;
 }): Promise<ActionResult<{ name: string }>> {
   await requirePermission(PERMISSIONS.VILLA_REFERRAL_MANAGE);
   const parsed = z
     .object({
       employeeId: z.string().uuid(),
       kode: z.string().regex(/^REF-[A-Z0-9]{2,20}$/),
-      diskonPersen: z.number().positive().max(50),
+      feePersen: z.number().positive().max(50),
     })
     .safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid");
   const sent = await sendReferralToEmployee(
     parsed.data.employeeId,
     parsed.data.kode,
-    parsed.data.diskonPersen,
+    parsed.data.feePersen,
   );
   if (!sent.ok) return actionError(sent.error);
   return actionSuccess({ name: sent.name });

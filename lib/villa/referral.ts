@@ -6,8 +6,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Kode referral karyawan untuk villa Loonars Private Living (owner
- * 2026-10-02). Tamu yang memakai kode di loonars.id dapat diskon 10%, dan
- * karyawan pemilik kode dapat fee sebesar diskon itu setelah tamu lunas.
+ * 2026-10-02). Tamu yang memakai kode di loonars.id tetap membayar harga
+ * normal; kodenya menandai karyawan yang membawa tamu, dan karyawan itu
+ * mendapat fee 10% dari nilai booking setelah tamu lunas.
  *
  * Modul ini hanya TRANSPOR ke villa-api (/bridge/referral/*): kode, harga,
  * dan pencatatan fee semuanya hidup di villa, satu-satunya tempat booking
@@ -22,7 +23,7 @@ export interface VillaReferralCode {
   kode: string;
   employee_id: string | null;
   employee_nama: string;
-  diskon_persen: number;
+  fee_persen: number;
   aktif: boolean;
   catatan: string | null;
   dibuat_oleh: string | null;
@@ -42,8 +43,7 @@ export interface VillaReferralRedemption {
   guest_nama: string | null;
   tgl_checkin: string | null;
   malam: number | null;
-  harga_normal: number;
-  diskon: number;
+  nilai_booking: number;
   fee: number;
   fee_dibayar_at: string | null;
   created_at: string;
@@ -131,15 +131,15 @@ export function setVillaReferralActive(id: string, aktif: boolean) {
 export function buildReferralWaMessage(
   employeeName: string,
   kode: string,
-  diskonPersen: number,
+  feePersen: number,
 ): string {
   return [
     `Halo ${employeeName}, ini kode referral Loonars Private Living milik Anda:`,
     "",
     `*${kode}*`,
     "",
-    `Bagikan ke calon tamu. Tamu yang memesan di loonars.id/private-living dan memasukkan kode ini mendapat diskon ${diskonPersen}%.`,
-    `Anda mendapat fee sebesar diskon tersebut (${diskonPersen}% dari harga normal) setelah tamu melunasi pembayaran.`,
+    `Bagikan ke calon tamu dan minta mereka memasukkan kode ini saat memesan di loonars.id/private-living.`,
+    `Anda mendapat fee ${feePersen}% dari nilai booking setelah tamu melunasi pembayaran. Tamu tetap membayar harga normal.`,
     "",
     "Kode hanya berlaku untuk pemesanan lewat website loonars.id.",
   ].join("\n");
@@ -149,7 +149,7 @@ export function buildReferralWaMessage(
 export async function sendReferralToEmployee(
   employeeId: string,
   kode: string,
-  diskonPersen: number,
+  feePersen: number,
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
   const supabase = createAdminClient();
   const { data: employee } = await supabase
@@ -163,7 +163,7 @@ export async function sendReferralToEmployee(
     return { ok: false, error: `${employee.full_name} belum punya nomor HP di data karyawan` };
   const result = await sendWhatsAppText(
     employee.phone,
-    buildReferralWaMessage(employee.full_name, kode, diskonPersen),
+    buildReferralWaMessage(employee.full_name, kode, feePersen),
   );
   if (!result.success)
     return {

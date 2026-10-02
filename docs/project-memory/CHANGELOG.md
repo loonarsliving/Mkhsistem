@@ -10,8 +10,9 @@ line below corresponds to one or more actual commit messages.
 
 Owner: Vando membuat kode referral karyawan untuk villa Loonars Private
 Living, mengirimkannya ke karyawan lewat WA, dan bisa memintanya lewat WA
-sistem. Tamu dapat diskon 10% di loonars.id, karyawan dapat fee sebesar
-diskon setelah tamu lunas (dicatat di Finance villa).
+sistem. Tamu yang memesan di loonars.id dengan kode itu tetap bayar harga
+normal; karyawan pemilik kode dapat fee 10% dari nilai booking setelah tamu
+lunas (dicatat di Finance villa).
 
 - `/villa-referral` (nav "Kode Referral Villa"): daftar kode + rekap fee,
   "Tambah kode" (langsung dikirim ke WA karyawan), "Kirim WA", nonaktifkan.
@@ -24,7 +25,7 @@ diskon setelah tamu lunas (dicatat di Finance villa).
 - Data tidak disimpan di Mkhsistem: semua lewat villa-api
   `/bridge/referral/*` (`lib/villa/referral.ts`, `VILLA_BRIDGE_SECRET`).
 - **Belum diterapkan:** migrasi 0283 belum di-apply dan belum di-merge --
-  menunggu persetujuan owner karena terkait harga tamu dan fee (lihat repo
+  menunggu persetujuan owner karena terkait fee (uang) (lihat repo
   villa, CHANGELOG 2026-10-02).
 
 ## 2026-10-01 — Loonars Private Living registration category
