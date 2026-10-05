@@ -6,6 +6,18 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-05 — Draf balasan AI untuk resepsionis villa — BELUM LIVE
+
+Owner ingin chat tamu villa dibalas AI; tahap 1 = draf saja. Endpoint baru
+`POST /api/villa/ai/chat-reply` (`lib/ai/domains/villa-chat-reply.ts`), pola
+secret yang sama dengan `/api/villa/ai/translate`. Villa mengirim buku
+pengetahuan (disetujui owner), riwayat chat, dan bila perlu data
+ketersediaan dari villa-api; model mengembalikan `{kategori, draf,
+cek_tanggal, alasan}`. Model dilarang mengarang harga/fakta; paket di luar
+kamar → `paket_rebecca`, komplain/permintaan di kamar → `komplain`. Villa
+yang menyimpan dan menampilkan draf -- endpoint ini tidak mengirim WhatsApp.
+Tes: `tests/unit/lib/villa-chat-reply.test.ts`.
+
 ## 2026-10-02 — Kode referral villa (Vando) — BELUM LIVE
 
 Owner: Vando membuat kode referral karyawan untuk villa Loonars Private
