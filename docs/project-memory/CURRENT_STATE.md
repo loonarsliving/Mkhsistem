@@ -421,6 +421,32 @@ posted workflow layer in front of the existing money-moving RPCs).
   (egress-proxy policy blocks `app.whacenter.com`) to read the real
   amount, so Vando needs to resend that same photo once this fix is live;
   it will now be read correctly.
+- **Real bug fixed 2026-10-05**: the `/construction-finance` web dashboard's
+  per-project summary card showed "Dana Sudah Ditransfer: Rp 0" and "Sisa
+  Dana Tunai: Rp 0" for Loonars Coffee despite ~Rp55,517,100 of
+  already-settled utang expenses across a dozen payments and Rp45,000,000
+  already advanced toward Anang's labor contract — both completely
+  invisible, since `getActiveConstructionProject()` only ever reads
+  `construction_fund_transfers` (`danaMasuk`) and `payment_method='cash'`
+  expenses (`totalCashOut`), and Loonars Coffee uses neither (money moves
+  through WhatsApp-approved `construction_cost_requests` straight into
+  `'utang'` expenses; labor payments move through the separate
+  `cm_labor_contracts` advance mechanism, 2026-09-15). Both figures were
+  therefore guaranteed to read 0 for this project regardless of how much
+  real work had happened — same root cause as the two WhatsApp reports
+  already fixed 2026-09-19/20, just never touched on this web page until
+  the owner asked: "kt sdh brapa kali mmebayar kontraktor dan belanja
+  material knpa tidak ada update dsni". Fixed by adding `totalSpent`
+  (every `construction_expenses` row regardless of payment
+  method/settlement) and `outstandingLaborAdvance` (summed
+  `cm_labor_contracts.outstanding_advance`) to the shared repository read,
+  and two new always-visible summary tiles ("Total Sudah Dikeluarkan",
+  "Sisa Anggaran" against the full budget) plus a conditional one for a
+  nonzero labor advance. The old Dana Sudah Ditransfer/Sisa Dana Tunai
+  tiles are untouched for a project that actually uses fund transfers
+  (Kendari) — shown only when `danaMasuk > 0` now, so nothing was removed,
+  just no longer shown as a misleading flat `Rp 0` for a project this
+  dashboard was never built to see.
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
