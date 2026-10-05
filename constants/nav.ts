@@ -36,6 +36,7 @@ import {
   Sparkles,
   StickyNote,
   Target,
+  TicketPercent,
   TrendingUp,
   Trophy,
   UserCheck,
@@ -231,6 +232,7 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: [PERMISSIONS.APPROVAL_REQUEST_VIEW_OWN, PERMISSIONS.APPROVAL_REQUEST_MANAGE],
       },
       { label: "Okupansi Kos", href: "/kos-occupancy", icon: BedDouble, permission: PERMISSIONS.KOS_OCCUPANCY_VIEW },
+      { label: "Kode Referral Villa", href: "/villa-referral", icon: TicketPercent, permission: PERMISSIONS.VILLA_REFERRAL_MANAGE },
     ],
   },
   {
