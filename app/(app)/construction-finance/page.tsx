@@ -57,6 +57,15 @@ const EXPENSE_TYPE_LABEL: Record<ConstructionExpense["expenseType"], string> = {
 
 function SummaryCard({ project }: { project: ConstructionProject }) {
   const sisaDana = project.danaMasuk - project.totalCashOut;
+  // "Sisa Anggaran" against the project's total budget, not just leftover
+  // cash-on-hand -- real money already out the door either as a settled/
+  // unsettled utang expense or an unreconciled contractor advance still
+  // counts against the budget, even for a project (Loonars Coffee) that
+  // never uses construction_fund_transfers/cash at all. See totalSpent's
+  // doc comment in construction-finance.repository.ts for the real
+  // incident this fixes: ~Rp55 juta settled + Rp45 juta advance, all
+  // invisible on this card before.
+  const sisaAnggaran = project.totalBudget - project.totalSpent - project.outstandingLaborAdvance;
   return (
     <Card>
       <CardHeader>
@@ -74,17 +83,35 @@ function SummaryCard({ project }: { project: ConstructionProject }) {
             <p className="text-lg font-semibold tabular-nums">{formatCurrency(project.totalBudget)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Dana Sudah Ditransfer</p>
-            <p className="text-lg font-semibold tabular-nums">{formatCurrency(project.danaMasuk)}</p>
+            <p className="text-xs text-muted-foreground">Total Sudah Dikeluarkan</p>
+            <p className="text-lg font-semibold tabular-nums">{formatCurrency(project.totalSpent)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Sisa Dana Tunai</p>
-            <p className="text-lg font-semibold tabular-nums">{formatCurrency(sisaDana)}</p>
+            <p className="text-xs text-muted-foreground">Sisa Anggaran</p>
+            <p className="text-lg font-semibold tabular-nums">{formatCurrency(Math.max(sisaAnggaran, 0))}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Utang Toko Belum Lunas</p>
             <p className="text-lg font-semibold tabular-nums text-destructive">{formatCurrency(project.totalUtangBelumLunas)}</p>
           </div>
+          {project.outstandingLaborAdvance > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Uang Muka Kontraktor (Belum Direkonsiliasi)</p>
+              <p className="text-lg font-semibold tabular-nums">{formatCurrency(project.outstandingLaborAdvance)}</p>
+            </div>
+          )}
+          {project.danaMasuk > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Dana Sudah Ditransfer</p>
+              <p className="text-lg font-semibold tabular-nums">{formatCurrency(project.danaMasuk)}</p>
+            </div>
+          )}
+          {project.danaMasuk > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Sisa Dana Tunai</p>
+              <p className="text-lg font-semibold tabular-nums">{formatCurrency(sisaDana)}</p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

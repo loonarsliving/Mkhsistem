@@ -18,6 +18,30 @@ export interface ConstructionProject {
   totalCashOut: number;
   totalUtangBelumLunas: number;
   totalUtangLunas: number;
+  /**
+   * totalCashOut + totalUtangBelumLunas + totalUtangLunas -- every
+   * construction_expenses row regardless of payment_method/is_settled.
+   * Added because "Dana Sudah Ditransfer"/"Sisa Dana Tunai" (danaMasuk and
+   * totalCashOut) are both structurally always 0 for a project that never
+   * uses construction_fund_transfers or a 'cash' payment_method at all
+   * (Loonars Coffee: money moves through WhatsApp-approved
+   * construction_cost_requests straight into 'utang' expenses -- see
+   * loonars-coffee-field-ops.ts) -- real incident: the owner had already
+   * settled ~Rp55 million of utang across a dozen payments and the
+   * dashboard's summary card showed "Dana Sudah Ditransfer: Rp 0" / "Sisa
+   * Dana Tunai: Rp 0" for all of it, looking exactly like nothing had
+   * happened on the project.
+   */
+  totalSpent: number;
+  /**
+   * cm_labor_contracts.outstanding_advance, summed across this project's
+   * labor contracts -- money already paid to a contractor but not yet
+   * reconciled against verified earned value (see 2026-09-15's advance fix
+   * in loonars-coffee-field-ops.ts). Was invisible on this dashboard
+   * entirely until now, the same real incident above: Rp45,000,000 already
+   * paid toward Anang's contract, nowhere on this card.
+   */
+  outstandingLaborAdvance: number;
 }
 
 /** The active construction project for a branch, with running totals -- one row expected per branch today (Kendari only). */
@@ -33,18 +57,21 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
   if (error) throw error;
   if (!project) return null;
 
-  const [{ data: transfers, error: transfersError }, { data: expenses, error: expensesError }] = await Promise.all([
+  const [{ data: transfers, error: transfersError }, { data: expenses, error: expensesError }, { data: laborContracts, error: laborError }] = await Promise.all([
     supabase.from("construction_fund_transfers").select("amount").eq("project_id", project.id),
     supabase.from("construction_expenses").select("expense_type, payment_method, amount, is_settled").eq("project_id", project.id),
+    supabase.from("cm_labor_contracts").select("outstanding_advance").eq("project_id", project.id),
   ]);
   if (transfersError) throw transfersError;
   if (expensesError) throw expensesError;
+  if (laborError) throw laborError;
 
   const danaMasuk = (transfers ?? []).reduce((sum, t) => sum + Number(t.amount), 0);
   const totalCashOut = (expenses ?? []).filter((e) => e.payment_method === "cash").reduce((sum, e) => sum + Number(e.amount), 0);
   const utang = (expenses ?? []).filter((e) => e.payment_method === "utang");
   const totalUtangBelumLunas = utang.filter((e) => !e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
   const totalUtangLunas = utang.filter((e) => e.is_settled).reduce((sum, e) => sum + Number(e.amount), 0);
+  const outstandingLaborAdvance = (laborContracts ?? []).reduce((sum, c) => sum + Number(c.outstanding_advance), 0);
 
   return {
     id: project.id,
@@ -57,6 +84,8 @@ export async function getActiveConstructionProject(supabase: TypedSupabaseClient
     totalCashOut,
     totalUtangBelumLunas,
     totalUtangLunas,
+    totalSpent: totalCashOut + totalUtangBelumLunas + totalUtangLunas,
+    outstandingLaborAdvance,
   };
 }
 
