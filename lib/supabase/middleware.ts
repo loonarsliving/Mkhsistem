@@ -68,6 +68,12 @@ const PUBLIC_PATHS = [
   "/api/villa/ai/pricing-insight",
   "/api/villa/ai/competitor-pricing",
   "/api/villa/ai/market-demand",
+  // Same bug, found again 2026-10-06: villa's receptionist chat
+  // translation (added 2026-09-28) and AI reply drafts (2026-10-05) both
+  // logged "gagal: HTTP 200" for every message -- the middleware 307'd
+  // them to /login. Same shared-secret check in their handlers.
+  "/api/villa/ai/translate",
+  "/api/villa/ai/chat-reply",
   // Called cross-origin by the Ultron voice assistant (separate "filehub"
   // deployment) with a Supabase access token in the Authorization header,
   // never a same-site session cookie -- must stay out of the cookie-based
@@ -115,7 +121,7 @@ const PUBLIC_PATHS = [
   "/api/admin/send-wa-message",
 ];
 
-function isPublicPath(pathname: string) {
+export function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
