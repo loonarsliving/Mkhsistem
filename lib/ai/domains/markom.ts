@@ -1035,7 +1035,7 @@ export async function researchAndDraftAd(input: AdDraftInput): Promise<AdDraft> 
     input.offeringType === "sale" && input.targetCities?.length
       ? ""
       : input.offeringType === "management_service"
-        ? `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal PEMILIK properti (villa, kos, homestay, rumah, dsb -- jenis apapun) di area "${input.projectCity ?? input.projectName}" biasanya berasal (mis. investor/pemilik luar kota yang punya unit di sana tapi tidak tinggal di situ) -- bukan pembeli baru, bukan wisatawan, tapi PEMILIK yang butuh jasa kelola. Sebutkan 3-6 kota/kabupaten NYATA di Indonesia di field "targetAreas" dengan alasan konkret di targetSummary. Kalau riset tidak cukup meyakinkan, kembalikan array kosong.`
+        ? `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): jasa ini mengelola aset yang BERLOKASI DI "${input.projectCity ?? input.projectName}" dan sekitarnya -- jadi iklan ini ditargetkan ke area tempat aset itu berada, BUKAN ke kota asal investor luar daerah. Riset lanskap pemilik properti di area itu: jenis aset apa yang banyak dimiliki (mis. kos dekat kampus, homestay/guesthouse di kawasan wisata, villa, rumah sewa), di kabupaten/kota mana saja aset itu terkonsentrasi, dan masalah pengelolaan apa yang umum dialami pemiliknya (okupansi rendah, perawatan, urus tamu/penyewa). Field "targetAreas" WAJIB diisi 3-6 nama kota/kabupaten NYATA yang berada DI DALAM atau BERBATASAN LANGSUNG dengan "${input.projectCity ?? input.projectName}" (untuk wilayah provinsi, sebutkan kota/kabupaten di provinsi itu -- mis. untuk Yogyakarta: Yogyakarta, Sleman, Bantul, Kulon Progo, Gunungkidul) -- DILARANG memasukkan kota di luar provinsi/wilayah tersebut (mis. Jakarta, Surabaya, Bandung) meskipun banyak pemilik asetnya tinggal di sana. Tulis di targetSummary alasan konkret dari risetmu: aset jenis apa, di area mana, dan kenapa pemiliknya butuh jasa kelola.`
         : `\nRISET AREA TARGET (WAJIB pakai Google Search, jangan mengarang): cari tahu dari mana asal rata-rata pembeli rumah di lokasi "${input.projectCity ?? input.projectName}" -- pertimbangkan akses tol/kereta, kota-kota komuter terdekat, dan pola pembeli perumahan sejenis di area itu berdasarkan artikel/listing properti/diskusi yang benar-benar kamu temukan.
 BATASAN WAJIB, jangan dilanggar: properti ini (apalagi rumah subsidi/komersial dengan pembeli yang akan menempati dan komuter harian, beda dengan villa investasi) hanya masuk akal untuk pembeli yang jarak tempuh hariannya wajar (kira-kira di bawah 1-1.5 jam berkendara dalam kondisi normal, bukan sekadar "searah ke Jakarta"). JANGAN memasukkan kota/kabupaten besar (terutama wilayah DKI Jakarta) hanya karena sering disebut sebagai daya tarik properti pinggiran -- itu klise pemasaran, bukan data pembeli riil. Setiap kota/kabupaten yang kamu masukkan ke targetAreas HARUS punya alasan konkret dari risetmu (misalnya: berbatasan langsung, akses tol/jalan yang benar-benar dipakai komuter ke lokasi ini, atau ada bukti pembeli riil dari kota itu di listing/diskusi yang kamu temukan) -- sebutkan alasannya di targetSummary, bukan cuma nama kotanya.
 Sebutkan 3-6 nama kota/kabupaten NYATA di Indonesia (bukan nama kecamatan/perumahan yang terlalu spesifik, karena harus bisa dikenali sistem targeting iklan) di field "targetAreas". Kalau riset tidak menemukan data yang cukup meyakinkan dan sesuai batasan jarak tempuh di atas, kembalikan array kosong -- jangan menebak atau memaksakan kota yang terlalu jauh.`;
@@ -1111,7 +1111,7 @@ Balas HANYA dengan JSON object (tanpa markdown code fence, tanpa penjelasan tamb
 
   try {
     const response = await generateAIText({ systemPrompt, userPrompt: researchPrompt, useWebSearch: true, images, maxOutputTokens: 2048 });
-    return parseAdDraftJson(response.text, input.availablePhotos, input.projectName);
+    return withProjectCityTargeted(parseAdDraftJson(response.text, input.availablePhotos, input.projectName), input);
   } catch {
     // fall through to the unresearched fallback below -- still picks a real photo, just without grounded research backing the copy.
   }
@@ -1134,7 +1134,25 @@ ${images.length > 0 ? `\nGambar asli untuk ${images.length} foto di atas terlamp
 
 Balas HANYA dengan JSON object: {"targetSummary": "...", "photoIds": ["..."], "headline": "...", "primaryText": "...", "description": "...", "welcomeMessage": "...", "suggestedDailyBudgetIdr": angka}`;
   const fallbackResponse = await generateAIText({ systemPrompt, userPrompt: fallbackPrompt, images, maxOutputTokens: 1024 });
-  return parseAdDraftJson(fallbackResponse.text, input.availablePhotos, input.projectName);
+  return withProjectCityTargeted(parseAdDraftJson(fallbackResponse.text, input.availablePhotos, input.projectName), input);
+}
+
+/**
+ * A management_service project manages assets physically located in
+ * projectCity, so its ad must always reach that city -- a real draft for a
+ * Yogyakarta management project came back targeting only Jakarta/Surabaya/
+ * Bandung/... (the AI's "where do out-of-town owners live" research), never
+ * Yogyakarta itself, which is the opposite of what the business wanted.
+ * The prompt now asks for the asset's own area, but this guarantees it in
+ * code regardless of what the model returns (including the unresearched
+ * fallback, which never asks for targetAreas at all and would otherwise
+ * fall back to nationwide targeting).
+ */
+function withProjectCityTargeted(draft: AdDraft, input: AdDraftInput): AdDraft {
+  const city = input.projectCity?.trim();
+  if (input.offeringType !== "management_service" || !city) return draft;
+  const others = draft.targetAreas.filter((a) => a.toLowerCase() !== city.toLowerCase());
+  return { ...draft, targetAreas: [city, ...others].slice(0, 6) };
 }
 
 export interface AdPerformanceInput {
