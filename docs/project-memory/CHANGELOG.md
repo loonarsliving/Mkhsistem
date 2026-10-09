@@ -6,6 +6,17 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-09 — Perintah WA "KOL" untuk kupon menginap gratis villa (barter KOL)
+
+Owner membuat kupon KOL lewat 0822: `KOL @akun 2`, `KOL LIST`,
+`KOL BATAL KOL-XXXXXX` (`lib/ai/domains/villa-kol-coupon.ts`, dipasang di
+`webhook-handler.ts` setelah REFERAL). Owner-only (super admin aktif, sama
+dengan LUNAS), lalu memanggil villa-api `POST /bridge/kol` dengan `sender`
+(villa-api memeriksa lagi terhadap `villa_notify.owner_hp`). Sebelum ini
+pesan "Kol @atmojoae" jatuh ke jalur karyawan dan dijawab "Tidak ditemukan
+karyawan aktif untuk: Atmojo". Logika kupon (tabel `villa_kol_vouchers`)
+seluruhnya di villa-api.
+
 ## 2026-10-05 — Draf balasan AI untuk resepsionis villa — BELUM LIVE
 
 Owner ingin chat tamu villa dibalas AI; tahap 1 = draf saja. Endpoint baru
