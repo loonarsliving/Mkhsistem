@@ -767,3 +767,11 @@ Lesson: don't infer which real-world transfer a verbal explanation refers
 to when two near-simultaneous transfers of the same amount exist — check
 for a matching pending `construction_cost_requests` row by exact
 amount/party/account first, the same way the automated handler does.
+
+Added `app/api/admin/upload-bukti-transfer/route.ts` (same
+`requireCronAuth` guard and middleware exclusion as `send-wa-message`) to
+host a bukti transfer photo that never came in through the WhatsApp bot at
+all (shown directly to an operator, no WhatsApp media URL to forward).
+Uploads to the public `project-photos` bucket via the service-role client
+and returns a public URL, which `send-wa-message`'s `imageUrl` can then
+use. Used once already to forward the Papang Widiyanto proof to Vando.
