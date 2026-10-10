@@ -447,6 +447,34 @@ posted workflow layer in front of the existing money-moving RPCs).
   (Kendari) — shown only when `danaMasuk > 0` now, so nothing was removed,
   just no longer shown as a misleading flat `Rp 0` for a project this
   dashboard was never built to see.
+- **Real gap fixed 2026-10-10**: `tryRecordConstructionOutflowPhoto()` (a
+  Kepala Cabang's bukti-transfer photo, auto-logged as a cash outflow) only
+  ever attributed the expense to the SENDER'S OWN branch project — it never
+  used the AI-recognized recipient name for anything beyond display. Real
+  incident: the owner sent a Rp10,000,000 bukti transfer via Fasly's
+  WhatsApp number with no caption ("SYAIRIL ASWAN ... atas nama Papang");
+  it was silently posted to Fasly's own project (Kendari) when it was
+  actually a Loonars Coffee payment. Owner: "knpa ai nya todak bkerja untuk
+  mngecek nama penerima". Investigated and explained honestly rather than
+  oversold: pure recipient-name matching could never have caught this
+  specific case — "Syairil Aswan" had no prior history with either
+  project, and the only signal connecting the payment to Loonars Coffee
+  ("atas nama Papang") existed only in the owner's head, not in the photo.
+  The real, buildable fix is the same convention Vando already uses for
+  Loonars Coffee: name the project in the caption.
+  `resolveOutflowProject()` now reads the caption the same way (matches an
+  active project's branch name as a whole word, case-insensitive) and
+  prefers that project over the sender's own branch when present; empty
+  caption still defaults to the sender's own branch exactly as before, so
+  Fasly's routine day-to-day Kendari submissions are unaffected. Also
+  fixed a latent bug this surfaced while implementing it: the
+  `construction_expenses` insert used `employee.branch_id` unconditionally
+  for the `branch_id` column, which would have been wrong the moment any
+  override ever picked a different project than the sender's own — now
+  uses the resolved project's own `branch_id`. Manually corrected the one
+  live row this affected: moved from Kendari to Loonars Coffee in both
+  `construction_expenses` and mkh-properti's `jurnal` (kept the
+  debit/credit pair balanced, both rows annotated with the correction).
 - **Real bug fixed 2026-09-12**: `findCostRequestByPrefix()` filtered with
   `.ilike("id", prefix + "%")` on a `uuid` column — Postgres has no
   `uuid ~~* text` operator, so every lookup errored server-side and
