@@ -119,6 +119,10 @@ const PUBLIC_PATHS = [
   // way every route above was: a real automation_post() call to it landed
   // on the /login HTML page (200 OK) instead of ever reaching the handler.
   "/api/admin/send-wa-message",
+  // Same class as send-wa-message immediately above, same reason for being
+  // here -- see app/api/admin/upload-bukti-transfer/route.ts. Own auth:
+  // requireCronAuth (x-cron-secret).
+  "/api/admin/upload-bukti-transfer",
 ];
 
 export function isPublicPath(pathname: string) {
