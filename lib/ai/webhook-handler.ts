@@ -47,6 +47,7 @@ import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-con
 import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-proof-confirmation";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
+import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
 import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
@@ -1275,6 +1276,21 @@ export async function handleWhatsAppWebhookEvent(
       // the general AI pipeline; only short-circuits when a fee is actually
       // pending, so it never hijacks an unrelated "ya" reply.
       if (roleKey === "super_admin") {
+        // Laporan Investor: "lapkeu" -> PDF dari MKH Property dikirim balik
+        // sebagai dokumen (lib/ai/domains/laporan-investor-wa.ts). "lapkeu"
+        // tidak bertabrakan dengan perintah lain di blok ini.
+        trace.push("tryHandleLapkeuViaWhatsApp:calling");
+        const lapkeu = await tryHandleLapkeuViaWhatsApp(inbound.sender, inbound.content.text);
+        trace.push(`tryHandleLapkeuViaWhatsApp:${lapkeu.outcome}`);
+        if (lapkeu.outcome !== "not_applicable") {
+          trace.push("sendWhatsAppText:calling(lapkeu)");
+          const sendResult = await sendWhatsAppText(inbound.sender, lapkeu.reply);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.text, lapkeu.reply, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
         // Super Admin answering a nurture-bot escalation, "[PQ-0001]:
         // jawaban" (see lib/ai/domains/lead-nurture.ts's
         // notifySuperadminsPendingQuestion). Must run first in this block
