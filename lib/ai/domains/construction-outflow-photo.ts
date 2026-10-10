@@ -25,22 +25,58 @@ export type ConstructionOutflowPhotoOutcome =
  * that Fasly paid something out; the owner still separately reimburses him
  * (or the store), which is what flips is_settled (see
  * construction-expense-settlement.ts).
+ *
+ * Real incident: the owner sent a Rp10,000,000 bukti transfer to "SYAIRIL
+ * ASWAN" via Fasly's WhatsApp number, with no caption -- this still
+ * defaulted to Fasly's own project (Kendari), and silently posted there,
+ * even though it was actually a Loonars Coffee payment ("atas nama Papang"
+ * -- Papang being a known Coffee party). His question: why doesn't the AI
+ * check the recipient name? It genuinely can't help here -- "Syairil Aswan"
+ * had never been paid by EITHER project before, so there was no name to
+ * match against. The only real fix for "I'm paying for a different project
+ * than my own branch" is the same one Vando already uses for Loonars
+ * Coffee: name the project in the caption. ownerProjectOverride below reads
+ * that caption the same way (matches an active project's branch name as a
+ * whole word, case-insensitive) -- when present, it wins over the sender's
+ * own branch; when absent, behaviour is unchanged from before.
  */
+async function resolveOutflowProject(supabase: ReturnType<typeof createAdminClient>, branchId: string, caption: string | null | undefined): Promise<{ id: string; name: string; branchId: string } | null> {
+  const trimmedCaption = (caption ?? "").trim();
+  if (trimmedCaption) {
+    const { data: activeProjects } = await supabase
+      .from("construction_projects")
+      .select("id, name, branch_id, branch:branch_id(name)")
+      .eq("status", "active");
+    for (const p of activeProjects ?? []) {
+      const branchName = (p.branch as unknown as { name: string } | null)?.name;
+      if (!branchName) continue;
+      const words = branchName.split(/\s+/).filter((w) => w.length >= 4);
+      if (words.length > 0 && words.some((w) => new RegExp(`\\b${w}\\b`, "i").test(trimmedCaption))) {
+        return { id: p.id as string, name: p.name as string, branchId: p.branch_id as string };
+      }
+    }
+  }
+
+  const { data: project } = await supabase
+    .from("construction_projects")
+    .select("id, name, branch_id")
+    .eq("branch_id", branchId)
+    .eq("status", "active")
+    .maybeSingle();
+  return project ? { id: project.id, name: project.name, branchId: project.branch_id } : null;
+}
+
 export async function tryRecordConstructionOutflowPhoto(
   employee: { id: string; full_name: string; branch_id: string | null; role_key: string | null },
   imageUrl: string,
+  caption?: string | null,
 ): Promise<ConstructionOutflowPhotoOutcome> {
   if (employee.role_key !== "kepala_cabang" || !employee.branch_id) {
     return { outcome: "not_applicable" };
   }
 
   const supabase = createAdminClient();
-  const { data: project } = await supabase
-    .from("construction_projects")
-    .select("id, name")
-    .eq("branch_id", employee.branch_id)
-    .eq("status", "active")
-    .maybeSingle();
+  const project = await resolveOutflowProject(supabase, employee.branch_id, caption);
   if (!project) return { outcome: "not_applicable" };
 
   const image = await fetchImageAsBase64(imageUrl);
@@ -60,7 +96,7 @@ export async function tryRecordConstructionOutflowPhoto(
 
   const { error } = await supabase.from("construction_expenses").insert({
     project_id: project.id,
-    branch_id: employee.branch_id,
+    branch_id: project.branchId,
     expense_type: "material_tunai",
     party_name: partyName,
     description: `Dicatat otomatis dari foto bukti transfer WA${ai.tanggal ? ` -- tanggal di foto: ${ai.tanggal}` : ""}${ai.notes ? ` (${ai.notes})` : ""}`,

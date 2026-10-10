@@ -1014,6 +1014,7 @@ export async function handleWhatsAppWebhookEvent(
       const outflowResult = await tryRecordConstructionOutflowPhoto(
         { id: employee.id, full_name: employee.full_name, branch_id: employee.branch_id, role_key: imageRoleKey },
         inbound.content.url,
+        inbound.content.caption,
       );
       trace.push(`tryRecordConstructionOutflowPhoto:${outflowResult.outcome}`);
       if (outflowResult.outcome === "recorded") {
