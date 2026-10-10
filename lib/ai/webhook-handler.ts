@@ -48,6 +48,7 @@ import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-pro
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
+import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
 import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
 import { tryForwardVillaDividendProofViaWhatsApp } from "./domains/villa-dividend-proof-forward";
 import { sendWhatsAppImage, sendWhatsAppText } from "./notifications/engine";
@@ -186,6 +187,20 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryVillaReferralRequestViaWhatsApp:not_applicable");
+
+      // Kupon KOL villa: "KOL @akun 2" / "KOL LIST" / "KOL BATAL <kode>"
+      // dari owner (2026-10-09). Owner-only dan polanya diawali kata
+      // "KOL", jadi tidak membayangi jalur karyawan di bawah -- yang
+      // sebelumnya membaca "Kol @atmojoae" sebagai nama karyawan.
+      trace.push("tryVillaKolCouponViaWhatsApp:calling");
+      const villaKol = await tryVillaKolCouponViaWhatsApp(inbound.sender, inbound.content.text);
+      if (villaKol.outcome === "handled") {
+        trace.push("tryVillaKolCouponViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, villaKol.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, villaKol.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryVillaKolCouponViaWhatsApp:not_applicable");
     }
 
     // Villa: owner forwards a dividend transfer proof photo to the investor
