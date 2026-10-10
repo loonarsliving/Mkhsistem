@@ -740,3 +740,30 @@ Free-tier Supabase, 246 migrations applied (assumed — not independently
 re-verified against the live project in this audit, which intentionally
 made no database changes), RLS active repo-wide, no automated backups
 active by default (self-managed backup workflow exists but needs secrets).
+
+## Data correction reversed and redone (2026-10-10, Loonars Coffee vs Kendari)
+
+A prior correction in this same incident (moving a Rp10,000,000 "SYAIRIL
+ASWAN" `construction_expenses`/jurnal row from Kendari to Loonars Coffee,
+based on the owner's offhand "atas nama papang" remark) was itself wrong.
+The owner later confirmed he never transferred anything to Syairil Aswan —
+that transfer and its original Kendari attribution were correct all along.
+Reverted `construction_expenses` id `674e0165-3f5a-490e-ba8e-429355411a35`
+and mkh-properti `jurnal` ids `1172`/`1173` back to Kendari/`'KDI'`.
+
+The real Loonars Coffee obligation was a *separate*, one-minute-later
+Rp10,000,000 transfer directly to "Papang Widiyanto" (Bank Danamon
+903692710811) — which matched an already-pending, untouched
+`construction_cost_requests` row (`99eb938b…`, submitted that same
+morning, never settled because the bukti-transfer photo was shown directly
+in chat rather than sent to the WhatsApp bot, so none of the
+photo-confirm handlers ever saw it). Settled it manually by hand-running
+the same steps `tryConfirmLoonarsCoffeeTransferByPhoto` would have run:
+inserted the linked `construction_expenses` row and updated the cost
+request to `status='posted'` with `posted_expense_id` set, which correctly
+fired the existing sync to mkh-properti's `jurnal` under `proyek='LL'`.
+
+Lesson: don't infer which real-world transfer a verbal explanation refers
+to when two near-simultaneous transfers of the same amount exist — check
+for a matching pending `construction_cost_requests` row by exact
+amount/party/account first, the same way the automated handler does.
