@@ -6,6 +6,19 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-10 — Perintah WA "lapkeu": Laporan Investor PDF untuk super admin
+
+Super admin mengirim `lapkeu` (opsional `YYYY-MM` atau `YYYY-MM YYYY-MM`)
+ke nomor sistem; MK Connect meminta tautan unduh sementara ke MKH Property
+(`POST https://finance.haluoleo.id/api/laporan-investor/wa`, header
+`x-sync-secret` = Vault `mk_sync_shared_secret` lewat RPC `get_sync_secret`
+yang sudah ada — tidak ada rahasia baru) lalu mengirim PDF lewat
+`sendWhatsAppDocument` (Whacenter mengambil dari tautan; berlaku 10 menit,
+maks 3 kali ambil). Kode: `lib/ai/domains/laporan-investor-wa.ts`, dipasang
+paling awal di blok `roleKey === "super_admin"` di `webhook-handler.ts`.
+Tanpa perubahan skema. PDF tidak disimpan di MK Connect. Sisi MKH Property:
+migrasi mkh-properti 0042.
+
 ## 2026-10-09 — Perintah WA "KOL" untuk kupon menginap gratis villa (barter KOL)
 
 Owner membuat kupon KOL lewat 0822: `KOL @akun 2`, `KOL LIST`,
