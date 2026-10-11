@@ -148,7 +148,7 @@ describe("utang toko & pengajuan mingguan", () => {
     const pesan = "L2 pengajuan:\n1. cicilan ke TB Maju Rp 2.500.000\n2) upah tukang unit 12 4 jt";
     const hasil = parseLoonars2Perintah(pesan);
     expect(hasil).toMatchObject({ aksi: "ajukan_mingguan" });
-    expect((hasil as { data: { baris: unknown[] } }).data.baris).toHaveLength(2);
+    expect((hasil as unknown as { data: { baris: unknown[] } }).data.baris).toHaveLength(2);
     expect(parseLoonars2Perintah("L2 cicilan TB Maju 3 juta")).toEqual({
       aksi: "ajukan_mingguan",
       data: { baris: [{ jenis: "cicilan", toko: "TB Maju", deskripsi: "cicilan TB Maju 3 juta", nominal: 3_000_000 }] },
