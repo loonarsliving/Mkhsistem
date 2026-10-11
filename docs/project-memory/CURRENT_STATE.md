@@ -3,10 +3,13 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Keuangan Loonars 2 via WhatsApp — dibangun, BELUM di-merge (2026-10-11)
+## Keuangan Loonars 2 via WhatsApp — LIVE di produksi (2026-10-11, PR #79)
 
 Adaptor WA untuk modul 4 rekening Loonars 2 yang data & hitungannya tinggal di
-MKH Property (mkh-properti migrasi `0043`, belum diterapkan). File:
+MKH Property (mkh-properti migrasi `0043`, LIVE; PR mkh-properti #16). Owner
+menyetujui rilis; PR #79 di-merge ke branch produksi. `security-scan` (npm
+audit atas dependency lama) merah di PR ini dan juga di branch produksi
+sebelumnya — bukan dari perubahan ini; butuh PR pembaruan dependency tersendiri. File:
 `lib/ai/domains/loonars2-wa.ts` (dipanggil di `webhook-handler.ts` tepat
 setelah perintah owner villa, untuk teks dan foto), route
 `app/api/loonars2/outbox/route.ts` (dibangunkan pg_cron MKH Property,
