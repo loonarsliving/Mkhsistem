@@ -37,6 +37,15 @@ let cachedFfmpegPath: string | null | undefined;
 async function resolveFfmpegPath(): Promise<string | null> {
   if (cachedFfmpegPath !== undefined) return cachedFfmpegPath;
 
+  // Disabled on Vercel by design: next.config.ts excludes the ffmpeg binary
+  // from every function bundle (it was filling the team's Function Storage),
+  // and heavy video work runs on the off-Vercel worker instead. Skip the
+  // lookup entirely so callers go straight to their no-frames fallback.
+  if (process.env.VERCEL) {
+    cachedFfmpegPath = null;
+    return cachedFfmpegPath;
+  }
+
   try {
     const installer = (await import("@ffmpeg-installer/ffmpeg")) as { default?: { path?: string }; path?: string };
     const path = installer.default?.path ?? installer.path;
