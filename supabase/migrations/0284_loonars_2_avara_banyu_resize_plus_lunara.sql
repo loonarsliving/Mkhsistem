@@ -1,5 +1,5 @@
 -- ============================================================================
--- MK Connect — 0281: Loonars 2 siteplan correction -- AVARA/BANYU resized to
+-- MK Connect — 0284: Loonars 2 siteplan correction -- AVARA/BANYU resized to
 -- 6 units each @ Rp420jt, new LUNARA type (2 kamar, Rp600jt, 5 units)
 --
 -- Owner's correction: AVARA and BANYU keep their names but each should only
