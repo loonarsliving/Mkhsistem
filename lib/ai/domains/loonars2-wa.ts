@@ -43,6 +43,11 @@ export type Loonars2Aksi =
   | "cairkan_profit"
   | "ajukan"
   | "bayar_pengajuan"
+  | "utang"
+  | "daftar_utang"
+  | "ajukan_mingguan"
+  | "putuskan_kode"
+  | "bayar_kelompok"
   | "ya"
   | "batal";
 
@@ -50,6 +55,8 @@ export type Loonars2Perintah =
   | { aksi: Loonars2Aksi; data: Record<string, unknown> }
   /** Pengajuan material/tukang pelaksana -- rinciannya dibaca Gemini. */
   | { aksi: "ajukan_ai"; unit: string | null; teks: string }
+  /** Pembelian secara utang di toko (keterangan foto nota juga boleh). */
+  | { aksi: "utang_foto"; unit: string[]; toko: string | null; deskripsi: string; nominal: number | null }
   /** Diawali "L2" tapi tidak dikenali -- dibalas daftar perintah. */
   | { aksi: "bantuan" };
 
@@ -95,7 +102,74 @@ export function parseUnit(teks: string): { ref: string; sisa: string } | null {
   return { ref, sisa: (teks.slice(0, m.index) + " " + teks.slice((m.index ?? 0) + m[0].length)).trim() };
 }
 
+/** Semua unit dalam teks: "unit 5,6 dan 7", "BANYU-06 & LUNARA-1" -> ["5","6","7"] / kode. */
+export function parseUnits(teks: string): string[] {
+  const hasil: string[] = [];
+  for (const m of teks.matchAll(/\bunit\s*(\d{1,2}(?:\s*(?:,|dan|&|\+|\/)\s*\d{1,2})*)/gi)) {
+    for (const n of m[1].split(/\s*(?:,|dan|&|\+|\/)\s*/i)) if (n) hasil.push(String(Number(n)));
+  }
+  for (const m of teks.matchAll(/\b(avara|banyu|lunara)[\s-]?(\d{1,2})\b/gi)) {
+    hasil.push(`${m[1].toUpperCase()}-${m[2].padStart(2, "0")}`);
+  }
+  return [...new Set(hasil)];
+}
+
+const UNIT_SEMUA_RE = /\bunit\s*\d{1,2}(?:\s*(?:,|dan|&|\+|\/)\s*\d{1,2})*|\b(?:avara|banyu|lunara)[\s-]?\d{1,2}\b/gi;
+const UANG_RE = /(?:rp\.?\s*)?\d[\d.,]*\s*(?:miliar|milyar|juta|jt|ribu|rb|k)\b|(?:rp\.?\s*)?\d{1,3}(?:[.,]\d{3})+(?!\d)|rp\.?\s*\d+/gi;
+
+/** Teks tanpa sebutan unit dan nominal uang (untuk nama toko / rincian). */
+function bersihkan(teks: string): string {
+  return teks.replace(UNIT_SEMUA_RE, " ").replace(UANG_RE, " ").replace(/\s+/g, " ").replace(/^[\s,:;-]+|[\s,:;-]+$/g, "").trim();
+}
+
+export type BarisMingguan = { jenis: "cicilan" | "tukang" | "material" | "lain"; toko?: string; unit?: string[]; deskripsi: string; nominal: number | null };
+
+/** Satu baris pengajuan mingguan: cicilan toko, kontraktor/tukang, atau material/lain. */
+export function parseBarisMingguan(baris: string): BarisMingguan | null {
+  const teks = baris.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s*/, "").replace(/\s+/g, " ").trim();
+  if (!teks) return null;
+  const nominal = parseRupiah(teks.replace(UNIT_SEMUA_RE, " "));
+  const cicilan = teks.match(/^(?:cicilan|cicil|angsuran|bayar\s+utang)\s+(?:utang\s+)?(?:ke\s+)?(.+)$/i);
+  if (cicilan) {
+    return { jenis: "cicilan", toko: bersihkan(cicilan[1]), deskripsi: teks, nominal };
+  }
+  const jenis = /\b(kontraktor|tukang|upah|borongan|mandor)\b/i.test(teks)
+    ? "tukang"
+    : /^(?:lain|biaya\s+lain)/i.test(teks)
+      ? "lain"
+      : "material";
+  const toko = teks.match(/\b((?:tb|toko|ud|cv)\s+[a-z0-9][\w .&-]*)$/i);
+  return { jenis, unit: parseUnits(teks), deskripsi: bersihkan(teks), toko: toko ? toko[1].trim() : undefined, nominal };
+}
+
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
+
+/**
+ * Pengajuan mingguan berbaris-baris (dibaca SEBELUM spasi/baris diratakan):
+ *   L2 pengajuan minggu ini
+ *   - cicilan TB Maju 3 juta
+ *   - kontraktor Pak Anang unit 5,6 15 juta
+ * Satu baris juga boleh: "L2 cicilan TB Maju 3 juta", "L2 kontraktor Pak Anang unit 5 7,5 juta".
+ */
+export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
+  const baris = input.split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+  if (baris.length === 0) return null;
+  const awalan = baris[0].match(PREFIX_RE);
+  if (!awalan) return null;
+  const kepala = baris[0].slice(awalan[0].length).trim();
+  const header = kepala.match(/^(?:pengajuan|ajuan|mingguan)\b(?:\s+minggu\s+ini|\s+mingguan)?[\s:,-]*(.*)$/i);
+  let isi: string[];
+  if (header) {
+    isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());
+  } else if (baris.length === 1 && /^(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|borongan|mandor)\b/i.test(kepala)) {
+    isi = [kepala];
+  } else {
+    return null;
+  }
+  const hasil = isi.map(parseBarisMingguan).filter((b): b is BarisMingguan => b !== null);
+  if (hasil.length === 0) return { aksi: "bantuan" };
+  return { aksi: "ajukan_mingguan", data: { baris: hasil } };
+}
 
 function parseAtasNama(teks: string): string | null {
   const m = teks.match(/\b(?:a\.?\s?n\.?|atas\s+nama)\s+(.+)$/i);
@@ -103,6 +177,8 @@ function parseAtasNama(teks: string): string | null {
 }
 
 export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
+  const mingguan = parsePengajuanMingguan(input);
+  if (mingguan) return mingguan;
   const asli = input.trim().replace(/\s+/g, " ");
   if (!asli) return null;
   const awalan = asli.match(PREFIX_RE);
@@ -116,6 +192,9 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
   if (/^saldo$/.test(kecil)) return { aksi: "saldo", data: {} };
   if (/^tagihan$/.test(kecil)) return { aksi: "tagihan", data: {} };
+  if (/^(?:daftar\s+|sisa\s+)?utang(?:\s+toko)?$/.test(kecil) && (awalan || /^utang$/.test(kecil))) {
+    return { aksi: "daftar_utang", data: {} };
+  }
 
   // "sudah 1" / "sudah semua" / "sudah T15"
   const sudah = kecil.match(/^sudah\s+(semua|\d|t\d+)$/);
@@ -140,6 +219,18 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
       if (atasNama) data.nama_pembeli = atasNama;
       return { aksi: "receipt", data };
     }
+  }
+
+  // "setujui M-3" (pengajuan mingguan) / "setujui U-2 buffer" (utang) / "tolak C-5 <alasan>" (cicilan)
+  const putusKode = teks.match(/^(setujui|setuju|acc|tolak)\s+([muc])\s*-\s*(\d+)\b\s*(.*)$/i);
+  if (putusKode) {
+    const setuju = putusKode[1].toLowerCase() !== "tolak";
+    const kode = `${putusKode[2].toUpperCase()}-${putusKode[3]}`;
+    const sisa = putusKode[4].trim();
+    return {
+      aksi: "putuskan_kode",
+      data: setuju ? { kode, setuju: true, buffer: /\bbuffer\b/i.test(sisa) } : { kode, setuju: false, alasan: sisa.replace(/^alasan[:\s]*/i, "") || null },
+    };
   }
 
   // "setujui L2-12" / "setujui #12 buffer" / "tolak L2-12 alasan harga kemahalan"
@@ -175,6 +266,27 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   // Sisanya hanya untuk pesan berawalan "L2" (pelaksana).
   if (!awalan) return null;
 
+  // "L2 bayar M-3" -- bayar semua baris pengajuan mingguan yang disetujui
+  const bayarKelompok = teks.match(/^(?:bayar|dibayar|lunas)\s+m\s*-\s*(\d+)\b/i);
+  if (bayarKelompok) return { aksi: "bayar_kelompok", data: { kode: `M-${bayarKelompok[1]}` } };
+
+  // "L2 utang TB Maju unit 5 semen 50 sak 6.500.000"
+  const utang = teks.match(/^utang\s+(.+)$/i);
+  if (utang) {
+    const units = parseUnits(utang[1]);
+    const posUnit = utang[1].search(UNIT_SEMUA_RE);
+    UNIT_SEMUA_RE.lastIndex = 0;
+    const toko = posUnit > 0 ? bersihkan(utang[1].slice(0, posUnit)) : null;
+    const setelah = posUnit >= 0 ? utang[1].slice(posUnit) : utang[1];
+    return {
+      aksi: "utang_foto",
+      unit: units,
+      toko: toko || null,
+      deskripsi: bersihkan(setelah),
+      nominal: parseRupiah(setelah.replace(UNIT_SEMUA_RE, " ")),
+    };
+  }
+
   // "L2 bayar L2-12" (biasanya keterangan foto bukti transfer)
   const bayarPengajuan = teks.match(/^(?:bayar|dibayar|lunas)\s+(?:l2-?|#)\s*(\d+)\b\s*(.*)$/i);
   if (bayarPengajuan) {
@@ -191,9 +303,11 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
 export const LOONARS2_BANTUAN =
   "Perintah Loonars 2:\n" +
-  "• Pelaksana: \"L2 unit 5 semen 20 sak 1.300.000 TB Maju\" (boleh kirim foto nota dengan keterangan yang sama), \"L2 bayar L2-12\" + foto bukti\n" +
+  "• Pelaksana: \"L2 utang TB Maju unit 5 semen 50 sak 6.500.000\" (+ foto nota), \"L2 pengajuan minggu ini\" lalu satu baris per pembayaran " +
+  "(\"- cicilan TB Maju 3 juta\", \"- kontraktor Pak Anang unit 5,6 15 juta\", \"- material unit 7 pasir 1,6 juta\"), \"L2 bayar M-3\" + foto bukti, \"L2 utang\" (daftar utang), " +
+  "\"L2 unit 5 semen 20 sak 1.300.000 TB Maju\" (pengajuan satuan)\n" +
   "• Owner: \"DP unit 5, 210 juta\", \"pelunasan unit 5\", \"saldo\", \"tagihan\", \"sudah 1\"/\"sudah semua\", " +
-  "\"sudah transfer B 73,8 juta\", \"setujui L2-12\", \"tolak L2-12 alasan ...\", \"ubah rekening C BCA 123 a.n. ...\", \"cairkan profit 200 juta\"";
+  "\"sudah transfer B 73,8 juta\", \"setujui M-3\" / \"setujui U-2\" / \"setujui L2-12\", \"tolak C-5 alasan ...\", \"utang\", \"ubah rekening C BCA 123 a.n. ...\", \"cairkan profit 200 juta\"";
 
 // ---------------------------------------------------------------------------
 // Jaringan: MKH Property
@@ -285,6 +399,10 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     });
   }
 
+  if (perintah.aksi === "utang_foto") {
+    return teruskan(sender, "utang", { unit: perintah.unit, toko: perintah.toko, deskripsi: perintah.deskripsi, nominal: perintah.nominal });
+  }
+
   return teruskan(sender, perintah.aksi, perintah.data);
 }
 
@@ -295,8 +413,34 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
   const perintah = parseLoonars2Perintah(caption ?? "");
   if (!perintah || perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
 
-  if (perintah.aksi === "konfirmasi_transfer" || perintah.aksi === "bayar_pengajuan" || perintah.aksi === "receipt") {
+  if (
+    perintah.aksi === "konfirmasi_transfer" ||
+    perintah.aksi === "bayar_pengajuan" ||
+    perintah.aksi === "bayar_kelompok" ||
+    perintah.aksi === "receipt"
+  ) {
     return teruskan(sender, perintah.aksi, { ...perintah.data, bukti_url: imageUrl });
+  }
+
+  // Foto nota utang: nominal/toko yang ditulis di keterangan dipakai lebih
+  // dulu; yang kosong dibaca dari nota oleh Gemini (pembaca nota yang sama).
+  if (perintah.aksi === "utang_foto") {
+    let { nominal, toko } = perintah;
+    let items: { nama: string; nilai: number }[] | undefined;
+    if (!nominal || !toko) {
+      const image = await fetchImageAsBase64(imageUrl);
+      const ai: ExpenseReceiptRecognition | null =
+        image && !image.fetchError
+          ? await recognizeExpenseReceipt({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(() => null)
+          : null;
+      nominal = nominal ?? ai?.nominal ?? null;
+      toko = toko ?? ai?.supplier ?? null;
+      items = ai?.items.map((it) => ({ nama: it.nama, nilai: it.harga }));
+    }
+    if (!nominal) {
+      return { outcome: "handled", reply: "⚠️ Total di nota tidak terbaca. Tulis totalnya di keterangan foto, mis. \"L2 utang TB Maju unit 5 semen 50 sak 6.500.000\"." };
+    }
+    return teruskan(sender, "utang", { unit: perintah.unit, toko, deskripsi: perintah.deskripsi, items, nominal, nota_url: imageUrl });
   }
 
   if (perintah.aksi === "ajukan_ai") {

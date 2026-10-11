@@ -6,7 +6,12 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
-## 2026-10-11 — Keuangan Loonars 2 via WhatsApp (branch `claude/loonars2-finance-module-9ejyyz`)
+## 2026-10-11 — Loonars 2: utang toko + pengajuan mingguan (WA)
+
+Perintah WA baru untuk utang toko bangunan, pengajuan mingguan multi-baris
+(cicilan + kontraktor + material), dan keputusan/pembayaran per kode M-/U-/C-.
+
+## 2026-10-11 — Keuangan Loonars 2 via WhatsApp (PR #79, LIVE)
 
 Adaptor WA + route `/api/loonars2/outbox` untuk modul 4 rekening Loonars 2
 di MKH Property (lihat CURRENT_STATE.md). Tanpa migrasi, tanpa rahasia baru.
