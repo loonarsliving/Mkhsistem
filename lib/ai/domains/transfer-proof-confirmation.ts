@@ -291,12 +291,12 @@ async function confirmSingleRow(
  * has more than a handful of pending items outstanding per account, and an
  * unbounded search here would be pointless work anyway.
  */
-function findMatchingSubsets(rows: PendingRow[], target: number): PendingRow[][] {
+export function findMatchingSubsets<T extends { nominal: number | string }>(rows: T[], target: number): T[][] {
   const n = rows.length;
-  const results: PendingRow[][] = [];
+  const results: T[][] = [];
   for (let mask = 1; mask < 1 << n; mask++) {
     let sum = 0;
-    const subset: PendingRow[] = [];
+    const subset: T[] = [];
     for (let i = 0; i < n; i++) {
       if (mask & (1 << i)) {
         sum += Number(rows[i].nominal);
@@ -308,6 +308,23 @@ function findMatchingSubsets(rows: PendingRow[], target: number): PendingRow[][]
     }
   }
   return results;
+}
+
+/**
+ * Real incident (Rebecca, Loonars Living, 2026-10-11): four pending
+ * pengajuan to her own account -- 400.000, 106.000, 300.000, 123.000 --
+ * and one Rp 529.000 transfer. 106.000 + 300.000 + 123.000 is EXACTLY
+ * 529.000, but 400.000 + 123.000 = 523.000 is also within the Rp 6.500
+ * admin-fee tolerance, so two subsets "matched" and the photo fell to
+ * no_amount_match. The tolerance exists for fee-shaped differences, not to
+ * outrank an exact sum: when exactly one subset adds up to the read
+ * nominal to the rupiah, that is the one the owner paid. Anything else
+ * (several exact sums, or only near-misses) stays ambiguous.
+ */
+export function pickSubsetMatch<T extends { nominal: number | string }>(matches: T[][], target: number): T[] | null {
+  if (matches.length === 1) return matches[0];
+  const exact = matches.filter((subset) => subset.reduce((s, r) => s + Number(r.nominal), 0) === target);
+  return exact.length === 1 ? exact[0] : null;
 }
 
 /**
@@ -478,9 +495,9 @@ export async function tryConfirmTransferProofViaWhatsApp(
     // means is genuinely ambiguous, so this still falls through to
     // no_amount_match rather than guessing.
     if (sameAccountRows.length >= 2 && sameAccountRows.length <= 15) {
-      const subsetMatches = findMatchingSubsets(sameAccountRows, ai.nominal);
-      if (subsetMatches.length === 1) {
-        return confirmGroup(supabase, subsetMatches[0], sender, imageUrl, ai);
+      const picked = pickSubsetMatch(findMatchingSubsets(sameAccountRows, ai.nominal), ai.nominal);
+      if (picked) {
+        return confirmGroup(supabase, picked, sender, imageUrl, ai);
       }
     }
   }
