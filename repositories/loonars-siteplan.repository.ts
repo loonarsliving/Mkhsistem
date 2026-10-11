@@ -80,8 +80,12 @@ export async function updateSiteplanUnit(
 }
 
 export async function deleteSiteplanUnit(supabase: TypedSupabaseClient, id: string) {
-  const { error } = await supabase.from("loonars_units").delete().eq("id", id);
+  const { data, error } = await supabase.from("loonars_units").delete().eq("id", id).select("id");
   if (error) throw error;
+  // RLS filtering a row out of a DELETE is not an error to PostgREST -- it just affects 0 rows.
+  if (!data || data.length === 0) {
+    throw new Error("Unit tidak bisa dihapus: hanya unit berstatus tersedia yang belum pernah ada pembelian yang boleh dihapus.");
+  }
 }
 
 // ----------------------------------------------------------------------------
