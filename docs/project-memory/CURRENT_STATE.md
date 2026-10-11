@@ -3,6 +3,25 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Keuangan Loonars 2 via WhatsApp — dibangun, BELUM di-merge (2026-10-11)
+
+Adaptor WA untuk modul 4 rekening Loonars 2 yang data & hitungannya tinggal di
+MKH Property (mkh-properti migrasi `0043`, belum diterapkan). File:
+`lib/ai/domains/loonars2-wa.ts` (dipanggil di `webhook-handler.ts` tepat
+setelah perintah owner villa, untuk teks dan foto), route
+`app/api/loonars2/outbox/route.ts` (dibangunkan pg_cron MKH Property,
+ditambahkan ke `PUBLIC_PATHS`), uji `tests/unit/lib/loonars2-wa.test.ts`.
+Tidak ada migrasi di sisi ini; memakai rahasia sync yang sudah ada
+(`get_sync_secret`). Perintah owner dikenali regex (bukan AI): "DP unit 5, 210
+juta", "pelunasan unit 5", "saldo", "tagihan", "sudah 1/semua/T15", "sudah
+transfer B 73,8 juta", "setujui/tolak L2-12", "ubah rekening C ...", "cairkan
+profit ...", "ya"/"batal". Pelaksana memakai awalan "L2" (teks atau foto nota,
+dibaca `recognizeConstructionCostRequest`/`recognizeExpenseReceipt`). Nomor yang
+tidak terdaftar di `loonars2_wa_users` (MKH Property) jatuh ke alur lain.
+Catatan: "ya" dari nomor terdaftar diperiksa dulu ke Loonars 2; hanya bila
+tidak ada konfirmasi yang ditunggu ia diteruskan ke alur lain (mis. persetujuan
+fee loonars).
+
 ## Loonars Private Living registration category — live in production (2026-10-01)
 
 Hospitality villa staff (Front Office, Security, Head of Loonars Villa) can

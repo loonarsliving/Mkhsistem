@@ -48,6 +48,7 @@ import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-pro
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
+import { tryHandleLoonars2Image, tryHandleLoonars2Text } from "./domains/loonars2-wa";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
 import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
@@ -202,6 +203,23 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryVillaKolCouponViaWhatsApp:not_applicable");
+
+      // Keuangan Loonars 2 (owner 2026-10-11): perintah owner ("DP unit 5,
+      // 210 juta", "sudah 1", "saldo", "setujui L2-12", ...) dan pengajuan
+      // pelaksana berawalan "L2". Whitelist nomor & peran dicek MKH Property
+      // (loonars2_wa_users) -- nomor lain mendapat not_applicable dan jatuh
+      // ke alur di bawah seperti biasa. Polanya tidak bertabrakan dengan
+      // LUNAS/PROMO/TOLAK villa (tepat 6 hex) maupun SETUJUI Coffee (6+ hex):
+      // kode Loonars 2 selalu "L2-<n>"/"#<n>". Lihat lib/ai/domains/loonars2-wa.ts.
+      trace.push("tryHandleLoonars2Text:calling");
+      const loonars2 = await tryHandleLoonars2Text(inbound.sender, inbound.content.text);
+      if (loonars2.outcome === "handled") {
+        trace.push("tryHandleLoonars2Text:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, loonars2.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.text, loonars2.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryHandleLoonars2Text:not_applicable");
     }
 
     // Villa: owner forwards a dividend transfer proof photo to the investor
@@ -220,6 +238,19 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryForwardVillaDividendProofViaWhatsApp:not_applicable");
+
+      // Loonars 2: foto bukti transfer ("sudah 1", "L2 bayar L2-12") atau
+      // foto nota pengajuan ("L2 unit 5 ..."). Keterangan foto memakai pola
+      // yang sama dengan perintah teks; foto tanpa keterangan Loonars 2 lewat.
+      trace.push("tryHandleLoonars2Image:calling");
+      const loonars2Foto = await tryHandleLoonars2Image(inbound.sender, inbound.content.url, inbound.content.caption);
+      if (loonars2Foto.outcome === "handled") {
+        trace.push("tryHandleLoonars2Image:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, loonars2Foto.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[foto loonars 2]", loonars2Foto.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryHandleLoonars2Image:not_applicable");
     }
 
     // Villa guest chat (owner decision 2026-09-27): a villa guest or someone

@@ -56,6 +56,10 @@ const PUBLIC_PATHS = [
   "/api/social/publish-content",
   "/api/markom/check-ads-balance",
   "/api/markom/refresh-ad-campaign-spend",
+  // Dibangunkan pg_cron MKH Property (mkh-properti 0043) lewat net.http_post
+  // tanpa sesi login; route-nya sendiri mencocokkan x-sync-secret dengan
+  // rahasia sync yang sudah ada (get_sync_secret).
+  "/api/loonars2/outbox",
   // Server-to-server bridge endpoints called by loonarsliving/villa's
   // server-side code (Supabase Edge Function / Vercel route handlers,
   // never a browser session) -- found missing here the same way every
