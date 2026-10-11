@@ -3,6 +3,18 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars 2: utang toko + pengajuan mingguan via WA — dibangun, BELUM di-merge (2026-10-11)
+
+Lanjutan modul Loonars 2 (permintaan owner): material dibeli utang di toko
+bangunan dan dicicil mingguan. Parser di `lib/ai/domains/loonars2-wa.ts`:
+"L2 utang <toko> unit <n[,m]> <rincian> <nominal>" (+ foto nota; toko/total
+yang kosong dibaca `recognizeExpenseReceipt`), "L2 utang" (daftar sisa
+utang), pengajuan mingguan berbaris-baris ("L2 pengajuan minggu ini" lalu
+"- cicilan TB Maju 3 juta", "- kontraktor Pak Anang unit 5,6 15 juta",
+"- material unit 7 ...") yang dibaca SEBELUM spasi/baris diratakan, keputusan
+owner per kode "setujui M-3" / "setujui U-2 buffer" / "tolak C-5 <alasan>",
+dan "L2 bayar M-3" + bukti. Data & validasi di mkh-properti migrasi `0044`.
+
 ## Keuangan Loonars 2 via WhatsApp — LIVE di produksi (2026-10-11, PR #79)
 
 Adaptor WA untuk modul 4 rekening Loonars 2 yang data & hitungannya tinggal di

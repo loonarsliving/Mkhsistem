@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { parseLoonars2Perintah, parseRupiah, parseUnit } from "@/lib/ai/domains/loonars2-wa";
+import { parseBarisMingguan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -103,6 +103,74 @@ describe("parseLoonars2Perintah", () => {
     // Without the prefix a material message is left to the existing flows.
     expect(parseLoonars2Perintah("unit 5 semen 20 sak 1.300.000")).toBeNull();
     expect(parseLoonars2Perintah("Belanja Coffee: semen 5 sak 700rb")).toBeNull();
+  });
+});
+
+describe("utang toko & pengajuan mingguan", () => {
+  it("reads several units", () => {
+    expect(parseUnits("kontraktor unit 5,6 dan 7 15 juta")).toEqual(["5", "6", "7"]);
+    expect(parseUnits("BANYU-06 & lunara 1")).toEqual(["BANYU-06", "LUNARA-01"]);
+  });
+
+  it("parses a store-credit purchase", () => {
+    expect(parseLoonars2Perintah("L2 utang TB Maju unit 5 semen 50 sak 6.500.000")).toEqual({
+      aksi: "utang_foto",
+      unit: ["5"],
+      toko: "TB Maju",
+      deskripsi: "semen 50 sak",
+      nominal: 6_500_000,
+    });
+    expect(parseLoonars2Perintah("L2 utang Toko Sinar Jaya unit 5,6 besi 10 batang 3,2 juta")).toMatchObject({
+      aksi: "utang_foto",
+      unit: ["5", "6"],
+      toko: "Toko Sinar Jaya",
+      nominal: 3_200_000,
+    });
+    expect(parseLoonars2Perintah("L2 utang")).toEqual({ aksi: "daftar_utang", data: {} });
+    expect(parseLoonars2Perintah("utang")).toEqual({ aksi: "daftar_utang", data: {} });
+  });
+
+  it("parses a multi-line weekly request, keeping each line", () => {
+    const pesan = "L2 pengajuan minggu ini\n- cicilan TB Maju 3 juta\n- kontraktor Pak Anang unit 5,6 15 juta\n- material unit 7 pasir 2 rit 1,6 juta TB Sinar";
+    expect(parseLoonars2Perintah(pesan)).toEqual({
+      aksi: "ajukan_mingguan",
+      data: {
+        baris: [
+          { jenis: "cicilan", toko: "TB Maju", deskripsi: "cicilan TB Maju 3 juta", nominal: 3_000_000 },
+          { jenis: "tukang", unit: ["5", "6"], deskripsi: "kontraktor Pak Anang", toko: undefined, nominal: 15_000_000 },
+          { jenis: "material", unit: ["7"], deskripsi: "material pasir 2 rit TB Sinar", toko: "TB Sinar", nominal: 1_600_000 },
+        ],
+      },
+    });
+  });
+
+  it("accepts numbered lines and a one-line request", () => {
+    const pesan = "L2 pengajuan:\n1. cicilan ke TB Maju Rp 2.500.000\n2) upah tukang unit 12 4 jt";
+    const hasil = parseLoonars2Perintah(pesan);
+    expect(hasil).toMatchObject({ aksi: "ajukan_mingguan" });
+    expect((hasil as { data: { baris: unknown[] } }).data.baris).toHaveLength(2);
+    expect(parseLoonars2Perintah("L2 cicilan TB Maju 3 juta")).toEqual({
+      aksi: "ajukan_mingguan",
+      data: { baris: [{ jenis: "cicilan", toko: "TB Maju", deskripsi: "cicilan TB Maju 3 juta", nominal: 3_000_000 }] },
+    });
+  });
+
+  it("leaves a missing amount for the database to reject by line number", () => {
+    expect(parseBarisMingguan("- kontraktor unit 5")).toMatchObject({ jenis: "tukang", nominal: null });
+  });
+
+  it("does not treat an owner buyer-installment as a store installment", () => {
+    // "cicilan unit 5 ..." from the owner is a buyer payment (receipt), not store credit.
+    expect(parseLoonars2Perintah("cicilan unit 5 50 juta")).toEqual({ aksi: "receipt", data: { unit: "5", jenis: "cicilan", nominal: 50_000_000 } });
+  });
+
+  it("owner decisions and payment by code", () => {
+    expect(parseLoonars2Perintah("setujui M-3")).toEqual({ aksi: "putuskan_kode", data: { kode: "M-3", setuju: true, buffer: false } });
+    expect(parseLoonars2Perintah("setujui u-2 buffer")).toEqual({ aksi: "putuskan_kode", data: { kode: "U-2", setuju: true, buffer: true } });
+    expect(parseLoonars2Perintah("tolak C-5 minggu depan saja")).toEqual({ aksi: "putuskan_kode", data: { kode: "C-5", setuju: false, alasan: "minggu depan saja" } });
+    expect(parseLoonars2Perintah("L2 bayar M-3")).toEqual({ aksi: "bayar_kelompok", data: { kode: "M-3" } });
+    // Coffee/villa hex codes still untouched
+    expect(parseLoonars2Perintah("SETUJUI c0ffee12")).toBeNull();
   });
 });
 
