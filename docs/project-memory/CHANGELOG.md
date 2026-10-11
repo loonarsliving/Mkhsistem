@@ -6,6 +6,18 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-11 — Bukti transfer gabungan: utamakan kombinasi yang pas persis
+
+Kasus Rebecca (Loonars Living): 4 pengajuan pending ke rekeningnya
+(400.000, 106.000, 300.000, 123.000) dibayar sekali Rp 529.000. Kombinasi
+106+300+123 pas persis, tapi 400+123 = 523.000 juga masuk toleransi biaya
+admin (Rp 6.500), jadi dianggap ambigu → "tidak cocok dengan pengajuan
+manapun". Sekarang bila beberapa kombinasi lolos toleransi tapi tepat satu
+yang jumlahnya persis sama, kombinasi itu yang dicatat
+(`pickSubsetMatch` di `lib/ai/domains/transfer-proof-confirmation.ts`,
+tes `tests/unit/lib/transfer-proof-subset-match.test.ts`). Dua kombinasi
+pas-persis, atau hanya hampir-pas, tetap ditolak. Tanpa perubahan skema.
+
 ## 2026-10-10 — Perintah WA "lapkeu": Laporan Investor PDF untuk super admin
 
 Super admin mengirim `lapkeu` (opsional `YYYY-MM` atau `YYYY-MM YYYY-MM`)
