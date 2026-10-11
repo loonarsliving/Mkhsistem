@@ -6,6 +6,20 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-11 — ffmpeg dikeluarkan dari bundle Vercel (Function Storage penuh)
+
+Vercel memperingatkan tim `haluoleo-s-projects` (Hobby) sudah memakai 100%
+dari 10 GB Function Storage. Penyebabnya `next.config.ts`:
+`outputFileTracingIncludes: { "*": ["./node_modules/@ffmpeg-installer/**/*"] }`
+menyalin binary ffmpeg linux-x64 (~66 MB) ke setiap function, di setiap
+deployment yang masih disimpan. Sekarang diganti
+`outputFileTracingExcludes` untuk path yang sama, dan
+`lib/video/extract-keyframes.ts` langsung mengembalikan "tanpa ffmpeg" bila
+`process.env.VERCEL` ada (analisis video memakai fallback tanpa keyframe).
+Keputusan owner: render video nanti di Mac mini lewat worker
+(`scripts/render-worker.ts`), jadi dependency `@ffmpeg-installer/ffmpeg`
+tetap dipertahankan untuk worker. Tanpa migrasi, tanpa env baru.
+
 ## 2026-10-11 — Keuangan Loonars 2 via WhatsApp (branch `claude/loonars2-finance-module-9ejyyz`)
 
 Adaptor WA + route `/api/loonars2/outbox` untuk modul 4 rekening Loonars 2
