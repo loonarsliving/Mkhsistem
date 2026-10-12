@@ -852,7 +852,7 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
   );
   if (!ai.readable || ai.nominal === null) return { outcome: "not_applicable" };
 
-  const candidates = awaitingMoney.filter(
+  const toleranceCandidates = awaitingMoney.filter(
     (row) =>
       !isNominalMismatch(Number(row.amount), ai.nominal) &&
       // A still-submitted request the owner raised HIMSELF is the one case
@@ -861,6 +861,13 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
       // ones are past that check, so they still go through.
       !(row.status === "submitted" && row.requested_by === sender.id),
   );
+  // Real incident (2026-10-12): a Rp 124.000 proof also fell inside the
+  // tolerance of a stale, still-submitted Rp 126.000 request from weeks
+  // earlier, so it counted as ambiguous and fell through to the generic
+  // "tidak cocok dengan pengajuan manapun" reply. When the tolerance window
+  // catches several, an exact-nominal match is unambiguous enough to win.
+  const exactCandidates = toleranceCandidates.filter((row) => Math.abs(Number(row.amount) - (ai.nominal as number)) < 1);
+  const candidates = toleranceCandidates.length > 1 && exactCandidates.length === 1 ? exactCandidates : toleranceCandidates;
   if (candidates.length !== 1) {
     // Zero matches, or an ambiguous amount shared by several open requests
     // -- never guess which one the owner paid.
