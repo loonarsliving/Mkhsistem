@@ -7,7 +7,7 @@ and existing docs — not from any external issue tracker (none found).
 
 Permintaan owner: modul khusus refund customer (dari spreadsheet "CS REFUND
 LANJUT AFIH") + login khusus jabatan **Refund & Customer Relation**. Migrasi
-`0286_refund_customer_relation.sql`: tabel `mkc_refund_customers`,
+`0287_refund_customer_relation.sql`: tabel `mkc_refund_customers`,
 `mkc_refund_installments` (termin per bulan, `is_paid`),
 `mkc_refund_chat_messages`, `mkc_refund_reminders`; izin `refund.view`/
 `refund.manage`; peran `refund_customer_relation` (dashboard.view +
@@ -19,7 +19,12 @@ keluar lewat `sendWhatsAppText` (device Whacenter perusahaan), masuk lewat
 `tryCaptureRefundCustomerMessage` di `webhook-handler.ts` (setelah perintah
 owner, SEBELUM resepsionis villa & jalur lead/AI) — cocok 9 digit terakhir
 nomor customer, tanpa balasan otomatis. Halaman `/refund` juga memuat kartu
-absensi (CheckInOutCard). "Terbayar" = `opening_paid_amount` + termin yang
+absensi (CheckInOutCard). Pendaftaran mandiri: divisi global
+"Refund & Customer Relation" (kode `REFUND-CR`); `approve_employee_registration`
+memberi peran `refund_customer_relation` (bukan `staff`) untuk divisi itu.
+Catatan: nomor 0286 sudah terpakai di DB live oleh
+`0286_lock_down_rls_disabled_tables` (tidak ada di repo) — karena itu migrasi
+ini bernomor 0287. "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB

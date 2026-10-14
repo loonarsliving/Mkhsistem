@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatRefundInboundBody, refundPhonesMatch, type RefundInboundContent } from "./refund-customer-chat-format";
 
 /**
- * Customer refund chat, inbound side (0286). When a customer on the refund
+ * Customer refund chat, inbound side (0287). When a customer on the refund
  * list (mkc_refund_customers) messages the company WhatsApp, the message is
  * stored in their conversation on /refund and the Refund & Customer
  * Relation officer gets an in-app notification. No automatic reply -- a

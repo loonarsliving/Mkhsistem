@@ -1,7 +1,7 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
 /**
- * Reads for the customer refund module (/refund, migration 0286). Pure
+ * Reads for the customer refund module (/refund, migration 0287). Pure
  * queries -- every total below is derived here from the raw rows rather than
  * stored, so ticking a termin can never leave a stale "terbayar"/"sisa"
  * figure behind.

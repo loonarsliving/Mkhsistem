@@ -29,7 +29,7 @@ import {
 } from "../schemas/refund.schema";
 
 /**
- * Refund module mutations (0286). requirePermission() here and RLS /
+ * Refund module mutations (0287). requirePermission() here and RLS /
  * security-definer RPC checks in the database are two independent layers --
  * neither is relied on alone.
  */

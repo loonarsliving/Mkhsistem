@@ -133,7 +133,7 @@ export type NotificationCategoryDb =
   | "construction_cost_request_submitted"
   | "construction_cost_request_decided"
   | "construction_project_weekly_report"
-  // Refund & Customer Relation module (migration 0286)
+  // Refund & Customer Relation module (migration 0287)
   | "refund_reminder"
   | "refund_customer_message";
 export type NotificationStatusDb = "unread" | "read" | "archived";

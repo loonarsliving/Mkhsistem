@@ -8,7 +8,7 @@ line below corresponds to one or more actual commit messages.
 
 ## 2026-10-14 — Modul Refund & Customer Relation (/refund)
 
-Migrasi 0286 + peran login baru `refund_customer_relation`. Centang termin
+Migrasi 0287 + peran login baru `refund_customer_relation`. Centang termin
 terbayar, chat WhatsApp dua arah dengan customer dari dashboard, tombol
 "Ingatkan Owner & Vando" (in-app + WA), absensi di halaman yang sama. Data
 customer dimuat langsung ke DB (tidak di-commit). Lihat CURRENT_STATE.md.

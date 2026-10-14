@@ -254,7 +254,7 @@ export async function handleWhatsAppWebhookEvent(
       trace.push("tryHandleLoonars2Image:not_applicable");
     }
 
-    // Refund customer chat (0286): a customer on the refund list
+    // Refund customer chat (0287): a customer on the refund list
     // (mkc_refund_customers) messaging us is answered by the Refund &
     // Customer Relation officer from /refund -- stored in their conversation
     // there, no automatic reply. Checked after the owner commands above

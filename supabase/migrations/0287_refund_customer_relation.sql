@@ -1,5 +1,5 @@
 -- ============================================================================
--- MK Connect — 0286: Refund & Customer Relation module (/refund)
+-- MK Connect — 0287: Refund & Customer Relation module (/refund)
 --
 -- Owner's ask (2026-10-14): a dedicated module + dedicated login for the
 -- "Refund & Customer Relation" job, built around the CS refund spreadsheet
@@ -8,7 +8,7 @@
 --   1. ticks off each monthly termin once it is paid,
 --   2. chats with the customer over WhatsApp from the dashboard (outbound
 --      through the company's Whacenter device; the customer's replies are
---      captured by the WA webhook -- see lib/refund/inbound.ts),
+--      captured by the WA webhook -- see lib/ai/domains/refund-customer-chat.ts),
 --   3. reminds the owner (every Super Admin) and Vando about a refund with
 --      one click -- delivered in-app AND over WhatsApp,
 --   4. does their own attendance (existing /attendance, attendance.view_own).
@@ -234,7 +234,7 @@ begin
     -- Siteplan unit purchase + fee claim alerts -- a fee claim is a real
     -- payout, so this is a finance matter too (0276, owner's explicit call).
     'loonars_fee_alert',
-    -- Refund customer -- pengingat dari Refund & Customer Relation (0286).
+    -- Refund customer -- pengingat dari Refund & Customer Relation (0287).
     'refund_reminder',
     -- Konstruksi (construction)
     'construction_expense_submitted', 'construction_weekly_report',
@@ -407,3 +407,84 @@ revoke all on function public.refund_set_installment_paid(uuid, boolean) from pu
 revoke all on function public.refund_send_reminder(uuid, text) from public, anon;
 grant execute on function public.refund_set_installment_paid(uuid, boolean) to authenticated;
 grant execute on function public.refund_send_reminder(uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Self-registration path (owner: "biarkan dia mendaftar, pilih jabatannya
+-- di sana"). /register offers branch + division, and approval always gave
+-- `staff`. A company-wide division "Refund & Customer Relation" (code
+-- REFUND-CR) is added, and approve_employee_registration() now gives the
+-- refund_customer_relation role to a registrant in that division instead of
+-- staff. A human still has to approve -- picking the division alone grants
+-- nothing (the pending role holds no permissions).
+-- ----------------------------------------------------------------------------
+insert into public.divisions (code, name, description, branch_id)
+select 'REFUND-CR', 'Refund & Customer Relation', 'Penanganan refund customer & customer relation (modul /refund)', null
+where not exists (select 1 from public.divisions where code = 'REFUND-CR' and deleted_at is null);
+
+-- Restated VERBATIM from the live function (2026-10-14) except the one role
+-- lookup marked below.
+create or replace function public.approve_employee_registration(p_employee_id uuid)
+ returns employees
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $function$
+declare
+  v_target public.employees;
+  v_staff_role_id uuid;
+begin
+  select * into v_target from public.employees where id = p_employee_id for update;
+  if not found then
+    raise exception 'Registrasi tidak ditemukan' using errcode = 'P0002';
+  end if;
+
+  if not (
+    public.app_is_super_admin()
+    or (
+      public.app_has_permission('registration.manage')
+      and (public.app_has_permission('registration.view_all') or v_target.branch_id = public.app_current_branch_id())
+    )
+  ) then
+    raise exception 'Anda tidak berwenang menyetujui registrasi ini' using errcode = '42501';
+  end if;
+
+  if v_target.approval_status <> 'pending' then
+    raise exception 'Registrasi ini sudah diproses' using errcode = '22023';
+  end if;
+
+  -- 0287: registrants in the REFUND-CR division get the single-purpose
+  -- refund role; everyone else keeps the default staff role.
+  select id into v_staff_role_id from public.roles
+  where key = case
+    when exists (select 1 from public.divisions d where d.id = v_target.division_id and d.code = 'REFUND-CR')
+      then 'refund_customer_relation'
+    else 'staff'
+  end;
+
+  update public.employees
+  set role_id = v_staff_role_id,
+      approval_status = 'approved',
+      is_active = true,
+      approved_by = auth.uid(),
+      approved_at = now(),
+      rejected_by = null,
+      rejected_at = null,
+      rejection_reason = null
+  where id = p_employee_id and approval_status = 'pending'
+  returning * into v_target;
+
+  if not found then
+    raise exception 'Registrasi ini sudah diproses' using errcode = '22023';
+  end if;
+
+  insert into public.mkc_notifications (user_id, type, category, title, body, link)
+  values (
+    v_target.id, 'registration', 'approved',
+    'Registrasi Anda disetujui',
+    'Akun Anda telah disetujui dan aktif. Selamat bergabung!',
+    '/dashboard'
+  );
+
+  return v_target;
+end;
+$function$;

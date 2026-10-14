@@ -60,7 +60,7 @@ export const metadata: Metadata = { title: "Dashboard" };
  */
 export default async function DashboardPage() {
   const session = await requireSession();
-  // Single-purpose login (0286): the refund module is this role's whole app.
+  // Single-purpose login (0287): the refund module is this role's whole app.
   if (session.roleKey === ROLE_KEYS.REFUND_CUSTOMER_RELATION) redirect("/refund");
   const supabase = await createClient();
   const canReviewRegistrations =

@@ -26,7 +26,7 @@ export const ROLE_KEYS = {
    */
   PRIVATE_ASSISTANT: "private_assistant",
   /**
-   * Refund & Customer Relation (0286) -- a single-purpose login: the /refund
+   * Refund & Customer Relation (0287) -- a single-purpose login: the /refund
    * module plus their own attendance. /dashboard redirects this role to
    * /refund so the module is the whole app for them.
    */
@@ -236,7 +236,7 @@ export const PERMISSIONS = {
   SITEPLAN_MANAGE: "siteplan.manage",
 
   /**
-   * Customer refund module (/refund, 0286) -- refund data + monthly termin
+   * Customer refund module (/refund, 0287) -- refund data + monthly termin
    * schedule. MANAGE ticks paid termin, edits refund data, chats customers
    * over WhatsApp, and sends the "ingatkan owner & Vando" reminder.
    */
