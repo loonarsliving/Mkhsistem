@@ -3,6 +3,35 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Modul Refund & Customer Relation (/refund) — dibangun, BELUM di-merge / BELUM diterapkan ke DB (2026-10-14)
+
+Permintaan owner: modul khusus refund customer (dari spreadsheet "CS REFUND
+LANJUT AFIH") + login khusus jabatan **Refund & Customer Relation**. Migrasi
+`0286_refund_customer_relation.sql`: tabel `mkc_refund_customers`,
+`mkc_refund_installments` (termin per bulan, `is_paid`),
+`mkc_refund_chat_messages`, `mkc_refund_reminders`; izin `refund.view`/
+`refund.manage`; peran `refund_customer_relation` (dashboard.view +
+attendance.view_own + refund.*; `/dashboard` me-redirect peran ini ke
+`/refund`); RPC `refund_set_installment_paid` dan `refund_send_reminder`
+(notifikasi ke semua Super Admin + Vando, dicocokkan nama seperti 0257;
+kategori `refund_reminder` ditambahkan ke allowlist WA relay). Chat customer:
+keluar lewat `sendWhatsAppText` (device Whacenter perusahaan), masuk lewat
+`tryCaptureRefundCustomerMessage` di `webhook-handler.ts` (setelah perintah
+owner, SEBELUM resepsionis villa & jalur lead/AI) — cocok 9 digit terakhir
+nomor customer, tanpa balasan otomatis. Halaman `/refund` juga memuat kartu
+absensi (CheckInOutCard). "Terbayar" = `opening_paid_amount` + termin yang
+dicentang (dihitung di repository, tidak disimpan).
+
+**Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB
+produksi. Aturan muat: kolom Sisa spreadsheet = kebenaran; termin sebelum
+Okt-26 dicentang terbayar; selisihnya jadi `opening_paid_amount`.
+Kejanggalan spreadsheet dilaporkan ke owner di chat (nama customer sengaja
+tidak dicatat di sini — repo publik): 1 customer sisa > jumlah refund, 2
+customer tanpa jadwal termin, 4 customer jadwal < sisa, 1 customer yang
+"Terbayar"-nya belum termasuk termin Sep-26, pembulatan +1–2 rb di beberapa
+jadwal. Modul menampilkan peringatan
+"belum punya jadwal termin" untuk kasus seperti ini.
+
 ## Loonars 2: utang toko + pengajuan mingguan via WA — dibangun, BELUM di-merge (2026-10-11)
 
 Lanjutan modul Loonars 2 (permintaan owner): material dibeli utang di toko

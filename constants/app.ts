@@ -125,6 +125,8 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   emergency_notice: "Pemberitahuan Darurat",
   salary_transfer_request: "Permintaan Transfer Gaji",
   salary_transferred: "Gaji Ditransfer",
+  refund_reminder: "Pengingat Refund Customer",
+  refund_customer_message: "Pesan Customer Refund",
 };
 
 export const PROSPECT_STATUS = {

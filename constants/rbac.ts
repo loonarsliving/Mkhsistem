@@ -25,6 +25,12 @@ export const ROLE_KEYS = {
    * in the system.
    */
   PRIVATE_ASSISTANT: "private_assistant",
+  /**
+   * Refund & Customer Relation (0286) -- a single-purpose login: the /refund
+   * module plus their own attendance. /dashboard redirects this role to
+   * /refund so the module is the whole app for them.
+   */
+  REFUND_CUSTOMER_RELATION: "refund_customer_relation",
   /** Placeholder role for self-registered accounts awaiting approval — grants nothing. */
   PENDING: "pending",
 } as const;
@@ -228,6 +234,14 @@ export const PERMISSIONS = {
    */
   SITEPLAN_VIEW: "siteplan.view",
   SITEPLAN_MANAGE: "siteplan.manage",
+
+  /**
+   * Customer refund module (/refund, 0286) -- refund data + monthly termin
+   * schedule. MANAGE ticks paid termin, edits refund data, chats customers
+   * over WhatsApp, and sends the "ingatkan owner & Vando" reminder.
+   */
+  REFUND_VIEW: "refund.view",
+  REFUND_MANAGE: "refund.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -572,6 +586,12 @@ export const ROLE_PERMISSIONS_SEED: Record<RoleKey, PermissionKey[]> = {
     PERMISSIONS.FRIDAY_VIEW,
     PERMISSIONS.FRIDAY_RUN,
     PERMISSIONS.HOLDING_VIEW,
+  ],
+  [ROLE_KEYS.REFUND_CUSTOMER_RELATION]: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ATTENDANCE_VIEW_OWN,
+    PERMISSIONS.REFUND_VIEW,
+    PERMISSIONS.REFUND_MANAGE,
   ],
   [ROLE_KEYS.PENDING]: [],
 };

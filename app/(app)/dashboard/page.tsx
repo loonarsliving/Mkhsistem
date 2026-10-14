@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
@@ -59,6 +60,8 @@ export const metadata: Metadata = { title: "Dashboard" };
  */
 export default async function DashboardPage() {
   const session = await requireSession();
+  // Single-purpose login (0286): the refund module is this role's whole app.
+  if (session.roleKey === ROLE_KEYS.REFUND_CUSTOMER_RELATION) redirect("/refund");
   const supabase = await createClient();
   const canReviewRegistrations =
     hasPermission(session, "registration.view_all") || hasPermission(session, "registration.view_branch");
