@@ -128,10 +128,13 @@ export function RefundBoard({
   customers,
   currentMonth,
   canManage,
+  canManageNumbers,
 }: {
   customers: RefundCustomer[];
   currentMonth: string;
   canManage: boolean;
+  /** Add customers / change phone numbers -- Super Admin only (0288). */
+  canManageNumbers: boolean;
 }) {
   const [query, setQuery] = React.useState("");
   const [chatCustomerId, setChatCustomerId] = React.useState<string | null>(null);
@@ -174,9 +177,11 @@ export function RefundBoard({
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setForm({ open: true, customer: null })}>
-              <Plus className="h-4 w-4" /> Tambah Customer
-            </Button>
+            {canManageNumbers && (
+              <Button variant="outline" onClick={() => setForm({ open: true, customer: null })}>
+                <Plus className="h-4 w-4" /> Tambah Customer
+              </Button>
+            )}
             <Button onClick={() => setReminder({ open: true, customer: null })}>
               <BellRing className="h-4 w-4" /> Ingatkan Owner & Vando
             </Button>
@@ -353,7 +358,12 @@ export function RefundBoard({
         customer={reminder.customer}
         onOpenChange={(open) => setReminder((r) => ({ ...r, open }))}
       />
-      <RefundCustomerFormDialog open={form.open} customer={form.customer} onOpenChange={(open) => setForm((f) => ({ ...f, open }))} />
+      <RefundCustomerFormDialog
+        open={form.open}
+        customer={form.customer}
+        canEditPhone={canManageNumbers}
+        onOpenChange={(open) => setForm((f) => ({ ...f, open }))}
+      />
       <RefundAddInstallmentDialog customer={addInstallmentFor} onOpenChange={(open) => !open && setAddInstallmentFor(null)} />
     </div>
   );
