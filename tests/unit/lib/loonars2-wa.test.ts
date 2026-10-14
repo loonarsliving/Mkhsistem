@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { parseBarisMingguan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -119,6 +119,7 @@ describe("utang toko & pengajuan mingguan", () => {
       toko: "TB Maju",
       deskripsi: "semen 50 sak",
       nominal: 6_500_000,
+      teks: "TB Maju unit 5 semen 50 sak 6.500.000",
     });
     expect(parseLoonars2Perintah("L2 utang Toko Sinar Jaya unit 5,6 besi 10 batang 3,2 juta")).toMatchObject({
       aksi: "utang_foto",
@@ -177,5 +178,83 @@ describe("utang toko & pengajuan mingguan", () => {
 describe("outbox route", () => {
   it("is reachable by MKH Property's pg_cron without a login session", () => {
     expect(isPublicPath("/api/loonars2/outbox")).toBe(true);
+  });
+});
+
+describe("unit ranges", () => {
+  it("expands ranges and mixed lists", () => {
+    expect(parseUnits("unit 1-6")).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(parseUnits("unit 1-3,5")).toEqual(["1", "2", "3", "5"]);
+    expect(parseUnits("unit 4 sampai 6")).toEqual(["4", "5", "6"]);
+    expect(parseUnits("blok 7 dan 8")).toEqual(["7", "8"]);
+    expect(parseUnits("unit 5,6 dan 7")).toEqual(["5", "6", "7"]);
+    expect(parseUnits("unit 6-2")).toEqual([]);
+    expect(parseUnits("unit 1-99")).toEqual([]);
+  });
+});
+
+describe("borongan tukang (upah mingguan)", () => {
+  it("'tukang minggu ini' is a weekly line without amount (system computes it)", () => {
+    expect(parseLoonars2Perintah("L2 tukang minggu ini")).toEqual({
+      aksi: "ajukan_mingguan",
+      data: { baris: [{ jenis: "tukang", unit: [], deskripsi: "tukang minggu ini", toko: undefined, nominal: null }] },
+    });
+    const lengkap = parseLoonars2Perintah("L2 pengajuan minggu ini\n- tukang minggu ini\n- cicilan TB Maju 3 juta\n- retensi unit 2");
+    expect(lengkap).toMatchObject({ aksi: "ajukan_mingguan" });
+    const baris = (lengkap as unknown as { data: { baris: { jenis: string; unit?: string[]; nominal: number | null }[] } }).data.baris;
+    expect(baris.map((b) => b.jenis)).toEqual(["tukang", "cicilan", "retensi"]);
+    expect(baris[0].nominal).toBeNull();
+    expect(baris[2].unit).toEqual(["2"]);
+  });
+
+  it("a contractor line with unit and amount stays a per-unit payment", () => {
+    expect(parseBarisMingguan("- kontraktor Pak Anang unit 5,6 15 juta")).toMatchObject({ jenis: "tukang", unit: ["5", "6"], nominal: 15_000_000 });
+  });
+
+  it("owner creates a borongan; the same word does not hijack a weekly line", () => {
+    expect(parseBorongan("L2 borongan Pak Anang unit 1-6 35 juta retensi 9 juta 12 minggu")).toEqual({
+      aksi: "borongan",
+      data: { nama: "Pak Anang", unit: ["1", "2", "3", "4", "5", "6"], nilai: 35_000_000, retensi: 9_000_000, minggu: 12 },
+    });
+    expect(parseLoonars2Perintah("L2 borongan Pak Anang unit 1-6 35jt retensi 9jt 12 minggu")).toMatchObject({ aksi: "borongan" });
+    expect(parseBorongan("L2 borongan")).toEqual({ aksi: "daftar_borongan", data: {} });
+    expect(parseBorongan("L2 borongan Pak Anang minggu ini")).toBeNull();
+    expect(parseLoonars2Perintah("L2 borongan Pak Anang minggu ini")).toMatchObject({ aksi: "ajukan_mingguan" });
+    expect(parseBorongan("borongan Pak Anang unit 1-6 35 juta 12 minggu")).toBeNull(); // wajib berawalan L2
+  });
+});
+
+describe("unit sedang dibangun, bahan kolektif, koreksi, RAB", () => {
+  it("answers 'which units are being built' with only unit numbers", () => {
+    expect(parseLoonars2Perintah("L2 unit 1-6")).toEqual({ aksi: "unit_dibangun", data: { unit: ["1", "2", "3", "4", "5", "6"] } });
+    expect(parseLoonars2Perintah("L2 unit 1,2,3 dan 7")).toEqual({ aksi: "unit_dibangun", data: { unit: ["1", "2", "3", "7"] } });
+    // pengajuan satuan lama tetap pengajuan
+    expect(parseLoonars2Perintah("L2 unit 5 semen 20 sak 1.300.000 TB Maju")).toMatchObject({ aksi: "ajukan_ai", unit: "5" });
+  });
+
+  it("reads a collective material order (no unit) and an explicit utang flag", () => {
+    expect(parseLoonars2Perintah("L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta")).toEqual({
+      aksi: "bahan_ai",
+      teks: "TB Maju semen 100 sak, pasir 12 rit 8,5 juta",
+      utang: false,
+      unit: [],
+    });
+    expect(parseLoonars2Perintah("L2 bahan utang TB Maju cat 3 juta")).toMatchObject({ aksi: "bahan_ai", utang: true });
+    expect(parseLoonars2Perintah("L2 bahan TB Maju besi untuk unit 1-3 3 juta")).toMatchObject({ aksi: "bahan_ai", unit: ["1", "2", "3"] });
+  });
+
+  it("utang without a unit is a collective order (database asks which units)", () => {
+    expect(parseLoonars2Perintah("L2 utang TB Maju semen 50 sak 6.500.000")).toMatchObject({ aksi: "utang_foto", unit: [], nominal: 6_500_000 });
+  });
+
+  it("koreksi moves a bahan to specific units; rab shows usage", () => {
+    expect(parseLoonars2Perintah("L2 koreksi M-7 semen unit 1,2,3")).toEqual({
+      aksi: "koreksi_bahan",
+      data: { kode: "M-7", item: "semen", unit: ["1", "2", "3"] },
+    });
+    expect(parseLoonars2Perintah("L2 koreksi U-2 unit 4-5")).toEqual({ aksi: "koreksi_bahan", data: { kode: "U-2", item: null, unit: ["4", "5"] } });
+    expect(parseLoonars2Perintah("L2 rab")).toEqual({ aksi: "rab", data: {} });
+    expect(parseLoonars2Perintah("L2 rab unit 3")).toEqual({ aksi: "rab", data: { unit: "3" } });
+    expect(parseLoonars2Perintah("rab unit 3")).toBeNull(); // wajib berawalan L2
   });
 });

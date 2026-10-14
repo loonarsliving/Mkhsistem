@@ -6,6 +6,15 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-14 — Loonars 2: borongan tukang, bahan kolektif, unit sedang dibangun (WA)
+
+Adaptor WA: "L2 tukang minggu ini" (nominal dihitung database), "L2 retensi unit N",
+"L2 bahan <toko> <item> <total>" (AI membaca item/jumlah/catatan "untuk unit ...";
+pembagian rupiah dihitung database), "L2 unit 1-6" (jawaban unit sedang dibangun),
+"L2 koreksi M-7 semen unit 1,2,3", "L2 rab [unit N]", "L2 borongan" (owner: buat dengan
+nilai, retensi, jumlah minggu). Rentang unit ("unit 1-6") didukung. Butuh migrasi 0047
+di mkh-properti. Uji: 403 vitest lulus.
+
 ## 2026-10-11 — Loonars 2: utang toko + pengajuan mingguan (WA)
 
 Perintah WA baru untuk utang toko bangunan, pengajuan mingguan multi-baris
