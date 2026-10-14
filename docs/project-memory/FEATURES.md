@@ -31,7 +31,7 @@ Never marked DONE without direct source evidence (route + repository/action
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Refund customer (termin per bulan, centang terbayar, chat WA dua arah, pengingat ke Owner & Vando, absensi) | BUILT, not yet merged/applied | `app/(app)/refund`, `features/refund/`, `repositories/refund.repository.ts`, `lib/ai/domains/refund-customer-chat*.ts`, migration `0287_refund_customer_relation.sql`, test `tests/unit/lib/refund-customer-chat.test.ts` |
+| Refund customer (termin per bulan, centang terbayar, chat WA dua arah, pengingat ke Owner & Vando, absensi) | LIVE (PR #85, 2026-10-14) | `app/(app)/refund`, `features/refund/`, `repositories/refund.repository.ts`, `lib/ai/domains/refund-customer-chat*.ts`, migration `0287_refund_customer_relation.sql`, test `tests/unit/lib/refund-customer-chat.test.ts` |
 
 ## FRIDAY / Holding (Executive Intelligence Layer)
 
