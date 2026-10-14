@@ -258,3 +258,23 @@ describe("unit sedang dibangun, bahan kolektif, koreksi, RAB", () => {
     expect(parseLoonars2Perintah("rab unit 3")).toBeNull(); // wajib berawalan L2
   });
 });
+
+describe("pembayaran lain-lain & cicilan utang", () => {
+  it("operational costs are 'lain' without needing a unit", () => {
+    expect(parseBarisMingguan("- listrik proyek 600 rb")).toMatchObject({ jenis: "lain", unit: [], nominal: 600_000 });
+    expect(parseBarisMingguan("- lain sewa scaffolding 1,5 juta")).toMatchObject({ jenis: "lain", nominal: 1_500_000 });
+    expect(parseBarisMingguan("- bensin 200 rb")).toMatchObject({ jenis: "lain", nominal: 200_000 });
+    expect(parseBarisMingguan("- semen 20 sak 1.300.000 TB Maju")).toMatchObject({ jenis: "material" });
+  });
+
+  it("one-line shortcuts for lain and cicilan (with or without amount)", () => {
+    expect(parseLoonars2Perintah("L2 lain listrik proyek 600 rb")).toMatchObject({ aksi: "ajukan_mingguan", data: { baris: [{ jenis: "lain", nominal: 600_000 }] } });
+    expect(parseLoonars2Perintah("L2 bensin 200 rb")).toMatchObject({ aksi: "ajukan_mingguan" });
+    expect(parseLoonars2Perintah("L2 cicilan TB Maju lunas")).toMatchObject({
+      aksi: "ajukan_mingguan",
+      data: { baris: [{ jenis: "cicilan", toko: "TB Maju", deskripsi: "cicilan TB Maju lunas", nominal: null }] },
+    });
+    expect(parseLoonars2Perintah("L2 cicilan TB Maju 3 juta")).toMatchObject({ data: { baris: [{ jenis: "cicilan", toko: "TB Maju", nominal: 3_000_000 }] } });
+  });
+});
+

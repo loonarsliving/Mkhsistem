@@ -152,6 +152,9 @@ function bersihkan(teks: string): string {
 
 export type BarisMingguan = { jenis: "cicilan" | "tukang" | "material" | "lain" | "retensi"; toko?: string; unit?: string[]; deskripsi: string; nominal: number | null };
 
+/** Biaya operasional di luar bahan bangunan & upah tukang: dibagi rata ke unit yang sedang dibangun bila unit tidak disebut. */
+const BIAYA_LAIN_RE = /^(?:lain(?:-lain)?|biaya\s+lain)\b|\b(?:listrik|air\s+(?:bersih|pdam|bor)|bensin|solar|bbm|konsumsi|makan|minum|transport|ongkir|ongkos|sewa|asuransi|satpam|keamanan|kebersihan|perizinan|izin)\b/i;
+
 /** Satu baris pengajuan mingguan: cicilan toko, kontraktor/tukang, atau material/lain. */
 export function parseBarisMingguan(baris: string): BarisMingguan | null {
   const teks = baris.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s*/, "").replace(/\s+/g, " ").trim();
@@ -159,13 +162,13 @@ export function parseBarisMingguan(baris: string): BarisMingguan | null {
   const nominal = parseRupiah(teks.replace(UNIT_SEMUA_RE, " "));
   const cicilan = teks.match(/^(?:cicilan|cicil|angsuran|bayar\s+utang)\s+(?:utang\s+)?(?:ke\s+)?(.+)$/i);
   if (cicilan) {
-    return { jenis: "cicilan", toko: bersihkan(cicilan[1]), deskripsi: teks, nominal };
+    return { jenis: "cicilan", toko: bersihkan(cicilan[1]).replace(/\s+(?:lunas|semua|penuh|habis|sisanya?)$/i, ""), deskripsi: teks, nominal };
   }
   const jenis = /\bretensi\b/i.test(teks)
     ? "retensi"
     : /\b(kontraktor|tukang|upah|borongan|mandor)\b/i.test(teks)
     ? "tukang"
-    : /^(?:lain|biaya\s+lain)/i.test(teks)
+    : BIAYA_LAIN_RE.test(teks)
       ? "lain"
       : "material";
   const toko = teks.match(/\b((?:tb|toko|ud|cv)\s+[a-z0-9][\w .&-]*)$/i);
@@ -192,7 +195,7 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   let isi: string[];
   if (header) {
     isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());
-  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi)\b|borongan\s+\S)/i.test(kepala)) {
+  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi)\b|borongan\s+\S)/i.test(kepala) || /^(?:lain(?:-lain)?|biaya\s+lain|listrik|bensin|solar|bbm|konsumsi|transport|ongkir|sewa|asuransi|satpam|kebersihan)\b/i.test(kepala)) {
     isi = [kepala];
   } else {
     return null;
@@ -390,16 +393,15 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
 export const LOONARS2_BANTUAN =
   "Perintah Loonars 2 (pelaksana selalu diawali L2):\n" +
-  "• Upah tukang (borongan): \"L2 tukang minggu ini\" — nominal & minggu ke-n dihitung sistem; \"L2 retensi unit 3\" setelah unit selesai\n" +
-  "• Bahan (dipesan untuk semua unit, dibagi sistem ke unit yang sedang dibangun): \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\" (+ foto nota); " +
-  "utang: \"L2 utang TB Maju semen 50 sak 6.500.000\"\n" +
-  "• Pengajuan mingguan, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", " +
-  "\"- material pasir 2 rit 1,6 juta TB Sinar\"\n" +
-  "• Unit yang sedang dibangun: \"L2 unit 1-6\" (sistem menanyakan tiap kali). Koreksi pembagian bahan: \"L2 koreksi M-7 semen unit 1,2,3\"\n" +
-  "• Lihat: \"L2 rab\" / \"L2 rab unit 3\" (RAB bahan per unit), \"L2 borongan\", \"L2 utang\", \"L2 bayar M-3\" + foto bukti\n" +
-  "• Owner: \"DP unit 5, 210 juta\", \"pelunasan unit 5\", \"saldo\", \"tagihan\", \"sudah 1\"/\"sudah semua\", \"sudah transfer B 73,8 juta\", " +
-  "\"setujui M-3\" / \"setujui U-2\" / \"setujui L2-12\", \"tolak C-5 alasan ...\", \"utang\", \"ubah rekening C BCA 123 a.n. ...\", \"cairkan profit 200 juta\", " +
-  "\"L2 borongan Pak Anang unit 1-6 35 juta retensi 9 juta 12 minggu\"";
+  "• Upah tukang mingguan (borongan): \"L2 tukang minggu ini\" — nominal & minggu ke-n dihitung sistem; \"L2 retensi unit 3\" setelah unit selesai\n" +
+  "• Catat utang material: \"L2 utang TB Maju semen 50 sak 6.500.000\" (+ foto nota); beli tunai: \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"\n" +
+  "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
+  "• Pembayaran lain-lain: \"L2 lain listrik proyek 600 rb\", \"L2 bensin 200 rb\", \"L2 sewa alat 1,5 juta\"\n" +
+  "• Semua sekaligus, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", \"- lain listrik 600 rb\"\n" +
+  "• Unit yang sedang dibangun: sistem menanyakan; balas YA atau \"L2 unit 1-7\". Koreksi pembagian bahan: \"L2 koreksi M-7 semen unit 1,2,3\"\n" +
+  "• Setelah dibayar: foto bukti + \"L2 bayar M-3\". Lihat: \"L2 rab unit 3\", \"L2 borongan\"\n" +
+  "• Owner: \"DP unit 5, 210 juta\", \"pelunasan unit 5\", \"saldo\", \"tagihan\", \"sudah 1\"/\"sudah semua\", " +
+  "\"sudah transfer B 73,8 juta\", \"setujui M-3\" / \"setujui U-2\" / \"setujui L2-12\", \"tolak C-5 alasan ...\", \"utang\", \"ubah rekening C BCA 123 a.n. ...\", \"cairkan profit 200 juta\"";
 
 // ---------------------------------------------------------------------------
 // Jaringan: MKH Property
