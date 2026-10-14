@@ -24,7 +24,14 @@ absensi (CheckInOutCard). Pendaftaran mandiri: divisi global
 memberi peran `refund_customer_relation` (bukan `staff`) untuk divisi itu.
 Catatan: nomor 0286 sudah terpakai di DB live oleh
 `0286_lock_down_rls_disabled_tables` (tidak ada di repo) — karena itu migrasi
-ini bernomor 0287. "Terbayar" = `opening_paid_amount` + termin yang
+ini bernomor 0287.
+
+Aturan owner (2026-10-14, migrasi 0288, LIVE): WhatsApp modul refund HANYA
+untuk nomor customer refund + pengingat ke owner & Vando. Menambah customer
+dan mengubah nomor HP customer hanya boleh Super Admin — dicek di
+`saveRefundCustomerAction` dan oleh trigger DB
+`mkc_refund_customers_guard_phone` (service role/data load dikecualikan).
+Jangan menambahkan kolom "nomor bebas" di chat refund. "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB

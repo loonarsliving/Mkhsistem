@@ -88,10 +88,13 @@ export function RefundReminderDialog({
 export function RefundCustomerFormDialog({
   open,
   customer,
+  canEditPhone,
   onOpenChange,
 }: {
   open: boolean;
   customer: RefundCustomer | null;
+  /** Super Admin only (0288): the WhatsApp chat may only reach refund customers' numbers. */
+  canEditPhone: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = React.useState("");
@@ -157,7 +160,15 @@ export function RefundCustomerFormDialog({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="rc-phone">No. Telepon (WhatsApp)</Label>
-            <Input id="rc-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08xxxxxxxxxx" />
+            <Input
+              id="rc-phone"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="08xxxxxxxxxx"
+              disabled={!canEditPhone}
+            />
+            {!canEditPhone && <p className="text-xs text-muted-foreground">Nomor HP hanya bisa diubah oleh Super Admin.</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="rc-amount">Jumlah Refund</Label>

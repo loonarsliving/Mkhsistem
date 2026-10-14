@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { PERMISSIONS } from "@/constants/rbac";
+import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
@@ -157,6 +157,21 @@ export async function saveRefundCustomerAction(input: SaveRefundCustomerInput): 
   };
 
   const supabase = await createClient();
+
+  // Owner's rule (0288): the module's WhatsApp may only reach refund
+  // customers, so only a Super Admin can add a customer or change a number.
+  if (session.roleKey !== ROLE_KEYS.SUPER_ADMIN) {
+    if (!v.id) return actionError("Hanya Super Admin yang bisa menambah customer refund.");
+    const { data: current, error: currentError } = await supabase
+      .from("mkc_refund_customers")
+      .select("phone")
+      .eq("id", v.id)
+      .maybeSingle();
+    if (currentError) return actionError(currentError.message);
+    if (!current) return actionError("Customer tidak ditemukan");
+    if ((current.phone ?? "") !== (v.phone ?? "")) return actionError("Hanya Super Admin yang bisa mengubah nomor HP customer refund.");
+  }
+
   const { error } = v.id
     ? await supabase.from("mkc_refund_customers").update(row).eq("id", v.id)
     : await supabase.from("mkc_refund_customers").insert({ ...row, created_by: session.userId, sort_order: 1000 });

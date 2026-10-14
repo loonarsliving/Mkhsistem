@@ -6,6 +6,12 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-14 — Refund: nomor WA dikunci ke customer refund (0288)
+
+Hanya Super Admin yang bisa menambah customer refund / mengubah nomor HP-nya
+(aplikasi + trigger DB), sehingga chat WA modul refund tidak bisa dipakai ke
+nomor lain.
+
 ## 2026-10-14 — Modul Refund & Customer Relation (/refund)
 
 Migrasi 0287 + peran login baru `refund_customer_relation`. Centang termin

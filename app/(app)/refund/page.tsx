@@ -6,7 +6,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, History, Wallet } from "luc
 import { PageHeader } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
-import { PERMISSIONS } from "@/constants/rbac";
+import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { CheckInOutCard } from "@/features/attendance/components/check-in-out-card";
 import { RefundBoard } from "@/features/refund/components/refund-board";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
@@ -78,7 +78,12 @@ export default async function RefundPage() {
         </div>
       </div>
 
-      <RefundBoard customers={customers} currentMonth={currentMonth} canManage={canManage} />
+      <RefundBoard
+        customers={customers}
+        currentMonth={currentMonth}
+        canManage={canManage}
+        canManageNumbers={canManage && session.roleKey === ROLE_KEYS.SUPER_ADMIN}
+      />
     </div>
   );
 }
