@@ -132,7 +132,10 @@ export type NotificationCategoryDb =
   // Loonars Coffee construction pilot (migrations 0256/0257)
   | "construction_cost_request_submitted"
   | "construction_cost_request_decided"
-  | "construction_project_weekly_report";
+  | "construction_project_weekly_report"
+  // Refund & Customer Relation module (migration 0287)
+  | "refund_reminder"
+  | "refund_customer_message";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -818,6 +821,116 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      mkc_refund_customers: {
+        Row: {
+          id: string;
+          customer_name: string;
+          phone: string | null;
+          refund_amount: number;
+          opening_paid_amount: number;
+          bank_name: string | null;
+          bank_account_number: string | null;
+          bank_account_holder: string | null;
+          notes: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          customer_name: string;
+          phone?: string | null;
+          refund_amount: number;
+          opening_paid_amount?: number;
+          bank_name?: string | null;
+          bank_account_number?: string | null;
+          bank_account_holder?: string | null;
+          notes?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_refund_customers"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_refund_installments: {
+        Row: {
+          id: string;
+          customer_id: string;
+          due_month: string;
+          amount: number;
+          is_paid: boolean;
+          paid_at: string | null;
+          paid_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          due_month: string;
+          amount: number;
+          is_paid?: boolean;
+          paid_at?: string | null;
+          paid_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_refund_installments"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_refund_chat_messages: {
+        Row: {
+          id: string;
+          customer_id: string;
+          direction: "outbound" | "inbound";
+          body: string;
+          sent_by: string | null;
+          delivery_status: "sent" | "failed" | "received";
+          error: string | null;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          direction: "outbound" | "inbound";
+          body: string;
+          sent_by?: string | null;
+          delivery_status?: "sent" | "failed" | "received";
+          error?: string | null;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_refund_chat_messages"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_refund_reminders: {
+        Row: {
+          id: string;
+          customer_id: string | null;
+          note: string | null;
+          recipient_count: number;
+          sent_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id?: string | null;
+          note?: string | null;
+          recipient_count?: number;
+          sent_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_refund_reminders"]["Insert"]>;
+        Relationships: [];
       };
       // Named mkc_notifications (not notifications) — this Supabase project
       // is shared with other apps that already own an unrelated
@@ -6097,6 +6210,8 @@ export interface Database {
         Returns: string;
       };
       mark_salary_transferred: { Args: { p_id: string }; Returns: undefined };
+      refund_set_installment_paid: { Args: { p_installment_id: string; p_paid: boolean }; Returns: undefined };
+      refund_send_reminder: { Args: { p_customer_id?: string | null; p_note?: string | null }; Returns: number };
       send_salary_transfer_summary: { Args: { p_branch_id?: string | null }; Returns: number };
       construction_submit_expense: {
         Args: {

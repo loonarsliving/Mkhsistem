@@ -49,6 +49,7 @@ import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejectio
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
 import { tryHandleLoonars2Image, tryHandleLoonars2Text } from "./domains/loonars2-wa";
+import { tryCaptureRefundCustomerMessage } from "./domains/refund-customer-chat";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
 import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
@@ -251,6 +252,28 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryHandleLoonars2Image:not_applicable");
+    }
+
+    // Refund customer chat (0287): a customer on the refund list
+    // (mkc_refund_customers) messaging us is answered by the Refund &
+    // Customer Relation officer from /refund -- stored in their conversation
+    // there, no automatic reply. Checked after the owner commands above
+    // (exact, owner-only patterns) but before the villa receptionist and every
+    // lead/AI route below, so someone owed a refund never gets a sales bot.
+    if (inbound.content.kind === "text" || inbound.content.kind === "image") {
+      trace.push("tryCaptureRefundCustomerMessage:calling");
+      const refundChat = await tryCaptureRefundCustomerMessage(inbound.sender, inbound.content);
+      if (refundChat.outcome === "captured") {
+        trace.push("tryCaptureRefundCustomerMessage:captured");
+        await saveAiConversationTurn(
+          inbound.sender,
+          inbound.content.kind === "text" ? inbound.content.text : (inbound.content.caption ?? "[foto customer refund]"),
+          null,
+          null,
+        );
+        return { status: "processed", sender: inbound.sender, replySent: false, reason: "refund customer chat -- answered from /refund", trace };
+      }
+      trace.push("tryCaptureRefundCustomerMessage:not_applicable");
     }
 
     // Villa guest chat (owner decision 2026-09-27): a villa guest or someone

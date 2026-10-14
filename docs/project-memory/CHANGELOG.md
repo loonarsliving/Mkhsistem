@@ -6,6 +6,13 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-14 — Modul Refund & Customer Relation (/refund)
+
+Migrasi 0287 + peran login baru `refund_customer_relation`. Centang termin
+terbayar, chat WhatsApp dua arah dengan customer dari dashboard, tombol
+"Ingatkan Owner & Vando" (in-app + WA), absensi di halaman yang sama. Data
+customer dimuat langsung ke DB (tidak di-commit). Lihat CURRENT_STATE.md.
+
 ## 2026-10-14 — Loonars 2: borongan tukang, bahan kolektif, unit sedang dibangun (WA)
 
 Adaptor WA: "L2 tukang minggu ini" (nominal dihitung database), "L2 retensi unit N",
