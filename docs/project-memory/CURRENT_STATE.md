@@ -3,7 +3,7 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Modul Refund & Customer Relation (/refund) — dibangun, BELUM di-merge / BELUM diterapkan ke DB (2026-10-14)
+## Modul Refund & Customer Relation (/refund) — LIVE di produksi (2026-10-14, PR #85; migrasi 0287 + data 20 customer sudah di DB)
 
 Permintaan owner: modul khusus refund customer (dari spreadsheet "CS REFUND
 LANJUT AFIH") + login khusus jabatan **Refund & Customer Relation**. Migrasi
