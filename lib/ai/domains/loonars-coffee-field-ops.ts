@@ -5,7 +5,6 @@ import { assessConstructionProgress, fetchImageAsBase64 } from "@/lib/ai/domains
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
-import { isNominalMismatch } from "@/lib/ai/domains/transfer-proof-confirmation";
 import type { Json, NotificationCategoryDb } from "@/types/database.types";
 
 /**
@@ -854,7 +853,11 @@ export async function tryConfirmLoonarsCoffeeTransferByPhoto(
 
   const candidates = awaitingMoney.filter(
     (row) =>
-      !isNominalMismatch(Number(row.amount), ai.nominal) &&
+      // EXACT amount only. This flow auto-approves AND posts, so it must not
+      // use isNominalMismatch's Rp 6.500 tolerance: on 2026-10-15 a Rp 537.000
+      // proof (Loonars Living KK-413, Gorden) was claimed by a Rp 535.000
+      // Loonars Coffee "semen" request that was 2.000 away.
+      Math.round(Number(row.amount)) === Math.round(Number(ai.nominal)) &&
       // A still-submitted request the owner raised HIMSELF is the one case
       // the transfer cannot double as the approval -- approving your own
       // request is blocked by design (and by the SQL RPC). Already-approved
