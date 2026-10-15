@@ -192,7 +192,7 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   const awalan = baris[0].match(PREFIX_RE);
   if (!awalan) return null;
   const kepala = baris[0].slice(awalan[0].length).trim();
-  const header = kepala.match(/^(?:pengajuan|ajuan|mingguan)\b(?:\s+minggu\s+ini|\s+mingguan)?[\s:,-]*(.*)$/i);
+  const header = kepala.match(/^(?:pengajuan|ajuan|mingguan)\b(?:\s+(?:pembayaran|bayar|biaya))?(?:\s+minggu\s+ini|\s+mingguan)?[\s:,-]*(.*)$/i);
   let isi: string[];
   if (header) {
     isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());

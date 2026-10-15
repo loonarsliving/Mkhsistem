@@ -131,6 +131,15 @@ describe("utang toko & pengajuan mingguan", () => {
     expect(parseLoonars2Perintah("utang")).toEqual({ aksi: "daftar_utang", data: {} });
   });
 
+  it("kepala 'pengajuan pembayaran' bukan baris tersendiri", () => {
+    const p = parseLoonars2Perintah("L2 pengajuan pembayaran\n• Material pasir dan split 4.365.000");
+    expect(p?.aksi).toBe("ajukan_mingguan");
+    const baris = ((p as unknown as { data: unknown }).data as { baris: { nominal: number | null; deskripsi: string }[] }).baris;
+    expect(baris).toHaveLength(1);
+    expect(baris[0].nominal).toBe(4365000);
+    expect(baris[0].deskripsi).toMatch(/pasir dan split/i);
+  });
+
   it("parses a multi-line weekly request, keeping each line", () => {
     const pesan = "L2 pengajuan minggu ini\n- cicilan TB Maju 3 juta\n- kontraktor Pak Anang unit 5,6 15 juta\n- material unit 7 pasir 2 rit 1,6 juta TB Sinar";
     expect(parseLoonars2Perintah(pesan)).toEqual({
