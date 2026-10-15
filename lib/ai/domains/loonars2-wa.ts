@@ -6,6 +6,7 @@ import { fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-visio
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { recognizeBahanPesanan, type BahanRecognition } from "@/lib/ai/domains/loonars2-bahan-recognition";
+import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
 import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 
 /**
@@ -540,9 +541,48 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
 // ---------------------------------------------------------------------------
 // Foto (bukti transfer / nota) -- keterangan foto memakai perintah yang sama
 // ---------------------------------------------------------------------------
+/**
+ * Foto TANPA keterangan Loonars 2 dari nomor terdaftar: mungkin bukti transfer yang dikirim owner/pelaksana
+ * (real incident 15 Okt 2026: owner membayar upah borongan Rp 13.000.000 dan mengirim foto tanpa keterangan;
+ * foto itu tidak pernah sampai ke Loonars 2 dan dijawab "tidak cocok dengan pengajuan manapun" oleh modul lain).
+ * Urutan sengaja hemat & aman: (1) tanya database dulu apakah ada yang menunggu pembayaran (nomor asing/tidak
+ * ada pengajuan = lewat tanpa memanggil AI), (2) AI hanya MEMBACA nominal di foto, (3) database mencocokkan
+ * nominal persis & unik ke satu pengajuan. Selain itu foto dilewatkan ke alur lain seperti biasa.
+ */
+/** Nomor yang bukan pengguna Loonars 2 (pelanggan, calon pembeli, ...): tidak ditanyakan lagi selama 30 menit, supaya foto mereka tidak membebani webhook/log. */
+const NOMOR_BUKAN_L2 = new Map<string, number>();
+const MASA_NOMOR_BUKAN_L2_MS = 30 * 60 * 1000;
+
+async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string): Promise<Loonars2Outcome> {
+  const sampai = NOMOR_BUKAN_L2.get(sender);
+  if (sampai !== undefined && sampai > Date.now()) return { outcome: "not_applicable" };
+  const kandidat = await panggilMkhProperty(sender, "bukti_kandidat", {});
+  if (kandidat?.status === "abaikan") {
+    NOMOR_BUKAN_L2.set(sender, Date.now() + MASA_NOMOR_BUKAN_L2_MS);
+    return { outcome: "not_applicable" };
+  }
+  if (!kandidat || kandidat.status !== "ok" || !(Number(kandidat.jumlah) > 0)) return { outcome: "not_applicable" };
+
+  const image = await fetchImageAsBase64(imageUrl);
+  if (!image || image.fetchError) return { outcome: "not_applicable" };
+  const ai: TransferProofRecognition | null = await recognizeTransferProof({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(() => null);
+  if (!ai || !ai.readable || ai.nominal === null || ai.nominal < 1000) return { outcome: "not_applicable" };
+
+  const hasil = await panggilMkhProperty(sender, "bukti_transfer", {
+    nominal: ai.nominal,
+    penerima: ai.rekeningTujuan,
+    tanggal: ai.tanggal,
+    bukti_url: imageUrl,
+  });
+  if (!hasil || hasil.status === "abaikan" || hasil.status === "tidak_cocok") return { outcome: "not_applicable" };
+  await flushLoonars2Outbox().catch(() => undefined);
+  return { outcome: "handled", reply: typeof hasil.balasan === "string" ? hasil.balasan : "OK" };
+}
+
 export async function tryHandleLoonars2Image(sender: string, imageUrl: string, caption: string | null | undefined): Promise<Loonars2Outcome> {
   const perintah = parseLoonars2Perintah(caption ?? "");
-  if (!perintah || perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
+  if (!perintah) return bacaBuktiTransferOtomatis(sender, imageUrl);
+  if (perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
 
   if (
     perintah.aksi === "konfirmasi_transfer" ||
