@@ -6,9 +6,9 @@ import { askAI, generateAIText } from "../service";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-type QueryToolName = "lead_stats" | "ad_performance" | "branch_balance" | "pending_approvals" | "attendance_today" | "pending_leave" | "markom_checklist";
+export type QueryToolName = "lead_stats" | "ad_performance" | "branch_balance" | "pending_approvals" | "attendance_today" | "pending_leave" | "markom_checklist";
 
-const QUERY_TOOL_CATALOG: { name: QueryToolName; description: string }[] = [
+export const QUERY_TOOL_CATALOG: { name: QueryToolName; description: string }[] = [
   { name: "lead_stats", description: "Statistik lead/prospek CRM 7 hari terakhir: jumlah baru, rincian per status" },
   { name: "ad_performance", description: "Performa campaign iklan Meta Ads yang sedang aktif: spend, klik, jumlah chat WA masuk, biaya per chat" },
   { name: "branch_balance", description: "Saldo kas per cabang (data finance, disinkron dari sistem keuangan)" },
@@ -155,7 +155,8 @@ async function runMarkomChecklist(supabase: AdminClient, branchId: string | null
   return `[Checklist Markom] Ada ${count ?? 0} tugas yang belum selesai${branchId ? " di cabang ini" : " (semua cabang)"}.`;
 }
 
-async function runTool(supabase: AdminClient, tool: QueryToolName, branchId: string | null, branchName: string | null): Promise<string> {
+/** Exported for the owner assistant (owner-assistant.ts), which offers these same tools alongside its cross-system ones. */
+export async function runTool(supabase: AdminClient, tool: QueryToolName, branchId: string | null, branchName: string | null): Promise<string> {
   switch (tool) {
     case "lead_stats":
       return runLeadStats(supabase, branchId);

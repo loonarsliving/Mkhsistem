@@ -3,6 +3,28 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — dibangun, BELUM di-merge (2026-10-18)
+
+Permintaan owner: WhatsApp jadi dashboard utama untuk keempat sistem, "cukup
+saya saja yang punya akses". `lib/ai/domains/owner-assistant.ts`, dipanggil
+dari `router.ts` HANYA untuk super admin aktif (pemeriksaan sama dengan
+LUNAS), menggantikan `tryAnswerWithData` untuk nomor itu. Satu klasifikasi
+Gemini memilih tool dari katalog tetap: 7 tool `data-queries.ts` yang sudah
+ada + okupansi villa hari ini/ke depan (`lib/occupancy/villa-provider.ts`, GET
+saja, maks 14 hari) + ringkasan keuangan MKH Property (POST
+`finance.haluoleo.id/api/laporan-investor/ringkasan-wa`, rahasia sync yang
+sudah ada, rumus sama dengan PDF lapkeu) + Loonars 2 saldo/tagihan/utang
+(`bacaLoonars2`). Riwayat 6 giliran / 3 jam dari `ai_conversations` agar
+pertanyaan lanjutan bisa. "menu"/"bantuan" = daftar contoh tanpa AI. Tidak
+ada tool yang menulis; semua perintah lama (LUNAS, L2, SETUJU, lapkeu, …)
+diperiksa lebih dulu di webhook-handler dan tidak berubah. Tanpa migrasi,
+tanpa env baru. Bergantung pada route mkh-properti (PR terpisah) — bila
+belum live, tool keuangan menjawab "data tidak tersedia".
+Celah data yang diketahui: metrik okupansi bulanan (bagian `metrik` dari `ir_ambil_data`) di
+MKH Property masih kosong, dan pendapatan villa baru masuk MKH Property
+sebulan sekali (bulan lalu) — pendapatan villa bulan berjalan belum bisa
+ditanyakan (butuh endpoint bridge villa-api, Tahap berikutnya).
+
 ## Modul Refund & Customer Relation (/refund) — LIVE di produksi (2026-10-14, PR #85; migrasi 0287 + data 20 customer sudah di DB)
 
 Permintaan owner: modul khusus refund customer (dari spreadsheet "CS REFUND

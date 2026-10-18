@@ -4,6 +4,7 @@ import { askAI } from "../service";
 import { tryAnswerWithData } from "./data-queries";
 import { formatFileRequestReply, tryHandleFileRequest } from "./file-request";
 import { formatRelayReply, tryRelayToEmployees } from "./message-relay";
+import { isSuperAdminSender, tryOwnerAssistant } from "./owner-assistant";
 import { getSystemPrompt } from "./prompts";
 
 const HR_KEYWORDS = ["absen", "cuti", "izin", "payroll", "gaji", "kontrak", "sop", "karyawan", "hr ", "evaluasi karyawan"];
@@ -63,9 +64,18 @@ export async function routeAndAnswer(
   // expertise. Must also run before the keyword-routed general chat below,
   // for the same reason the relay check does: without this, Gemini would
   // just answer from its own guesswork instead of the system's actual data.
+  //
+  // The super admin gets the owner assistant instead (owner-assistant.ts):
+  // the same tools plus villa occupancy, MKH Property finance and Loonars 2,
+  // with the recent conversation so follow-ups ("kalau bulan lalu?") work.
   if (employee) {
-    const dataResult = await tryAnswerWithData(question, employee);
-    if (dataResult.applicable) return dataResult.answer;
+    if (opts?.senderWaNumber && (await isSuperAdminSender(opts.senderWaNumber))) {
+      const ownerResult = await tryOwnerAssistant(question, opts.senderWaNumber, { jobId: opts.jobId });
+      if (ownerResult.applicable) return ownerResult.answer;
+    } else {
+      const dataResult = await tryAnswerWithData(question, employee);
+      if (dataResult.applicable) return dataResult.answer;
+    }
   }
 
   // "Kirim saya file X" -- the company file manager (Filemanager repo agent
