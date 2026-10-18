@@ -11,7 +11,11 @@ dari `router.ts` HANYA untuk super admin aktif (pemeriksaan sama dengan
 LUNAS), menggantikan `tryAnswerWithData` untuk nomor itu. Satu klasifikasi
 Gemini memilih tool dari katalog tetap: 7 tool `data-queries.ts` yang sudah
 ada + okupansi villa hari ini/ke depan (`lib/occupancy/villa-provider.ts`, GET
-saja, maks 14 hari) + ringkasan keuangan MKH Property (POST
+saja, maks 14 hari) + keuangan villa bulan mana pun, termasuk bulan berjalan (villa-api `GET
+/bridge/owner-finance`, `VILLA_BRIDGE_SECRET` yang sudah ada; rumus sama
+dengan halaman Finance villa + laporan investor) + pipeline properti
+loonars.id/hitung (`pi_properties`/`pi_surveys`, database yang sama; masih
+kosong 2026-10-18) + ringkasan keuangan MKH Property (POST
 `finance.haluoleo.id/api/laporan-investor/ringkasan-wa`, rahasia sync yang
 sudah ada, rumus sama dengan PDF lapkeu) + Loonars 2 saldo/tagihan/utang
 (`bacaLoonars2`). Riwayat 6 giliran / 3 jam dari `ai_conversations` agar
@@ -22,8 +26,10 @@ tanpa env baru. Bergantung pada route mkh-properti (PR terpisah) — bila
 belum live, tool keuangan menjawab "data tidak tersedia".
 Celah data yang diketahui: metrik okupansi bulanan (bagian `metrik` dari `ir_ambil_data`) di
 MKH Property masih kosong, dan pendapatan villa baru masuk MKH Property
-sebulan sekali (bulan lalu) — pendapatan villa bulan berjalan belum bisa
-ditanyakan (butuh endpoint bridge villa-api, Tahap berikutnya).
+sebulan sekali (bulan lalu); pendapatan villa bulan berjalan karena itu
+diambil langsung dari villa-api (`villa_keuangan`). Bergantung juga pada PR
+villa (`/bridge/owner-finance`) — sebelum live, tool itu menjawab "data tidak
+tersedia".
 
 ## Modul Refund & Customer Relation (/refund) — LIVE di produksi (2026-10-14, PR #85; migrasi 0287 + data 20 customer sudah di DB)
 

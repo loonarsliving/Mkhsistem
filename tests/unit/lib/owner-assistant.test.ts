@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatKeuanganVilla,
   formatOkupansiKeDepan,
   formatRingkasanKeuangan,
   isOwnerMenuRequest,
@@ -159,5 +160,53 @@ describe("formatRingkasanKeuangan without villa metrics", () => {
     expect(text).toContain("metrik operasi bulanan (okupansi/ADR) belum tersedia");
     expect(text).not.toContain("ADR belum tersedia");
     expect(text).toContain("sewa kamar Rp21.678.357");
+  });
+});
+
+describe("formatKeuanganVilla", () => {
+  const dasar = {
+    bulan: "2026-10",
+    hari_ini: "2026-10-18",
+    finance: {
+      gross_revenue: 40_000_000,
+      net_revenue: 34_000_000,
+      payment_received: 30_000_000,
+      outstanding: 10_000_000,
+      ota_receivable: 8_000_000,
+      bookings_counted: 55,
+      cancelled_excluded: 3,
+      pipeline: { amount: 12_000_000, count: 20 },
+      cash_received: { amount: 0, verified: false, count: 0 },
+      alerts: [{ message: "2 settlement sudah lewat tanggal perkiraan cair." }],
+    },
+    channel: {
+      channels: [{ sumber: "agoda", booking_count: 30, room_nights: 35, revenue: 25_000_000, net_revenue: 20_000_000, avg_net_adr: 571_428.57 }],
+      bersih_belum_tersedia: 2,
+    },
+    laporan_investor: {
+      gross_revenue: 38_000_000,
+      opex_per_unit: 9_500_000,
+      marketing_amount: 10_450_000,
+      net: 18_050_000,
+      owner_amount: 12_635_000,
+      pengelola_amount: 5_415_000,
+      investor_count: 13,
+      per_investor_amount: 971_923.08,
+      jaminan_aktif: true,
+      jaminan_topup: 4_028_076.92,
+      walkin_income: { cafe: 1_000_000, spa: 0, lainnya: 320_000, total: 1_320_000 },
+    },
+  };
+
+  it("copies Finance, channel and investor numbers as-is", () => {
+    const text = formatKeuanganVilla(dasar);
+    expect(text).toContain("[Keuangan Villa 2026-10]");
+    expect(text).toContain("kotor Rp40.000.000, bersih (sebelum fee OTA) Rp34.000.000 dari 55 booking (3 batal");
+    expect(text).toContain("uang diterima tercatat Finance belum diverifikasi");
+    expect(text).toContain("agoda 30 booking/35 malam, kotor Rp25.000.000, bersih Rp20.000.000, ADR bersih Rp571.429");
+    expect(text).toContain("2 booking OTA belum punya angka bersih");
+    expect(text).toContain("bagian investor Rp12.635.000 untuk 13 investor (Rp971.923 per investor, jaminan aktif: top-up Rp4.028.077 per investor)");
+    expect(text).toContain("kafe Rp1.000.000");
+    expect(text).toContain("Peringatan Finance: 2 settlement");
   });
 });
