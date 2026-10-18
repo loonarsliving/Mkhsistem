@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatHargaVilla,
   formatKeuanganVilla,
   formatOkupansiKeDepan,
   formatRingkasanKeuangan,
@@ -39,7 +40,9 @@ describe("parseOwnerIntentJson", () => {
   });
 
   it("treats anything but literal true as not a data question", () => {
-    expect(parseOwnerIntentJson('{"isDataQuestion": "true", "tools": ["lead_stats"]}').isDataQuestion).toBe(false);
+    expect(
+      parseOwnerIntentJson('{"isDataQuestion": "true", "tools": ["lead_stats"]}').isDataQuestion,
+    ).toBe(false);
   });
 });
 
@@ -89,7 +92,15 @@ describe("formatRingkasanKeuangan", () => {
       total_ekuitas: 600_000_000,
       kas_akhir: 250_000_000,
     },
-    tren: [{ periode: "2026-10", label: "Okt 2026", pendapatan: 150_000_000, laba: 100_000_000, kas: 250_000_000 }],
+    tren: [
+      {
+        periode: "2026-10",
+        label: "Okt 2026",
+        pendapatan: 150_000_000,
+        laba: 100_000_000,
+        kas: 250_000_000,
+      },
+    ],
     unit: [
       {
         kode: "villa-jogja",
@@ -102,8 +113,17 @@ describe("formatRingkasanKeuangan", () => {
           {
             periode: "2026-10",
             status: "sebagian",
-            buku_besar: { pendapatan: 80_000_000, beban: 10_000_000, laba: 70_000_000, kas: 5_000_000 },
-            metrik: { okupansi_unit_total_pct: 62.5, pendapatan_kotor: 75_000_000, adr_kotor: null },
+            buku_besar: {
+              pendapatan: 80_000_000,
+              beban: 10_000_000,
+              laba: 70_000_000,
+              kas: 5_000_000,
+            },
+            metrik: {
+              okupansi_unit_total_pct: 62.5,
+              pendapatan_kotor: 75_000_000,
+              adr_kotor: null,
+            },
             pendapatan_villa: { rental: 60_000_000, non_kamar: 4_000_000, total: 64_000_000 },
           },
         ],
@@ -119,14 +139,18 @@ describe("formatRingkasanKeuangan", () => {
     expect(text).toContain("okupansi 62,5%");
     expect(text).toContain("pendapatan kamar kotor Rp75.000.000");
     expect(text).toContain("ADR belum tersedia");
-    expect(text).toContain("pendapatan villa (sync bulanan) sewa kamar Rp60.000.000, non-kamar Rp4.000.000, total Rp64.000.000");
+    expect(text).toContain(
+      "pendapatan villa (sync bulanan) sewa kamar Rp60.000.000, non-kamar Rp4.000.000, total Rp64.000.000",
+    );
     expect(text).toContain("Utang bank KPR BTN: sisa Rp50.000.000");
     expect(text).toContain("Akun di luar bagan akun");
     expect(text).not.toContain("2026-09 [belum_mulai]");
   });
 
   it("says so when there is no journal in the range", () => {
-    expect(formatRingkasanKeuangan({ ...ringkasan, gabungan: null, tren: [], unit: [], temuan: [] })).toContain("belum ada jurnal");
+    expect(
+      formatRingkasanKeuangan({ ...ringkasan, gabungan: null, tren: [], unit: [], temuan: [] }),
+    ).toContain("belum ada jurnal");
   });
 });
 
@@ -180,7 +204,16 @@ describe("formatKeuanganVilla", () => {
       alerts: [{ message: "2 settlement sudah lewat tanggal perkiraan cair." }],
     },
     channel: {
-      channels: [{ sumber: "agoda", booking_count: 30, room_nights: 35, revenue: 25_000_000, net_revenue: 20_000_000, avg_net_adr: 571_428.57 }],
+      channels: [
+        {
+          sumber: "agoda",
+          booking_count: 30,
+          room_nights: 35,
+          revenue: 25_000_000,
+          net_revenue: 20_000_000,
+          avg_net_adr: 571_428.57,
+        },
+      ],
       bersih_belum_tersedia: 2,
     },
     laporan_investor: {
@@ -201,12 +234,53 @@ describe("formatKeuanganVilla", () => {
   it("copies Finance, channel and investor numbers as-is", () => {
     const text = formatKeuanganVilla(dasar);
     expect(text).toContain("[Keuangan Villa 2026-10]");
-    expect(text).toContain("kotor Rp40.000.000, bersih (sebelum fee OTA) Rp34.000.000 dari 55 booking (3 batal");
+    expect(text).toContain(
+      "kotor Rp40.000.000, bersih (sebelum fee OTA) Rp34.000.000 dari 55 booking (3 batal",
+    );
     expect(text).toContain("uang diterima tercatat Finance belum diverifikasi");
-    expect(text).toContain("agoda 30 booking/35 malam, kotor Rp25.000.000, bersih Rp20.000.000, ADR bersih Rp571.429");
+    expect(text).toContain(
+      "agoda 30 booking/35 malam, kotor Rp25.000.000, bersih Rp20.000.000, ADR bersih Rp571.429",
+    );
     expect(text).toContain("2 booking OTA belum punya angka bersih");
-    expect(text).toContain("bagian investor Rp12.635.000 untuk 13 investor (Rp971.923 per investor, jaminan aktif: top-up Rp4.028.077 per investor)");
+    expect(text).toContain(
+      "bagian investor Rp12.635.000 untuk 13 investor (Rp971.923 per investor, jaminan aktif: top-up Rp4.028.077 per investor)",
+    );
     expect(text).toContain("kafe Rp1.000.000");
     expect(text).toContain("Peringatan Finance: 2 settlement");
+  });
+});
+
+describe("formatHargaVilla", () => {
+  it("shows website and engine prices per room type, and never prices a sold-out type", () => {
+    const text = formatHargaVilla([
+      {
+        date: "2026-10-25",
+        rooms: [
+          {
+            code: "standard",
+            name: "Standard",
+            total: 10,
+            available: 4,
+            nights: 1,
+            pricePerNightAvg: 405_000,
+            priceNormalPerNightAvg: 502_000,
+          },
+          {
+            code: "sawah_view",
+            name: "Sawah View",
+            total: 3,
+            available: 0,
+            nights: 1,
+            pricePerNightAvg: null,
+            priceNormalPerNightAvg: null,
+          },
+        ],
+      },
+    ]);
+    expect(text).toContain(
+      "2026-10-25: Standard: website Rp405.000, harga mesin/dasar Cloudbeds Rp502.000 (4/10 kosong)",
+    );
+    expect(text).toContain("Sawah View: penuh (0/3 kosong, harga tidak dihitung)");
+    expect(text).toContain("tidak tersedia di sistem, jangan ditebak");
   });
 });

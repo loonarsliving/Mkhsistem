@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
-import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
+import { getOccupancyProvider, getVillaRoomPricesForDate } from "@/lib/occupancy/villa-provider";
+import type { RoomTypeAvailability } from "@/lib/occupancy/types";
 
 import { askAI, generateAIText } from "../service";
 import { QUERY_TOOL_CATALOG, runTool, type QueryToolName } from "./data-queries";
@@ -50,6 +51,7 @@ type OwnerToolName =
   | "villa_okupansi_hari_ini"
   | "villa_okupansi_ke_depan"
   | "villa_keuangan"
+  | "villa_harga"
   | "loonars_properti"
   | "keuangan_ringkasan"
   | "loonars2_saldo"
@@ -71,6 +73,10 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
     name: "villa_keuangan",
     description:
       "Villa satu bulan (bisa bulan berjalan): pendapatan kotor/bersih, jumlah booking, sudah dibayar, outstanding, piutang OTA, per channel (Agoda, Booking.com, website, walk-in, ...), booking mendatang, bagi hasil investor & per investor, pendapatan kafe/spa -- sama dengan halaman Finance villa",
+  },
+  {
+    name: "villa_harga",
+    description: `Villa: harga jual kamar per malam per tipe kamar pada tanggal tertentu (maks ${MAKS_HARI_OKUPANSI} tanggal berurutan) -- harga website loonars.id dan harga mesin/dasar yang dikirim ke Cloudbeds. BUKAN harga final Agoda/Booking.com`,
   },
   {
     name: "loonars_properti",
@@ -230,6 +236,40 @@ async function runVillaKeDepan(mulai: string, jumlahHari: number): Promise<strin
   );
   if (!r.ok) return `[Villa Okupansi ke Depan] data tidak tersedia (${r.reason})`;
   return formatOkupansiKeDepan(r.data);
+}
+
+// ── Harga kamar villa ───────────────────────────────────────────────────
+
+/**
+ * Exported for tests. Harga OTA final sengaja tidak dihitung: tambahan per
+ * channel diatur owner di Cloudbeds Distribution dan tidak terbaca lewat API
+ * (villa CURRENT_STATE 2026-10-08), sedangkan integration_settings
+ * 'harga_website_agoda'.tambahan adalah tuas harga website (Standard sengaja
+ * 0 sejak 13 Okt), bukan salinan tambahan OTA yang sebenarnya.
+ */
+export function formatHargaVilla(
+  perTanggal: { date: string; rooms: RoomTypeAvailability[] }[],
+): string {
+  const baris = perTanggal.map(({ date, rooms }) => {
+    const rinci = rooms.map((r) =>
+      r.available === 0 || r.pricePerNightAvg === null
+        ? `${r.name}: penuh (0/${r.total} kosong, harga tidak dihitung)`
+        : `${r.name}: website ${rupiah(r.pricePerNightAvg)}, harga mesin/dasar Cloudbeds ${rupiah(r.priceNormalPerNightAvg)} (${r.available}/${r.total} kosong)`,
+    );
+    return `${date}: ${rinci.join("; ")}`;
+  });
+  return `[Harga Kamar Villa per Malam] (dihitung villa-api, rumus sama dengan form booking loonars.id. Harga Agoda/Booking.com = harga dasar + tambahan per channel yang diatur di Cloudbeds, dikurangi diskon OTA sendiri -- tidak tersedia di sistem, jangan ditebak)\n${baris.join("\n")}`;
+}
+
+async function runVillaHarga(mulai: string, jumlahHari: number): Promise<string> {
+  const hasil: { date: string; rooms: RoomTypeAvailability[] }[] = [];
+  for (let i = 0; i < jumlahHari; i++) {
+    const date = tambahHari(mulai, i);
+    const r = await getVillaRoomPricesForDate(date);
+    if (!r.ok) return `[Harga Kamar Villa] data tidak tersedia (${r.reason})`;
+    hasil.push({ date, rooms: r.data });
+  }
+  return formatHargaVilla(hasil);
 }
 
 // ── Keuangan villa ──────────────────────────────────────────────────────
@@ -523,6 +563,7 @@ export const OWNER_MENU_TEXT = [
   "🏡 *Villa*",
   "• okupansi villa hari ini?",
   "• okupansi 7 hari ke depan?",
+  "• harga kamar tanggal 25 Oktober?",
   "",
   "💰 *Keuangan (MKH Property)*",
   "• laba bulan ini berapa?",
@@ -560,8 +601,8 @@ ${katalog}
 Tentukan apakah pertanyaan terbaru BUTUH data nyata dari sistem. Kalau ya, pilih tool yang relevan (boleh lebih dari satu). Isi juga parameter bila relevan:
 - branchName: nama cabang MK Connect yang disebut (mis. "Jogja", "Kendari"), atau null
 - bulanDari/bulanSampai: rentang bulan "YYYY-MM" untuk keuangan_ringkasan dan villa_keuangan (mis. "bulan lalu" = bulan kalender sebelumnya; tidak disebut = null)
-- tanggalMulai: "YYYY-MM-DD" awal okupansi ke depan (tidak disebut = null, berarti hari ini)
-- jumlahHari: jumlah hari okupansi ke depan (maks ${MAKS_HARI_OKUPANSI}; tidak disebut = null)
+- tanggalMulai: "YYYY-MM-DD" tanggal (pertama) untuk okupansi ke depan atau harga kamar (tidak disebut = null, berarti hari ini; "malam minggu" = Sabtu terdekat)
+- jumlahHari: jumlah tanggal berurutan untuk okupansi ke depan atau harga kamar (maks ${MAKS_HARI_OKUPANSI}; satu tanggal = 1; tidak disebut = null)
 
 Balas HANYA dengan JSON (tanpa markdown code fence): {"isDataQuestion": true/false, "tools": ["nama_tool", ...], "branchName": null, "bulanDari": null, "bulanSampai": null, "tanggalMulai": null, "jumlahHari": null}`;
 
@@ -629,6 +670,8 @@ export async function tryOwnerAssistant(
           return runVillaHariIni();
         case "villa_okupansi_ke_depan":
           return runVillaKeDepan(mulai, intent.jumlahHari ?? 7);
+        case "villa_harga":
+          return runVillaHarga(mulai, intent.jumlahHari ?? 1);
         case "villa_keuangan":
           return runVillaKeuangan(sampai);
         case "loonars_properti":

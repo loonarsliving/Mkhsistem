@@ -13,7 +13,12 @@ Gemini memilih tool dari katalog tetap: 7 tool `data-queries.ts` yang sudah
 ada + okupansi villa hari ini/ke depan (`lib/occupancy/villa-provider.ts`, GET
 saja, maks 14 hari) + keuangan villa bulan mana pun, termasuk bulan berjalan (villa-api `GET
 /bridge/owner-finance`, `VILLA_BRIDGE_SECRET` yang sudah ada; rumus sama
-dengan halaman Finance villa + laporan investor) + pipeline properti
+dengan halaman Finance villa + laporan investor) + harga kamar per malam
+per tanggal (`villa_harga`: harga website + harga mesin dari villa-api
+`/public/availability`; harga final Agoda/Booking.com sengaja tidak dihitung
+karena tambahan per channel diatur di Cloudbeds dan tidak terbaca sistem,
+sedangkan `harga_website_agoda.tambahan` adalah tuas harga website, bukan
+salinannya) + pipeline properti
 loonars.id/hitung (`pi_properties`/`pi_surveys`, database yang sama; masih
 kosong 2026-10-18) + ringkasan keuangan MKH Property (POST
 `finance.haluoleo.id/api/laporan-investor/ringkasan-wa`, rahasia sync yang
