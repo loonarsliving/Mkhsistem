@@ -38,6 +38,7 @@ interface PublicAvailabilityResponse {
     nights: number;
     price_total?: number;
     price_per_night_avg?: number;
+    price_total_normal?: number | null;
   }[];
 }
 
@@ -108,6 +109,7 @@ async function fetchOneDayAvailability(date: string, roomTypeCode?: string): Pro
     available: rt.available,
     nights: rt.nights,
     pricePerNightAvg: typeof rt.price_per_night_avg === "number" ? rt.price_per_night_avg : null,
+    priceNormalPerNightAvg: typeof rt.price_total_normal === "number" && rt.nights > 0 ? Math.round(rt.price_total_normal / rt.nights) : null,
   }));
   return { ok: true, data: roomTypes };
 }
@@ -187,6 +189,15 @@ class VillaOccupancyProvider implements OccupancyProvider {
       },
     };
   }
+}
+
+/**
+ * Harga satu malam per tipe kamar pada satu tanggal -- harga website
+ * loonars.id dan harga mesin sebelum potongan website, dihitung villa-api
+ * dengan rumus yang sama dengan form booking. Dipakai asisten WA owner.
+ */
+export function getVillaRoomPricesForDate(date: string): Promise<ProviderResult<RoomTypeAvailability[]>> {
+  return fetchOneDayAvailability(date);
 }
 
 let cachedProvider: VillaOccupancyProvider | null = null;

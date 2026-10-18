@@ -6,6 +6,13 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-18 — Asisten WhatsApp owner, Tahap 1 (hanya baca)
+
+Chatbot tanya-jawab untuk super admin saja: okupansi villa, keuangan MKH
+Property, Loonars 2, dan data MK Connect yang sudah ada, dengan riwayat
+percakapan. `lib/ai/domains/owner-assistant.ts` + uji
+`tests/unit/lib/owner-assistant.test.ts`. Tanpa migrasi.
+
 ## 2026-10-14 — Refund: nomor WA dikunci ke customer refund (0288)
 
 Hanya Super Admin yang bisa menambah customer refund / mengubah nomor HP-nya

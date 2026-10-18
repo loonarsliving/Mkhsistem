@@ -441,6 +441,18 @@ async function panggilMkhProperty(nomor: string | null, aksi: string, data: Reco
   }
 }
 
+/**
+ * Teks laporan Loonars 2 yang hanya-baca (saldo, tagihan, daftar utang) untuk
+ * asisten WA owner (owner-assistant.ts). Sama dengan perintah "saldo" /
+ * "tagihan" / "L2 utang"; MKH Property tetap memeriksa bahwa nomornya owner.
+ * null = tidak tersedia (bukan owner, atau MKH Property tidak bisa dihubungi).
+ */
+export async function bacaLoonars2(sender: string, aksi: "saldo" | "tagihan" | "daftar_utang"): Promise<string | null> {
+  const hasil = await panggilMkhProperty(sender, aksi, {});
+  if (!hasil || hasil.status !== "ok" || typeof hasil.balasan !== "string") return null;
+  return hasil.balasan;
+}
+
 export type Loonars2Outcome = { outcome: "not_applicable" } | { outcome: "handled"; reply: string };
 
 const GAGAL = "⚠️ Sistem Loonars 2 sedang tidak bisa dihubungi. Coba lagi beberapa menit lagi.";

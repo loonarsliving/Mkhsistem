@@ -17,6 +17,8 @@ export interface RoomTypeAvailability {
   /** Nights covered by the query this row came from — not itself a per-date figure. */
   nights: number;
   pricePerNightAvg: number | null;
+  /** Harga mesin (sebelum potongan website) per malam -- villa-api price_total_normal / nights. Null bila tipe ini penuh. */
+  priceNormalPerNightAvg: number | null;
 }
 
 /** One calendar day's occupancy, derived (never fabricated) from villa-api's forward availability. */
