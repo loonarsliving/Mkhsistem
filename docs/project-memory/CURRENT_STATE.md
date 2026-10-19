@@ -3,7 +3,7 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — dibangun, BELUM di-merge (2026-10-18)
+## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — LIVE (PR #91, 2026-10-18; refund ditambah 2026-10-19)
 
 Permintaan owner: WhatsApp jadi dashboard utama untuk keempat sistem, "cukup
 saya saja yang punya akses". `lib/ai/domains/owner-assistant.ts`, dipanggil
@@ -20,11 +20,13 @@ karena tambahan per channel diatur di Cloudbeds dan tidak terbaca sistem,
 sedangkan `harga_website_agoda.tambahan` adalah tuas harga website, bukan
 salinannya) + pipeline properti
 loonars.id/hitung (`pi_properties`/`pi_surveys`, database yang sama; masih
-kosong 2026-10-18) + ringkasan keuangan MKH Property (POST
+kosong 2026-10-18) + refund customer (`listRefundCustomers`, angka sama dengan
+`/refund`) + ringkasan keuangan MKH Property (POST
 `finance.haluoleo.id/api/laporan-investor/ringkasan-wa`, rahasia sync yang
 sudah ada, rumus sama dengan PDF lapkeu) + Loonars 2 saldo/tagihan/utang
 (`bacaLoonars2`). Riwayat 6 giliran / 3 jam dari `ai_conversations` agar
-pertanyaan lanjutan bisa. "menu"/"bantuan" = daftar contoh tanpa AI. Tidak
+pertanyaan lanjutan bisa. "menu"/"bantuan" = daftar contoh tanpa AI. Pertanyaan data yang tidak dicakup tool mana pun
+dijawab "belum tersambung" (bukan "tidak tersedia"). Tidak
 ada tool yang menulis; semua perintah lama (LUNAS, L2, SETUJU, lapkeu, …)
 diperiksa lebih dulu di webhook-handler dan tidak berubah. Tanpa migrasi,
 tanpa env baru. Bergantung pada route mkh-properti (PR terpisah) — bila

@@ -5,6 +5,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { getOccupancyProvider, getVillaRoomPricesForDate } from "@/lib/occupancy/villa-provider";
+import {
+  currentRefundMonth,
+  listRefundCustomers,
+  type RefundCustomer,
+} from "@/repositories/refund.repository";
 import type { RoomTypeAvailability } from "@/lib/occupancy/types";
 
 import { askAI, generateAIText } from "../service";
@@ -53,6 +58,7 @@ type OwnerToolName =
   | "villa_keuangan"
   | "villa_harga"
   | "loonars_properti"
+  | "refund_customer"
   | "keuangan_ringkasan"
   | "loonars2_saldo"
   | "loonars2_tagihan"
@@ -77,6 +83,11 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
   {
     name: "villa_harga",
     description: `Villa: harga jual kamar per malam per tipe kamar pada tanggal tertentu (maks ${MAKS_HARI_OKUPANSI} tanggal berurutan) -- harga website loonars.id dan harga mesin/dasar yang dikirim ke Cloudbeds. BUKAN harga final Agoda/Booking.com`,
+  },
+  {
+    name: "refund_customer",
+    description:
+      "Refund customer (modul /refund MK Connect): termin refund yang jatuh tempo bulan ini (sudah/belum dibayar, per customer), total refund, sudah terbayar, sisa, customer tanpa jadwal termin, chat customer belum dibaca",
   },
   {
     name: "loonars_properti",
@@ -372,6 +383,61 @@ async function runVillaKeuangan(bulan: string): Promise<string> {
   }
 }
 
+// ── Refund customer ─────────────────────────────────────────────────────
+
+/** Exported for tests. Paid/remaining come from listRefundCustomers -- the same numbers /refund shows. */
+export function formatRefund(customers: RefundCustomer[], bulan: string): string {
+  if (!customers.length) return "[Refund Customer] Belum ada customer refund.";
+  const label = bulan.slice(0, 7);
+  const jatuhTempo = customers.flatMap((c) =>
+    c.installments.filter((i) => i.dueMonth === bulan).map((i) => ({ nama: c.name, ...i })),
+  );
+  const sudah = jatuhTempo.filter((i) => i.isPaid);
+  const belum = jatuhTempo.filter((i) => !i.isPaid);
+  const jumlah = (xs: { amount: number }[]) => xs.reduce((s, x) => s + x.amount, 0);
+  const total = (f: (c: RefundCustomer) => number) => customers.reduce((s, c) => s + f(c), 0);
+  const out = [
+    `[Refund Customer] (sumber: modul /refund MK Connect)`,
+    `Termin jatuh tempo ${label}: ${jatuhTempo.length} termin, total ${rupiah(jumlah(jatuhTempo))}; sudah dibayar ${sudah.length} termin ${rupiah(jumlah(sudah))}; belum dibayar ${belum.length} termin ${rupiah(jumlah(belum))}.`,
+  ];
+  if (jatuhTempo.length) {
+    out.push(
+      `Rincian ${label}: ${jatuhTempo.map((i) => `${i.nama} ${rupiah(i.amount)} ${i.isPaid ? "✅ dibayar" : "⏳ belum"}`).join("; ")}.`,
+    );
+  }
+  out.push(
+    `Keseluruhan ${customers.length} customer: total refund ${rupiah(total((c) => c.refundAmount))}, sudah terbayar ${rupiah(total((c) => c.paidAmount))}, sisa ${rupiah(total((c) => c.remainingAmount))}.`,
+  );
+  const tanpaJadwal = customers.filter((c) => c.unscheduledAmount > 0.5);
+  if (tanpaJadwal.length) {
+    out.push(
+      `Sisa yang belum punya jadwal termin: ${tanpaJadwal.map((c) => `${c.name} ${rupiah(c.unscheduledAmount)}`).join("; ")}.`,
+    );
+  }
+  const lebih = customers.filter((c) => c.overScheduled);
+  if (lebih.length)
+    out.push(
+      `Jadwal termin melebihi sisa (perlu dikoreksi): ${lebih.map((c) => c.name).join(", ")}.`,
+    );
+  const chat = customers.filter((c) => c.unreadMessages > 0);
+  if (chat.length)
+    out.push(
+      `Chat customer belum dibaca: ${chat.map((c) => `${c.name} (${c.unreadMessages})`).join(", ")}.`,
+    );
+  return out.join("\n");
+}
+
+async function runRefund(): Promise<string> {
+  try {
+    return formatRefund(await listRefundCustomers(createAdminClient()), currentRefundMonth());
+  } catch (e) {
+    logger.error("owner-assistant: data refund gagal dibaca", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return "[Refund Customer] data tidak tersedia (gagal membaca modul refund)";
+  }
+}
+
 // ── Loonars Property Intelligence ───────────────────────────────────────
 
 interface PiProperty {
@@ -577,9 +643,13 @@ export const OWNER_MENU_TEXT = [
   "• siapa yang belum absen hari ini?",
   "• lead minggu ini? performa iklan?",
   "• pengajuan & cuti yang masih pending?",
+  "• refund customer bulan ini? sisa refund?",
   "",
   'Pertanyaan lanjutan juga bisa ("kalau bulan lalu?"). Perintah lama (LUNAS, setujui L2-…, lapkeu, dst.) tetap berjalan seperti biasa.',
 ].join("\n");
+
+export const OWNER_BELUM_TERSAMBUNG_TEXT =
+  "Data untuk pertanyaan itu belum tersambung ke asisten ini, jadi saya tidak bisa menjawabnya dengan angka yang benar. Kirim *menu* untuk melihat data yang sudah bisa ditanyakan, atau minta tim teknis menyambungkan modul tersebut.";
 
 export function isOwnerMenuRequest(text: string): boolean {
   return /^\s*(menu|bantuan|help|\/start)\s*[?!.]*\s*$/i.test(text);
@@ -644,7 +714,11 @@ export async function tryOwnerAssistant(
   const hariIni = tanggalWib();
   const riwayat = await ambilRiwayat(sender).catch(() => "");
   const intent = await extractOwnerIntent(question, riwayat, hariIni);
-  if (!intent.isDataQuestion || intent.tools.length === 0) return { applicable: false, answer: "" };
+  if (!intent.isDataQuestion) return { applicable: false, answer: "" };
+  // A data question no tool covers: say so plainly instead of letting the
+  // general chat answer "tidak tersedia" as if the data were empty (owner,
+  // 2026-10-19: "refund customer knpa tidak tersedia?" before that tool existed).
+  if (intent.tools.length === 0) return { applicable: true, answer: OWNER_BELUM_TERSAMBUNG_TEXT };
 
   const supabase = createAdminClient();
   let branchId: string | null = null;
@@ -674,6 +748,8 @@ export async function tryOwnerAssistant(
           return runVillaHarga(mulai, intent.jumlahHari ?? 1);
         case "villa_keuangan":
           return runVillaKeuangan(sampai);
+        case "refund_customer":
+          return runRefund();
         case "loonars_properti":
           return runLoonarsProperti();
         case "keuangan_ringkasan":
