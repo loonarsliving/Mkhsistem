@@ -9,13 +9,23 @@ and existing docs — not from any external issue tracker (none found).
   Loonars Coffee, nominal persis) sudah tergantikan oleh kode di branch
   produksi (`lib/supabase/middleware.ts`; `loonars-coffee-field-ops.ts`
   hanya mencocokkan nominal persis sejak PR #89). Keduanya bisa ditutup.
-- PR #80 (ffmpeg tidak dibundel ke semua fungsi Vercel) masih relevan tapi
-  konflik dengan branch produksi; perlu di-port ulang. Deploy produksi
-  per 2026-10-19 masih berstatus READY.
+- PR #80 (ffmpeg tidak dibundel ke semua fungsi Vercel) di-port ulang di
+  branch `claude/eval-5-repos-development-pfhey3`: `outputFileTracingExcludes`
+  + `extractVideoKeyframes` langsung kosong bila `process.env.VERCEL`
+  (`tests/unit/lib/extract-keyframes.test.ts`). Dicek di build: 0 dari 133
+  jejak fungsi membawa `@ffmpeg-installer/linux-x64`. Dampak fitur: analisis
+  video KontenAI di Vercel memakai fallback tanpa frame; data produksi
+  2026-10-19 menunjukkan 7 aset video (Juli) dan tidak satu pun pernah punya
+  keyframe, jadi tidak ada fitur berjalan yang hilang.
 - Paket rentan diperbarui dalam rentang semver (`@capacitor/*` 8.5.3, xmldom,
-  js-yaml, undici, brace-expansion, dll). `security-scan` tetap merah sampai
-  Next.js 15 → 16 (PR dependabot #7, critical) dikerjakan tersendiri;
-  `braces` belum punya versi perbaikan.
+  js-yaml, undici, brace-expansion, dll). Lalu `next` 15.5.23 → 15.5.28
+  (backport keamanan resmi, menutup temuan critical tanpa pindah ke Next 16)
+  dan `sharp` 0.34.5 → 0.35.5 (masih dalam rentang yang diizinkan next).
+  Sisa temuan high `npm audit` hanya `braces` lewat `tailwindcss` 3 (alat
+  build, tidak ada di `npm audit --omit=dev`, belum ada versi perbaikan;
+  hilang hanya dengan migrasi Tailwind 4). Karena itu `security-scan` masih
+  merah. Upgrade Next.js 16 (dependabot #7) tidak lagi diperlukan untuk
+  keamanan.
 
 ## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — LIVE (PR #91, 2026-10-18; refund ditambah 2026-10-19)
 
