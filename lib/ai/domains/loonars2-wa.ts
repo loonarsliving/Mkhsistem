@@ -176,6 +176,9 @@ export function parseBarisMingguan(baris: string): BarisMingguan | null {
   return { jenis, unit: parseUnits(teks), deskripsi: bersihkan(teks), toko: toko ? toko[1].trim() : undefined, nominal };
 }
 
+/** "nota beda" / "bukan double" = pelaksana menegaskan notanya memang lain, penjaga nota double dilewati. */
+export const NOTA_BEDA_RE = /\b(?:nota\s+(?:beda|berbeda|baru|lain)|beda\s+nota|bukan\s+(?:nota\s+)?(?:double|dobel|ganda))\b/i;
+
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
 
 /**
@@ -395,7 +398,7 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 export const LOONARS2_BANTUAN =
   "Perintah Loonars 2 (pelaksana selalu diawali L2):\n" +
   "• Upah tukang mingguan (borongan): \"L2 tukang minggu ini\" — nominal & minggu ke-n dihitung sistem; \"L2 retensi unit 3\" setelah unit selesai\n" +
-  "• Catat utang material: \"L2 utang TB Maju semen 50 sak 6.500.000\" (+ foto nota); beli tunai: \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"\n" +
+  "• Catat utang material (langsung sah, tidak perlu persetujuan; sistem hanya menolak nota yang kembar): \"L2 utang TB Maju semen 50 sak 6.500.000\" (+ foto nota). Kalau ditolak karena dikira double tapi notanya memang lain, tambahkan \"nota beda\"; beli tunai: \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"\n" +
   "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
   "• Pembayaran lain-lain: \"L2 lain listrik proyek 600 rb\", \"L2 bensin 200 rb\", \"L2 sewa alat 1,5 juta\"\n" +
   "• Semua sekaligus, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", \"- lain listrik 600 rb\"\n" +
@@ -535,16 +538,22 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     if (!data.nominal) {
       return { outcome: "handled", reply: "Total pesanan bahan belum terbaca. Tulis totalnya, mis. \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"." };
     }
-    return teruskan(sender, "bahan", data);
+    return teruskan(sender, "bahan", { ...data, paksa: NOTA_BEDA_RE.test(perintah.teks) });
   }
 
   if (perintah.aksi === "utang_foto") {
     // Utang tanpa menyebut unit = pesanan kolektif: item dibaca AI, dibagi ke unit yang sedang dibangun.
     if (perintah.unit.length === 0 && perintah.nominal) {
       const data = await susunBahan(perintah.teks ?? perintah.deskripsi, true, [], { toko: perintah.toko, nominal: perintah.nominal });
-      return teruskan(sender, "utang", data);
+      return teruskan(sender, "utang", { ...data, paksa: NOTA_BEDA_RE.test(perintah.teks ?? perintah.deskripsi) });
     }
-    return teruskan(sender, "utang", { unit: perintah.unit, toko: perintah.toko, deskripsi: perintah.deskripsi, nominal: perintah.nominal });
+    return teruskan(sender, "utang", {
+      unit: perintah.unit,
+      toko: perintah.toko,
+      deskripsi: perintah.deskripsi,
+      nominal: perintah.nominal,
+      paksa: NOTA_BEDA_RE.test(perintah.teks ?? perintah.deskripsi),
+    });
   }
 
   return teruskan(sender, perintah.aksi, perintah.data);
@@ -623,7 +632,15 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
     if (!nominal) {
       return { outcome: "handled", reply: "⚠️ Total di nota tidak terbaca. Tulis totalnya di keterangan foto, mis. \"L2 utang TB Maju unit 5 semen 50 sak 6.500.000\"." };
     }
-    return teruskan(sender, "utang", { unit: perintah.unit, toko, deskripsi: perintah.deskripsi, items, nominal, nota_url: imageUrl });
+    return teruskan(sender, "utang", {
+      unit: perintah.unit,
+      toko,
+      deskripsi: perintah.deskripsi,
+      items,
+      nominal,
+      nota_url: imageUrl,
+      paksa: NOTA_BEDA_RE.test(perintah.teks ?? perintah.deskripsi),
+    });
   }
 
   if (perintah.aksi === "bahan_ai") {
@@ -641,7 +658,7 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
     if (!data.nominal) {
       return { outcome: "handled", reply: "⚠️ Total di nota tidak terbaca. Tulis totalnya di keterangan foto, mis. \"L2 bahan TB Maju semen 100 sak 8,5 juta\"." };
     }
-    return teruskan(sender, "bahan", { ...data, nota_url: imageUrl });
+    return teruskan(sender, "bahan", { ...data, nota_url: imageUrl, paksa: NOTA_BEDA_RE.test(perintah.teks) });
   }
 
   if (perintah.aksi === "ajukan_ai") {
