@@ -53,6 +53,13 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@v3
+        with:
+          # Default-nya "tools platform-tools". Paket legacy `tools` sudah
+          # tidak ada di cmdline-tools 16.0 milik runner (Okt 2026), dan
+          # sdkmanager gagal "Failed to find package 'tools'" sebelum langkah
+          # build berjalan. Gradle hanya butuh platform-tools; sisanya
+          # diunduh AGP sendiri.
+          packages: platform-tools
 
       - name: Sync Capacitor
         run: npx cap sync android
