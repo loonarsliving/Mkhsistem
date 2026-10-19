@@ -291,5 +291,17 @@ describe("pembayaran lain-lain & cicilan utang", () => {
     expect(NOTA_BEDA_RE.test("L2 utang Sedia Nurut besi 5 juta bukan double")).toBe(true);
     expect(NOTA_BEDA_RE.test("L2 utang Sedia Nurut besi 5 juta")).toBe(false);
   });
+
+  it("permintaan laporan utang (PDF) dikenali dengan atau tanpa awalan L2", () => {
+    for (const m of ["kirim laporan utang loonars 2 pdf", "laporan pembayaran utang", "L2 laporan utang", "pdf utang toko", "tolong kirimkan rekap utang toko dalam bentuk pdf", "utang loonars 2 pdf"]) {
+      expect(parseLoonars2Perintah(m)).toEqual({ aksi: "laporan_utang", data: {} });
+    }
+  });
+
+  it("kalimat lain tentang utang tidak dianggap permintaan laporan", () => {
+    expect(parseLoonars2Perintah("utang")).toEqual({ aksi: "daftar_utang", data: {} });
+    expect(parseLoonars2Perintah("laporan keuangan villa")).toBeNull();
+    expect(parseLoonars2Perintah("bayar utang toko besi 9 juta")).toBeNull();
+  });
 });
 
