@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import type { RefundCustomer } from "@/repositories/refund.repository";
+
 import {
   formatHargaVilla,
   formatKeuanganVilla,
   formatOkupansiKeDepan,
+  formatRefund,
   formatRingkasanKeuangan,
   isOwnerMenuRequest,
   parseOwnerIntentJson,
@@ -282,5 +285,89 @@ describe("formatHargaVilla", () => {
     );
     expect(text).toContain("Sawah View: penuh (0/3 kosong, harga tidak dihitung)");
     expect(text).toContain("tidak tersedia di sistem, jangan ditebak");
+  });
+});
+
+describe("formatRefund", () => {
+  const customer = (over: Partial<RefundCustomer>): RefundCustomer => ({
+    id: "c1",
+    name: "Budi",
+    phone: null,
+    refundAmount: 10_000_000,
+    openingPaidAmount: 2_000_000,
+    paidAmount: 3_000_000,
+    remainingAmount: 7_000_000,
+    scheduledUnpaidAmount: 4_000_000,
+    unscheduledAmount: 3_000_000,
+    overScheduled: false,
+    bankName: null,
+    bankAccountNumber: null,
+    bankAccountHolder: null,
+    notes: null,
+    sortOrder: 0,
+    installments: [
+      {
+        id: "i1",
+        customerId: "c1",
+        dueMonth: "2026-09-01",
+        amount: 1_000_000,
+        isPaid: true,
+        paidAt: null,
+      },
+      {
+        id: "i2",
+        customerId: "c1",
+        dueMonth: "2026-10-01",
+        amount: 1_000_000,
+        isPaid: false,
+        paidAt: null,
+      },
+    ],
+    unreadMessages: 2,
+    lastMessageAt: null,
+    lastReminderAt: null,
+    ...over,
+  });
+
+  it("summarises this month's termin and the overall totals from the repository's own figures", () => {
+    const text = formatRefund(
+      [
+        customer({}),
+        customer({
+          id: "c2",
+          name: "Sari",
+          refundAmount: 5_000_000,
+          paidAmount: 5_000_000,
+          remainingAmount: 0,
+          unscheduledAmount: 0,
+          unreadMessages: 0,
+          installments: [
+            {
+              id: "i3",
+              customerId: "c2",
+              dueMonth: "2026-10-01",
+              amount: 500_000,
+              isPaid: true,
+              paidAt: null,
+            },
+          ],
+        }),
+      ],
+      "2026-10-01",
+    );
+    expect(text).toContain(
+      "Termin jatuh tempo 2026-10: 2 termin, total Rp1.500.000; sudah dibayar 1 termin Rp500.000; belum dibayar 1 termin Rp1.000.000.",
+    );
+    expect(text).toContain("Budi Rp1.000.000 ⏳ belum");
+    expect(text).toContain("Sari Rp500.000 ✅ dibayar");
+    expect(text).toContain(
+      "Keseluruhan 2 customer: total refund Rp15.000.000, sudah terbayar Rp8.000.000, sisa Rp7.000.000.",
+    );
+    expect(text).toContain("belum punya jadwal termin: Budi Rp3.000.000");
+    expect(text).toContain("Chat customer belum dibaca: Budi (2)");
+  });
+
+  it("says so when the module has no customers", () => {
+    expect(formatRefund([], "2026-10-01")).toContain("Belum ada customer refund");
   });
 });
