@@ -7,7 +7,7 @@ import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { recognizeBahanPesanan, type BahanRecognition } from "@/lib/ai/domains/loonars2-bahan-recognition";
 import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
-import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
+import { sendWhatsAppDocument, sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 
 /**
  * Keuangan Loonars 2 lewat WhatsApp (owner 2026-10-11) -- ADAPTOR tipis.
@@ -47,6 +47,7 @@ export type Loonars2Aksi =
   | "bayar_pengajuan"
   | "utang"
   | "daftar_utang"
+  | "laporan_utang"
   | "ajukan_mingguan"
   | "putuskan_kode"
   | "bayar_kelompok"
@@ -179,6 +180,10 @@ export function parseBarisMingguan(baris: string): BarisMingguan | null {
 /** "nota beda" / "bukan double" = pelaksana menegaskan notanya memang lain, penjaga nota double dilewati. */
 export const NOTA_BEDA_RE = /\b(?:nota\s+(?:beda|berbeda|baru|lain)|beda\s+nota|bukan\s+(?:nota\s+)?(?:double|dobel|ganda))\b/i;
 
+const LAPORAN_UTANG_RE =
+  /^(?:tolong\s+|coba\s+)?(?:kirim(?:kan)?\s+|minta\s+|buat(?:kan)?\s+)?(?:laporan|rekap)\s+(?:pembayaran\s+)?utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?(?:\s+(?:dalam\s+bentuk\s+|bentuk\s+|format\s+)?pdf)?$|^(?:tolong\s+)?(?:kirim(?:kan)?\s+)?pdf\s+(?:laporan\s+)?(?:pembayaran\s+)?utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?$/;
+const LAPORAN_UTANG_PDF_DULU_RE = /^utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?\s+pdf$/;
+
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
 
 /**
@@ -263,6 +268,9 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   if (/^(?:daftar\s+|sisa\s+)?utang(?:\s+toko)?$/.test(kecil) && (awalan || /^utang$/.test(kecil))) {
     return { aksi: "daftar_utang", data: {} };
   }
+
+  // "kirim laporan utang loonars 2 pdf" -> PDF Laporan Pembayaran Utang Toko dari MKH Property (khusus owner; dicek di sana)
+  if (LAPORAN_UTANG_RE.test(kecil) || LAPORAN_UTANG_PDF_DULU_RE.test(kecil)) return { aksi: "laporan_utang", data: {} };
 
   // "sudah 1" / "sudah semua" / "sudah T15"
   const sudah = kecil.match(/^sudah\s+(semua|\d|t\d+)$/);
@@ -506,9 +514,27 @@ export async function susunBahan(
 // ---------------------------------------------------------------------------
 // Pesan teks
 // ---------------------------------------------------------------------------
+/** Minta MKH Property membuat tautan laporan, lalu kirim PDF-nya sebagai dokumen WhatsApp (khusus owner). */
+async function kirimLaporanUtang(sender: string): Promise<Loonars2Outcome> {
+  const hasil = await panggilMkhProperty(sender, "laporan_utang", {});
+  if (!hasil) return { outcome: "handled", reply: GAGAL };
+  if (hasil.status === "abaikan") return { outcome: "not_applicable" };
+  if (hasil.status !== "ok" || typeof hasil.token !== "string" || typeof hasil.nama_berkas !== "string") {
+    return { outcome: "handled", reply: typeof hasil.balasan === "string" ? hasil.balasan : GAGAL };
+  }
+  const url = `${new URL(MKH_PROPERTY_LOONARS2_URL).origin}/api/loonars2/laporan-utang/${hasil.token}/${hasil.nama_berkas}`;
+  const kirim = await sendWhatsAppDocument(sender, url, hasil.nama_berkas);
+  if (!kirim.success) {
+    return { outcome: "handled", reply: "⚠️ Laporan sudah dibuat tapi gagal dikirim sebagai dokumen. Coba minta lagi sebentar." };
+  }
+  return { outcome: "handled", reply: "📄 Laporan Pembayaran Utang Toko Loonars 2 terkirim sebagai PDF (isi sesuai data terbaru)." };
+}
+
 export async function tryHandleLoonars2Text(sender: string, text: string): Promise<Loonars2Outcome> {
   const perintah = parseLoonars2Perintah(text);
   if (!perintah) return { outcome: "not_applicable" };
+
+  if (perintah.aksi === "laporan_utang") return kirimLaporanUtang(sender);
 
   if (perintah.aksi === "bantuan") return { outcome: "handled", reply: LOONARS2_BANTUAN };
 
