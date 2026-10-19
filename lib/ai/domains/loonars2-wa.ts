@@ -574,10 +574,10 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
 const NOMOR_BUKAN_L2 = new Map<string, number>();
 const MASA_NOMOR_BUKAN_L2_MS = 30 * 60 * 1000;
 
-async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string): Promise<Loonars2Outcome> {
+async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string, keterangan: string | null): Promise<Loonars2Outcome> {
   const sampai = NOMOR_BUKAN_L2.get(sender);
   if (sampai !== undefined && sampai > Date.now()) return { outcome: "not_applicable" };
-  const kandidat = await panggilMkhProperty(sender, "bukti_kandidat", {});
+  const kandidat = await panggilMkhProperty(sender, "bukti_kandidat", { keterangan });
   if (kandidat?.status === "abaikan") {
     NOMOR_BUKAN_L2.set(sender, Date.now() + MASA_NOMOR_BUKAN_L2_MS);
     return { outcome: "not_applicable" };
@@ -593,6 +593,7 @@ async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string): Prom
     nominal: ai.nominal,
     penerima: ai.rekeningTujuan,
     tanggal: ai.tanggal,
+    keterangan,
     bukti_url: imageUrl,
   });
   if (!hasil || hasil.status === "abaikan" || hasil.status === "tidak_cocok") return { outcome: "not_applicable" };
@@ -602,7 +603,7 @@ async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string): Prom
 
 export async function tryHandleLoonars2Image(sender: string, imageUrl: string, caption: string | null | undefined): Promise<Loonars2Outcome> {
   const perintah = parseLoonars2Perintah(caption ?? "");
-  if (!perintah) return bacaBuktiTransferOtomatis(sender, imageUrl);
+  if (!perintah) return bacaBuktiTransferOtomatis(sender, imageUrl, caption?.trim() ? caption.trim().slice(0, 300) : null);
   if (perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
 
   if (
