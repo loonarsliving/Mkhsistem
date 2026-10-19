@@ -210,6 +210,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Users,
         permission: [PERMISSIONS.EMPLOYEE_VIEW_BRANCH, PERMISSIONS.EMPLOYEE_VIEW_ALL],
       },
+      { label: "Karyawan Loonars Private Living", href: "/lpl-staff", icon: UsersRound, permission: PERMISSIONS.LPL_STAFF_MANAGE },
       { label: "Pending Registration", href: "/registrations", icon: UserCheck, permission: PERMISSIONS.REGISTRATION_MANAGE },
       { label: "Cabang", href: "/branches", icon: Building2, permission: PERMISSIONS.BRANCH_MANAGE },
       { label: "Divisi", href: "/divisions", icon: Network, permission: PERMISSIONS.DIVISION_MANAGE },

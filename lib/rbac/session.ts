@@ -69,6 +69,16 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     permissions.push(PERMISSIONS.VILLA_REFERRAL_MANAGE);
   }
 
+  // Karyawan Loonars Private Living (owner 2026-10-19) are managed by the
+  // same person -- mirrored in the DB by app_can_manage_lpl_staff() (0289).
+  if (
+    employee.role_key === ROLE_KEYS.KEPALA_CABANG &&
+    employee.branch_id === JOGJA_BRANCH_ID &&
+    !permissions.includes(PERMISSIONS.LPL_STAFF_MANAGE)
+  ) {
+    permissions.push(PERMISSIONS.LPL_STAFF_MANAGE);
+  }
+
   // Markom pages are scoped to Jogja's own Kepala Cabang -- every branch
   // shares the role, so any OTHER branch's head has these permissions
   // stripped back out here (see MARKOM_KEPALA_CABANG_PERMISSIONS). The

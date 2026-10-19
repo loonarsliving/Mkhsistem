@@ -358,6 +358,13 @@ export const MANAGEMENT_PROPERTY_BRANCH_ID = "4d61f863-3358-4068-b80e-9770e88282
 export const JOGJA_BRANCH_ID = "fdeb7f3a-e211-4e6d-a2a6-35162378e3ae";
 
 /**
+ * Loonars Private Living (code LPL, 0282) -- the villa hospitality staff.
+ * Owner 2026-10-19: Jogja's Kepala Cabang (Vando) adds/removes LPL
+ * employees and inputs their salary (/lpl-staff, migration 0289).
+ */
+export const LPL_BRANCH_ID = "0c016dec-8332-40ac-a5f8-d74136de778e";
+
+/**
  * The Kendari branch (code KDI). Construction project finance (dana proyek
  * pembangunan -- gaji tukang / pembelian material) is currently a
  * Kendari-only feature, gated the same way as JOGJA_BRANCH_ID above: every

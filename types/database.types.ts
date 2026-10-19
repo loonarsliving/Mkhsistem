@@ -6213,6 +6213,22 @@ export interface Database {
       refund_set_installment_paid: { Args: { p_installment_id: string; p_paid: boolean }; Returns: undefined };
       refund_send_reminder: { Args: { p_customer_id?: string | null; p_note?: string | null }; Returns: number };
       send_salary_transfer_summary: { Args: { p_branch_id?: string | null }; Returns: number };
+      lpl_add_employee: {
+        Args: {
+          p_id: string;
+          p_full_name: string;
+          p_email: string;
+          p_phone: string | null;
+          p_division_id: string | null;
+          p_gender: string | null;
+          p_join_date: string | null;
+          p_bank_name: string | null;
+          p_bank_account_number: string | null;
+          p_bank_account_holder: string | null;
+        };
+        Returns: string;
+      };
+      lpl_remove_employee: { Args: { p_id: string }; Returns: undefined };
       construction_submit_expense: {
         Args: {
           p_project_id: string;

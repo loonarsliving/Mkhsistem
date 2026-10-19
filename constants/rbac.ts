@@ -151,6 +151,15 @@ export const PERMISSIONS = {
   VILLA_REFERRAL_MANAGE: "villa_referral.manage",
 
   /**
+   * Tambah/keluarkan + input gaji karyawan Loonars Private Living (/lpl-staff,
+   * owner 2026-10-19). Super Admin lewat role_permissions (0289); Kepala
+   * Cabang Jogja (Vando) lewat pemeriksaan cabang di getCurrentSession() dan
+   * app_can_manage_lpl_staff() di DB -- sengaja BUKAN employee.manage, yang
+   * berlaku untuk semua karyawan semua cabang.
+   */
+  LPL_STAFF_MANAGE: "lpl_staff.manage",
+
+  /**
    * FRIDAY — the executive intelligence layer (/friday).
    *
    * Three permissions rather than one, because reading FRIDAY's analysis,

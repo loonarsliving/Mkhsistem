@@ -6,6 +6,13 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-19 — Vando mengelola karyawan Loonars Private Living (0289)
+
+Halaman baru `/lpl-staff`: Vando (Kepala Cabang Jogja) menambah dan
+mengeluarkan karyawan cabang LPL, dan menginput gaji mereka di `/hr/salary`.
+Izin baru `lpl_staff.manage`; tanpa `employee.manage`. Belum aktif sampai
+migrasi 0289 diterapkan ke DB produksi.
+
 ## 2026-10-18 — Asisten WhatsApp owner, Tahap 1 (hanya baca)
 
 Chatbot tanya-jawab untuk super admin saja: okupansi villa, keuangan MKH

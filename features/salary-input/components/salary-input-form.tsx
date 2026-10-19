@@ -55,6 +55,8 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
   });
 
   const employeeId = watch("employeeId");
+  // Jogja's Kepala Cabang also inputs Loonars Private Living's salaries (0289).
+  const showBranch = new Set(candidates.map((c) => c.branchName)).size > 1;
 
   function handleEmployeeChange(id: string, onChange: (value: string) => void) {
     onChange(id);
@@ -110,6 +112,7 @@ export function SalaryInputForm({ candidates }: SalaryInputFormProps) {
                       {candidates.map((person) => (
                         <SelectItem key={person.id} value={person.id}>
                           {person.fullName} ({person.employeeCode})
+                          {showBranch ? ` — ${person.branchName}` : ""}
                           {person.separateSchedule ? " — jadwal terpisah" : ""}
                         </SelectItem>
                       ))}

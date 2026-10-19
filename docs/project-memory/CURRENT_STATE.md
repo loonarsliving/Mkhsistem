@@ -27,6 +27,26 @@ and existing docs — not from any external issue tracker (none found).
   merah. Upgrade Next.js 16 (dependabot #7) tidak lagi diperlukan untuk
   keamanan.
 
+## Vando mengelola karyawan Loonars Private Living (2026-10-19, migrasi 0289)
+
+Permintaan owner: Vando bisa menambah/mengeluarkan karyawan Loonars Private
+Living (cabang `LPL`, 0282) dan menginput gaji mereka. Vando sengaja TIDAK
+diberi `employee.manage` (izin itu mencakup semua karyawan semua cabang dan
+penggantian peran). Sebagai gantinya izin `lpl_staff.manage`: super_admin di
+level peran, Kepala Cabang Jogja lewat `getCurrentSession()` dan
+`app_can_manage_lpl_staff()` di DB (pola sama dengan `villa_referral.manage`).
+- `/lpl-staff` (`features/lpl-staff`, `repositories/lpl-staff.repository.ts`):
+  tambah = undangan email (sama dengan `/employees`) + RPC `lpl_add_employee`
+  yang memaksa cabang LPL, divisi LPL, peran `staff`, kode otomatis `LPL-NNN`;
+  keluarkan = RPC `lpl_remove_employee` (soft delete + `terminated`, sama
+  dengan tombol Nonaktifkan).
+- `/hr/salary`: daftar karyawan LPL + panel ringkasan LPL untuk Vando.
+  `submit_employee_salary` dan `send_salary_transfer_summary` menerima cabang
+  LPL untuk pemegang izin ini (tanpa itu ringkasan otomatis LPL akan menarget
+  cabang Jogja).
+- RLS: dua policy SELECT permissive tambahan (`employees`,
+  `employee_salary_submissions`); policy lama tidak diubah.
+
 ## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — LIVE (PR #91, 2026-10-18; refund ditambah 2026-10-19)
 
 Permintaan owner: WhatsApp jadi dashboard utama untuk keempat sistem, "cukup

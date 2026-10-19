@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LPL_BRANCH_ID } from "@/constants/app";
 import { PERMISSIONS } from "@/constants/rbac";
 import { SalaryInputForm } from "@/features/salary-input/components/salary-input-form";
 import { SalarySummarySendPanel } from "@/features/salary-input/components/salary-summary-send-panel";
@@ -28,17 +29,24 @@ export default async function SalaryInputPage() {
   const session = await requireSession();
   const canSubmit = hasPermission(session, PERMISSIONS.SALARY_INPUT_SUBMIT);
   const canTransfer = hasPermission(session, PERMISSIONS.SALARY_INPUT_TRANSFER);
+  // Vando (Kepala Cabang Jogja) also inputs Loonars Private Living's salaries
+  // -- submit_employee_salary accepts the LPL branch for him (0289).
+  const canSubmitLpl =
+    hasPermission(session, PERMISSIONS.LPL_STAFF_MANAGE) && session.employee.branch_id !== LPL_BRANCH_ID;
 
-  if (!canSubmit && !canTransfer) redirect("/dashboard?error=forbidden");
+  if (!canSubmit && !canTransfer && !canSubmitLpl) redirect("/dashboard?error=forbidden");
 
   const supabase = await createClient();
 
-  const [candidates, submissions, pendingTransfers, unsummarized] = await Promise.all([
+  const [ownCandidates, lplCandidates, submissions, pendingTransfers, unsummarized, lplUnsummarized] = await Promise.all([
     canSubmit ? listSalaryCandidates(supabase, session.employee.branch_id) : Promise.resolve([]),
+    canSubmitLpl ? listSalaryCandidates(supabase, LPL_BRANCH_ID) : Promise.resolve([]),
     listSalarySubmissions(supabase),
     canTransfer ? listPendingSalaryTransfers(supabase) : Promise.resolve([]),
     canSubmit ? listUnsummarizedSalarySubmissions(supabase, session.employee.branch_id) : Promise.resolve([]),
+    canSubmitLpl ? listUnsummarizedSalarySubmissions(supabase, LPL_BRANCH_ID) : Promise.resolve([]),
   ]);
+  const candidates = [...ownCandidates, ...lplCandidates];
 
   return (
     <div className="space-y-8">
@@ -51,7 +59,11 @@ export default async function SalaryInputPage() {
         <SalarySummarySendPanel branchName={session.employee.branch_name ?? "-"} items={unsummarized} />
       )}
 
-      {canSubmit && <SalaryInputForm candidates={candidates} />}
+      {canSubmitLpl && (
+        <SalarySummarySendPanel branchName="Loonars Private Living" branchId={LPL_BRANCH_ID} items={lplUnsummarized} />
+      )}
+
+      {(canSubmit || canSubmitLpl) && <SalaryInputForm candidates={candidates} />}
 
       {canTransfer && <SalaryTransferQueue items={pendingTransfers} />}
 

@@ -14,6 +14,8 @@ import { sendSalarySummaryAction } from "../actions/salary-input.actions";
 
 interface SalarySummarySendPanelProps {
   branchName: string;
+  /** Omitted = the caller's own branch; set for Loonars Private Living (0289). */
+  branchId?: string;
   items: SalarySubmission[];
 }
 
@@ -24,7 +26,7 @@ interface SalarySummarySendPanelProps {
  * WhatsApp messages. This button folds everything still un-summarized into
  * ONE WhatsApp message (names + bank accounts) once they're done inputting.
  */
-export function SalarySummarySendPanel({ branchName, items }: SalarySummarySendPanelProps) {
+export function SalarySummarySendPanel({ branchName, branchId, items }: SalarySummarySendPanelProps) {
   const [isSending, setIsSending] = useState(false);
 
   if (items.length === 0) return null;
@@ -33,7 +35,7 @@ export function SalarySummarySendPanel({ branchName, items }: SalarySummarySendP
 
   async function handleSend() {
     setIsSending(true);
-    const result = await sendSalarySummaryAction({});
+    const result = await sendSalarySummaryAction({ branchId });
     setIsSending(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal mengirim ringkasan");
