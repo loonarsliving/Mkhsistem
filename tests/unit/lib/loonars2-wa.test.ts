@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { NOTA_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -284,6 +284,12 @@ describe("pembayaran lain-lain & cicilan utang", () => {
       data: { baris: [{ jenis: "cicilan", toko: "TB Maju", deskripsi: "cicilan TB Maju lunas", nominal: null }] },
     });
     expect(parseLoonars2Perintah("L2 cicilan TB Maju 3 juta")).toMatchObject({ data: { baris: [{ jenis: "cicilan", toko: "TB Maju", nominal: 3_000_000 }] } });
+  });
+
+  it("kata 'nota beda' / 'bukan double' menandai nota yang memang lain", () => {
+    expect(NOTA_BEDA_RE.test("L2 utang Sedia Nurut semen 5 juta nota beda")).toBe(true);
+    expect(NOTA_BEDA_RE.test("L2 utang Sedia Nurut besi 5 juta bukan double")).toBe(true);
+    expect(NOTA_BEDA_RE.test("L2 utang Sedia Nurut besi 5 juta")).toBe(false);
   });
 });
 
