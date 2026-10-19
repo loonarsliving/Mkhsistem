@@ -19,20 +19,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "210mb",
     },
   },
-  // KontenAI Video Intelligence (features/kontenai/asset-library) shells out to
-  // the static ffmpeg binary from @ffmpeg-installer/ffmpeg to extract video
-  // keyframes server-side. @ffmpeg-installer/ffmpeg resolves its per-platform
-  // binary package (@ffmpeg-installer/linux-x64) via a *dynamic* require()
-  // built from path.resolve(__dirname, ...) at runtime -- Next's automatic
-  // file tracer can't follow that statically, so without an explicit include
-  // the binary silently never makes it into the deployed serverless function
-  // and every upload fails with "Cannot find module
-  // .../node_modules/@ffmpeg-installer/linux-x64/package.json". A route-scoped
-  // key here has been unreliable in production, so this includes it for every
-  // route -- the binary is a few MB, not worth re-debugging tracing edge
-  // cases over. Render Engine (Sprint 6) no longer runs ffmpeg on Vercel at
-  // all -- scripts/render-worker.ts does the actual render on its own host.
-  outputFileTracingIncludes: {
+  // ffmpeg never runs on Vercel: video renders run on the off-Vercel worker
+  // (scripts/render-worker.ts), and on Vercel lib/video/extract-keyframes.ts
+  // skips keyframe extraction so video analysis uses its no-frames fallback.
+  // This used to *include* @ffmpeg-installer for every route, which
+  // copied a ~70MB static binary into every function bundle of every retained
+  // deployment and filled the Hobby team's 10GB Function Storage. Exclude it
+  // explicitly so no route can pull it back in by accident.
+  outputFileTracingExcludes: {
     "*": ["./node_modules/@ffmpeg-installer/**/*"],
   },
   images: {
