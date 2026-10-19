@@ -3,6 +3,20 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Pemilahan PR terbuka & dependency (2026-10-19)
+
+- PR #58 (villa AI bridge di `PUBLIC_PATHS`) dan PR #82 (bukti transfer
+  Loonars Coffee, nominal persis) sudah tergantikan oleh kode di branch
+  produksi (`lib/supabase/middleware.ts`; `loonars-coffee-field-ops.ts`
+  hanya mencocokkan nominal persis sejak PR #89). Keduanya bisa ditutup.
+- PR #80 (ffmpeg tidak dibundel ke semua fungsi Vercel) masih relevan tapi
+  konflik dengan branch produksi; perlu di-port ulang. Deploy produksi
+  per 2026-10-19 masih berstatus READY.
+- Paket rentan diperbarui dalam rentang semver (`@capacitor/*` 8.5.3, xmldom,
+  js-yaml, undici, brace-expansion, dll). `security-scan` tetap merah sampai
+  Next.js 15 → 16 (PR dependabot #7, critical) dikerjakan tersendiri;
+  `braces` belum punya versi perbaikan.
+
 ## Asisten WhatsApp Owner, Tahap 1 (hanya baca) — LIVE (PR #91, 2026-10-18; refund ditambah 2026-10-19)
 
 Permintaan owner: WhatsApp jadi dashboard utama untuk keempat sistem, "cukup
@@ -79,7 +93,11 @@ customer tanpa jadwal termin, 4 customer jadwal < sisa, 1 customer yang
 jadwal. Modul menampilkan peringatan
 "belum punya jadwal termin" untuk kasus seperti ini.
 
-## Loonars 2: utang toko + pengajuan mingguan via WA — dibangun, BELUM di-merge (2026-10-11)
+## Loonars 2: utang toko + pengajuan mingguan via WA — LIVE (dibangun 2026-10-11, di-merge lewat PR #89/#90)
+
+_Koreksi 2026-10-19: judul lama "BELUM di-merge" sudah usang. Commit
+`a982166` (utang toko + pengajuan mingguan) ada di branch produksi lewat
+PR #89 (deploy produksi 2026-10-14), perbaikan lanjutannya PR #90._
 
 Lanjutan modul Loonars 2 (permintaan owner): material dibeli utang di toko
 bangunan dan dicicil mingguan. Parser di `lib/ai/domains/loonars2-wa.ts`:
