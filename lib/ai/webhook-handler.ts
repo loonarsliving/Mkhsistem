@@ -50,6 +50,7 @@ import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confi
 import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
 import { tryHandleLoonars2Image, tryHandleLoonars2Text } from "./domains/loonars2-wa";
 import { tryCaptureRefundCustomerMessage } from "./domains/refund-customer-chat";
+import { tryHandleRefundTransferProofViaWhatsApp } from "./domains/refund-transfer-proof-wa";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
 import { tryVillaReferralRequestViaWhatsApp } from "./domains/villa-referral-request";
@@ -239,6 +240,20 @@ export async function handleWhatsAppWebhookEvent(
         return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
       }
       trace.push("tryForwardVillaDividendProofViaWhatsApp:not_applicable");
+
+      // Bukti transfer refund (0289): owner / petugas Refund & CR mengirim
+      // foto dengan keterangan "REFUND <nama customer / no urut> [bulan]".
+      // Dikunci ke pengirim berwenang dan diawali kata REFUND, jadi tidak
+      // membayangi jalur foto lain di bawah. Lihat refund-transfer-proof-wa.ts.
+      trace.push("tryHandleRefundTransferProofViaWhatsApp:calling");
+      const refundProof = await tryHandleRefundTransferProofViaWhatsApp(inbound.sender, inbound.content.url, inbound.content.caption);
+      if (refundProof.outcome === "handled") {
+        trace.push("tryHandleRefundTransferProofViaWhatsApp:handled");
+        const sendResult = await sendWhatsAppText(inbound.sender, refundProof.reply);
+        await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer refund]", refundProof.reply, null);
+        return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+      }
+      trace.push("tryHandleRefundTransferProofViaWhatsApp:not_applicable");
 
       // Loonars 2: foto bukti transfer ("sudah 1", "L2 bayar L2-12") atau
       // foto nota pengajuan ("L2 unit 5 ..."). Keterangan foto memakai pola

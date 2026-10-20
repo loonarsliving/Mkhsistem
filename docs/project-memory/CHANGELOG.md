@@ -13,6 +13,13 @@ Property, Loonars 2, dan data MK Connect yang sudah ada, dengan riwayat
 percakapan. `lib/ai/domains/owner-assistant.ts` + uji
 `tests/unit/lib/owner-assistant.test.ts`. Tanpa migrasi.
 
+## 2026-10-20 — Refund: bukti transfer (0289)
+
+Bukti transfer refund disimpan (bucket privat), termin otomatis dicentang dan
+bukti diteruskan ke WA customer. Lewat WA ("REFUND <nama>" + foto) atau tombol
+"Bukti Transfer" di /refund. Jadwal termin diselaraskan dengan PDF skema
+manajemen.
+
 ## 2026-10-14 — Refund: nomor WA dikunci ke customer refund (0288)
 
 Hanya Super Admin yang bisa menambah customer refund / mengubah nomor HP-nya

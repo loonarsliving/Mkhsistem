@@ -932,6 +932,36 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mkc_refund_reminders"]["Insert"]>;
         Relationships: [];
       };
+      mkc_refund_transfer_proofs: {
+        Row: {
+          id: string;
+          customer_id: string;
+          installment_id: string | null;
+          storage_path: string;
+          content_type: string;
+          source: "whatsapp" | "dashboard";
+          uploaded_by: string | null;
+          forward_status: "pending" | "sent" | "failed";
+          forward_error: string | null;
+          forwarded_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          installment_id?: string | null;
+          storage_path: string;
+          content_type?: string;
+          source: "whatsapp" | "dashboard";
+          uploaded_by?: string | null;
+          forward_status?: "pending" | "sent" | "failed";
+          forward_error?: string | null;
+          forwarded_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_refund_transfer_proofs"]["Insert"]>;
+        Relationships: [];
+      };
       // Named mkc_notifications (not notifications) — this Supabase project
       // is shared with other apps that already own an unrelated
       // public.notifications table.

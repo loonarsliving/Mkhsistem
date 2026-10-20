@@ -6,6 +6,7 @@ import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
 import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
+import { REFUND_PROOF_BUCKET, processRefundTransferProof, resendRefundTransferProof } from "@/lib/refund/transfer-proof";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { listRefundChatMessages, type RefundChatMessage } from "@/repositories/refund.repository";
@@ -13,6 +14,8 @@ import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
   addInstallmentSchema,
+  recordRefundProofSchema,
+  refundProofIdSchema,
   deleteInstallmentSchema,
   refundCustomerIdSchema,
   saveRefundCustomerSchema,
@@ -20,6 +23,8 @@ import {
   sendRefundReminderSchema,
   toggleInstallmentPaidSchema,
   type AddInstallmentInput,
+  type RecordRefundProofInput,
+  type RefundProofIdInput,
   type DeleteInstallmentInput,
   type RefundCustomerIdInput,
   type SaveRefundCustomerInput,
@@ -215,4 +220,72 @@ export async function deleteInstallmentAction(input: DeleteInstallmentInput): Pr
 
   revalidatePath(REFUND_PATH);
   return actionSuccess();
+}
+
+/**
+ * Dashboard "Upload Bukti" (0289). The browser uploads the file straight to
+ * the private refund-transfer-proofs bucket (storage RLS: refund.manage),
+ * then calls this -- same automatic path as the WhatsApp "REFUND <nama>"
+ * photo: tick the termin, store the record, forward to the customer.
+ */
+export async function recordRefundTransferProofAction(
+  input: RecordRefundProofInput,
+): Promise<ActionResult<{ forwarded: boolean; forwardError: string | null; termin: string | null }>> {
+  const session = await requirePermission(PERMISSIONS.REFUND_MANAGE);
+  const parsed = recordRefundProofSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
+
+  // The path must sit in this customer's folder -- never let a caller attach
+  // another customer's (or any arbitrary) object to this record.
+  const { customerId, storagePath } = parsed.data;
+  if (!storagePath.startsWith(`${customerId}/`) || storagePath.includes("..")) return actionError("Lokasi file tidak valid");
+
+  const result = await processRefundTransferProof({
+    customerId,
+    installmentId: parsed.data.installmentId,
+    storagePath,
+    contentType: parsed.data.contentType,
+    source: "dashboard",
+    actorEmployeeId: session.userId,
+  });
+  if (!result.ok) return actionError(result.error);
+
+  revalidatePath(REFUND_PATH);
+  return actionSuccess({
+    forwarded: result.forwarded,
+    forwardError: result.forwardError,
+    termin: result.installment?.dueMonth ?? null,
+  });
+}
+
+/** Short-lived link to view a stored proof. RLS on the table and bucket decides who can read it. */
+export async function getRefundProofUrlAction(input: RefundProofIdInput): Promise<ActionResult<{ url: string }>> {
+  const session = await requireSession();
+  if (!hasPermission(session, PERMISSIONS.REFUND_VIEW) && !hasPermission(session, PERMISSIONS.REFUND_MANAGE)) {
+    return actionError("Tidak punya akses");
+  }
+  const parsed = refundProofIdSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid");
+
+  const supabase = await createClient();
+  const { data: proof } = await supabase
+    .from("mkc_refund_transfer_proofs")
+    .select("storage_path")
+    .eq("id", parsed.data.proofId)
+    .maybeSingle();
+  if (!proof) return actionError("Bukti transfer tidak ditemukan");
+
+  const { data, error } = await supabase.storage.from(REFUND_PROOF_BUCKET).createSignedUrl(proof.storage_path, 60 * 10);
+  if (error || !data) return actionError(error?.message ?? "Gagal membuka file");
+  return actionSuccess({ url: data.signedUrl });
+}
+
+export async function resendRefundTransferProofAction(input: RefundProofIdInput): Promise<ActionResult> {
+  const session = await requirePermission(PERMISSIONS.REFUND_MANAGE);
+  const parsed = refundProofIdSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid");
+
+  const result = await resendRefundTransferProof(parsed.data.proofId, session.userId);
+  revalidatePath(REFUND_PATH);
+  return result.ok ? actionSuccess() : actionError(result.error ?? "Gagal mengirim ulang");
 }
