@@ -62,3 +62,15 @@ export type AddInstallmentInput = z.infer<typeof addInstallmentSchema>;
 
 export const deleteInstallmentSchema = z.object({ installmentId: uuid });
 export type DeleteInstallmentInput = z.infer<typeof deleteInstallmentSchema>;
+
+export const recordRefundProofSchema = z.object({
+  customerId: uuid,
+  /** null = let the system pick the oldest unpaid termin. */
+  installmentId: uuid.nullable(),
+  storagePath: z.string().min(1).max(500),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+});
+export type RecordRefundProofInput = z.infer<typeof recordRefundProofSchema>;
+
+export const refundProofIdSchema = z.object({ proofId: uuid });
+export type RefundProofIdInput = z.infer<typeof refundProofIdSchema>;

@@ -90,7 +90,21 @@ untuk nomor customer refund + pengingat ke owner & Vando. Menambah customer
 dan mengubah nomor HP customer hanya boleh Super Admin — dicek di
 `saveRefundCustomerAction` dan oleh trigger DB
 `mkc_refund_customers_guard_phone` (service role/data load dikecualikan).
-Jangan menambahkan kolom "nomor bebas" di chat refund. "Terbayar" = `opening_paid_amount` + termin yang
+Jangan menambahkan kolom "nomor bebas" di chat refund.
+
+Bukti transfer refund (2026-10-20, migrasi 0289): bucket PRIVAT
+`refund-transfer-proofs` + tabel `mkc_refund_transfer_proofs`. Dua jalur, satu
+proses (`lib/refund/transfer-proof.ts`): (1) WA — Super Admin/petugas Refund
+kirim foto ke nomor perusahaan dengan keterangan "REFUND <nama / no urut>
+[bulan]" (`lib/ai/domains/refund-transfer-proof-wa.ts`, dipanggil di
+webhook-handler tepat setelah bukti dividen villa); (2) dashboard — tombol
+"Bukti Transfer" di kartu customer (upload langsung dari browser ke storage,
+lalu `recordRefundTransferProofAction`). Otomatis (pilihan owner): termin
+dicentang (termin tertua belum dibayar, atau bulan di keterangan), bukti
+diteruskan ke WA customer dengan ringkasan terbayar/sisa, dicatat di chat
+customer. Tombol "Lihat" (signed URL 10 menit) dan "Kirim ulang".
+Jadwal termin diselaraskan dengan PDF skema manajemen 2026-10-20 (142 termin,
+data langsung di DB). "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB

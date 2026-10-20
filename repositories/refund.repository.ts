@@ -17,6 +17,15 @@ export interface RefundInstallment {
   paidAt: string | null;
 }
 
+export interface RefundTransferProof {
+  id: string;
+  installmentId: string | null;
+  source: "whatsapp" | "dashboard";
+  forwardStatus: "pending" | "sent" | "failed";
+  forwardError: string | null;
+  createdAt: string;
+}
+
 export interface RefundCustomer {
   id: string;
   name: string;
@@ -43,6 +52,8 @@ export interface RefundCustomer {
   unreadMessages: number;
   lastMessageAt: string | null;
   lastReminderAt: string | null;
+  /** Bukti transfer (0289), newest first. */
+  proofs: RefundTransferProof[];
 }
 
 export interface RefundChatMessage {
@@ -64,7 +75,7 @@ export function currentRefundMonth(now: Date = new Date()): string {
 }
 
 export async function listRefundCustomers(supabase: TypedSupabaseClient): Promise<RefundCustomer[]> {
-  const [customersRes, installmentsRes, messagesRes, remindersRes] = await Promise.all([
+  const [customersRes, installmentsRes, messagesRes, remindersRes, proofsRes] = await Promise.all([
     supabase
       .from("mkc_refund_customers")
       .select("*")
@@ -82,11 +93,31 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
       .select("customer_id, created_at")
       .order("created_at", { ascending: false })
       .limit(500),
+    supabase
+      .from("mkc_refund_transfer_proofs")
+      .select("id, customer_id, installment_id, source, forward_status, forward_error, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5000),
   ]);
   if (customersRes.error) throw customersRes.error;
   if (installmentsRes.error) throw installmentsRes.error;
   if (messagesRes.error) throw messagesRes.error;
   if (remindersRes.error) throw remindersRes.error;
+  if (proofsRes.error) throw proofsRes.error;
+
+  const proofsByCustomer = new Map<string, RefundTransferProof[]>();
+  for (const row of proofsRes.data ?? []) {
+    const list = proofsByCustomer.get(row.customer_id) ?? [];
+    list.push({
+      id: row.id,
+      installmentId: row.installment_id,
+      source: row.source,
+      forwardStatus: row.forward_status,
+      forwardError: row.forward_error,
+      createdAt: row.created_at,
+    });
+    proofsByCustomer.set(row.customer_id, list);
+  }
 
   const installmentsByCustomer = new Map<string, RefundInstallment[]>();
   for (const row of installmentsRes.data ?? []) {
@@ -141,6 +172,7 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
       unreadMessages: unread.get(row.id) ?? 0,
       lastMessageAt: lastMessage.get(row.id) ?? null,
       lastReminderAt: lastReminder.get(row.id) ?? null,
+      proofs: proofsByCustomer.get(row.id) ?? [],
     };
   });
 }

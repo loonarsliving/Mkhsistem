@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, BellRing, CalendarPlus, Loader2, MessageCircle, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, BellRing, CalendarPlus, Loader2, MessageCircle, Pencil, Plus, Receipt, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -20,6 +20,7 @@ import { deleteInstallmentAction, toggleInstallmentPaidAction } from "../actions
 import { formatRefundMonth } from "../schemas/refund.schema";
 import { RefundChatDialog } from "./refund-chat-dialog";
 import { RefundAddInstallmentDialog, RefundCustomerFormDialog, RefundReminderDialog } from "./refund-dialogs";
+import { RefundProofDialog, RefundProofList } from "./refund-proof";
 
 type MonthState = "paid" | "overdue" | "current" | "upcoming";
 
@@ -141,6 +142,7 @@ export function RefundBoard({
   const [reminder, setReminder] = React.useState<{ open: boolean; customer: RefundCustomer | null }>({ open: false, customer: null });
   const [form, setForm] = React.useState<{ open: boolean; customer: RefundCustomer | null }>({ open: false, customer: null });
   const [addInstallmentFor, setAddInstallmentFor] = React.useState<RefundCustomer | null>(null);
+  const [proofCustomerId, setProofCustomerId] = React.useState<string | null>(null);
 
   const allMonths = React.useMemo(
     () => [...new Set(customers.flatMap((c) => c.installments.map((i) => i.dueMonth)))].sort(),
@@ -231,6 +233,9 @@ export function RefundBoard({
                       </Button>
                       {canManage && (
                         <>
+                          <Button size="sm" variant="outline" onClick={() => setProofCustomerId(c.id)}>
+                            <Receipt className="h-4 w-4" /> Bukti Transfer
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => setReminder({ open: true, customer: c })}>
                             <BellRing className="h-4 w-4" /> Ingatkan
                           </Button>
@@ -262,6 +267,8 @@ export function RefundBoard({
                       </button>
                     )}
                   </div>
+
+                  <RefundProofList customer={c} canManage={canManage} />
 
                   {(c.unscheduledAmount > 0.5 || c.overScheduled) && (
                     <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
@@ -365,6 +372,10 @@ export function RefundBoard({
         onOpenChange={(open) => setForm((f) => ({ ...f, open }))}
       />
       <RefundAddInstallmentDialog customer={addInstallmentFor} onOpenChange={(open) => !open && setAddInstallmentFor(null)} />
+      <RefundProofDialog
+        customer={customers.find((c) => c.id === proofCustomerId) ?? null}
+        onOpenChange={(open) => !open && setProofCustomerId(null)}
+      />
     </div>
   );
 }
