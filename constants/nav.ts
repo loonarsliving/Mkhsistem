@@ -94,6 +94,12 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: HandCoins,
         permission: [PERMISSIONS.REFUND_VIEW, PERMISSIONS.REFUND_MANAGE],
       },
+      {
+        label: "Chat Refund",
+        href: "/refund/chat",
+        icon: MessageCircle,
+        permission: [PERMISSIONS.REFUND_VIEW, PERMISSIONS.REFUND_MANAGE],
+      },
       { label: "Memo", href: "/memo", icon: StickyNote, permission: PERMISSIONS.MEMO_VIEW },
       { label: "Pengumuman", href: "/announcements", icon: Megaphone, permission: PERMISSIONS.ANNOUNCEMENT_VIEW },
     ],

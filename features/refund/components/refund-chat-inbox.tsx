@@ -367,11 +367,14 @@ export function RefundChatInbox({
   canManage,
   selectedId,
   onSelect,
+  className,
 }: {
   customers: RefundCustomer[];
   canManage: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Overrides the default height (the full-screen /refund/chat page uses more of the viewport). */
+  className?: string;
 }) {
   const router = useRouter();
   const selected = customers.find((c) => c.id === selectedId) ?? null;
@@ -382,7 +385,7 @@ export function RefundChatInbox({
   }, [router]);
 
   return (
-    <div className="flex h-[calc(100dvh-13rem)] min-h-[520px] overflow-hidden rounded-xl border bg-background shadow-sm">
+    <div className={cn("flex h-[calc(100dvh-13rem)] min-h-[520px] overflow-hidden rounded-xl border bg-background shadow-sm", className)}>
       <div className={cn("h-full w-full border-r md:w-[340px] md:shrink-0", selected ? "hidden md:block" : "block")}>
         <ConversationList customers={customers} selectedId={selectedId} onSelect={onSelect} />
       </div>

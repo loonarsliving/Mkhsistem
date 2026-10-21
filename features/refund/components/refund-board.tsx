@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, BellRing, CalendarPlus, Loader2, MessageCircle, Pencil, Plus, Receipt, Search, X } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, BellRing, CalendarPlus, Loader2, Maximize2, MessageCircle, Pencil, Plus, Receipt, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -209,7 +210,14 @@ export function RefundBoard({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="chat" className="mt-4">
+        <TabsContent value="chat" className="mt-4 space-y-2">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={chatCustomerId ? `/refund/chat?c=${chatCustomerId}` : "/refund/chat"}>
+                <Maximize2 className="h-4 w-4" /> Layar penuh
+              </Link>
+            </Button>
+          </div>
           <RefundChatInbox customers={customers} canManage={canManage} selectedId={chatCustomerId} onSelect={setChatCustomerId} />
         </TabsContent>
 

@@ -74,7 +74,7 @@ export async function tryCaptureRefundCustomerMessage(
         category: "refund_customer_message",
         title: `Pesan dari ${customer.customer_name}`,
         body: body.length > 300 ? `${body.slice(0, 297)}...` : body,
-        link: "/refund",
+        link: `/refund/chat?c=${customer.id}`,
         metadata: { refund_customer_id: customer.id },
       })),
     );
