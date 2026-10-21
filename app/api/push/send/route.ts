@@ -79,7 +79,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ sent: 0, expired: 0, reason: "no subscriptions" });
   }
 
+  // Refund customer chat: carry the shared inbox's unread count so the
+  // service worker can set the home-screen icon badge (iPhone "Add to Home
+  // Screen" / installed PWA) like WhatsApp, even while the app is closed.
+  let badge: number | undefined;
+  if (notification.category === "refund_customer_message") {
+    const { count } = await supabase
+      .from("mkc_refund_chat_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("direction", "inbound")
+      .is("read_at", null);
+    badge = count ?? undefined;
+  }
+
   const payload = JSON.stringify({
+    badge,
     title: "MK Connect",
     body: notification.title,
     detail: notification.body,

@@ -10,7 +10,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { RefundChatMessage, RefundCustomer } from "@/repositories/refund.repository";
 
 import { getRefundChatAction, sendRefundChatAction } from "../actions/refund.actions";
-import { REFUND_CHAT_EVENT } from "./refund-chat-alerts";
+import { REFUND_CHAT_EVENT, REFUND_CHAT_READ_EVENT } from "./refund-chat-alerts";
 
 /** Open conversation is re-fetched on this interval so a customer's reply appears without reloading. */
 const MESSAGE_POLL_MS = 6000;
@@ -198,13 +198,19 @@ function ConversationPane({
   const load = React.useCallback(async () => {
     const result = await getRefundChatAction({ customerId });
     if (result.success && result.data) setMessages(result.data.messages);
+    return result.success;
   }, [customerId]);
+
+  // Opening a chat / receiving into the open chat marks messages read -- let the icon badge drop.
+  const loadAndMarkRead = React.useCallback(async () => {
+    if (await load()) window.dispatchEvent(new Event(REFUND_CHAT_READ_EVENT));
+  }, [load]);
 
   React.useEffect(() => {
     setMessages([]);
     setDraft("");
     setLoading(true);
-    void load().finally(() => {
+    void loadAndMarkRead().finally(() => {
       setLoading(false);
       // Opening marks the customer's messages read -- refresh the list badge.
       if (hadUnread.current) router.refresh();
@@ -212,14 +218,14 @@ function ConversationPane({
     const timer = setInterval(() => void load(), MESSAGE_POLL_MS);
     // New message pushed by RefundChatAlerts -- show it now, not at the next poll.
     const onNew = (e: Event) => {
-      if ((e as CustomEvent<{ customerId: string | null }>).detail?.customerId === customerId) void load();
+      if ((e as CustomEvent<{ customerId: string | null }>).detail?.customerId === customerId) void loadAndMarkRead();
     };
     window.addEventListener(REFUND_CHAT_EVENT, onNew);
     return () => {
       clearInterval(timer);
       window.removeEventListener(REFUND_CHAT_EVENT, onNew);
     };
-  }, [load, router, customerId]);
+  }, [load, loadAndMarkRead, router, customerId]);
 
   React.useEffect(() => {
     const el = scrollRef.current;
