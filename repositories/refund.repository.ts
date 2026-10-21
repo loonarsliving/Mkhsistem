@@ -51,6 +51,9 @@ export interface RefundCustomer {
   installments: RefundInstallment[];
   unreadMessages: number;
   lastMessageAt: string | null;
+  /** Last chat message, for the WhatsApp-style conversation list. */
+  lastMessagePreview: string | null;
+  lastMessageDirection: "outbound" | "inbound" | null;
   lastReminderAt: string | null;
   /** Bukti transfer (0289), newest first. */
   proofs: RefundTransferProof[];
@@ -85,7 +88,7 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
     supabase.from("mkc_refund_installments").select("*").order("due_month", { ascending: true }).limit(5000),
     supabase
       .from("mkc_refund_chat_messages")
-      .select("customer_id, direction, read_at, created_at")
+      .select("customer_id, direction, read_at, created_at, body")
       .order("created_at", { ascending: false })
       .limit(5000),
     supabase
@@ -134,9 +137,11 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
   }
 
   const unread = new Map<string, number>();
-  const lastMessage = new Map<string, string>();
+  const lastMessage = new Map<string, { at: string; body: string; direction: "outbound" | "inbound" }>();
   for (const row of messagesRes.data ?? []) {
-    if (!lastMessage.has(row.customer_id)) lastMessage.set(row.customer_id, row.created_at);
+    if (!lastMessage.has(row.customer_id)) {
+      lastMessage.set(row.customer_id, { at: row.created_at, body: row.body.slice(0, 120), direction: row.direction });
+    }
     if (row.direction === "inbound" && !row.read_at) unread.set(row.customer_id, (unread.get(row.customer_id) ?? 0) + 1);
   }
 
@@ -170,7 +175,9 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
       sortOrder: row.sort_order,
       installments,
       unreadMessages: unread.get(row.id) ?? 0,
-      lastMessageAt: lastMessage.get(row.id) ?? null,
+      lastMessageAt: lastMessage.get(row.id)?.at ?? null,
+      lastMessagePreview: lastMessage.get(row.id)?.body ?? null,
+      lastMessageDirection: lastMessage.get(row.id)?.direction ?? null,
       lastReminderAt: lastReminder.get(row.id) ?? null,
       proofs: proofsByCustomer.get(row.id) ?? [],
     };

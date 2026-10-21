@@ -18,7 +18,7 @@ import type { RefundCustomer, RefundInstallment } from "@/repositories/refund.re
 
 import { deleteInstallmentAction, toggleInstallmentPaidAction } from "../actions/refund.actions";
 import { formatRefundMonth } from "../schemas/refund.schema";
-import { RefundChatDialog } from "./refund-chat-dialog";
+import { RefundChatInbox } from "./refund-chat-inbox";
 import { RefundAddInstallmentDialog, RefundCustomerFormDialog, RefundReminderDialog } from "./refund-dialogs";
 import { RefundProofDialog, RefundProofList } from "./refund-proof";
 
@@ -138,7 +138,13 @@ export function RefundBoard({
   canManageNumbers: boolean;
 }) {
   const [query, setQuery] = React.useState("");
+  const [tab, setTab] = React.useState("customer");
   const [chatCustomerId, setChatCustomerId] = React.useState<string | null>(null);
+  const openChat = (id: string) => {
+    setChatCustomerId(id);
+    setTab("chat");
+  };
+  const totalUnread = customers.reduce((s, c) => s + c.unreadMessages, 0);
   const [reminder, setReminder] = React.useState<{ open: boolean; customer: RefundCustomer | null }>({ open: false, customer: null });
   const [form, setForm] = React.useState<{ open: boolean; customer: RefundCustomer | null }>({ open: false, customer: null });
   const [addInstallmentFor, setAddInstallmentFor] = React.useState<RefundCustomer | null>(null);
@@ -168,8 +174,6 @@ export function RefundBoard({
   const monthTotal = monthRows.reduce((s, r) => s + r.installment.amount, 0);
   const monthPaid = monthRows.filter((r) => r.installment.isPaid).reduce((s, r) => s + r.installment.amount, 0);
 
-  const chatCustomer = customers.find((c) => c.id === chatCustomerId) ?? null;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -191,11 +195,23 @@ export function RefundBoard({
         )}
       </div>
 
-      <Tabs defaultValue="customer">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="customer">Per Customer</TabsTrigger>
           <TabsTrigger value="month">Per Bulan</TabsTrigger>
+          <TabsTrigger value="chat" className="gap-1.5">
+            <MessageCircle className="h-4 w-4" /> Chat
+            {totalUnread > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-semibold text-white">
+                {totalUnread}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="chat" className="mt-4">
+          <RefundChatInbox customers={customers} canManage={canManage} selectedId={chatCustomerId} onSelect={setChatCustomerId} />
+        </TabsContent>
 
         <TabsContent value="customer" className="mt-4 space-y-3">
           {filtered.length === 0 ? (
@@ -223,7 +239,7 @@ export function RefundBoard({
                       {c.notes && <p className="mt-1 text-xs italic text-muted-foreground">{c.notes}</p>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      <Button size="sm" variant="outline" onClick={() => setChatCustomerId(c.id)}>
+                      <Button size="sm" variant="outline" onClick={() => openChat(c.id)}>
                         <MessageCircle className="h-4 w-4" /> Chat
                         {c.unreadMessages > 0 && (
                           <Badge variant="destructive" className="ml-1 h-5 px-1.5">
@@ -338,7 +354,7 @@ export function RefundBoard({
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5">
-                              <Button size="sm" variant="outline" onClick={() => setChatCustomerId(customer.id)} aria-label="Chat">
+                              <Button size="sm" variant="outline" onClick={() => openChat(customer.id)} aria-label="Chat">
                                 <MessageCircle className="h-4 w-4" />
                               </Button>
                               {canManage && (
@@ -359,7 +375,6 @@ export function RefundBoard({
         </TabsContent>
       </Tabs>
 
-      <RefundChatDialog customer={chatCustomer} canManage={canManage} onOpenChange={(open) => !open && setChatCustomerId(null)} />
       <RefundReminderDialog
         open={reminder.open}
         customer={reminder.customer}

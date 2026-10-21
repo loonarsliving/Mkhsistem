@@ -326,6 +326,8 @@ describe("formatRefund", () => {
     unreadMessages: 2,
     lastMessageAt: null,
     lastReminderAt: null,
+    lastMessagePreview: null,
+    lastMessageDirection: null,
     proofs: [],
     ...over,
   });
