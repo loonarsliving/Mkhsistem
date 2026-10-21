@@ -10,6 +10,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { RefundChatMessage, RefundCustomer } from "@/repositories/refund.repository";
 
 import { getRefundChatAction, sendRefundChatAction } from "../actions/refund.actions";
+import { REFUND_CHAT_EVENT } from "./refund-chat-alerts";
 
 /** Open conversation is re-fetched on this interval so a customer's reply appears without reloading. */
 const MESSAGE_POLL_MS = 6000;
@@ -209,8 +210,16 @@ function ConversationPane({
       if (hadUnread.current) router.refresh();
     });
     const timer = setInterval(() => void load(), MESSAGE_POLL_MS);
-    return () => clearInterval(timer);
-  }, [load, router]);
+    // New message pushed by RefundChatAlerts -- show it now, not at the next poll.
+    const onNew = (e: Event) => {
+      if ((e as CustomEvent<{ customerId: string | null }>).detail?.customerId === customerId) void load();
+    };
+    window.addEventListener(REFUND_CHAT_EVENT, onNew);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(REFUND_CHAT_EVENT, onNew);
+    };
+  }, [load, router, customerId]);
 
   React.useEffect(() => {
     const el = scrollRef.current;
@@ -381,7 +390,12 @@ export function RefundChatInbox({
 
   React.useEffect(() => {
     const timer = setInterval(() => router.refresh(), LIST_REFRESH_MS);
-    return () => clearInterval(timer);
+    const onNew = () => router.refresh();
+    window.addEventListener(REFUND_CHAT_EVENT, onNew);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(REFUND_CHAT_EVENT, onNew);
+    };
   }, [router]);
 
   return (
