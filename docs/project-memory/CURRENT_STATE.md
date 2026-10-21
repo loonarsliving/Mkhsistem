@@ -112,7 +112,10 @@ Chat refund bergaya WhatsApp (2026-10-21): tab "Chat" di /refund
 pemisah tanggal, status terkirim/gagal, Enter untuk kirim). Di HP berganti
 daftar ↔ percakapan. Menggantikan dialog chat lama (`refund-chat-dialog.tsx`
 dihapus). Foto dari customer dibuka sebagai tautan (CSP tidak mengizinkan
-gambar dari domain Whacenter). "Terbayar" = `opening_paid_amount` + termin yang
+gambar dari domain Whacenter). Halaman layar penuh `/refund/chat` (2026-10-21,
+`app/(app)/refund/chat/page.tsx`, menu "Chat Refund"): `?c=<customer id>`
+membuka percakapan langsung; notifikasi "Pesan dari …" sekarang menaut ke
+sana. "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB
