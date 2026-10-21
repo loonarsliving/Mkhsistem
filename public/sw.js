@@ -30,15 +30,23 @@ self.addEventListener("push", (event) => {
   const body = isRefundChat ? payload.detail || "" : payload.body || "";
   const link = payload.link || "/notifications";
 
+  // Home-screen icon badge (refund chat unread count, see /api/push/send).
+  // setAppBadge exists on iOS 16.4+ home-screen apps and installed PWAs;
+  // elsewhere it's simply skipped.
+  const badgeUpdate =
+    typeof payload.badge === "number" && self.navigator && "setAppBadge" in self.navigator
+      ? (payload.badge > 0 ? self.navigator.setAppBadge(payload.badge) : self.navigator.clearAppBadge()).catch(() => {})
+      : Promise.resolve();
+
   event.waitUntil(
-    self.registration.showNotification(title, {
+    Promise.all([badgeUpdate, self.registration.showNotification(title, {
       body,
       icon: "/images/icon-192.png",
       badge: "/images/icon-192.png",
       timestamp: payload.timestamp || Date.now(),
       tag: payload.notificationId || undefined,
       data: { link },
-    }),
+    })]),
   );
 });
 

@@ -128,7 +128,14 @@ saat tab di belakang, dan event `refund-chat:new` agar chat yang terbuka
 langsung memuat pesan baru. `public/sw.js`: push kategori ini menampilkan
 "Pesan dari …" sebagai judul dan isi pesan customer sebagai body.
 Penerima notifikasi pesan masuk: akun peran refund_customer_relation
-(fallback Super Admin bila belum ada petugas). "Terbayar" = `opening_paid_amount` + termin yang
+(fallback Super Admin bila belum ada petugas).
+Badge ikon aplikasi (2026-10-21): untuk peran refund_customer_relation,
+ikon MK Connect di layar utama (iPhone "Add to Home Screen" iOS 16.4+ /
+PWA terpasang) menampilkan jumlah pesan customer refund belum dibaca —
+di-set oleh `public/sw.js` dari field `badge` payload `/api/push/send`
+(kategori refund_customer_message) saat aplikasi tertutup, dan disinkron
+oleh RefundChatAlerts (`navigator.setAppBadge`) saat terbuka/setelah chat
+dibaca (event `refund-chat:read`). "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB
