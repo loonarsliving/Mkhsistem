@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Bell, BellOff } from "lucide-react";
 
 import type { RefundCustomer } from "@/repositories/refund.repository";
 
+import { REFUND_CHAT_SOUND_KEY, isRefundChatSoundOn } from "./refund-chat-alerts";
 import { RefundChatInbox } from "./refund-chat-inbox";
 
 /** Client shell for /refund/chat: keeps the open conversation in the URL (?c=) so it survives refresh and can be shared/linked. */
@@ -20,6 +21,18 @@ export function RefundChatPage({
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(initialCustomerId);
   const totalUnread = customers.reduce((s, c) => s + c.unreadMessages, 0);
+  const [soundOn, setSoundOn] = React.useState(true);
+  React.useEffect(() => setSoundOn(isRefundChatSoundOn()), []);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    try {
+      window.localStorage.setItem(REFUND_CHAT_SOUND_KEY, next ? "on" : "off");
+    } catch {
+      // storage unavailable -- toggle still applies to this page view
+    }
+  }
 
   function select(id: string | null) {
     setSelectedId(id);
@@ -42,7 +55,17 @@ export function RefundChatPage({
             </span>
           )}
         </div>
-        <p className="hidden text-xs text-muted-foreground sm:block">Dikirim dari nomor WhatsApp perusahaan · hanya ke customer refund</p>
+        <div className="flex items-center gap-3">
+          <p className="hidden text-xs text-muted-foreground sm:block">Dikirim dari nomor WhatsApp perusahaan · hanya ke customer refund</p>
+          <button
+            type="button"
+            onClick={toggleSound}
+            className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Bunyi notifikasi chat baru"
+          >
+            {soundOn ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />} Suara {soundOn ? "aktif" : "mati"}
+          </button>
+        </div>
       </div>
       <RefundChatInbox
         customers={customers}

@@ -115,7 +115,20 @@ dihapus). Foto dari customer dibuka sebagai tautan (CSP tidak mengizinkan
 gambar dari domain Whacenter). Halaman layar penuh `/refund/chat` (2026-10-21,
 `app/(app)/refund/chat/page.tsx`, menu "Chat Refund"): `?c=<customer id>`
 membuka percakapan langsung; notifikasi "Pesan dari …" sekarang menaut ke
-sana. "Terbayar" = `opening_paid_amount` + termin yang
+sana.
+
+Notifikasi chat refund baru (2026-10-21): selain lonceng + web push yang
+sudah ada (trigger `mkc_notifications_after_insert_push`), komponen
+`features/refund/components/refund-chat-alerts.tsx` (dipasang di
+`app/(app)/layout.tsx` hanya untuk pemegang refund.view/manage) mendengar
+insert `mkc_notifications` kategori `refund_customer_message` lewat
+Supabase Realtime: bunyi "ding" (Web Audio, bisa dimatikan di /refund/chat,
+disimpan di localStorage), toast dengan tombol "Balas", judul tab ditandai
+saat tab di belakang, dan event `refund-chat:new` agar chat yang terbuka
+langsung memuat pesan baru. `public/sw.js`: push kategori ini menampilkan
+"Pesan dari …" sebagai judul dan isi pesan customer sebagai body.
+Penerima notifikasi pesan masuk: akun peran refund_customer_relation
+(fallback Super Admin bila belum ada petugas). "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB

@@ -22,8 +22,12 @@ self.addEventListener("push", (event) => {
     payload = { title: "MK Connect", body: event.data.text() };
   }
 
-  const title = payload.title || "MK Connect";
-  const body = payload.body || "";
+  // Refund customer chat (0287): show it like a WhatsApp message -- the
+  // sender as the title ("Pesan dari ...") and the message itself as the
+  // body -- instead of the generic "MK Connect" + title.
+  const isRefundChat = payload.category === "refund_customer_message";
+  const title = isRefundChat ? payload.body || "Pesan customer refund" : payload.title || "MK Connect";
+  const body = isRefundChat ? payload.detail || "" : payload.body || "";
   const link = payload.link || "/notifications";
 
   event.waitUntil(
