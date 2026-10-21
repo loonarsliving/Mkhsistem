@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { NOTA_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { NOTA_BEDA_RE, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -302,6 +302,12 @@ describe("pembayaran lain-lain & cicilan utang", () => {
     expect(parseLoonars2Perintah("utang")).toEqual({ aksi: "daftar_utang", data: {} });
     expect(parseLoonars2Perintah("laporan keuangan villa")).toBeNull();
     expect(parseLoonars2Perintah("bayar utang toko besi 9 juta")).toBeNull();
+  });
+
+  it("kata 'transfer beda' menandai transfer lain walau nominal & penerima sama", () => {
+    expect(TRANSFER_BEDA_RE.test("cicilan utang toko, transfer beda")).toBe(true);
+    expect(TRANSFER_BEDA_RE.test("ini bukan double")).toBe(true);
+    expect(TRANSFER_BEDA_RE.test("Ini bukti bayar cicil utang toko di tgl 10 oktober 2026")).toBe(false);
   });
 });
 

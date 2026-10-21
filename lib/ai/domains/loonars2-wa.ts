@@ -184,6 +184,9 @@ const LAPORAN_UTANG_RE =
   /^(?:tolong\s+|coba\s+)?(?:kirim(?:kan)?\s+|minta\s+|buat(?:kan)?\s+)?(?:laporan|rekap)\s+(?:pembayaran\s+)?utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?(?:\s+(?:dalam\s+bentuk\s+|bentuk\s+|format\s+)?pdf)?$|^(?:tolong\s+)?(?:kirim(?:kan)?\s+)?pdf\s+(?:laporan\s+)?(?:pembayaran\s+)?utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?$/;
 const LAPORAN_UTANG_PDF_DULU_RE = /^utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?\s+pdf$/;
 
+/** "transfer beda" / "bukan double" = owner menegaskan ini transfer lain walau nominal & penerima & tanggal sama. */
+export const TRANSFER_BEDA_RE = /\b(?:(?:transfer|trf|bukti|cicilan)\s+(?:beda|berbeda|lain)|beda\s+(?:transfer|trf|bukti)|bukan\s+(?:transfer\s+|bukti\s+)?(?:double|dobel|ganda))\b/i;
+
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
 
 /**
@@ -619,6 +622,9 @@ async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string, keter
     nominal: ai.nominal,
     penerima: ai.rekeningTujuan,
     tanggal: ai.tanggal,
+    waktu: ai.waktu ?? null,
+    referensi: ai.referensi ?? null,
+    paksa: TRANSFER_BEDA_RE.test(keterangan ?? ""),
     keterangan,
     bukti_url: imageUrl,
   });
