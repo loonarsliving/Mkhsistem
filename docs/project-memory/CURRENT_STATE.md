@@ -104,7 +104,15 @@ dicentang (termin tertua belum dibayar, atau bulan di keterangan), bukti
 diteruskan ke WA customer dengan ringkasan terbayar/sisa, dicatat di chat
 customer. Tombol "Lihat" (signed URL 10 menit) dan "Kirim ulang".
 Jadwal termin diselaraskan dengan PDF skema manajemen 2026-10-20 (142 termin,
-data langsung di DB). "Terbayar" = `opening_paid_amount` + termin yang
+data langsung di DB).
+
+Chat refund bergaya WhatsApp (2026-10-21): tab "Chat" di /refund
+(`features/refund/components/refund-chat-inbox.tsx`) — daftar percakapan
+(urut pesan terbaru, badge belum dibaca, cuplikan) + ruang chat (gelembung,
+pemisah tanggal, status terkirim/gagal, Enter untuk kirim). Di HP berganti
+daftar ↔ percakapan. Menggantikan dialog chat lama (`refund-chat-dialog.tsx`
+dihapus). Foto dari customer dibuka sebagai tautan (CSP tidak mengizinkan
+gambar dari domain Whacenter). "Terbayar" = `opening_paid_amount` + termin yang
 dicentang (dihitung di repository, tidak disimpan).
 
 **Data customer TIDAK ada di repo** (repo publik) — dimuat langsung ke DB
