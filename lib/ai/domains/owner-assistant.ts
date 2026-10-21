@@ -31,7 +31,10 @@ import { bacaLoonars2 } from "./loonars2-wa";
  *                        pi_surveys -- satu database dengan MK Connect)
  *   - MKH Property    -> ringkasan keuangan + metrik operasi per unit bisnis
  *                        (POST finance.haluoleo.id/api/laporan-investor/
- *                        ringkasan-wa -- data & rumus sama dengan PDF lapkeu)
+ *                        ringkasan-wa -- data & rumus sama dengan PDF lapkeu),
+ *                        laporan keuangan villa + pajak hotel (POST
+ *                        finance.haluoleo.id/api/laporan-villa/ringkasan-wa --
+ *                        kiriman harian villa-api, migrasi mkh-properti 0054)
  *                        dan teks Loonars 2 (saldo/tagihan/utang)
  *
  * TAHAP 1 = HANYA BACA. Tidak ada tool yang mengubah data; perintah yang
@@ -48,6 +51,7 @@ import { bacaLoonars2 } from "./loonars2-wa";
 
 const VILLA_API_BASE = "https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api";
 const MKH_PROPERTY_RINGKASAN_URL = "https://finance.haluoleo.id/api/laporan-investor/ringkasan-wa";
+const MKH_PROPERTY_LAPORAN_VILLA_URL = "https://finance.haluoleo.id/api/laporan-villa/ringkasan-wa";
 const MAKS_HARI_OKUPANSI = 14;
 const RIWAYAT_MAKS_GILIRAN = 6;
 const RIWAYAT_JENDELA_MS = 3 * 60 * 60 * 1000;
@@ -56,6 +60,7 @@ type OwnerToolName =
   | "villa_okupansi_hari_ini"
   | "villa_okupansi_ke_depan"
   | "villa_keuangan"
+  | "villa_laporan_pajak"
   | "villa_harga"
   | "loonars_properti"
   | "refund_customer"
@@ -79,6 +84,11 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
     name: "villa_keuangan",
     description:
       "Villa satu bulan (bisa bulan berjalan): pendapatan kotor/bersih, jumlah booking, sudah dibayar, outstanding, piutang OTA, per channel (Agoda, Booking.com, website, walk-in, ...), booking mendatang, bagi hasil investor & per investor, pendapatan kafe/spa -- sama dengan halaman Finance villa",
+  },
+  {
+    name: "villa_laporan_pajak",
+    description:
+      "Villa satu bulan (bisa bulan berjalan), laporan keuangan resmi di MKH Property (kiriman harian dari villa): laba rugi villa -- pendapatan kotor, komisi OTA, bersih, COGS, gross profit, gaji/OPEX, net profit, okupansi -- dan pajak hotel (PBJT) terutang untuk Dispenda beserta setoran yang sudah dicatat",
   },
   {
     name: "villa_harga",
@@ -313,6 +323,14 @@ export interface KeuanganVilla {
     bersih_belum_tersedia: number;
   };
   laporan_investor: {
+    /** "revenue_cogs_opex_v2" sejak villa-api v144 (owner 2026-10-19); kosong = rumus lama. */
+    rumus?: string;
+    revenue?: number;
+    malam_terisi?: number;
+    cogs?: number;
+    cogs_per_malam?: number;
+    gross_profit?: number;
+    opex?: number;
     gross_revenue: number;
     opex_per_unit: number;
     marketing_amount: number;
@@ -351,8 +369,14 @@ export function formatKeuanganVilla(k: KeuanganVilla): string {
     out.push(
       `${k.channel.bersih_belum_tersedia} booking OTA belum punya angka bersih dari Cloudbeds.`,
     );
+  const bagiHasil = `bagian investor ${rupiah(inv.owner_amount)} untuk ${inv.investor_count} investor (${rupiah(inv.per_investor_amount)} per investor${inv.jaminan_aktif ? `, jaminan aktif: top-up ${rupiah(inv.jaminan_topup)} per investor` : ""}), bagian pengelola ${rupiah(inv.pengelola_amount)}.`;
   out.push(
-    `Laporan investor (rumus bagi hasil villa, dari transaksi pemasukan bulan ini): pendapatan ${rupiah(inv.gross_revenue)}, opex ${rupiah(inv.opex_per_unit)}, marketing ${rupiah(inv.marketing_amount)}, bersih ${rupiah(inv.net)}, bagian investor ${rupiah(inv.owner_amount)} untuk ${inv.investor_count} investor (${rupiah(inv.per_investor_amount)} per investor${inv.jaminan_aktif ? `, jaminan aktif: top-up ${rupiah(inv.jaminan_topup)} per investor` : ""}), bagian pengelola ${rupiah(inv.pengelola_amount)}.`,
+    // Rumus bagi hasil sejak 2026-10-19: pendapatan setelah komisi OTA - COGS
+    // = gross profit - OPEX (gaji) = net profit, lalu 70:30. Pemasaran 27,5%
+    // dan opex 25% sudah dihapus, jadi tidak disebut lagi.
+    inv.rumus === "revenue_cogs_opex_v2" && inv.cogs != null
+      ? `Laporan investor (rumus bagi hasil villa: pendapatan setelah komisi OTA - COGS = gross profit - OPEX gaji = net profit, lalu 70:30): pendapatan ${rupiah(inv.revenue)}, COGS ${rupiah(inv.cogs)} (${rupiah(inv.cogs_per_malam)} x ${inv.malam_terisi ?? 0} malam terisi), gross profit ${rupiah(inv.gross_profit)}, OPEX gaji ${rupiah(inv.opex)}, net profit ${rupiah(inv.net)}, ${bagiHasil}`
+      : `Laporan investor (rumus bagi hasil villa, dari transaksi pemasukan bulan ini): pendapatan ${rupiah(inv.gross_revenue)}, opex ${rupiah(inv.opex_per_unit)}, marketing ${rupiah(inv.marketing_amount)}, bersih ${rupiah(inv.net)}, ${bagiHasil}`,
     `Non-kamar (tidak masuk bagi hasil): kafe ${rupiah(inv.walkin_income.cafe)}, spa ${rupiah(inv.walkin_income.spa)}, lainnya ${rupiah(inv.walkin_income.lainnya)}.`,
   );
   if (f.alerts.length)
@@ -380,6 +404,82 @@ async function runVillaKeuangan(bulan: string): Promise<string> {
       error: e instanceof Error ? e.message : String(e),
     });
     return `[Keuangan Villa ${bulan}] data tidak tersedia (villa-api tidak bisa dihubungi)`;
+  }
+}
+
+// ── Laporan keuangan villa + pajak hotel (MKH Property) ─────────────────
+
+/** Bentuk respons /api/laporan-villa/ringkasan-wa (mkh-properti, RPC villa_laporan_ringkasan_wa, migrasi 0054). */
+export interface LaporanVillaMkh {
+  ada_data: boolean;
+  periode: string;
+  status?: "sementara" | "final";
+  diperbarui?: string;
+  omzet_kotor?: number;
+  komisi_ota?: number;
+  pendapatan_bersih?: number;
+  pendapatan_walkin?: number;
+  malam_terjual?: number;
+  okupansi_pct?: number | null;
+  cogs?: number;
+  gross_profit?: number;
+  opex?: number;
+  net_profit?: number;
+  pajak_hotel?: {
+    tarif_pct: number;
+    dasar: "kotor" | "bersih";
+    dasar_pengenaan: number;
+    pajak_terutang: number;
+    jumlah_disetor: number | null;
+    tgl_setor: string | null;
+  };
+}
+
+/** Exported for tests. Copies MKH Property's numbers as-is; a month without a delivery says so instead of reading 0. */
+export function formatLaporanVillaMkh(r: LaporanVillaMkh): string {
+  if (!r.ada_data) {
+    return `[Laporan Keuangan Villa ${r.periode}] belum ada kiriman dari sistem villa untuk bulan itu di MKH Property (dikirim otomatis tiap malam).`;
+  }
+  const sementara = r.status === "sementara";
+  const out = [
+    `[Laporan Keuangan Villa ${r.periode}, MKH Property] (kiriman harian dari sistem villa, ${sementara ? "SEMENTARA: bulan masih berjalan" : "final"}${r.diperbarui ? `, diperbarui ${r.diperbarui}` : ""})`,
+    `Pendapatan kamar kotor (total dibayar tamu) ${rupiah(r.omzet_kotor)}, komisi OTA ${rupiah(r.komisi_ota)}, bersih ${rupiah(r.pendapatan_bersih)}.`,
+    `COGS ${rupiah(r.cogs)}, gross profit ${rupiah(r.gross_profit)}, OPEX (gaji) ${rupiah(r.opex)}, net profit ${rupiah(r.net_profit)}.`,
+    `Malam terjual ${angkaAtau(r.malam_terjual)}, okupansi ${angkaAtau(r.okupansi_pct, "%")}. Pendapatan walk-in (kafe/spa/lainnya, di luar laba di atas) ${rupiah(r.pendapatan_walkin)}.`,
+  ];
+  const p = r.pajak_hotel;
+  if (p) {
+    out.push(
+      `Pajak hotel (PBJT jasa perhotelan, tarif ${p.tarif_pct}%, dasar ${p.dasar}): dasar pengenaan ${rupiah(p.dasar_pengenaan)}, pajak terutang ${rupiah(p.pajak_terutang)}${sementara ? " (perkiraan dari angka sementara)" : ""}; ${p.jumlah_disetor != null ? `sudah disetor ${rupiah(p.jumlah_disetor)}${p.tgl_setor ? ` pada ${p.tgl_setor}` : ""}` : "belum ada setoran tercatat"}.`,
+    );
+  }
+  return out.join("\n");
+}
+
+async function runVillaLaporanPajak(sender: string, bulan: string): Promise<string> {
+  const { data: secret, error } = await createAdminClient().rpc("get_sync_secret");
+  if (error || !secret) {
+    logger.error("owner-assistant: rahasia sync tidak tersedia", { error: error?.message });
+    return "[Laporan Keuangan Villa] data tidak tersedia (rahasia sync tidak bisa dibaca)";
+  }
+  try {
+    const res = await fetch(MKH_PROPERTY_LAPORAN_VILLA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-sync-secret": secret as string },
+      body: JSON.stringify({ nomor: sender, periode: bulan }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      logger.error("owner-assistant: MKH Property menolak laporan villa", { status: res.status });
+      return `[Laporan Keuangan Villa ${bulan}] data tidak tersedia (MKH Property HTTP ${res.status})`;
+    }
+    return formatLaporanVillaMkh((await res.json()) as LaporanVillaMkh);
+  } catch (e) {
+    logger.error("owner-assistant: gagal menghubungi MKH Property untuk laporan villa", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return `[Laporan Keuangan Villa ${bulan}] data tidak tersedia (MKH Property tidak bisa dihubungi)`;
   }
 }
 
@@ -635,6 +735,8 @@ export const OWNER_MENU_TEXT = [
   "• laba bulan ini berapa?",
   "• pendapatan villa bulan ini per channel?",
   "• bagi hasil investor villa bulan lalu?",
+  "• laporan keuangan villa bulan ini? laba rugi villa?",
+  "• pajak hotel villa bulan ini berapa?",
   "• kas dan utang bank sekarang?",
   "• saldo / tagihan / utang Loonars 2?",
   "• properti prospek Loonars (loonars.id/hitung)?",
@@ -670,7 +772,7 @@ ${katalog}
 
 Tentukan apakah pertanyaan terbaru BUTUH data nyata dari sistem. Kalau ya, pilih tool yang relevan (boleh lebih dari satu). Isi juga parameter bila relevan:
 - branchName: nama cabang MK Connect yang disebut (mis. "Jogja", "Kendari"), atau null
-- bulanDari/bulanSampai: rentang bulan "YYYY-MM" untuk keuangan_ringkasan dan villa_keuangan (mis. "bulan lalu" = bulan kalender sebelumnya; tidak disebut = null)
+- bulanDari/bulanSampai: rentang bulan "YYYY-MM" untuk keuangan_ringkasan, villa_keuangan, dan villa_laporan_pajak (mis. "bulan lalu" = bulan kalender sebelumnya; tidak disebut = null)
 - tanggalMulai: "YYYY-MM-DD" tanggal (pertama) untuk okupansi ke depan atau harga kamar (tidak disebut = null, berarti hari ini; "malam minggu" = Sabtu terdekat)
 - jumlahHari: jumlah tanggal berurutan untuk okupansi ke depan atau harga kamar (maks ${MAKS_HARI_OKUPANSI}; satu tanggal = 1; tidak disebut = null)
 
@@ -748,6 +850,8 @@ export async function tryOwnerAssistant(
           return runVillaHarga(mulai, intent.jumlahHari ?? 1);
         case "villa_keuangan":
           return runVillaKeuangan(sampai);
+        case "villa_laporan_pajak":
+          return runVillaLaporanPajak(sender, sampai);
         case "refund_customer":
           return runRefund();
         case "loonars_properti":

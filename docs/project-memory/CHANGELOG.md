@@ -6,6 +6,11 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-21 — Asisten WA owner: laporan keuangan villa + pajak hotel
+
+Tool `villa_laporan_pajak` (laporan keuangan villa dan pajak hotel dari MKH Property) dan teks bagi
+hasil villa mengikuti rumus baru. Lihat CURRENT_STATE.md.
+
 ## 2026-10-18 — Asisten WhatsApp owner, Tahap 1 (hanya baca)
 
 Chatbot tanya-jawab untuk super admin saja: okupansi villa, keuangan MKH

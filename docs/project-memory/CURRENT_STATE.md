@@ -3,6 +3,22 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Asisten WA owner: laporan keuangan villa + pajak hotel (2026-10-21)
+
+- Owner: laporan keuangan villa di MKH Property bisa diminta lewat WhatsApp. Tool baru
+  `villa_laporan_pajak` di `lib/ai/domains/owner-assistant.ts` memanggil
+  `POST finance.haluoleo.id/api/laporan-villa/ringkasan-wa` (mkh-properti, migrasi 0054; hanya
+  baca) dengan `x-sync-secret` yang sama dengan ringkasan keuangan MKH Property (`get_sync_secret`)
+  dan nomor pengirim; MKH Property yang mencocokkan lewat `ir_boleh_akses`. Menjawab: kotor, komisi
+  OTA, bersih, COGS, gross profit, OPEX (gaji), net profit, okupansi, dan pajak hotel (PBJT)
+  terutang beserta setoran yang tercatat. Bulan berjalan diberi tanda SEMENTARA; bulan tanpa kiriman
+  dijawab "belum ada kiriman", tidak pernah 0.
+- Teks tool `villa_keuangan` diperbarui mengikuti rumus bagi hasil villa baru (villa-api v144,
+  2026-10-19): pendapatan setelah komisi OTA - COGS = gross profit - OPEX gaji = net profit, lalu
+  70:30. Kata "marketing" tidak lagi muncul untuk respons baru; respons lama (tanpa `rumus`) tetap
+  diformat seperti sebelumnya.
+- Tanpa migrasi, tanpa env baru. Tes: `tests/unit/lib/owner-assistant.test.ts` (+5).
+
 ## Pemilahan PR terbuka & dependency (2026-10-19)
 
 - PR #58 (villa AI bridge di `PUBLIC_PATHS`) dan PR #82 (bukti transfer

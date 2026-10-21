@@ -5,6 +5,7 @@ import type { RefundCustomer } from "@/repositories/refund.repository";
 import {
   formatHargaVilla,
   formatKeuanganVilla,
+  formatLaporanVillaMkh,
   formatOkupansiKeDepan,
   formatRefund,
   formatRingkasanKeuangan,
@@ -16,6 +17,14 @@ import {
 } from "@/lib/ai/domains/owner-assistant";
 
 describe("parseOwnerIntentJson", () => {
+  it("knows the villa financial report tool", () => {
+    const intent = parseOwnerIntentJson(
+      '{"isDataQuestion": true, "tools": ["villa_laporan_pajak"], "bulanDari": null, "bulanSampai": "2026-10"}',
+    );
+    expect(intent.tools).toEqual(["villa_laporan_pajak"]);
+    expect(intent.bulanSampai).toBe("2026-10");
+  });
+
   it("keeps known tools and valid parameters", () => {
     const intent = parseOwnerIntentJson(
       '```json\n{"isDataQuestion": true, "tools": ["keuangan_ringkasan", "villa_okupansi_ke_depan", "attendance_today"], "branchName": "Jogja", "bulanDari": "2026-09", "bulanSampai": "2026-10", "tanggalMulai": "2026-10-20", "jumlahHari": 7}\n```',
@@ -250,6 +259,85 @@ describe("formatKeuanganVilla", () => {
     );
     expect(text).toContain("kafe Rp1.000.000");
     expect(text).toContain("Peringatan Finance: 2 settlement");
+  });
+
+  it("rumus bagi hasil baru: pendapatan - COGS = gross profit - OPEX gaji = net profit, tanpa marketing", () => {
+    const baru = {
+      ...dasar,
+      laporan_investor: {
+        ...dasar.laporan_investor,
+        rumus: "revenue_cogs_opex_v2",
+        revenue: 68_000_000,
+        malam_terisi: 150,
+        cogs: 14_969_550,
+        cogs_per_malam: 99_797,
+        gross_profit: 53_030_450,
+        opex: 10_500_000,
+        marketing_amount: 0,
+        net: 42_530_450,
+      },
+    };
+    const text = formatKeuanganVilla(baru);
+    expect(text).toContain(
+      "pendapatan Rp68.000.000, COGS Rp14.969.550 (Rp99.797 x 150 malam terisi), gross profit Rp53.030.450, OPEX gaji Rp10.500.000, net profit Rp42.530.450",
+    );
+    expect(text).not.toContain("marketing");
+    expect(text).toContain("bagian investor Rp12.635.000 untuk 13 investor");
+  });
+});
+
+describe("formatLaporanVillaMkh", () => {
+  const dasarLaporan = {
+    ada_data: true,
+    periode: "2026-10",
+    status: "sementara" as const,
+    diperbarui: "2026-10-21T17:40:00Z",
+    omzet_kotor: 100_000_000,
+    komisi_ota: 12_000_000,
+    pendapatan_bersih: 88_000_000,
+    pendapatan_walkin: 500_000,
+    malam_terjual: 200,
+    okupansi_pct: 49.6,
+    cogs: 19_959_400,
+    gross_profit: 68_040_600,
+    opex: 10_500_000,
+    net_profit: 57_540_600,
+    pajak_hotel: {
+      tarif_pct: 10,
+      dasar: "kotor" as const,
+      dasar_pengenaan: 100_000_000,
+      pajak_terutang: 10_000_000,
+      jumlah_disetor: null,
+      tgl_setor: null,
+    },
+  };
+
+  it("copies the report and tax numbers as-is and flags a running month as provisional", () => {
+    const text = formatLaporanVillaMkh(dasarLaporan);
+    expect(text).toContain("[Laporan Keuangan Villa 2026-10, MKH Property]");
+    expect(text).toContain("SEMENTARA");
+    expect(text).toContain("kotor (total dibayar tamu) Rp100.000.000, komisi OTA Rp12.000.000, bersih Rp88.000.000");
+    expect(text).toContain("COGS Rp19.959.400, gross profit Rp68.040.600, OPEX (gaji) Rp10.500.000, net profit Rp57.540.600");
+    expect(text).toContain("Malam terjual 200, okupansi 49,6%");
+    expect(text).toContain("tarif 10%, dasar kotor): dasar pengenaan Rp100.000.000, pajak terutang Rp10.000.000 (perkiraan dari angka sementara)");
+    expect(text).toContain("belum ada setoran tercatat");
+  });
+
+  it("shows a recorded tax payment and no provisional note for a final month", () => {
+    const text = formatLaporanVillaMkh({
+      ...dasarLaporan,
+      status: "final",
+      pajak_hotel: { ...dasarLaporan.pajak_hotel, jumlah_disetor: 10_000_000, tgl_setor: "2026-11-15" },
+    });
+    expect(text).toContain("final");
+    expect(text).not.toContain("perkiraan dari angka sementara");
+    expect(text).toContain("sudah disetor Rp10.000.000 pada 2026-11-15");
+  });
+
+  it("says so plainly when the month has no delivery yet, never reads as zero", () => {
+    const text = formatLaporanVillaMkh({ ada_data: false, periode: "2026-09" });
+    expect(text).toContain("belum ada kiriman dari sistem villa");
+    expect(text).not.toContain("Rp0");
   });
 });
 
