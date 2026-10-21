@@ -10,6 +10,10 @@ export interface TransferProofRecognition {
   nominal: number | null;
   tanggal: string | null;
   rekeningTujuan: string | null;
+  /** Jam transaksi "HH:MM" seperti tertulis di bukti (null kalau tidak ada/terbaca). */
+  waktu?: string | null;
+  /** Nomor referensi / ID transaksi bila tertulis (null kalau tidak ada/terbaca). */
+  referensi?: string | null;
   notes: string;
 }
 
@@ -32,6 +36,8 @@ function parseRecognition(text: string): TransferProofRecognition {
     nominal: typeof parsed.nominal === "number" && Number.isFinite(parsed.nominal) ? parsed.nominal : null,
     tanggal: typeof parsed.tanggal === "string" && parsed.tanggal.trim() ? parsed.tanggal.trim().slice(0, 40) : null,
     rekeningTujuan: typeof parsed.rekeningTujuan === "string" && parsed.rekeningTujuan.trim() ? parsed.rekeningTujuan.trim().slice(0, 150) : null,
+    waktu: typeof parsed.waktu === "string" && /^([01]?\d|2[0-3])[:.][0-5]\d/.test(parsed.waktu.trim()) ? parsed.waktu.trim().slice(0, 5).replace(".", ":") : null,
+    referensi: typeof parsed.referensi === "string" && parsed.referensi.trim() ? parsed.referensi.trim().slice(0, 60) : null,
     notes: typeof parsed.notes === "string" ? parsed.notes.trim().slice(0, 300) : "",
   };
 }
@@ -55,11 +61,13 @@ Lihat langsung isi gambar ini dan baca:
 - readable: true kalau ini benar-benar terlihat seperti bukti transfer (screenshot m-banking/struk ATM) yang cukup jelas dibaca, false kalau tidak
 - nominal: jumlah uang yang ditransfer, sebagai angka murni tanpa "Rp" atau titik/koma (null kalau tidak terbaca)
 - tanggal: tanggal transaksi seperti tertulis di gambar (null kalau tidak terbaca)
+- waktu: jam transaksi seperti tertulis di gambar, format "HH:MM" (null kalau tidak terbaca)
+- referensi: nomor referensi / ID transaksi / no. transaksi bila tertulis di gambar (null kalau tidak ada)
 - rekeningTujuan: nama dan/atau nomor rekening PENERIMA (tujuan transfer -- uang MASUK ke rekening ini), seperti tertulis di gambar. Kalau struk menampilkan dua rekening sekaligus (mis. field "Penerima"/"Tujuan" DAN field "Sumber Dana"/"Dari"/"Rekening Anda"), ambil HANYA yang berlabel Penerima/Tujuan -- JANGAN ambil rekening sumber dana/pengirim. null kalau tidak terbaca
 - notes: catatan singkat 1 kalimat, termasuk kalau nominal di gambar terlihat berbeda dari nominal yang seharusnya
 
 Balas HANYA dengan JSON object:
-{"readable": true, "nominal": 0, "tanggal": null, "rekeningTujuan": null, "notes": "..."}`;
+{"readable": true, "nominal": 0, "tanggal": null, "waktu": null, "referensi": null, "rekeningTujuan": null, "notes": "..."}`;
 
   const response = await generateAIText({
     systemPrompt: SYSTEM_PROMPT,
