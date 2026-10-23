@@ -896,6 +896,7 @@ export interface Database {
           delivery_status: "sent" | "failed" | "received";
           error: string | null;
           read_at: string | null;
+          media_path: string | null;
           created_at: string;
         };
         Insert: {
@@ -907,6 +908,7 @@ export interface Database {
           delivery_status?: "sent" | "failed" | "received";
           error?: string | null;
           read_at?: string | null;
+          media_path?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["mkc_refund_chat_messages"]["Insert"]>;

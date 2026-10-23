@@ -23,10 +23,21 @@ export const sendRefundReminderSchema = z.object({
 });
 export type SendRefundReminderInput = z.infer<typeof sendRefundReminderSchema>;
 
-export const sendRefundChatSchema = z.object({
-  customerId: uuid,
-  message: z.string().trim().min(1, "Pesan wajib diisi").max(4096, "Pesan maksimal 4096 karakter"),
-});
+/** Stored as the body of a photo sent without a caption, so list previews still read "📷 Foto". */
+export const REFUND_CHAT_PHOTO_PLACEHOLDER = "📷 Foto";
+
+export const sendRefundChatSchema = z
+  .object({
+    customerId: uuid,
+    message: z.string().trim().max(4096, "Pesan maksimal 4096 karakter"),
+    // Photo already uploaded from the browser to refund-transfer-proofs ("<customer_id>/..."); message becomes its caption.
+    mediaPath: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.message.length > 0 || Boolean(v.mediaPath), { message: "Pesan wajib diisi", path: ["message"] })
+  .refine((v) => !v.mediaPath || (v.mediaPath.startsWith(`${v.customerId}/`) && !v.mediaPath.includes("..")), {
+    message: "Lokasi foto tidak valid",
+    path: ["mediaPath"],
+  });
 export type SendRefundChatInput = z.infer<typeof sendRefundChatSchema>;
 
 export const refundCustomerIdSchema = z.object({ customerId: uuid });

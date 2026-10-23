@@ -6,6 +6,12 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-23 — Chat refund: kirim foto ke customer
+
+Migrasi `0290_refund_chat_images.sql` (kolom `media_path`). Lihat
+CURRENT_STATE.md (Kirim foto di chat refund). Juga PR #105: `/api/wa/send`
+menerima gambar tanpa keterangan (untuk kirim gambar di chat tamu villa).
+
 ## 2026-10-18 — Asisten WhatsApp owner, Tahap 1 (hanya baca)
 
 Chatbot tanya-jawab untuk super admin saja: okupansi villa, keuangan MKH

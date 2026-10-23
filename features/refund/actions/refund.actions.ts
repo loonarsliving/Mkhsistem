@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
-import { sendWhatsAppText } from "@/lib/ai/notifications/engine";
+import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { REFUND_PROOF_BUCKET, processRefundTransferProof, resendRefundTransferProof } from "@/lib/refund/transfer-proof";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
@@ -13,6 +13,7 @@ import { listRefundChatMessages, type RefundChatMessage } from "@/repositories/r
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
 
 import {
+  REFUND_CHAT_PHOTO_PLACEHOLDER,
   addInstallmentSchema,
   recordRefundProofSchema,
   refundProofIdSchema,
@@ -97,7 +98,16 @@ export async function sendRefundChatAction(input: SendRefundChatInput): Promise<
   const phone = normalizeIndonesianPhone(customer.phone ?? "");
   if (phone.length < 10) return actionError("Nomor HP customer belum diisi atau tidak valid -- perbarui lewat tombol Edit.");
 
-  const result = await sendWhatsAppText(phone, parsed.data.message);
+  const { message, mediaPath } = parsed.data;
+  let result: { success: boolean; error?: string };
+  if (mediaPath) {
+    // Whacenter downloads the photo from this link right away; the chat view signs its own short-lived links.
+    const { data: signed, error: signError } = await supabase.storage.from(REFUND_PROOF_BUCKET).createSignedUrl(mediaPath, 60 * 60);
+    if (signError || !signed) return actionError(`Foto tidak ditemukan: ${signError?.message ?? "unknown error"}`);
+    result = await sendWhatsAppImage(phone, signed.signedUrl, message);
+  } else {
+    result = await sendWhatsAppText(phone, message);
+  }
   if (!result.success) {
     logger.warn("refund: WhatsApp send to customer failed", { customer_id: customer.id, error: result.error });
   }
@@ -105,7 +115,9 @@ export async function sendRefundChatAction(input: SendRefundChatInput): Promise<
   const { error: insertError } = await supabase.from("mkc_refund_chat_messages").insert({
     customer_id: customer.id,
     direction: "outbound",
-    body: parsed.data.message,
+    // Caption, or a placeholder so the conversation list still has a preview.
+    body: message || REFUND_CHAT_PHOTO_PLACEHOLDER,
+    media_path: mediaPath ?? null,
     sent_by: session.userId,
     delivery_status: result.success ? "sent" : "failed",
     error: result.success ? null : (result.error ?? "unknown error"),

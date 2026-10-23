@@ -2,14 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Camera, Check, CheckCheck, Loader2, MessageCircle, Search, Send } from "lucide-react";
+import { AlertCircle, ArrowLeft, Camera, Check, CheckCheck, ImagePlus, Loader2, MessageCircle, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
+import { uploadEntityFile } from "@/lib/supabase/storage";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { RefundChatMessage, RefundCustomer } from "@/repositories/refund.repository";
 
 import { getRefundChatAction, sendRefundChatAction } from "../actions/refund.actions";
+import { REFUND_CHAT_PHOTO_PLACEHOLDER } from "../schemas/refund.schema";
 import { REFUND_CHAT_EVENT, REFUND_CHAT_READ_EVENT } from "./refund-chat-alerts";
 
 /** Open conversation is re-fetched on this interval so a customer's reply appears without reloading. */
@@ -107,6 +109,45 @@ function MessageBody({ body }: { body: string }) {
   );
 }
 
+const PHOTO_BUCKET = "refund-transfer-proofs";
+const PHOTO_MAX_SIDE = 1600;
+
+/** Phone photos are 5-12MB; shrink to 1600px JPEG in the browser before upload so they send fast. */
+function shrinkPhoto(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const src = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(src);
+      const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Browser tidak bisa memproses foto"));
+      ctx.fillStyle = "#fff"; // transparent PNG -> white, not black
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(new File([blob], "foto.jpg", { type: "image/jpeg" })) : reject(new Error("Foto gagal diproses"))),
+        "image/jpeg",
+        0.82,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(src);
+      reject(new Error("File ini bukan foto yang bisa dibuka"));
+    };
+    img.src = src;
+  });
+}
+
+/** Signed photo links change on every poll; keep the one already shown so the image doesn't reload every few seconds. */
+function keepMediaUrls(prev: RefundChatMessage[], next: RefundChatMessage[]): RefundChatMessage[] {
+  const shown = new Map(prev.filter((m) => m.mediaUrl).map((m) => [m.id, m.mediaUrl]));
+  return next.map((m) => (m.mediaUrl && shown.has(m.id) ? { ...m, mediaUrl: shown.get(m.id) ?? m.mediaUrl } : m));
+}
+
 function ConversationList({
   customers,
   selectedId,
@@ -190,6 +231,9 @@ function ConversationPane({
   const [loading, setLoading] = React.useState(true);
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  // Photo picked but not sent yet: shrunk file + local preview URL.
+  const [photo, setPhoto] = React.useState<{ file: File; preview: string } | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const customerId = customer.id;
@@ -197,7 +241,10 @@ function ConversationPane({
 
   const load = React.useCallback(async () => {
     const result = await getRefundChatAction({ customerId });
-    if (result.success && result.data) setMessages(result.data.messages);
+    if (result.success && result.data) {
+      const next = result.data.messages;
+      setMessages((prev) => keepMediaUrls(prev, next));
+    }
     return result.success;
   }, [customerId]);
 
@@ -209,6 +256,7 @@ function ConversationPane({
   React.useEffect(() => {
     setMessages([]);
     setDraft("");
+    setPhoto(null);
     setLoading(true);
     void loadAndMarkRead().finally(() => {
       setLoading(false);
@@ -240,11 +288,38 @@ function ConversationPane({
     el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
   }, [draft]);
 
+  // Free the local preview when it's replaced, removed, or the chat closes.
+  React.useEffect(() => {
+    if (!photo) return;
+    return () => URL.revokeObjectURL(photo.preview);
+  }, [photo]);
+
+  async function pickPhoto(file: File | undefined) {
+    if (!file) return;
+    try {
+      const small = await shrinkPhoto(file);
+      setPhoto({ file: small, preview: URL.createObjectURL(small) });
+      textareaRef.current?.focus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Foto tidak bisa dipakai");
+    }
+  }
+
   async function handleSend() {
     const text = draft.trim();
-    if (!text || sending) return;
+    if ((!text && !photo) || sending) return;
     setSending(true);
-    const result = await sendRefundChatAction({ customerId, message: text });
+    let mediaPath: string | undefined;
+    if (photo) {
+      try {
+        mediaPath = (await uploadEntityFile(PHOTO_BUCKET, customerId, photo.file)).path;
+      } catch (err) {
+        setSending(false);
+        toast.error(`Foto gagal diunggah: ${err instanceof Error ? err.message : "coba lagi"}`);
+        return;
+      }
+    }
+    const result = await sendRefundChatAction({ customerId, message: text, mediaPath });
     setSending(false);
     if (!result.success) {
       toast.error(result.error ?? "Gagal mengirim pesan");
@@ -252,7 +327,11 @@ function ConversationPane({
       return;
     }
     setDraft("");
-    if (result.data) setMessages(result.data.messages);
+    setPhoto(null);
+    if (result.data) {
+      const next = result.data.messages;
+      setMessages((prev) => keepMediaUrls(prev, next));
+    }
     router.refresh();
   }
 
@@ -313,7 +392,13 @@ function ConversationPane({
                       )}
                     >
                       {out && m.senderName && !grouped && <p className="mb-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{m.senderName}</p>}
-                      <MessageBody body={m.body} />
+                      {m.mediaUrl && (
+                        <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="-mx-1 mb-1 block">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed storage link */}
+                          <img src={m.mediaUrl} alt="Foto terkirim" loading="lazy" className="max-h-72 w-auto max-w-full rounded-md object-cover" />
+                        </a>
+                      )}
+                      {!(m.mediaUrl && m.body === REFUND_CHAT_PHOTO_PLACEHOLDER) && <MessageBody body={m.body} />}
                       <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-[#667781] dark:text-[#8696a0]">
                         <span>{formatTime(m.createdAt)}</span>
                         {out &&
@@ -338,8 +423,40 @@ function ConversationPane({
       </div>
 
       {/* Composer */}
+      {canManage && photo && (
+        <div className="flex items-center gap-3 border-t bg-muted/60 px-3 pt-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- local preview (blob URL) */}
+          <img src={photo.preview} alt="Foto yang akan dikirim" className="h-16 w-16 rounded-md border object-cover" />
+          <p className="flex-1 text-xs text-muted-foreground">
+            Foto siap dikirim{draft.trim() ? " dengan keterangan di bawah" : " — tulis keterangan kalau perlu"}
+          </p>
+          <button type="button" onClick={() => setPhoto(null)} disabled={sending} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label="Batalkan foto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {canManage ? (
         <div className="flex items-end gap-2 border-t bg-muted/60 px-3 py-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void pickPhoto(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={sending}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+            aria-label="Kirim foto"
+            title="Kirim foto"
+          >
+            <ImagePlus className="h-5 w-5" />
+          </button>
           <textarea
             ref={textareaRef}
             value={draft}
@@ -358,7 +475,7 @@ function ConversationPane({
           <button
             type="button"
             onClick={() => void handleSend()}
-            disabled={sending || !draft.trim()}
+            disabled={sending || (!draft.trim() && !photo)}
             className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition-opacity hover:bg-emerald-700 disabled:opacity-50"
             aria-label="Kirim"
           >
