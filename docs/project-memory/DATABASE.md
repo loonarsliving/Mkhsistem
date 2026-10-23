@@ -102,7 +102,7 @@ source before relying on this list for schema-changing work.
   `0148_scope_markom_to_jogja_only.sql`,
   `0188_restrict_kepala_cabang_closing_fee_visibility.sql`).
 
-## Loonars Connect tables (0291, not yet applied as of 2026-10-23)
+## Loonars Connect tables (0291 + 0292, applied to production 2026-10-23)
 
 `mkc_chat_departments`, `mkc_chat_conversations`, `mkc_chat_members`,
 `mkc_chat_division_roles`, `mkc_chat_role_assignments`, `mkc_chat_messages`,

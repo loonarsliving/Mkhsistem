@@ -58,7 +58,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 
 ✨ = ditambahkan oleh audit ini (migrasi `0176`).
 
-### Loonars Connect Hospitality (0291 — belum diterapkan per 2026-10-23)
+### Loonars Connect Hospitality (0291, aktif sejak 2026-10-23)
 
 | Job | UTC | WITA | Fungsi |
 |---|---|---|---|

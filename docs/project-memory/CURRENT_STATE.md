@@ -3,24 +3,28 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DIBANGUN, BELUM DITERAPKAN (2026-10-23)
+## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
 Branch `claude/loonars-connect-hospitality-chat`, migrasi
-`0291_loonars_connect_hospitality_chat.sql`, halaman `/chat`. Detail lengkap:
-`docs/HOSPITALITY_CONNECT.md`. Grup operasional "Hospitality Loonars"
-(anggota dari divisi LPL + penugasan eksplisit), feed owner "Laporan
-Hospitality" (izin `hospitality.owner_report`, bukan keanggotaan), kartu
-tugas kamar/checklist/insiden, laporan pagi/siang/akhir hari, peringatan
-kritis langsung, bukti foto privat dihapus 30 hari.
+`0291_loonars_connect_hospitality_chat.sql` + `0292_loonars_connect_hardening.sql`,
+halaman `/chat`. Detail lengkap: `docs/HOSPITALITY_CONNECT.md`. Grup
+operasional "Hospitality Loonars" (anggota dari divisi LPL + penugasan
+eksplisit), feed owner "Laporan Hospitality" (izin `hospitality.owner_report`,
+bukan keanggotaan), kartu tugas kamar/checklist/insiden, laporan
+pagi/siang/akhir hari, peringatan kritis langsung, bukti foto privat dihapus
+30 hari.
 
-Status 2026-10-23: kode + uji selesai (unit 478/478, SQL behaviour 66/66 di
-Postgres lokal, typecheck/lint/build). **Migrasi 0291 BELUM diterapkan ke
-DB produksi, branch BELUM di-merge** — menunggu persetujuan owner karena
-0291 menulis ke tabel villa (`housekeeping`, `units`) lewat
-`mkc_hosp_fo_inspect`, menambah trigger di `employees`, 3 job pg_cron, dan
-mengubah allowlist relay WA. Setelah diterapkan, yang masih harus
-diverifikasi di produksi: realtime, laporan terjadwal benar-benar jalan,
-penghapusan objek Storage nyata, relay WA insiden kritis.
+Status 2026-10-23 (persetujuan owner di sesi ini): 0291 dan 0292 diterapkan ke
+DB produksi. 0291 diterapkan dengan mengambil file persis dari commit
+`8425c9a` (md5 dicocokkan) lalu dicatat di `schema_migrations`. Diverifikasi
+live: 14 tabel ber-RLS, 2 percakapan, 3 job pg_cron, bucket privat,
+publikasi realtime, keanggotaan otomatis (1 FO + 3 Security dari divisi,
+Rebecca = manager lewat `mkc_chat_role_assignments`), sinkron tugas kamar
+langsung membuat 1 tugas untuk unit yang `dirty`, RLS sebagai user nyata
+(non-anggota tidak melihat apa pun; FO hanya grup; owner hanya feed + detail
+operasional). Uji: unit 478/478, SQL behaviour 66/66, typecheck/lint/build.
+Lihat bagian verifikasi di HOSPITALITY_CONNECT.md untuk yang belum terbukti
+end-to-end di produksi.
 
 Data karyawan (dicek 2026-10-23, tanpa perubahan): Rebecca ada (cabang JOG,
 divisi Produksi, peran staff) — akan jadi Hospitality Manager lewat baris
