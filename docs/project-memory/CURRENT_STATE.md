@@ -3,6 +3,35 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DIBANGUN, BELUM DITERAPKAN (2026-10-23)
+
+Branch `claude/loonars-connect-hospitality-chat`, migrasi
+`0291_loonars_connect_hospitality_chat.sql`, halaman `/chat`. Detail lengkap:
+`docs/HOSPITALITY_CONNECT.md`. Grup operasional "Hospitality Loonars"
+(anggota dari divisi LPL + penugasan eksplisit), feed owner "Laporan
+Hospitality" (izin `hospitality.owner_report`, bukan keanggotaan), kartu
+tugas kamar/checklist/insiden, laporan pagi/siang/akhir hari, peringatan
+kritis langsung, bukti foto privat dihapus 30 hari.
+
+Status 2026-10-23: kode + uji selesai (unit 478/478, SQL behaviour 66/66 di
+Postgres lokal, typecheck/lint/build). **Migrasi 0291 BELUM diterapkan ke
+DB produksi, branch BELUM di-merge** — menunggu persetujuan owner karena
+0291 menulis ke tabel villa (`housekeeping`, `units`) lewat
+`mkc_hosp_fo_inspect`, menambah trigger di `employees`, 3 job pg_cron, dan
+mengubah allowlist relay WA. Setelah diterapkan, yang masih harus
+diverifikasi di produksi: realtime, laporan terjadwal benar-benar jalan,
+penghapusan objek Storage nyata, relay WA insiden kritis.
+
+Data karyawan (dicek 2026-10-23, tanpa perubahan): Rebecca ada (cabang JOG,
+divisi Produksi, peran staff) — akan jadi Hospitality Manager lewat baris
+`mkc_chat_role_assignments` (bukan ganti peran, agar alur WA nota
+konstruksinya tidak berubah). LPL: FO 1 disetujui + 3 pending; Security 3
+disetujui + 1 pending. Duplikat dilaporkan ke owner: dua record disetujui
+dengan nama sama di Security, dan satu record pending yang mirip record
+Security yang sudah disetujui. Belum ada staf Cleaning di data mana pun
+(divisi LPL-CLN baru ditambah 0291). `mkh.sistem` tidak terkonfigurasi
+(bukan TLD publik); URL yang benar `https://mkh.haluoleo.id/chat`.
+
 ## Pemilahan PR terbuka & dependency (2026-10-19)
 
 - PR #58 (villa AI bridge di `PUBLIC_PATHS`) dan PR #82 (bukti transfer

@@ -127,6 +127,9 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   salary_transferred: "Gaji Ditransfer",
   refund_reminder: "Pengingat Refund Customer",
   refund_customer_message: "Pesan Customer Refund",
+  hospitality_task: "Tugas Hospitality",
+  hospitality_report: "Laporan Hospitality",
+  hospitality_critical_alert: "Insiden Kritis Hospitality",
 };
 
 export const PROSPECT_STATUS = {

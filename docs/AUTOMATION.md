@@ -58,6 +58,14 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 
 ✨ = ditambahkan oleh audit ini (migrasi `0176`).
 
+### Loonars Connect Hospitality (0291 — belum diterapkan per 2026-10-23)
+
+| Job | UTC | WITA | Fungsi |
+|---|---|---|---|
+| `hospitality-sync-room-tasks` | `*/5 * * * *` | tiap 5 mnt | SQL murni: tugas kamar dari housekeeping villa |
+| `hospitality-report-dispatch` | `7,22,37,52 * * * *` | tiap 15 mnt | HTTP dispatch → `/api/hospitality/reports/dispatch` (laporan yang jatuh tempo saja, idempoten) |
+| `hospitality-evidence-retention` | `40 * * * *` | tiap jam | HTTP dispatch → `/api/hospitality/retention` (hapus bukti > 30 hari) |
+
 ### HR & komunikasi harian
 
 | Job | UTC | WITA | Fungsi |

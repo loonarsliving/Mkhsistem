@@ -14,6 +14,14 @@ duplicated here to avoid drift between the two files.
 
 ## IN PROGRESS
 
+- Loonars Connect Fase 1 (Hospitality) — built on
+  `claude/loonars-connect-hospitality-chat`; next: owner approval → apply
+  0291 → merge → production verification (see CURRENT_STATE.md). Later
+  phases: other departments (Markom, Finance, Development, Sales) on the same
+  department → group → records → owner report model; forced first-login
+  password change (not supported by MK Connect today); optional villa-api
+  bridge endpoint for `/housekeeping/done` so 0291 no longer mirrors it.
+
 - **Contractor expense-report WhatsApp flow** (Construction Management) —
   actively being built and iterated as of the most recent commits
   (2026-08-21). See `CURRENT_STATE.md`.

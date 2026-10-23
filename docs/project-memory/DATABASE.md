@@ -102,6 +102,19 @@ source before relying on this list for schema-changing work.
   `0148_scope_markom_to_jogja_only.sql`,
   `0188_restrict_kepala_cabang_closing_fee_visibility.sql`).
 
+## Loonars Connect tables (0291, not yet applied as of 2026-10-23)
+
+`mkc_chat_departments`, `mkc_chat_conversations`, `mkc_chat_members`,
+`mkc_chat_division_roles`, `mkc_chat_role_assignments`, `mkc_chat_messages`,
+`mkc_chat_reads`, `mkc_chat_attachments`, `mkc_chat_retention_runs`,
+`mkc_hosp_room_tasks`, `mkc_hosp_checklists`, `mkc_hosp_issues`,
+`mkc_hosp_issue_events`, `mkc_hosp_reports`; private bucket
+`hospitality-evidence`. No insert/update/delete RLS policies — all writes via
+security-definer RPCs. Cross-app FKs to the villa app's `units` and
+`housekeeping` use `on delete set null`. The only writes into villa tables
+are inside `mkc_hosp_fo_inspect` (decision `ready`). See
+`docs/HOSPITALITY_CONNECT.md`.
+
 ## RPC functions (transactional, SECURITY DEFINER where noted)
 
 Notable named RPCs found in README/migration references:

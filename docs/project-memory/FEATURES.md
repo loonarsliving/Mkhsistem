@@ -27,6 +27,17 @@ Never marked DONE without direct source evidence (route + repository/action
 | Search (global) | DONE | `app/(app)/search`, `features/search/` (2 files) |
 | Settings (company profile, work hours, office location/radius) | DONE | `app/(app)/settings`, `features/settings/` (3 files) |
 
+## Loonars Connect — Hospitality chat (added 2026-10-23, NOT merged yet)
+
+`/chat`, migration `0291`. Operational group "Hospitality Loonars" (FO,
+Cleaning, Security, Hospitality Manager; membership from LPL divisions or an
+explicit assignment), owner feed with consolidated report cards
+(`hospitality.owner_report`), checkout → cleaning checklist → FO inspection
+with 3 photos → room released in the villa tables, security reports,
+issues/incidents with history and immediate critical escalation, 30-day
+private evidence retention. Status: built and tested, awaiting owner approval
+to apply 0291 and merge. See `docs/HOSPITALITY_CONNECT.md`.
+
 ## Refund & Customer Relation
 
 | Feature | Status | Evidence |
