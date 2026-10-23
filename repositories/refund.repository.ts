@@ -66,6 +66,8 @@ export interface RefundChatMessage {
   deliveryStatus: "sent" | "failed" | "received";
   error: string | null;
   senderName: string | null;
+  /** Short-lived signed link to a photo the officer sent (null for text). */
+  mediaUrl: string | null;
   createdAt: string;
 }
 
@@ -187,7 +189,7 @@ export async function listRefundCustomers(supabase: TypedSupabaseClient): Promis
 export async function listRefundChatMessages(supabase: TypedSupabaseClient, customerId: string): Promise<RefundChatMessage[]> {
   const { data, error } = await supabase
     .from("mkc_refund_chat_messages")
-    .select("id, direction, body, delivery_status, error, sent_by, created_at")
+    .select("id, direction, body, delivery_status, error, sent_by, media_path, created_at")
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false })
     .limit(200);
@@ -200,6 +202,14 @@ export async function listRefundChatMessages(supabase: TypedSupabaseClient, cust
     for (const e of employees ?? []) names.set(e.id, e.full_name);
   }
 
+  // Photos live in the private refund-transfer-proofs bucket -- sign them per load (1 hour, longer than the chat poll needs).
+  const mediaPaths = (data ?? []).map((m) => m.media_path).filter((p): p is string => Boolean(p));
+  const mediaUrls = new Map<string, string>();
+  if (mediaPaths.length > 0) {
+    const { data: signed } = await supabase.storage.from("refund-transfer-proofs").createSignedUrls(mediaPaths, 60 * 60);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) mediaUrls.set(s.path, s.signedUrl);
+  }
+
   return (data ?? [])
     .map((m) => ({
       id: m.id,
@@ -208,6 +218,7 @@ export async function listRefundChatMessages(supabase: TypedSupabaseClient, cust
       deliveryStatus: m.delivery_status,
       error: m.error,
       senderName: m.sent_by ? (names.get(m.sent_by) ?? null) : null,
+      mediaUrl: m.media_path ? (mediaUrls.get(m.media_path) ?? null) : null,
       createdAt: m.created_at,
     }))
     .reverse();
