@@ -6,6 +6,14 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-23 — Loonars Connect Fase 1: chat Hospitality + laporan owner 
+
+Migrasi `0291_loonars_connect_hospitality_chat.sql` + `0292_loonars_connect_hardening.sql` (keduanya diterapkan), halaman `/chat`,
+`lib/hospitality/*`, `features/chat/*`, `repositories/chat.repository.ts`,
+route cron `/api/hospitality/reports/dispatch` dan `/api/hospitality/retention`,
+skrip `scripts/provision-hospitality-accounts.ts`, uji unit + suite SQL
+`tests/sql/0291_hospitality`. Lihat `docs/HOSPITALITY_CONNECT.md`.
+
 ## 2026-10-23 — Chat refund: kirim foto ke customer
 
 Migrasi `0290_refund_chat_images.sql` (kolom `media_path`). Lihat

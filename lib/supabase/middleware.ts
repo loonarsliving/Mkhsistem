@@ -105,6 +105,10 @@ const PUBLIC_PATHS = [
   // automation_post/pg_net -- no browser session, same class of bug as
   // crm-promo-sends-worker above. Own auth: requireCronAuth (x-cron-secret).
   "/api/automation/construction-tukang-tip",
+  // pg_cron-triggered (hospitality-report-dispatch / hospitality-evidence-
+  // retention, 0291) via automation_post/pg_net. Own auth: requireCronAuth.
+  "/api/hospitality/reports/dispatch",
+  "/api/hospitality/retention",
   // pg_cron-triggered (ad-lead-pending-question-timeout-sweep, 0229) via
   // automation_post/pg_net -- same class of bug as
   // crm-promo-sends-worker/construction-tukang-tip above, found the same

@@ -242,6 +242,20 @@ export const PERMISSIONS = {
    */
   REFUND_VIEW: "refund.view",
   REFUND_MANAGE: "refund.manage",
+
+  /**
+   * Loonars Connect (0291) owner feed: consolidated Hospitality report cards
+   * and critical alerts, plus read access to the supporting operational
+   * records -- WITHOUT membership in the operational group.
+   */
+  HOSPITALITY_OWNER_REPORT: "hospitality.owner_report",
+  /**
+   * Session-derived, NOT a role_permissions row: getCurrentSession() adds it
+   * when the employee is an active member of a Loonars Connect group or holds
+   * HOSPITALITY_OWNER_REPORT. Only shows the /chat nav entry; every read and
+   * write is authorized by group membership in the database (0291).
+   */
+  CHAT_VIEW: "chat.view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

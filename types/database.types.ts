@@ -161,6 +161,414 @@ export type KpiRankingScopeDb = "weekly" | "monthly";
 export interface Database {
   public: {
     Tables: {
+      mkc_chat_departments: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          branch_id: string | null;
+          timezone: string;
+          settings: Json;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code?: string;
+          name?: string;
+          branch_id?: string | null;
+          timezone?: string;
+          settings?: Json;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_departments"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_conversations: {
+        Row: {
+          id: string;
+          department_id: string;
+          kind: "operational_group" | "owner_feed";
+          name: string;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          kind?: "operational_group" | "owner_feed";
+          name?: string;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_conversations"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_members: {
+        Row: {
+          conversation_id: string;
+          employee_id: string;
+          member_role: string;
+          source: string;
+          joined_at: string;
+          removed_at: string | null;
+        };
+        Insert: {
+          conversation_id?: string;
+          employee_id?: string;
+          member_role?: string;
+          source?: string;
+          joined_at?: string;
+          removed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_members"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_role_assignments: {
+        Row: {
+          department_id: string;
+          employee_id: string;
+          member_role: string;
+          note: string | null;
+          assigned_by: string | null;
+          created_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          department_id?: string;
+          employee_id?: string;
+          member_role?: string;
+          note?: string | null;
+          assigned_by?: string | null;
+          created_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_role_assignments"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          sender_id: string | null;
+          kind: string;
+          body: string;
+          ref_table: string | null;
+          ref_id: string | null;
+          payload: Json;
+          dedupe_key: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id?: string;
+          sender_id?: string | null;
+          kind?: string;
+          body?: string;
+          ref_table?: string | null;
+          ref_id?: string | null;
+          payload?: Json;
+          dedupe_key?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_messages"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_attachments: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          message_id: string | null;
+          room_task_id: string | null;
+          issue_id: string | null;
+          checklist_id: string | null;
+          evidence_slot: string | null;
+          bucket: string;
+          object_path: string;
+          mime_type: string | null;
+          size_bytes: number | null;
+          uploaded_by: string;
+          uploaded_at: string;
+          expires_at: string;
+          retention_hold_until: string | null;
+          retention_hold_reason: string | null;
+          retention_hold_by: string | null;
+          retention_hold_at: string | null;
+          deleted_at: string | null;
+          delete_attempts: number;
+          last_delete_error: string | null;
+          last_delete_attempt_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          conversation_id?: string;
+          message_id?: string | null;
+          room_task_id?: string | null;
+          issue_id?: string | null;
+          checklist_id?: string | null;
+          evidence_slot?: string | null;
+          bucket?: string;
+          object_path?: string;
+          mime_type?: string | null;
+          size_bytes?: number | null;
+          uploaded_by?: string;
+          uploaded_at?: string;
+          expires_at?: string;
+          retention_hold_until?: string | null;
+          retention_hold_reason?: string | null;
+          retention_hold_by?: string | null;
+          retention_hold_at?: string | null;
+          deleted_at?: string | null;
+          delete_attempts?: number;
+          last_delete_error?: string | null;
+          last_delete_attempt_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_attachments"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_chat_retention_runs: {
+        Row: {
+          id: string;
+          started_at: string;
+          finished_at: string | null;
+          candidates: number;
+          deleted: number;
+          failed: number;
+          error: string | null;
+        };
+        Insert: {
+          id?: string;
+          started_at?: string;
+          finished_at?: string | null;
+          candidates?: number;
+          deleted?: number;
+          failed?: number;
+          error?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_chat_retention_runs"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_hosp_room_tasks: {
+        Row: {
+          id: string;
+          department_id: string;
+          housekeeping_id: string | null;
+          unit_id: string | null;
+          unit_nomor: string;
+          status: string;
+          assigned_to: string | null;
+          started_by: string | null;
+          started_at: string | null;
+          submitted_by: string | null;
+          submitted_at: string | null;
+          inspected_by: string | null;
+          inspected_at: string | null;
+          rework_count: number;
+          completed_at: string | null;
+          completion_source: string | null;
+          blocked_reason: string | null;
+          conflict_note: string | null;
+          target_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          housekeeping_id?: string | null;
+          unit_id?: string | null;
+          unit_nomor?: string;
+          status?: string;
+          assigned_to?: string | null;
+          started_by?: string | null;
+          started_at?: string | null;
+          submitted_by?: string | null;
+          submitted_at?: string | null;
+          inspected_by?: string | null;
+          inspected_at?: string | null;
+          rework_count?: number;
+          completed_at?: string | null;
+          completion_source?: string | null;
+          blocked_reason?: string | null;
+          conflict_note?: string | null;
+          target_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_hosp_room_tasks"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_hosp_checklists: {
+        Row: {
+          id: string;
+          department_id: string;
+          conversation_id: string;
+          kind: string;
+          room_task_id: string | null;
+          unit_id: string | null;
+          unit_nomor: string | null;
+          submitted_by: string;
+          submitted_at: string;
+          report_date: string;
+          items: Json;
+          notes: string | null;
+          result: string;
+          decision: string | null;
+          details: Json;
+          message_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          conversation_id?: string;
+          kind?: string;
+          room_task_id?: string | null;
+          unit_id?: string | null;
+          unit_nomor?: string | null;
+          submitted_by?: string;
+          submitted_at?: string;
+          report_date?: string;
+          items?: Json;
+          notes?: string | null;
+          result?: string;
+          decision?: string | null;
+          details?: Json;
+          message_id?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_hosp_checklists"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_hosp_issues: {
+        Row: {
+          id: string;
+          code: string;
+          department_id: string;
+          conversation_id: string;
+          category: string;
+          severity: string;
+          unit_id: string | null;
+          unit_nomor: string | null;
+          location: string | null;
+          title: string;
+          description: string;
+          occurred_at: string;
+          action_taken: string | null;
+          reporter_id: string;
+          assigned_to: string | null;
+          status: string;
+          target_at: string | null;
+          resolution_notes: string | null;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          cancel_reason: string | null;
+          cancelled_by: string | null;
+          cancelled_at: string | null;
+          room_task_id: string | null;
+          source_checklist_id: string | null;
+          escalated_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code?: string;
+          department_id?: string;
+          conversation_id?: string;
+          category?: string;
+          severity?: string;
+          unit_id?: string | null;
+          unit_nomor?: string | null;
+          location?: string | null;
+          title?: string;
+          description?: string;
+          occurred_at?: string;
+          action_taken?: string | null;
+          reporter_id?: string;
+          assigned_to?: string | null;
+          status?: string;
+          target_at?: string | null;
+          resolution_notes?: string | null;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          cancel_reason?: string | null;
+          cancelled_by?: string | null;
+          cancelled_at?: string | null;
+          room_task_id?: string | null;
+          source_checklist_id?: string | null;
+          escalated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_hosp_issues"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_hosp_issue_events: {
+        Row: {
+          id: string;
+          issue_id: string;
+          actor_id: string | null;
+          event: string;
+          from_status: string | null;
+          to_status: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          issue_id?: string;
+          actor_id?: string | null;
+          event?: string;
+          from_status?: string | null;
+          to_status?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_hosp_issue_events"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_hosp_reports: {
+        Row: {
+          id: string;
+          department_id: string;
+          period_kind: "morning" | "afternoon" | "end_of_day" | "manual";
+          report_date: string;
+          status: "generating" | "success" | "failed";
+          attempts: number;
+          data: Json | null;
+          sources: Json | null;
+          error: string | null;
+          started_at: string | null;
+          generated_at: string | null;
+          generated_by: string | null;
+          message_id: string | null;
+          acknowledged_by: string | null;
+          acknowledged_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          period_kind?: "morning" | "afternoon" | "end_of_day" | "manual";
+          report_date?: string;
+          status?: "generating" | "success" | "failed";
+          attempts?: number;
+          data?: Json | null;
+          sources?: Json | null;
+          error?: string | null;
+          started_at?: string | null;
+          generated_at?: string | null;
+          generated_by?: string | null;
+          message_id?: string | null;
+          acknowledged_by?: string | null;
+          acknowledged_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_hosp_reports"]["Insert"]>;
+        Relationships: [];
+      };
       roles: {
         Row: {
           id: string;
@@ -6012,6 +6420,62 @@ export interface Database {
       };
     };
     Functions: {
+      mkc_chat_list: { Args: Record<string, never>; Returns: Json };
+      mkc_chat_mark_read: { Args: { p_conversation_id: string }; Returns: undefined };
+      mkc_chat_send_text: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: string };
+      mkc_chat_register_attachment: { Args: { p_conversation_id: string; p_object_path: string; p_evidence_slot?: string | null }; Returns: string };
+      mkc_chat_set_retention_hold: { Args: { p_attachment_id: string; p_until: string; p_reason: string }; Returns: undefined };
+      mkc_chat_sync_members: { Args: Record<string, never>; Returns: number };
+      mkc_hosp_sync_room_tasks: { Args: Record<string, never>; Returns: number };
+      mkc_hosp_task_start: { Args: { p_task_id: string }; Returns: undefined };
+      mkc_hosp_task_assign: { Args: { p_task_id: string; p_employee_id: string }; Returns: undefined };
+      mkc_hosp_task_block: { Args: { p_task_id: string; p_reason: string }; Returns: undefined };
+      mkc_hosp_task_submit_cleaning: { Args: { p_task_id: string; p_items: Json; p_notes: string | null; p_attachment_ids?: string[] }; Returns: string };
+      mkc_hosp_fo_inspect: {
+        Args: { p_task_id: string; p_items: Json; p_notes: string | null; p_decision: string; p_attachment_ids?: string[] };
+        Returns: Json;
+      };
+      mkc_hosp_issue_create: {
+        Args: {
+          p_department_code: string;
+          p_category: string;
+          p_severity: string;
+          p_title: string;
+          p_description: string;
+          p_unit_id?: string | null;
+          p_location?: string | null;
+          p_occurred_at?: string | null;
+          p_action_taken?: string | null;
+          p_attachment_ids?: string[];
+          p_assigned_to?: string | null;
+          p_source_checklist_id?: string | null;
+        };
+        Returns: string;
+      };
+      mkc_hosp_issue_update: { Args: { p_issue_id: string; p_action: string; p_assignee?: string | null; p_note?: string | null }; Returns: undefined };
+      mkc_hosp_submit_security: {
+        Args: {
+          p_department_code: string;
+          p_kind: string;
+          p_items: Json;
+          p_notes: string | null;
+          p_details?: Json;
+          p_unit_id?: string | null;
+          p_severity?: string;
+          p_attachment_ids?: string[];
+        };
+        Returns: Json;
+      };
+      mkc_hosp_units: { Args: { p_department_code: string }; Returns: Json };
+      mkc_hosp_people: { Args: { p_department_code: string }; Returns: Json };
+      mkc_hosp_report_begin: {
+        Args: { p_department_id: string; p_report_date: string; p_period_kind: string; p_generated_by?: string | null };
+        Returns: string | null;
+      };
+      mkc_hosp_report_villa_snapshot: { Args: { p_from: string; p_to: string; p_local_date: string }; Returns: Json };
+      mkc_hosp_report_finish: { Args: { p_report_id: string; p_data: Json; p_sources: Json; p_summary: string }; Returns: string };
+      mkc_hosp_report_fail: { Args: { p_report_id: string; p_error: string; p_sources?: Json | null }; Returns: undefined };
+      mkc_hosp_report_acknowledge: { Args: { p_report_id: string }; Returns: undefined };
       release_pending_expense_approval_notifications: { Args: { p_employee_id: string }; Returns: number };
       markom_content_submitted: { Args: { p_submission_id: string }; Returns: Json };
       hr_discipline_evidence: { Args: { p_employee_id: string }; Returns: Json };

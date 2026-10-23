@@ -25,6 +25,7 @@ import {
   MapPinned,
   Megaphone,
   MessageCircle,
+  MessagesSquare,
   Network,
   PieChart,
   Radar,
@@ -100,6 +101,8 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: MessageCircle,
         permission: [PERMISSIONS.REFUND_VIEW, PERMISSIONS.REFUND_MANAGE],
       },
+      // Loonars Connect (0291): operational group chat + owner report feed.
+      { label: "Chat", href: "/chat", icon: MessagesSquare, permission: PERMISSIONS.CHAT_VIEW },
       { label: "Memo", href: "/memo", icon: StickyNote, permission: PERMISSIONS.MEMO_VIEW },
       { label: "Pengumuman", href: "/announcements", icon: Megaphone, permission: PERMISSIONS.ANNOUNCEMENT_VIEW },
     ],

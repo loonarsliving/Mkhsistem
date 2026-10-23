@@ -108,6 +108,22 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
     permissions = permissions.filter((key) => !(SITEPLAN_BRANCH_SCOPED_PERMISSIONS as readonly string[]).includes(key));
   }
 
+  // Loonars Connect (/chat, 0291): the entry point is visible to members of a
+  // chat group (membership is data, not a role) and to the owner-feed
+  // holders. The database re-checks membership on every read and write.
+  if (!permissions.includes(PERMISSIONS.CHAT_VIEW)) {
+    let canChat = permissions.includes(PERMISSIONS.HOSPITALITY_OWNER_REPORT);
+    if (!canChat) {
+      const { count } = await supabase
+        .from("mkc_chat_members")
+        .select("conversation_id", { count: "exact", head: true })
+        .eq("employee_id", user.id)
+        .is("removed_at", null);
+      canChat = (count ?? 0) > 0;
+    }
+    if (canChat) permissions.push(PERMISSIONS.CHAT_VIEW);
+  }
+
   return {
     userId: user.id,
     employee,
