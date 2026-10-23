@@ -61,8 +61,10 @@ export async function POST(request: Request) {
   // on it got a text-only message with no error to explain why the photo
   // never arrived.
   const file = typeof body.file === "string" && body.file.trim() ? body.file.trim() : undefined;
-  if (!phone || !message) {
-    return NextResponse.json({ success: false, error: "phone and message are required" }, { status: 400 });
+  // A photo may go out without a caption (villa guest chat image send) --
+  // only a text-only message needs a body.
+  if (!phone || (!message && !file)) {
+    return NextResponse.json({ success: false, error: "phone and message (or file) are required" }, { status: 400 });
   }
   // Whacenter's /send takes plain text; 4096 mirrors WhatsApp's own message
   // cap so an oversized payload fails loudly here instead of silently
