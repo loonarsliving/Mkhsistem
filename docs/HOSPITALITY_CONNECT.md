@@ -15,9 +15,11 @@ Three parts:
    with `hospitality.owner_report` (super_admin); the owner is **not** a
    group member and never sees raw staff conversation.
 3. **Extensible shape** — `mkc_chat_departments` → operational group +
-   owner feed → structured records → report. Only `hospitality` is seeded.
-   A future department needs its own division mapping, checklists/workflow
-   and report computation; the chat tables/UI are reused as-is.
+   owner feed → structured records → report. `hospitality` was the first
+   department; Markom Jogja and Sales Jogja followed in 0294
+   (`docs/CONNECT_MARKOM_SALES_JOGJA.md`). Each department needs its own
+   division mapping, workflow RPCs and report computation; the chat
+   tables/UI are reused.
 
 ## Home-screen shortcut
 

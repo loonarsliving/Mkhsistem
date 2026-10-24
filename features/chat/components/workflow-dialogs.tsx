@@ -42,10 +42,10 @@ import {
 import { useChat } from "./chat-context";
 import { EvidenceSlotButton, ExtraEvidence, type UploadedEvidence } from "./evidence-picker";
 
-const selectClass =
+export const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-function useSubmit(onDone: () => void) {
+export function useSubmit(onDone: () => void) {
   const { refresh } = useChat();
   const [pending, setPending] = React.useState(false);
   const run = React.useCallback(

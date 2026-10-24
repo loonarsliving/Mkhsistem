@@ -1,5 +1,7 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 
+import { CONNECT_REF_TABLES, EMPTY_CONNECT_REFS, loadConnectRefs, type ConnectRefs, type ConnectRefTable } from "./connect.repository";
+
 /**
  * Reads for Loonars Connect chat (/chat, migration 0291). Pure queries under
  * the caller's own session: RLS (membership for the operational group,
@@ -113,7 +115,7 @@ export interface ChatMessage {
   senderId: string | null;
   kind: string;
   body: string;
-  refTable: "room_task" | "issue" | "checklist" | "report" | null;
+  refTable: "room_task" | "issue" | "checklist" | "report" | ConnectRefTable | null;
   refId: string | null;
   payload: Record<string, unknown>;
   createdAt: string;
@@ -125,6 +127,8 @@ export interface ChatRefs {
   issues: Record<string, IssueRef>;
   checklists: Record<string, ChecklistRef>;
   reports: Record<string, ReportRef>;
+  /** Markom / Sales records (0294) */
+  connect: ConnectRefs;
 }
 
 export interface ChatUnit {
@@ -364,9 +368,20 @@ export async function listChatMessages(
   ]);
   for (const r of [attachments, tasks, issues, checklists, reports]) if (r.error) throw new Error(r.error.message);
 
+  const connectIds: Partial<Record<ConnectRefTable, string[]>> = {};
+  for (const t of CONNECT_REF_TABLES) {
+    const list = refIds(t);
+    if (list.length) connectIds[t] = list;
+  }
+  let connect: ConnectRefs = EMPTY_CONNECT_REFS;
+  if (Object.keys(connectIds).length) {
+    const dept = await getConversationDepartment(supabase, conversationId);
+    if (dept) connect = await loadConnectRefs(supabase, dept.code, connectIds);
+  }
+
   const attByMessage = await signAttachments(supabase, (attachments.data ?? []) as Parameters<typeof signAttachments>[1]);
 
-  const refs: ChatRefs = { tasks: {}, issues: {}, checklists: {}, reports: {} };
+  const refs: ChatRefs = { tasks: {}, issues: {}, checklists: {}, reports: {}, connect };
   for (const t of (tasks.data ?? []) as TaskRow[]) refs.tasks[t.id] = mapTask(t);
   for (const i of (issues.data ?? []) as IssueRow[]) refs.issues[i.id] = mapIssue(i);
   for (const c of (checklists.data ?? []) as {
@@ -441,6 +456,16 @@ export async function listChatMessages(
 export async function getDepartmentId(supabase: TypedSupabaseClient, conversationId: string): Promise<string | null> {
   const { data } = await supabase.from("mkc_chat_conversations").select("department_id").eq("id", conversationId).maybeSingle();
   return data?.department_id ?? null;
+}
+
+export async function getConversationDepartment(
+  supabase: TypedSupabaseClient,
+  conversationId: string,
+): Promise<{ id: string; code: string; timezone: string } | null> {
+  const departmentId = await getDepartmentId(supabase, conversationId);
+  if (!departmentId) return null;
+  const { data } = await supabase.from("mkc_chat_departments").select("id, code, timezone").eq("id", departmentId).maybeSingle();
+  return data ?? null;
 }
 
 /** Search message text in one conversation (RLS-scoped), newest first. */
