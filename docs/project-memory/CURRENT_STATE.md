@@ -5,6 +5,14 @@ and existing docs — not from any external issue tracker (none found).
 
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
+Perbaikan 2026-10-24 (migrasi `0293`, diterapkan): `mkc_hosp_notify` memakai
+`type='info'` yang ditolak `mkc_notifications_type_check` produksi, sehingga
+semua notifikasi Hospitality gagal (laporan pagi 24-10 gagal 3x; peringatan
+kritis juga akan gagal). Sekarang `type='system'`; laporan pagi dibuat ulang dan
+berhasil. Stub uji SQL kini meniru constraint itu. Juga diperbaiki: ruang chat
+memuat ulang terus ("Memuat percakapan…") karena callback `onActivity` baru
+setiap render memicu ulang efek awal.
+
 Branch `claude/loonars-connect-hospitality-chat`, migrasi
 `0291_loonars_connect_hospitality_chat.sql` + `0292_loonars_connect_hardening.sql`,
 halaman `/chat`. Detail lengkap: `docs/HOSPITALITY_CONNECT.md`. Grup

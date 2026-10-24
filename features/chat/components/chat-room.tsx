@@ -234,6 +234,15 @@ export function ChatRoom({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const stickToBottom = React.useRef(true);
 
+  // The parent passes a fresh onActivity every render (its list reloads after
+  // each mark-read). Read it through a ref so `load` -- and the mount effect
+  // below -- stay stable; depending on it directly re-ran the mount effect on
+  // every list refresh, wiping the room back to "Memuat percakapan…" in a loop.
+  const onActivityRef = React.useRef(onActivity);
+  React.useEffect(() => {
+    onActivityRef.current = onActivity;
+  }, [onActivity]);
+
   const load = React.useCallback(async () => {
     const r = await loadMessagesAction({ conversationId: conversation.id });
     setLoading(false);
@@ -245,8 +254,8 @@ export function ChatRoom({
     setMessages(r.data.messages);
     setRefs(r.data.refs);
     setHasMore(r.data.hasMore);
-    void markReadAction({ conversationId: conversation.id }).then(onActivity);
-  }, [conversation.id, onActivity]);
+    void markReadAction({ conversationId: conversation.id }).then(() => onActivityRef.current());
+  }, [conversation.id]);
 
   const loadWork = React.useCallback(async () => {
     if (isFeed) return;
@@ -262,11 +271,16 @@ export function ChatRoom({
   // Cards and dialogs call the context's refresh(); point it at this room.
   React.useEffect(() => registerRefresh(refresh), [registerRefresh, refresh]);
 
+  // Reset only when the conversation changes; background refreshes keep what
+  // is on screen and just replace it when the new data arrives.
   React.useEffect(() => {
     setLoading(true);
     setMessages([]);
     setWork(null);
     stickToBottom.current = true;
+  }, [conversation.id]);
+
+  React.useEffect(() => {
     refresh();
     const timer = window.setInterval(refresh, POLL_MS);
     return () => window.clearInterval(timer);
