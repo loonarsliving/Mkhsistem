@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { MessagesSquare } from "lucide-react";
+import { MessageSquarePlus, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { ChatContextProvider } from "./chat-context";
 import { ChatNotificationPrompt } from "./chat-notification-prompt";
 import { ChatRoom, ConversationAvatar } from "./chat-room";
 import { formatListStamp } from "./chat-utils";
+import { NewDirectChat } from "./new-direct-chat";
 
 /** Conversation list refresh while open (unread badges), on top of realtime. */
 const LIST_REFRESH_MS = 30_000;
@@ -50,6 +51,7 @@ function useKeyboardAwareHeight(): number | null {
 export function ChatApp({
   userId,
   isOwner,
+  canDirectChat,
   initialConversations,
   initialConversationId,
   peopleByDepartment,
@@ -57,6 +59,8 @@ export function ChatApp({
 }: {
   userId: string;
   isOwner: boolean;
+  /** direct 1-on-1 chat available to this user (0300) */
+  canDirectChat: boolean;
   initialConversations: ChatConversation[];
   initialConversationId: string | null;
   peopleByDepartment: Record<string, ChatPerson[]>;
@@ -67,6 +71,7 @@ export function ChatApp({
   const [conversations, setConversations] = React.useState(initialConversations);
   const [selectedId, setSelectedId] = React.useState<string | null>(initialConversationId);
   const [reloadToken, setReloadToken] = React.useState(0);
+  const [newChatOpen, setNewChatOpen] = React.useState(false);
   const roomRefresh = React.useRef<() => void>(() => {});
   const supabase = React.useMemo(() => createClient(), []);
   const viewportHeight = useKeyboardAwareHeight();
@@ -175,9 +180,14 @@ export function ChatApp({
             departmentCode: selected.departmentCode,
             userId,
             // The owner feed has no group role; actions there come from the owner permission.
-            myRole: selected.kind === "operational_group" ? selected.myRole : null,
+            myRole: selected.kind === "owner_feed" ? null : selected.myRole,
             isOwner,
-            people: peopleByDepartment[selected.departmentCode] ?? [],
+            people:
+              selected.kind === "direct"
+                ? selected.peerId
+                  ? [{ id: selected.peerId, name: selected.name, role: null, active: true }]
+                  : []
+                : (peopleByDepartment[selected.departmentCode] ?? []),
             units: unitsByDepartment[selected.departmentCode] ?? [],
             refresh: () => roomRefresh.current(),
           }
@@ -193,10 +203,33 @@ export function ChatApp({
       className="-m-4 flex h-[calc(var(--chat-vh,100dvh)-4rem)] overflow-hidden bg-background sm:-m-6 lg:m-0 lg:h-[calc(100dvh-10rem)] lg:min-h-[520px] lg:rounded-xl lg:border lg:shadow-sm"
     >
       <div className={cn("h-full w-full md:w-[320px] md:shrink-0 md:border-r", selected ? "hidden md:block" : "block")}>
+        {newChatOpen ? (
+          <NewDirectChat
+            onBack={() => setNewChatOpen(false)}
+            onOpened={async (id) => {
+              await reloadList();
+              setNewChatOpen(false);
+              select(id);
+            }}
+          />
+        ) : (
         <div className="flex h-full min-h-0 flex-col">
-          <div className="border-b px-4 py-3">
-            <p className="font-semibold">Chat</p>
-            <p className="text-xs text-muted-foreground">Loonars Connect</p>
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Chat</p>
+              <p className="text-xs text-muted-foreground">Loonars Connect</p>
+            </div>
+            {canDirectChat && (
+              <button
+                type="button"
+                onClick={() => setNewChatOpen(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-emerald-700 hover:bg-muted dark:text-emerald-400"
+                aria-label="Chat baru"
+                title="Chat baru"
+              >
+                <MessageSquarePlus className="h-5 w-5" />
+              </button>
+            )}
           </div>
           <ChatNotificationPrompt />
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -217,7 +250,13 @@ export function ChatApp({
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-xs text-muted-foreground">
-                      {c.lastBody ? `${c.lastSender ? `${c.lastSender}: ` : ""}${c.lastBody}` : c.kind === "owner_feed" ? "Laporan konsolidasi" : `${c.memberCount} anggota`}
+                      {c.lastBody
+                        ? `${c.lastSender && c.kind !== "direct" ? `${c.lastSender}: ` : ""}${c.lastBody}`
+                        : c.kind === "owner_feed"
+                          ? "Laporan konsolidasi"
+                          : c.kind === "direct"
+                            ? c.description || "Pesan pribadi"
+                            : `${c.memberCount} anggota`}
                     </p>
                     {c.unread > 0 && (
                       <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-semibold text-white">
@@ -229,10 +268,13 @@ export function ChatApp({
               </button>
             ))}
             {conversations.length === 0 && (
-              <p className="p-6 text-center text-sm text-muted-foreground">Anda belum tergabung di grup mana pun. Hubungi atasan atau admin.</p>
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                {canDirectChat ? "Belum ada percakapan. Ketuk ikon chat baru di atas untuk mulai chat dengan rekan kerja." : "Anda belum tergabung di grup mana pun. Hubungi atasan atau admin."}
+              </p>
             )}
           </div>
         </div>
+        )}
       </div>
 
       <div className={cn("h-full min-w-0 flex-1", selected ? "block" : "hidden md:block")}>

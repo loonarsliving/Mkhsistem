@@ -8,8 +8,10 @@ import {
   getDepartmentId,
   listChatConversations,
   listChatMessages,
+  listDirectContacts,
   listOpenWork,
   searchChatMessages,
+  type ChatContact,
   type ChatConversation,
   type ChatMessage,
   type ChatRefs,
@@ -25,6 +27,7 @@ import {
   createIssueSchema,
   foInspectSchema,
   loadMessagesSchema,
+  openDirectChatSchema,
   registerAttachmentSchema,
   reportIdSchema,
   retentionHoldSchema,
@@ -40,6 +43,7 @@ import {
   type CreateIssueInput,
   type FoInspectInput,
   type LoadMessagesInput,
+  type OpenDirectChatInput,
   type RegisterAttachmentInput,
   type ReportIdInput,
   type RetentionHoldInput,
@@ -75,6 +79,25 @@ export async function listConversationsAction(): Promise<ActionResult<ChatConver
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal memuat percakapan");
   }
+}
+
+/** Direct chat (0300): people in scope; the RPC rejects callers outside it. */
+export async function loadDirectContactsAction(): Promise<ActionResult<ChatContact[]>> {
+  await requireSession();
+  try {
+    return actionSuccess(await listDirectContacts(await createClient()));
+  } catch (err) {
+    return dbError(err instanceof Error ? err.message : "Gagal memuat kontak");
+  }
+}
+
+/** Opens (or reuses) the caller's direct chat with one person; scope is checked by the RPC. */
+export async function openDirectChatAction(input: OpenDirectChatInput): Promise<ActionResult<{ id: string }>> {
+  await requireSession();
+  const parsed = openDirectChatSchema.safeParse(input);
+  if (!parsed.success) return invalid(parsed.error);
+  const { data, error } = await (await createClient()).rpc("mkc_chat_direct_open", { p_employee_id: parsed.data.employeeId });
+  return error ? dbError(error.message) : actionSuccess({ id: data as string });
 }
 
 export async function loadMessagesAction(

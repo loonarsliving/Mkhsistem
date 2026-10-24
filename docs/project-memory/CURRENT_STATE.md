@@ -3,6 +3,26 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Connect: chat pribadi 1-on-1 (0300) — DIBANGUN, BELUM DITERAPKAN (2026-10-25)
+
+- Permintaan owner: chat pribadi dengan karyawan. Pilihan owner: semua orang
+  dalam cakupan boleh memulai; cakupan = karyawan cabang Jogja (JOG) + Loonars
+  Private Living (LPL) + owner; foto ikut aturan 30 hari.
+- Model: percakapan `kind = 'direct'`, dua anggota (`source = 'direct'`), satu
+  per pasangan (`direct_key`), di bawah departemen teknis `pesan_pribadi`
+  (cakupan & retensi di `settings.direct_scope`, bisa diubah tanpa deploy).
+- RPC: `mkc_chat_direct_available()`, `mkc_chat_direct_contacts()`,
+  `mkc_chat_direct_open(employee)`. `mkc_chat_list` menamai chat dengan nama
+  lawan bicara; chat kosong hanya tampil untuk yang membuka.
+- Privasi: hanya dua anggota yang bisa membaca. Bypass owner
+  (`mkc_hosp_can_view_department`) dimatikan untuk departemen pribadi; tiga
+  policy (anggota, lampiran, foto storage) kini mencari departemen lewat
+  `mkc_chat_conversation_department()` (definer) — sebelumnya subquery ber-RLS
+  mengembalikan NULL dan `can_view_department(NULL)` bernilai true bagi owner.
+- Sinkron anggota grup tidak pernah menghapus anggota chat pribadi.
+- `/chat` kini juga terbuka untuk siapa pun dalam cakupan chat pribadi
+  (`lib/rbac/session.ts`).
+
 ## Loonars Connect: notifikasi chat ala WhatsApp + realtime (0297) — 2026-10-24
 
 Pesan grup dari orang → notifikasi push `chat_message` ke anggota lain

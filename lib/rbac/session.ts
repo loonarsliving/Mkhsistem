@@ -109,8 +109,9 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
   }
 
   // Loonars Connect (/chat, 0291): the entry point is visible to members of a
-  // chat group (membership is data, not a role) and to the owner-feed
-  // holders. The database re-checks membership on every read and write.
+  // chat group (membership is data, not a role), to the owner-feed holders,
+  // and to everyone in the direct-chat scope (0300: Jogja + Loonars Private
+  // Living + owners). The database re-checks access on every read and write.
   if (!permissions.includes(PERMISSIONS.CHAT_VIEW)) {
     let canChat = permissions.includes(PERMISSIONS.HOSPITALITY_OWNER_REPORT);
     if (!canChat) {
@@ -120,6 +121,10 @@ export const getCurrentSession = cache(async (): Promise<CurrentSession | null> 
         .eq("employee_id", user.id)
         .is("removed_at", null);
       canChat = (count ?? 0) > 0;
+    }
+    if (!canChat) {
+      const { data } = await supabase.rpc("mkc_chat_direct_available");
+      canChat = data === true;
     }
     if (canChat) permissions.push(PERMISSIONS.CHAT_VIEW);
   }

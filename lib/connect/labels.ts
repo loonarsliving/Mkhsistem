@@ -4,14 +4,21 @@
  * the database stays the control, these only drive the forms.
  */
 
-export type ConnectDepartmentKind = "hospitality" | "markom" | "sales" | "koordinasi";
+export type ConnectDepartmentKind = "hospitality" | "markom" | "sales" | "koordinasi" | "direct";
 
 export function departmentKind(code: string): ConnectDepartmentKind {
   if (code.startsWith("markom_")) return "markom";
   if (code.startsWith("sales_")) return "sales";
   // cross-team group (0298): plain chat, no workflow / work panel / report
   if (code.startsWith("koordinasi_")) return "koordinasi";
+  // direct 1-on-1 chats (0300): plain chat too
+  if (code === "pesan_pribadi") return "direct";
   return "hospitality";
+}
+
+/** Plain conversation: text + photos only, no work panel, quick reports or live report. */
+export function isPlainChat(kind: ConnectDepartmentKind): boolean {
+  return kind === "koordinasi" || kind === "direct";
 }
 
 const ROLE_LABELS: Record<ConnectDepartmentKind, Record<string, string>> = {
@@ -19,6 +26,7 @@ const ROLE_LABELS: Record<ConnectDepartmentKind, Record<string, string>> = {
   markom: { markom: "Markom", room_approver: "Persetujuan kamar villa" },
   sales: { sales: "Sales", manager: "Kepala Cabang / Manager Sales" },
   koordinasi: { member: "Anggota" },
+  direct: { member: "" },
 };
 
 export function memberRoleLabel(role: string | null | undefined, departmentCode: string): string {

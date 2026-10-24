@@ -34,7 +34,8 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
   const supabase = await createClient();
   const [{ c }, conversations] = await Promise.all([searchParams, listChatConversations(supabase)]);
 
-  const departments = [...new Set(conversations.map((conv) => conv.departmentCode))];
+  // Direct chats (0300) carry their own names; no department people / units to load.
+  const departments = [...new Set(conversations.filter((conv) => conv.kind !== "direct").map((conv) => conv.departmentCode))];
   const peopleByDepartment: Record<string, ChatPerson[]> = {};
   const unitsByDepartment: Record<string, ChatUnit[]> = {};
   await Promise.all(
@@ -46,11 +47,13 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
   );
 
   const initialId = c && conversations.some((conv) => conv.id === c) ? c : null;
+  const { data: canDirectChat } = await supabase.rpc("mkc_chat_direct_available");
 
   return (
     <ChatApp
       userId={session.userId}
       isOwner={hasPermission(session, PERMISSIONS.HOSPITALITY_OWNER_REPORT)}
+      canDirectChat={canDirectChat === true}
       initialConversations={conversations}
       initialConversationId={initialId}
       peopleByDepartment={peopleByDepartment}
