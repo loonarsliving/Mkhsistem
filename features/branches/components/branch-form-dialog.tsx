@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, LocateFixed } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,7 @@ export function BranchFormDialog({ trigger, initialValues }: BranchFormDialogPro
     control,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<BranchInput>({
+  } = useForm<z.input<typeof branchSchema>, unknown, BranchInput>({
     resolver: zodResolver(branchSchema),
     defaultValues: initialValues ?? {
       code: "",

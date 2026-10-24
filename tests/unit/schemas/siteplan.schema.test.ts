@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { siteplanProjectSchema, siteplanPurchaseSchema, siteplanUnitSchema } from "@/features/siteplan/schemas/siteplan.schema";
 
-const unitId = "11111111-1111-1111-1111-111111111111";
+const unitId = "11111111-1111-4111-8111-111111111111";
 
 const baseBooking = {
   unitId,
@@ -105,7 +105,7 @@ describe("siteplanPurchaseSchema", () => {
 });
 
 describe("siteplanProjectSchema", () => {
-  const branchId = "33333333-3333-3333-3333-333333333333";
+  const branchId = "33333333-3333-4333-8333-333333333333";
 
   it("accepts a valid project", () => {
     expect(siteplanProjectSchema.safeParse({ kode: "LV-01", nama: "Loonars Villa", branchId }).success).toBe(true);
@@ -125,7 +125,7 @@ describe("siteplanProjectSchema", () => {
 });
 
 describe("siteplanUnitSchema", () => {
-  const projectId = "22222222-2222-2222-2222-222222222222";
+  const projectId = "22222222-2222-4222-8222-222222222222";
 
   it("accepts a valid unit", () => {
     expect(siteplanUnitSchema.safeParse({ projectId, blok: "C1" }).success).toBe(true);

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
 import { useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ export function CompanySettingsForm({ initialValues }: { initialValues: CompanyS
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<CompanySettingsInput>({ resolver: zodResolver(companySettingsSchema), defaultValues: initialValues });
+  } = useForm<z.input<typeof companySettingsSchema>, unknown, CompanySettingsInput>({ resolver: zodResolver(companySettingsSchema), defaultValues: initialValues });
 
   const logoUrl = watch("companyLogoUrl");
 

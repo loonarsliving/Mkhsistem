@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export function WorkScheduleFormDialog({ trigger, initialValues }: WorkScheduleF
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<WorkScheduleInput>({
+  } = useForm<z.input<typeof workScheduleSchema>, unknown, WorkScheduleInput>({
     resolver: zodResolver(workScheduleSchema),
     defaultValues: initialValues ?? {
       branchId: null,

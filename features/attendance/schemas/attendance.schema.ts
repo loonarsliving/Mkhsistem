@@ -13,7 +13,7 @@ export type CheckOutInput = z.infer<typeof checkOutSchema>;
 
 export const leaveRequestSchema = z
   .object({
-    type: z.enum(["izin", "sakit"], { required_error: "Jenis pengajuan wajib dipilih" }),
+    type: z.enum(["izin", "sakit"], { error: "Jenis pengajuan wajib dipilih" }),
     startDate: z.string().min(1, "Tanggal mulai wajib diisi"),
     endDate: z.string().min(1, "Tanggal selesai wajib diisi"),
     reason: z.string().min(5, "Alasan minimal 5 karakter").max(1000),

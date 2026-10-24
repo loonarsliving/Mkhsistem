@@ -6,7 +6,7 @@ import {
   terminateEmployeeSchema,
 } from "@/features/hr-discipline/schemas/hr-discipline.schema";
 
-const EMPLOYEE_ID = "11111111-2222-3333-4444-555555555555";
+const EMPLOYEE_ID = "11111111-2222-4333-8444-555555555555";
 
 describe("issueWarningSchema", () => {
   it("accepts a complete warning", () => {

@@ -6,6 +6,22 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+
+## 2026-10-24 — Keamanan: zod 4 + vite 8.3 (npm audit high/critical bersih)
+
+- `zod` 3.25 → 4.6.7 (GHSA-mrhx-c7xc-m3w5, memori habis saat validasi koleksi
+  besar) dan `@hookform/resolvers` 3 → 5 (dukungan zod 4). Penyesuaian:
+  `required_error` / `invalid_type_error` / `errorMap` → `error` (9 skema);
+  form dengan input≠output memakai `useForm<z.input<…>, unknown, Output>`
+  (16 komponen); fixture UUID di tes dibuat RFC-valid (zod 4 `uuid()` lebih
+  ketat — data produksi sudah dicek: dari 232 tabel hanya `company_settings`
+  dan `meta_ads_balance_state` punya id non-RFC dan keduanya tidak divalidasi
+  zod).
+- `vite` (dev-only, lewat vitest) dipaksa ke ^8.3.5 via `overrides`
+  (beberapa advisory dev-server). `npm audit --audit-level=high` kini lulus;
+  sisa: moderate (uuid via exceljs/xcode, postcss-selector-parser,
+  @vitest/mocker).
+
 ## 2026-10-24 — Loonars Connect: notifikasi chat ala WhatsApp + realtime (0297)
 
 `0297_loonars_connect_chat_push_realtime.sql`: pesan grup → push ke HP anggota

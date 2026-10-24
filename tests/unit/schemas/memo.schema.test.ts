@@ -64,8 +64,8 @@ describe("memoFormSchema", () => {
       ...validBase,
       targets: [
         { target_type: "all_division", target_id: null },
-        { target_type: "position", target_id: "11111111-1111-1111-1111-111111111111" },
-        { target_type: "user", target_id: "22222222-2222-2222-2222-222222222222" },
+        { target_type: "position", target_id: "11111111-1111-4111-8111-111111111111" },
+        { target_type: "user", target_id: "22222222-2222-4222-8222-222222222222" },
       ],
     });
     expect(result.success).toBe(true);

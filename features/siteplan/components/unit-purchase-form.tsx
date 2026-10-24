@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
     watch,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<SiteplanPurchaseInput>({
+  } = useForm<z.input<typeof siteplanPurchaseSchema>, unknown, SiteplanPurchaseInput>({
     resolver: zodResolver(siteplanPurchaseSchema),
     defaultValues: {
       unitId,
@@ -159,7 +160,7 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
             <Controller
               control={control}
               name="price"
-              render={({ field }) => <CurrencyInput id="price" value={field.value} onValueChange={field.onChange} />}
+              render={({ field }) => <CurrencyInput id="price" value={field.value as number | undefined} onValueChange={field.onChange} />}
             />
             {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
           </div>
@@ -170,7 +171,7 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
               <Controller
                 control={control}
                 name="bookingFee"
-                render={({ field }) => <CurrencyInput id="bookingFee" value={field.value} onValueChange={field.onChange} />}
+                render={({ field }) => <CurrencyInput id="bookingFee" value={field.value as number | undefined} onValueChange={field.onChange} />}
               />
               {errors.bookingFee && <p className="text-sm text-destructive">{errors.bookingFee.message}</p>}
             </div>
@@ -183,7 +184,7 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
                 <Controller
                   control={control}
                   name="dpAmount"
-                  render={({ field }) => <CurrencyInput id="dpAmount" value={field.value} onValueChange={field.onChange} />}
+                  render={({ field }) => <CurrencyInput id="dpAmount" value={field.value as number | undefined} onValueChange={field.onChange} />}
                 />
                 {errors.dpAmount && <p className="text-sm text-destructive">{errors.dpAmount.message}</p>}
               </div>
@@ -192,7 +193,7 @@ export function UnitPurchaseForm({ open, onOpenChange, unitId, unitBlok, onSubmi
                 <Controller
                   control={control}
                   name="pelunasanAmount"
-                  render={({ field }) => <CurrencyInput id="pelunasanAmount" value={field.value} onValueChange={field.onChange} />}
+                  render={({ field }) => <CurrencyInput id="pelunasanAmount" value={field.value as number | undefined} onValueChange={field.onChange} />}
                 />
               </div>
             </div>

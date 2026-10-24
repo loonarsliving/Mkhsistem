@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ export function PositionFormDialog({ trigger, initialValues }: PositionFormDialo
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<PositionInput>({
+  } = useForm<z.input<typeof positionSchema>, unknown, PositionInput>({
     resolver: zodResolver(positionSchema),
     defaultValues: initialValues ?? { code: "", name: "", level: 100, description: "", isActive: true },
   });

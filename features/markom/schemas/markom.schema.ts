@@ -29,7 +29,7 @@ export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
 export const verifyTaskSchema = z.object({
   taskId: z.string().uuid(),
-  status: z.enum(["completed", "rejected"], { required_error: "Status wajib dipilih" }),
+  status: z.enum(["completed", "rejected"], { error: "Status wajib dipilih" }),
   notes: z.string().max(2000).optional(),
 });
 export type VerifyTaskInput = z.infer<typeof verifyTaskSchema>;
