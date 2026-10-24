@@ -39,7 +39,7 @@ import { generateReportNowAction, loadMessagesAction, loadOpenWorkAction, markRe
 import { loadConnectWorkAction } from "../actions/connect.actions";
 import { AttachmentStrip, ChecklistCard, IssueCard, SystemLine, TaskCard } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
-import { ConnectReportCard, ContentPlanCard, DailyReportCard, KolCard, ProspectCard, PurchaseCard, VisitCard } from "./connect-cards";
+import { ConnectReportCard, ContentPlanCard, LiveConnectReportCard, DailyReportCard, KolCard, ProspectCard, PurchaseCard, VisitCard } from "./connect-cards";
 import { ContentPlanDialog, DailyReportDialog, KolDialog, LeadDialog } from "./connect-dialogs";
 import { MarkomWorkPanel, SalesWorkPanel } from "./connect-panels";
 import { avatarColor, dayKey, formatDateTime, formatDaySeparator, formatTime, initials } from "./chat-utils";
@@ -491,6 +491,12 @@ export function ChatRoom({
           </div>
         )}
 
+        {isFeed && deptKind !== "hospitality" && isOwner && (
+          <div className="max-h-[45%] shrink-0 overflow-y-auto border-b bg-[#efeae2] px-3 pt-3 pb-2 dark:bg-[#0b141a] sm:px-6">
+            <LiveConnectReportCard conversationId={conversation.id} title={conversation.name} reloadToken={reloadToken} />
+          </div>
+        )}
+
         {/* Messages */}
         <div
           ref={scrollRef}
@@ -517,7 +523,7 @@ export function ChatRoom({
                 {isFeed
                   ? deptKind === "hospitality"
                     ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
-                    : "Belum ada laporan. Laporan akhir hari muncul di sini otomatis setiap malam."
+                    : "Laporan live ada di atas dan selalu mengikuti data terbaru. Laporan akhir hari (20:00) tersimpan di sini otomatis setiap malam."
                   : deptKind === "markom"
                     ? "Belum ada pesan. Susun kalender konten dan ajukan kamar KOL lewat tombol +."
                     : deptKind === "sales"

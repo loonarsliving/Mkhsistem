@@ -6,6 +6,13 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-24 — Loonars Connect: laporan live Markom/Sales di feed owner
+
+Kartu "Live hari ini" di atas feed Laporan Markom/Sales Jogja: dihitung dari
+data terbaru dengan aturan yang sama dengan laporan 20:00
+(`buildConnectReport`), tidak disimpan; diperbarui saat ada aktivitas
+(realtime) dan tiap menit. Tanpa migrasi.
+
 ## 2026-10-24 — Loonars Connect: sinkron tugas kamar instan saat check-out villa (0296)
 
 `0296_loonars_connect_instant_room_sync.sql`: trigger deferred di `units` dan

@@ -42,6 +42,86 @@ function collectIds(snapshot: Record<string, unknown>): string[] {
   return [...ids];
 }
 
+/**
+ * Snapshot (service role) + computation, no persistence. Used by the stored
+ * report below and by the live report in the owner feed, so both show the
+ * same numbers from the same rules.
+ */
+export async function buildConnectReport(
+  admin: Admin,
+  dept: Department,
+  periodKind: PeriodKind,
+  reportDate: string,
+  now: Date = new Date(),
+): Promise<{ data: ConnectReportData; sources: Record<string, unknown> }> {
+  const conf = CONNECT[dept.code];
+  if (!conf) throw new Error("bukan departemen Loonars Connect");
+  const window = reportWindow(periodKind, reportDate, dept.settings, dept.timezone, now);
+  const { data: snap, error: snapError } = await admin.rpc(conf.snapshot, {
+    p_department_id: dept.id,
+    p_from: window.from,
+    p_to: window.to,
+    p_local_date: reportDate,
+  });
+  if (snapError) throw new Error(snapError.message);
+  const snapshot = (snap ?? {}) as Record<string, unknown>;
+
+  const ids = collectIds(snapshot);
+  const people: Record<string, string> = {};
+  if (ids.length) {
+    const { data: emps } = await admin.from("employees").select("id, full_name").in("id", ids);
+    for (const e of emps ?? []) people[e.id] = e.full_name;
+  }
+  const settings = (dept.settings ?? {}) as Record<string, unknown>;
+
+  let data: ConnectReportData;
+  if (dept.code === "markom_jogja") {
+    data = computeMarkomReport({
+      departmentCode: dept.code,
+      periodKind,
+      reportDate,
+      timezone: dept.timezone,
+      now,
+      window,
+      settings: { kol_decision_target_hours: Number(settings.kol_decision_target_hours ?? 24) },
+      content: fromSnapshotSection<ContentRow[]>(snapshot.content),
+      kols: fromSnapshotSection<KolRow[]>(snapshot.kols),
+      submissions: fromSnapshotSection<{ published: number; failed: number }>(snapshot.submissions),
+      people,
+    });
+  } else {
+    data = computeSalesReport({
+      departmentCode: dept.code,
+      periodKind,
+      reportDate,
+      timezone: dept.timezone,
+      now,
+      window,
+      settings: {
+        lead_first_contact_hours: Number(settings.lead_first_contact_hours ?? 24),
+        lead_stale_days: Number(settings.lead_stale_days ?? 3),
+        daily_report_due: String(settings.daily_report_due ?? "19:00"),
+      },
+      members: fromSnapshotSection<{ id: string; role: string }[]>(snapshot.sales),
+      leads: fromSnapshotSection<LeadRow[]>(snapshot.leads),
+      followUps: fromSnapshotSection<Record<string, number>>(snapshot.follow_ups),
+      visits: fromSnapshotSection<VisitRow[]>(snapshot.visits),
+      dailyReports: fromSnapshotSection<{ sales_id: string; follow_ups: number; visits: number; hot: number }[]>(snapshot.daily_reports),
+      siteplan: fromSnapshotSection<{ units: Record<string, number>; purchases: PurchaseRow[] }>(snapshot.siteplan),
+      targets: fromSnapshotSection<Record<string, number>>(snapshot.targets),
+      people,
+    });
+  }
+
+  // Keep only ok/error/fetched_at per source.
+  const sources: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(snapshot)) {
+    const s = v as { ok?: boolean; error?: string; fetched_at?: string };
+    sources[k] = { ok: !!s?.ok, error: s?.error ?? null, fetched_at: s?.fetched_at ?? null };
+  }
+  return { data, sources };
+}
+
 export async function generateConnectReport(
   admin: Admin,
   dept: Department,
@@ -61,72 +141,8 @@ export async function generateConnectReport(
   if (beginError) return { status: "failed", reportId: null, error: beginError.message };
   if (!reportId) return { status: "skipped", reason: "sudah dibuat atau sedang diproses" };
 
-  const now = new Date();
   try {
-    const window = reportWindow(periodKind, reportDate, dept.settings, dept.timezone, now);
-    const { data: snap, error: snapError } = await admin.rpc(conf.snapshot, {
-      p_department_id: dept.id,
-      p_from: window.from,
-      p_to: window.to,
-      p_local_date: reportDate,
-    });
-    if (snapError) throw new Error(snapError.message);
-    const snapshot = (snap ?? {}) as Record<string, unknown>;
-
-    const ids = collectIds(snapshot);
-    const people: Record<string, string> = {};
-    if (ids.length) {
-      const { data: emps } = await admin.from("employees").select("id, full_name").in("id", ids);
-      for (const e of emps ?? []) people[e.id] = e.full_name;
-    }
-    const settings = (dept.settings ?? {}) as Record<string, unknown>;
-
-    let data: ConnectReportData;
-    if (dept.code === "markom_jogja") {
-      data = computeMarkomReport({
-        departmentCode: dept.code,
-        periodKind,
-        reportDate,
-        timezone: dept.timezone,
-        now,
-        window,
-        settings: { kol_decision_target_hours: Number(settings.kol_decision_target_hours ?? 24) },
-        content: fromSnapshotSection<ContentRow[]>(snapshot.content),
-        kols: fromSnapshotSection<KolRow[]>(snapshot.kols),
-        submissions: fromSnapshotSection<{ published: number; failed: number }>(snapshot.submissions),
-        people,
-      });
-    } else {
-      data = computeSalesReport({
-        departmentCode: dept.code,
-        periodKind,
-        reportDate,
-        timezone: dept.timezone,
-        now,
-        window,
-        settings: {
-          lead_first_contact_hours: Number(settings.lead_first_contact_hours ?? 24),
-          lead_stale_days: Number(settings.lead_stale_days ?? 3),
-          daily_report_due: String(settings.daily_report_due ?? "19:00"),
-        },
-        members: fromSnapshotSection<{ id: string; role: string }[]>(snapshot.sales),
-        leads: fromSnapshotSection<LeadRow[]>(snapshot.leads),
-        followUps: fromSnapshotSection<Record<string, number>>(snapshot.follow_ups),
-        visits: fromSnapshotSection<VisitRow[]>(snapshot.visits),
-        dailyReports: fromSnapshotSection<{ sales_id: string; follow_ups: number; visits: number; hot: number }[]>(snapshot.daily_reports),
-        siteplan: fromSnapshotSection<{ units: Record<string, number>; purchases: PurchaseRow[] }>(snapshot.siteplan),
-        targets: fromSnapshotSection<Record<string, number>>(snapshot.targets),
-        people,
-      });
-    }
-
-    // Keep only ok/error/fetched_at per source in the stored report.
-    const sources: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(snapshot)) {
-      const s = v as { ok?: boolean; error?: string; fetched_at?: string };
-      sources[k] = { ok: !!s?.ok, error: s?.error ?? null, fetched_at: s?.fetched_at ?? null };
-    }
-
+    const { data, sources } = await buildConnectReport(admin, dept, periodKind, reportDate);
     const { error: finishError } = await admin.rpc("mkc_hosp_report_finish", {
       p_report_id: reportId,
       p_data: data as unknown as Json,
