@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { NOTA_BEDA_RE, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { NOTA_BEDA_RE, parseRekeningBalasan, pisahRekening, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -308,6 +308,42 @@ describe("pembayaran lain-lain & cicilan utang", () => {
     expect(TRANSFER_BEDA_RE.test("cicilan utang toko, transfer beda")).toBe(true);
     expect(TRANSFER_BEDA_RE.test("ini bukan double")).toBe(true);
     expect(TRANSFER_BEDA_RE.test("Ini bukti bayar cicil utang toko di tgl 10 oktober 2026")).toBe(false);
+  });
+
+  it("rekening dipisah dari tulisan supaya nomor rekening tidak terbaca sebagai nominal", () => {
+    const b = parseBarisMingguan("- Reimburse mas sarno 972.000 BCA 1234567890 a.n. Sarno");
+    expect(b?.nominal).toBe(972000);
+    expect(b?.rekening).toContain("1234567890");
+    expect(b?.deskripsi).not.toContain("1234567890");
+    const c = parseBarisMingguan("Cicilan Toko Besi & Kaca SEDIA NURUT 15 jt");
+    expect(c?.nominal).toBe(15000000);
+    expect(c?.rekening).toBeUndefined();
+    const d = parseBarisMingguan("Pasir 1,5 jt");
+    expect(d?.nominal).toBe(1500000);
+  });
+
+  it("pisahRekening: bank + nomor, nomor + bank, dan angka biasa", () => {
+    expect(pisahRekening("mami ini rekeningku ya REBECCA DINDA PRASAS Bank Mandiri 1640009977150").rekening).not.toBeNull();
+    expect(pisahRekening("BCA 037-301-1441 a.n. Anang").rekening).not.toBeNull();
+    expect(pisahRekening("transfer ke 7855066190 BCA a/n Irfan").rekening).not.toBeNull();
+    expect(pisahRekening("pasir 2 rit 1.600.000").rekening).toBeNull();
+    expect(pisahRekening("bca 1234567890 972.000").sisa).toContain("972.000");
+  });
+
+  it("balasan rekening: satu baris, bernomor, dan teks lain tidak diambil", () => {
+    expect(parseRekeningBalasan("BCA 1234567890 a.n. Sarno")).toEqual([{ no: null, rekening: "BCA 1234567890 a.n. Sarno" }]);
+    expect(parseRekeningBalasan("1. BCA 1234567890 a.n. Sarno\n2. Mandiri 9876543210 a.n. Toko Maju")).toEqual([
+      { no: 1, rekening: "BCA 1234567890 a.n. Sarno" },
+      { no: 2, rekening: "Mandiri 9876543210 a.n. Toko Maju" },
+    ]);
+    expect(parseRekeningBalasan("halo pak, besok saya kirim")).toBeNull();
+    expect(parseRekeningBalasan("saya sudah transfer 500 rb, ini buktinya")).toBeNull();
+  });
+
+  it("balasan rekening dan 'tanpa rekening' dikenali tanpa awalan L2; teks biasa tetap null", () => {
+    expect(parseLoonars2Perintah("BCA 1234567890 a.n. Sarno")?.aksi).toBe("rekening");
+    expect(parseLoonars2Perintah("L2 tanpa rekening")?.aksi).toBe("tanpa_rekening");
+    expect(parseLoonars2Perintah("selamat pagi")).toBeNull();
   });
 });
 
