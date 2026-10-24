@@ -3,7 +3,11 @@
 import * as React from "react";
 import {
   ArrowLeft,
+  CalendarPlus,
+  ClipboardCheck,
   ClipboardList,
+  Handshake,
+  MapPin,
   FileBarChart,
   ImagePlus,
   Loader2,
@@ -15,6 +19,7 @@ import {
   Send,
   ShieldCheck,
   Sunrise,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -23,13 +28,20 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { MEMBER_ROLE_LABELS, roleCan, type MemberRole, type SecurityKind } from "@/lib/hospitality/checklists";
+import { departmentKind, memberRoleLabel } from "@/lib/connect/labels";
+import type { ConnectReportData } from "@/lib/connect/report-types";
+import { roleCan, type SecurityKind } from "@/lib/hospitality/checklists";
 import { cn } from "@/lib/utils";
 import type { ChatConversation, ChatMessage, ChatRefs, IssueRef, RoomTaskRef } from "@/repositories/chat.repository";
+import { EMPTY_CONNECT_REFS, type MarkomOpenWork, type SalesOpenWork } from "@/repositories/connect.repository";
 
 import { generateReportNowAction, loadMessagesAction, loadOpenWorkAction, markReadAction, searchMessagesAction, sendTextAction } from "../actions/chat.actions";
+import { loadConnectWorkAction } from "../actions/connect.actions";
 import { AttachmentStrip, ChecklistCard, IssueCard, SystemLine, TaskCard } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
+import { ConnectReportCard, ContentPlanCard, DailyReportCard, KolCard, ProspectCard, PurchaseCard, VisitCard } from "./connect-cards";
+import { ContentPlanDialog, DailyReportDialog, KolDialog, LeadDialog } from "./connect-dialogs";
+import { MarkomWorkPanel, SalesWorkPanel } from "./connect-panels";
 import { avatarColor, dayKey, formatDateTime, formatDaySeparator, formatTime, initials } from "./chat-utils";
 import { ExtraEvidence, type UploadedEvidence } from "./evidence-picker";
 import { ReportCard } from "./report-card";
@@ -70,7 +82,30 @@ function CardShell({ children, tone }: { children: React.ReactNode; tone?: "aler
   );
 }
 
-function MessageView({ message, refs, isFeed }: { message: ChatMessage; refs: ChatRefs; isFeed: boolean }) {
+/** Markom/Sales record behind a message (0294), or null. */
+function connectCard(message: ChatMessage, refs: ChatRefs): React.ReactNode | null {
+  const id = message.refId;
+  if (!id) return null;
+  const c = refs.connect;
+  switch (message.refTable) {
+    case "content_plan":
+      return c.contentPlans[id] ? <ContentPlanCard plan={c.contentPlans[id]} /> : null;
+    case "kol":
+      return c.kols[id] ? <KolCard kol={c.kols[id]} /> : null;
+    case "prospect":
+      return c.prospects[id] ? <ProspectCard prospect={c.prospects[id]} /> : null;
+    case "visit":
+      return c.visits[id] ? <VisitCard visit={c.visits[id]} /> : null;
+    case "purchase":
+      return c.purchases[id] ? <PurchaseCard purchase={c.purchases[id]} /> : null;
+    case "daily_report":
+      return c.dailyReports[id] ? <DailyReportCard report={c.dailyReports[id]} /> : null;
+    default:
+      return null;
+  }
+}
+
+function MessageView({ message, refs, isFeed, reportTitle }: { message: ChatMessage; refs: ChatRefs; isFeed: boolean; reportTitle: string }) {
   const { userId, people } = useChat();
   const own = message.senderId === userId;
   const sender = message.senderId ? personName(people, message.senderId) : null;
@@ -102,11 +137,26 @@ function MessageView({ message, refs, isFeed }: { message: ChatMessage; refs: Ch
   const report = message.refTable === "report" && message.refId ? refs.reports[message.refId] : undefined;
 
   if (message.kind === "report_card" && report) {
+    const kind = (report.data as Partial<ConnectReportData> | null)?.kind;
     return (
       <CardShell tone="report">
-        <ReportCard report={report} />
+        {report.status === "success" && (kind === "markom" || kind === "sales") ? <ConnectReportCard report={report} title={reportTitle} /> : <ReportCard report={report} />}
       </CardShell>
     );
+  }
+  // Markom/Sales: the creating post (task / work report / Loonars 2 status)
+  // carries the live card; follow-up system posts stay one-line history.
+  if (message.kind === "task" || message.kind === "work_report" || message.kind === "alert" || message.refTable === "purchase") {
+    const card = connectCard(message, refs);
+    if (card) {
+      return (
+        <CardShell tone={message.kind === "alert" ? "report" : undefined}>
+          <p className="mb-2 text-xs text-muted-foreground">{message.body}</p>
+          {card}
+          {meta}
+        </CardShell>
+      );
+    }
   }
   if (message.kind === "task" && task) {
     return (
@@ -153,7 +203,21 @@ function MessageView({ message, refs, isFeed }: { message: ChatMessage; refs: Ch
   return <SystemLine body={message.body} at={message.createdAt} />;
 }
 
-function WorkPanel({ work, onClose }: { work: { tasks: RoomTaskRef[]; issues: IssueRef[] } | null; onClose: () => void }) {
+type HospitalityWork = { tasks: RoomTaskRef[]; issues: IssueRef[] };
+type AnyWork = HospitalityWork | MarkomOpenWork | SalesOpenWork;
+
+function isConnectWork(w: AnyWork): w is MarkomOpenWork | SalesOpenWork {
+  return "kind" in w;
+}
+
+function openWorkCount(w: AnyWork | null): number {
+  if (!w) return 0;
+  if (!isConnectWork(w)) return w.tasks.length + w.issues.length;
+  if (w.kind === "markom") return w.kols.filter((k) => k.status === "requested").length + w.content.filter((c) => c.plannedDate < w.today).length;
+  return w.leads.filter((l) => l.overdue).length + w.visits.length;
+}
+
+function WorkPanel({ work, onClose }: { work: AnyWork | null; onClose: () => void }) {
   return (
     <div className="flex h-full min-h-0 flex-col border-l bg-background">
       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -167,6 +231,12 @@ function WorkPanel({ work, onClose }: { work: { tasks: RoomTaskRef[]; issues: Is
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat…
           </p>
+        ) : isConnectWork(work) ? (
+          work.kind === "markom" ? (
+            <MarkomWorkPanel work={work} />
+          ) : (
+            <SalesWorkPanel work={work} />
+          )
         ) : (
           <>
             <p className="text-xs font-semibold uppercase text-muted-foreground">Kamar ({work.tasks.length})</p>
@@ -213,8 +283,9 @@ export function ChatRoom({
 }) {
   const { userId, myRole, isOwner, people } = useChat();
   const isFeed = conversation.kind === "owner_feed";
+  const deptKind = departmentKind(conversation.departmentCode);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  const [refs, setRefs] = React.useState<ChatRefs>({ tasks: {}, issues: {}, checklists: {}, reports: {} });
+  const [refs, setRefs] = React.useState<ChatRefs>({ tasks: {}, issues: {}, checklists: {}, reports: {}, connect: EMPTY_CONNECT_REFS });
   const [hasMore, setHasMore] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -223,10 +294,11 @@ export function ChatRoom({
   const [photos, setPhotos] = React.useState<UploadedEvidence[]>([]);
   const [showPhotos, setShowPhotos] = React.useState(false);
   const [sending, setSending] = React.useState(false);
-  const [work, setWork] = React.useState<{ tasks: RoomTaskRef[]; issues: IssueRef[] } | null>(null);
+  const [work, setWork] = React.useState<AnyWork | null>(null);
   const [showWork, setShowWork] = React.useState(false);
   const [securityKind, setSecurityKind] = React.useState<SecurityKind | null>(null);
   const [issueOpen, setIssueOpen] = React.useState(false);
+  const [connectDialog, setConnectDialog] = React.useState<"content" | "kol" | "lead" | "daily" | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [term, setTerm] = React.useState("");
   const [results, setResults] = React.useState<{ id: string; body: string; createdAt: string; senderId: string | null }[] | null>(null);
@@ -259,9 +331,9 @@ export function ChatRoom({
 
   const loadWork = React.useCallback(async () => {
     if (isFeed) return;
-    const r = await loadOpenWorkAction({ conversationId: conversation.id });
+    const r = deptKind === "hospitality" ? await loadOpenWorkAction({ conversationId: conversation.id }) : await loadConnectWorkAction({ conversationId: conversation.id });
     if (r.success && r.data) setWork(r.data);
-  }, [conversation.id, isFeed]);
+  }, [conversation.id, isFeed, deptKind]);
 
   const refresh = React.useCallback(() => {
     void load();
@@ -310,6 +382,14 @@ export function ChatRoom({
       issues: { ...older.refs.issues, ...prev.issues },
       checklists: { ...older.refs.checklists, ...prev.checklists },
       reports: { ...older.refs.reports, ...prev.reports },
+      connect: {
+        contentPlans: { ...older.refs.connect.contentPlans, ...prev.connect.contentPlans },
+        kols: { ...older.refs.connect.kols, ...prev.connect.kols },
+        prospects: { ...older.refs.connect.prospects, ...prev.connect.prospects },
+        visits: { ...older.refs.connect.visits, ...prev.connect.visits },
+        purchases: { ...older.refs.connect.purchases, ...prev.connect.purchases },
+        dailyReports: { ...older.refs.connect.dailyReports, ...prev.connect.dailyReports },
+      },
     }));
     setHasMore(older.hasMore);
   }
@@ -334,7 +414,7 @@ export function ChatRoom({
     setResults(r.data ?? []);
   }
 
-  const openWorkCount = (work?.tasks.length ?? 0) + (work?.issues.length ?? 0);
+  const workCount = openWorkCount(work);
   const canSecurity = roleCan(myRole, "security");
   const canLateCheckin = roleCan(myRole, "lateCheckin");
 
@@ -354,7 +434,7 @@ export function ChatRoom({
             <p className="truncate text-xs text-muted-foreground">
               {isFeed
                 ? "Laporan konsolidasi & peringatan kritis"
-                : `${conversation.memberCount} anggota${myRole ? ` · Anda: ${MEMBER_ROLE_LABELS[myRole as MemberRole] ?? myRole}` : ""}`}
+                : `${conversation.memberCount} anggota${myRole ? ` · Anda: ${memberRoleLabel(myRole, conversation.departmentCode)}` : ""}`}
             </p>
           </div>
           <Button size="icon" variant="ghost" onClick={() => setSearchOpen((s) => !s)} aria-label="Cari pesan">
@@ -363,8 +443,8 @@ export function ChatRoom({
           {!isFeed && (
             <Button size="sm" variant="outline" onClick={() => setShowWork(true)} className="gap-1">
               <ClipboardList className="h-4 w-4" />
-              <span className="hidden sm:inline">Pekerjaan</span>
-              {openWorkCount > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white">{openWorkCount}</span>}
+              <span className="hidden sm:inline">{deptKind === "markom" ? "Kalender & KOL" : deptKind === "sales" ? "Lead & kunjungan" : "Pekerjaan"}</span>
+              {workCount > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white">{workCount}</span>}
             </Button>
           )}
           {isOwner && isFeed && (
@@ -435,8 +515,14 @@ export function ChatRoom({
             <div className="flex h-full items-center justify-center">
               <p className="max-w-sm rounded-lg bg-[#fff8c5] px-4 py-2 text-center text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#8696a0]">
                 {isFeed
-                  ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
-                  : "Belum ada pesan. Tugas kamar setelah check-out muncul otomatis di sini."}
+                  ? deptKind === "hospitality"
+                    ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
+                    : "Belum ada laporan. Laporan akhir hari muncul di sini otomatis setiap malam."
+                  : deptKind === "markom"
+                    ? "Belum ada pesan. Susun kalender konten dan ajukan kamar KOL lewat tombol +."
+                    : deptKind === "sales"
+                      ? "Belum ada pesan. Lead baru dari CRM muncul otomatis di sini; catat follow-up dan kunjungan lewat kartunya."
+                      : "Belum ada pesan. Tugas kamar setelah check-out muncul otomatis di sini."}
               </p>
             </div>
           ) : (
@@ -459,7 +545,7 @@ export function ChatRoom({
                         </span>
                       </div>
                     )}
-                    <MessageView message={m} refs={refs} isFeed={isFeed} />
+                    <MessageView message={m} refs={refs} isFeed={isFeed} reportTitle={conversation.name} />
                   </React.Fragment>
                 );
               })}
@@ -470,7 +556,7 @@ export function ChatRoom({
         {/* Composer */}
         {isFeed ? (
           <p className="border-t bg-muted/60 px-3 py-3 text-center text-xs text-muted-foreground">
-            Feed ini hanya berisi laporan konsolidasi — percakapan operasional tetap di grup Hospitality.
+            Feed ini hanya berisi laporan konsolidasi — percakapan operasional tetap di grup {conversation.departmentName}.
           </p>
         ) : myRole ? (
           <div className="border-t bg-muted/60">
@@ -487,16 +573,50 @@ export function ChatRoom({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top" className="w-60">
-                  <DropdownMenuItem onSelect={() => setIssueOpen(true)}>
-                    <Megaphone className="mr-2 h-4 w-4" /> Lapor masalah / insiden
-                  </DropdownMenuItem>
-                  {(canSecurity || canLateCheckin) && <DropdownMenuSeparator />}
-                  {(canSecurity || canLateCheckin) && <DropdownMenuLabel className="text-xs">Laporan Security</DropdownMenuLabel>}
-                  {SECURITY_MENU.filter((s) => (s.kind === "security_late_checkin" ? canLateCheckin : canSecurity)).map((s) => (
-                    <DropdownMenuItem key={s.kind} onSelect={() => setSecurityKind(s.kind)}>
-                      <s.icon className="mr-2 h-4 w-4" /> {s.label}
-                    </DropdownMenuItem>
-                  ))}
+                  {deptKind === "hospitality" && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setIssueOpen(true)}>
+                        <Megaphone className="mr-2 h-4 w-4" /> Lapor masalah / insiden
+                      </DropdownMenuItem>
+                      {(canSecurity || canLateCheckin) && <DropdownMenuSeparator />}
+                      {(canSecurity || canLateCheckin) && <DropdownMenuLabel className="text-xs">Laporan Security</DropdownMenuLabel>}
+                      {SECURITY_MENU.filter((s) => (s.kind === "security_late_checkin" ? canLateCheckin : canSecurity)).map((s) => (
+                        <DropdownMenuItem key={s.kind} onSelect={() => setSecurityKind(s.kind)}>
+                          <s.icon className="mr-2 h-4 w-4" /> {s.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
+                  {deptKind === "markom" &&
+                    (myRole === "markom" ? (
+                      <>
+                        <DropdownMenuItem onSelect={() => setConnectDialog("content")}>
+                          <CalendarPlus className="mr-2 h-4 w-4" /> Rencana konten
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setConnectDialog("kol")}>
+                          <Handshake className="mr-2 h-4 w-4" /> Kolaborasi KOL (minta kamar)
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
+                      <DropdownMenuItem onSelect={() => setShowWork(true)}>
+                        <Handshake className="mr-2 h-4 w-4" /> Lihat KOL menunggu persetujuan
+                      </DropdownMenuItem>
+                    ))}
+                  {deptKind === "sales" && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setConnectDialog("lead")}>
+                        <UserPlus className="mr-2 h-4 w-4" /> Lead baru
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setShowWork(true)}>
+                        <MapPin className="mr-2 h-4 w-4" /> Follow-up / jadwalkan kunjungan
+                      </DropdownMenuItem>
+                      {myRole === "sales" && (
+                        <DropdownMenuItem onSelect={() => setConnectDialog("daily")}>
+                          <ClipboardCheck className="mr-2 h-4 w-4" /> Laporan harian
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               <button
@@ -542,6 +662,10 @@ export function ChatRoom({
       )}
 
       {securityKind && <SecurityDialog kind={securityKind} open onOpenChange={(o) => !o && setSecurityKind(null)} />}
+      {connectDialog === "content" && <ContentPlanDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
+      {connectDialog === "kol" && <KolDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
+      {connectDialog === "lead" && <LeadDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
+      {connectDialog === "daily" && <DailyReportDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
       {issueOpen && <IssueDialog open onOpenChange={setIssueOpen} defaultCategory={canSecurity && myRole === "security" ? "security" : "room"} />}
     </div>
   );

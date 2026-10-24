@@ -59,6 +59,9 @@ export function ChatApp({
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "mkc_chat_messages" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_hosp_room_tasks" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_hosp_issues" }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mkc_mkt_content_plans" }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mkc_mkt_kol_collabs" }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mkc_sales_visits" }, bump)
       .subscribe();
     const interval = window.setInterval(() => void reloadList(), LIST_REFRESH_MS);
     return () => {
@@ -138,7 +141,7 @@ export function ChatApp({
               </button>
             ))}
             {conversations.length === 0 && (
-              <p className="p-6 text-center text-sm text-muted-foreground">Anda belum tergabung di grup mana pun. Hubungi Hospitality Manager atau admin.</p>
+              <p className="p-6 text-center text-sm text-muted-foreground">Anda belum tergabung di grup mana pun. Hubungi atasan atau admin.</p>
             )}
           </div>
         </div>

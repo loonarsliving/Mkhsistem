@@ -1,5 +1,6 @@
 import "server-only";
 
+import { generateConnectReport, isConnectDepartment } from "@/lib/connect/connect-report-generator";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.types";
@@ -34,9 +35,9 @@ import { addDays, DEFAULT_TIMEZONE, localParts } from "./time";
  * never post two cards for the same period.
  */
 
-type Admin = ReturnType<typeof createAdminClient>;
+export type Admin = ReturnType<typeof createAdminClient>;
 
-interface Department {
+export interface Department {
   id: string;
   code: string;
   timezone: string;
@@ -61,7 +62,7 @@ function fromSnapshot<T>(section: unknown): SourceResult<T> {
   return { ok: true, fetchedAt: s.fetched_at ?? new Date().toISOString(), data: s.data as T };
 }
 
-async function loadDepartments(admin: Admin, code?: string): Promise<Department[]> {
+export async function loadDepartments(admin: Admin, code?: string): Promise<Department[]> {
   let q = admin.from("mkc_chat_departments").select("id, code, timezone, settings, created_at").eq("is_active", true);
   if (code) q = q.eq("code", code);
   const { data, error } = await q;
@@ -183,15 +184,28 @@ export async function generateHospitalityReport(
   }
 }
 
+/** Report generator for a department: Hospitality has its own; Markom/Sales Jogja share lib/connect. */
+async function generateFor(admin: Admin, dept: Department, periodKind: PeriodKind, reportDate: string, generatedBy: string | null = null) {
+  if (dept.code === "hospitality") return generateHospitalityReport(admin, dept, periodKind, reportDate, generatedBy);
+  if (isConnectDepartment(dept.code)) return generateConnectReport(admin, dept, periodKind, reportDate, generatedBy);
+  return { status: "skipped", reason: `belum ada laporan untuk departemen ${dept.code}` } satisfies GenerateOutcome;
+}
+
+/** Keep synced records current before reading them (each also has its own cron). */
+async function syncSources(admin: Admin) {
+  await admin.rpc("mkc_hosp_sync_room_tasks");
+  await admin.rpc("mkc_mkt_sync_kol");
+  await admin.rpc("mkc_sales_sync");
+}
+
 /** Cron entry point: generate every scheduled period that is due and not yet done, for every active department. */
 export async function dispatchDueHospitalityReports(now = new Date()): Promise<{ department: string; periodKind: string; reportDate: string; outcome: GenerateOutcome }[]> {
   const admin = createAdminClient();
-  // Keep room tasks current before reading them (also runs on its own 5-minute cron).
-  await admin.rpc("mkc_hosp_sync_room_tasks");
+  await syncSources(admin);
   const results: { department: string; periodKind: string; reportDate: string; outcome: GenerateOutcome }[] = [];
   for (const dept of await loadDepartments(admin)) {
     for (const due of duePeriods(dept.settings, dept.timezone, now)) {
-      const outcome = await generateHospitalityReport(admin, dept, due.periodKind, due.reportDate);
+      const outcome = await generateFor(admin, dept, due.periodKind, due.reportDate);
       results.push({ department: dept.code, periodKind: due.periodKind, reportDate: due.reportDate, outcome });
     }
   }
@@ -201,8 +215,8 @@ export async function dispatchDueHospitalityReports(now = new Date()): Promise<{
 /** "Buat laporan sekarang" -- caller's permission must already be checked. */
 export async function generateManualHospitalityReport(departmentCode: string, generatedBy: string): Promise<GenerateOutcome> {
   const admin = createAdminClient();
-  await admin.rpc("mkc_hosp_sync_room_tasks");
+  await syncSources(admin);
   const [dept] = await loadDepartments(admin, departmentCode);
   if (!dept) return { status: "skipped", reason: "departemen tidak ditemukan" };
-  return generateHospitalityReport(admin, dept, "manual", localParts(new Date(), dept.timezone).date, generatedBy);
+  return generateFor(admin, dept, "manual", localParts(new Date(), dept.timezone).date, generatedBy);
 }

@@ -20,3 +20,8 @@ psql -d t -f tests/sql/0291_hospitality/behavior_test.sql   # prints PASS/FAIL p
 ```
 
 Last run (2026-10-24, incl. 0295): 69 passed, 0 failed.
+
+## 0294 (Markom Jogja + Sales Jogja)
+
+On a separate fresh DB: `stubs.sql`, then `seed_0294.sql`, then migrations
+0291..0294, then `behavior_0294.sql`. Last run (2026-10-24): 40 passed, 0 failed.

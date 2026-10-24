@@ -76,7 +76,7 @@ select t_expect_error('markom: cannot list units', 'select mkc_hosp_units(''hosp
 
 -- ===================== as Owner =====================
 select set_config('request.jwt.claim.sub', :owner, false);
-select t_check('owner: sees only owner feed, not the group', (select jsonb_agg(x ->> 'kind') from jsonb_array_elements(mkc_chat_list()) x) = '["owner_feed"]'::jsonb);
+select t_check('owner: sees only owner feeds, never an operational group', (select bool_and(x ->> 'kind' = 'owner_feed') and count(*) >= 1 from jsonb_array_elements(mkc_chat_list()) x));
 select t_check('owner: no group messages', (select count(*) from mkc_chat_messages m join mkc_chat_conversations c on c.id = m.conversation_id where c.kind = 'operational_group') = 0);
 select t_check('owner: can open operational details (tasks)', (select count(*) from mkc_hosp_room_tasks) = 2);
 select t_expect_error('owner: cannot post into group', 'select mkc_chat_send_text((select id from mkc_chat_conversations where kind=''owner_feed''), ''x'')');
@@ -234,11 +234,12 @@ reset role;
 
 -- villa snapshot: stub has no bookings/villa_room_maintenance/cron.job_run_details -> those report ok:false, units ok
 select set_config('t.snap', mkc_hosp_report_villa_snapshot(now() - interval '1 day', now(), current_date)::text, false);
-select t_check('snapshot: units ok, missing sources reported as errors (not zero)',
+-- the stub has no cron.job_run_details, so 'jobs' must come back as an error, not as empty/zero
+select t_check('snapshot: available sources ok, a missing source reported as an error (not zero)',
   (current_setting('t.snap')::jsonb #>> '{units,ok}') = 'true'
-  and (current_setting('t.snap')::jsonb #>> '{bookings,ok}') = 'false'
-  and (current_setting('t.snap')::jsonb #>> '{maintenance,ok}') = 'false'
-  and (current_setting('t.snap')::jsonb #> '{bookings,error}') is not null);
+  and (current_setting('t.snap')::jsonb #>> '{bookings,ok}') = 'true'
+  and (current_setting('t.snap')::jsonb #>> '{jobs,ok}') = 'false'
+  and (current_setting('t.snap')::jsonb #> '{jobs,error}') is not null);
 set role authenticated;
 select set_config('request.jwt.claim.sub', :markom, false);
 select t_expect_error('markom: cannot call villa snapshot', 'select mkc_hosp_report_villa_snapshot(now(), now(), current_date)');

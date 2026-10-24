@@ -161,6 +161,194 @@ export type KpiRankingScopeDb = "weekly" | "monthly";
 export interface Database {
   public: {
     Tables: {
+      mkc_mkt_kol_collabs: {
+        Row: {
+          id: string;
+          department_id: string;
+          conversation_id: string;
+          kol_handle: string;
+          platform: string;
+          followers: number | null;
+          niche: string | null;
+          compensation: string;
+          requested_checkin: string;
+          nights: number;
+          deliverables: string[];
+          deliverables_done: Json;
+          notes: string | null;
+          status: string;
+          approved_unit_id: string | null;
+          approved_unit_nomor: string | null;
+          approved_checkin: string | null;
+          approved_nights: number | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          voucher_id: string | null;
+          voucher_kode: string | null;
+          voucher_valid_until: string | null;
+          booking_id: string | null;
+          booked_unit_nomor: string | null;
+          booked_checkin: string | null;
+          booked_checkout: string | null;
+          content_due_at: string | null;
+          completed_at: string | null;
+          cancel_reason: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          conversation_id?: string;
+          kol_handle?: string;
+          platform?: string;
+          followers?: number | null;
+          niche?: string | null;
+          compensation?: string;
+          requested_checkin?: string;
+          nights?: number;
+          deliverables?: string[];
+          deliverables_done?: Json;
+          notes?: string | null;
+          status?: string;
+          approved_unit_id?: string | null;
+          approved_unit_nomor?: string | null;
+          approved_checkin?: string | null;
+          approved_nights?: number | null;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          voucher_id?: string | null;
+          voucher_kode?: string | null;
+          voucher_valid_until?: string | null;
+          booking_id?: string | null;
+          booked_unit_nomor?: string | null;
+          booked_checkin?: string | null;
+          booked_checkout?: string | null;
+          content_due_at?: string | null;
+          completed_at?: string | null;
+          cancel_reason?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_mkt_kol_collabs"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_mkt_content_plans: {
+        Row: {
+          id: string;
+          department_id: string;
+          conversation_id: string;
+          planned_date: string;
+          platform: string;
+          format: string;
+          topic: string;
+          title: string;
+          brief: string | null;
+          pic_id: string;
+          kol_id: string | null;
+          status: string;
+          published_url: string | null;
+          published_at: string | null;
+          cancel_reason: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          conversation_id?: string;
+          planned_date?: string;
+          platform?: string;
+          format?: string;
+          topic?: string;
+          title?: string;
+          brief?: string | null;
+          pic_id?: string;
+          kol_id?: string | null;
+          status?: string;
+          published_url?: string | null;
+          published_at?: string | null;
+          cancel_reason?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_mkt_content_plans"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_sales_visits: {
+        Row: {
+          id: string;
+          department_id: string;
+          conversation_id: string;
+          prospect_id: string;
+          sales_id: string;
+          scheduled_at: string;
+          status: string;
+          interest: string | null;
+          note: string | null;
+          result_note: string | null;
+          follow_up_id: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          conversation_id?: string;
+          prospect_id?: string;
+          sales_id?: string;
+          scheduled_at?: string;
+          status?: string;
+          interest?: string | null;
+          note?: string | null;
+          result_note?: string | null;
+          follow_up_id?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_sales_visits"]["Insert"]>;
+        Relationships: [];
+      };
+      mkc_sales_daily_reports: {
+        Row: {
+          id: string;
+          department_id: string;
+          conversation_id: string;
+          sales_id: string;
+          report_date: string;
+          items: Json;
+          follow_ups: number;
+          visits: number;
+          hot_prospects: number;
+          notes: string | null;
+          message_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          department_id?: string;
+          conversation_id?: string;
+          sales_id?: string;
+          report_date?: string;
+          items?: Json;
+          follow_ups?: number;
+          visits?: number;
+          hot_prospects?: number;
+          notes?: string | null;
+          message_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mkc_sales_daily_reports"]["Insert"]>;
+        Relationships: [];
+      };
       mkc_chat_departments: {
         Row: {
           id: string;
@@ -6420,6 +6608,58 @@ export interface Database {
       };
     };
     Functions: {
+      mkc_mkt_sync_kol: { Args: Record<string, never>; Returns: number };
+      mkc_sales_sync: { Args: Record<string, never>; Returns: number };
+      mkc_mkt_report_snapshot: { Args: { p_department_id: string; p_from: string; p_to: string; p_local_date: string }; Returns: Json };
+      mkc_sales_report_snapshot: { Args: { p_department_id: string; p_from: string; p_to: string; p_local_date: string }; Returns: Json };
+      mkc_mkt_content_create: {
+        Args: {
+          p_department_code: string;
+          p_planned_date: string;
+          p_platform: string;
+          p_format: string;
+          p_topic: string;
+          p_title: string;
+          p_brief?: string | null;
+          p_pic_id?: string | null;
+          p_kol_id?: string | null;
+        };
+        Returns: string;
+      };
+      mkc_mkt_content_update: {
+        Args: { p_id: string; p_action: string; p_date?: string | null; p_url?: string | null; p_pic_id?: string | null; p_note?: string | null };
+        Returns: undefined;
+      };
+      mkc_mkt_kol_create: {
+        Args: {
+          p_department_code: string;
+          p_kol_handle: string;
+          p_platform: string;
+          p_followers: number | null;
+          p_niche: string | null;
+          p_compensation: string;
+          p_requested_checkin: string;
+          p_nights: number;
+          p_deliverables: string[];
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      mkc_mkt_kol_decide: {
+        Args: { p_kol_id: string; p_decision: string; p_unit_id?: string | null; p_checkin?: string | null; p_nights?: number | null; p_note?: string | null };
+        Returns: Json;
+      };
+      mkc_mkt_kol_update: { Args: { p_kol_id: string; p_action: string; p_key?: string | null; p_url?: string | null; p_note?: string | null }; Returns: undefined };
+      mkc_sales_post_lead: { Args: { p_department_code: string; p_prospect_id: string }; Returns: string };
+      mkc_sales_follow_up: { Args: { p_department_code: string; p_prospect_id: string; p_activity_type: string; p_notes?: string | null }; Returns: string };
+      mkc_sales_visit_schedule: { Args: { p_department_code: string; p_prospect_id: string; p_scheduled_at: string; p_note?: string | null }; Returns: string };
+      mkc_sales_visit_result: { Args: { p_visit_id: string; p_outcome: string; p_interest?: string | null; p_note?: string | null }; Returns: undefined };
+      mkc_sales_daily_report_submit: {
+        Args: { p_department_code: string; p_items: Json; p_follow_ups: number; p_visits: number; p_hot: number; p_notes?: string | null };
+        Returns: string;
+      };
+      mkc_sales_cards: { Args: { p_department_code: string; p_prospect_ids: string[]; p_visit_ids: string[]; p_purchase_ids: string[] }; Returns: Json };
+      mkc_sales_open_work: { Args: { p_department_code: string }; Returns: Json };
       mkc_chat_list: { Args: Record<string, never>; Returns: Json };
       mkc_chat_mark_read: { Args: { p_conversation_id: string }; Returns: undefined };
       mkc_chat_send_text: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: string };
