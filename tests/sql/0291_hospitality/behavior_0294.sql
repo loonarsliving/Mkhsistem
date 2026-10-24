@@ -84,7 +84,7 @@ select t_expect_error('second decision rejected', format('select mkc_mkt_kol_dec
 reset role;
 select t_check('voucher created in villa table exactly like villa-api (KOL-XXXXXX, nights, 3 months, mkconnect)',
   (select kode ~ '^KOL-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$' and malam_gratis = 2 and aktif and dibuat_lewat = 'mkconnect'
-          and berlaku_sampai = (current_date + interval '3 months')::date and untuk = '@kol.jogja'
+          and berlaku_sampai = ((now() at time zone 'Asia/Jakarta')::date + interval '3 months')::date and untuk = '@kol.jogja'
    from villa_kol_vouchers where id = (select voucher_id from mkc_mkt_kol_collabs where id = current_setting('t.k1')::uuid)));
 select t_check('kol approved with unit A2', (select status || '|' || approved_unit_nomor from mkc_mkt_kol_collabs where id = current_setting('t.k1')::uuid) = 'approved|A2');
 
