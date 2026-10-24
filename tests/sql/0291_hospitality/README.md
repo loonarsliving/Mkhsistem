@@ -15,7 +15,7 @@ columns mirrored from the live schema. It is NOT a migration.
 ```sh
 createdb t
 psql -d t -f tests/sql/0291_hospitality/stubs.sql
-psql -d t -v ON_ERROR_STOP=1 -f supabase/migrations/0291_loonars_connect_hospitality_chat.sql
+for f in supabase/migrations/029[1-9]_loonars_connect*.sql; do psql -d t -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d t -f tests/sql/0291_hospitality/behavior_test.sql   # prints PASS/FAIL per check
 ```
 
