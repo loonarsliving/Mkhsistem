@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ export function TargetManagementForm() {
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<SaveAndDistributeTargetInput>({
+  } = useForm<z.input<typeof saveAndDistributeTargetSchema>, unknown, SaveAndDistributeTargetInput>({
     resolver: zodResolver(saveAndDistributeTargetSchema),
     defaultValues: { branchId: "", periodMonth: month, periodYear: year, details: [{ ...EMPTY_ROW }] },
   });

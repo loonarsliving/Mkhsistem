@@ -4,6 +4,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ const EMPTY_VALUES = { dpAmount: undefined, handoverDate: "", pelunasanAmount: u
  * pays more on top of the booking fee. Resubmits the purchase to Finance's pending queue --
  * it does not claim a fee itself (DP still isn't fee-claimable, only Akad is, per 0204).
  */
+const dpFormSchema = siteplanDpFollowupSchema.omit({ purchaseId: true });
+
 export function DpFollowupDialog({ open, onOpenChange, purchaseId, onRecorded }: DpFollowupDialogProps) {
   const {
     register,
@@ -37,8 +40,8 @@ export function DpFollowupDialog({ open, onOpenChange, purchaseId, onRecorded }:
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<Omit<SiteplanDpFollowupInput, "purchaseId">>({
-    resolver: zodResolver(siteplanDpFollowupSchema.omit({ purchaseId: true })),
+  } = useForm<z.input<typeof dpFormSchema>, unknown, z.output<typeof dpFormSchema>>({
+    resolver: zodResolver(dpFormSchema),
     defaultValues: EMPTY_VALUES,
   });
 
@@ -70,7 +73,7 @@ export function DpFollowupDialog({ open, onOpenChange, purchaseId, onRecorded }:
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="dpAmount">Nominal DP</Label>
-            <Controller control={control} name="dpAmount" render={({ field }) => <CurrencyInput id="dpAmount" value={field.value} onValueChange={field.onChange} />} />
+            <Controller control={control} name="dpAmount" render={({ field }) => <CurrencyInput id="dpAmount" value={field.value as number | undefined} onValueChange={field.onChange} />} />
             {errors.dpAmount && <p className="text-sm text-destructive">{errors.dpAmount.message}</p>}
           </div>
           <div className="space-y-2">
@@ -78,7 +81,7 @@ export function DpFollowupDialog({ open, onOpenChange, purchaseId, onRecorded }:
             <Controller
               control={control}
               name="pelunasanAmount"
-              render={({ field }) => <CurrencyInput id="pelunasanAmount" value={field.value} onValueChange={field.onChange} />}
+              render={({ field }) => <CurrencyInput id="pelunasanAmount" value={field.value as number | undefined} onValueChange={field.onChange} />}
             />
           </div>
           <div className="space-y-2">

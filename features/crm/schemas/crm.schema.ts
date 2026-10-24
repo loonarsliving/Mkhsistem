@@ -7,7 +7,7 @@ export const addProspectSchema = z.object({
   phone: z.string().min(8, "Nomor telepon tidak valid").max(20),
   houseType: z.string().min(1, "Tipe rumah wajib diisi").max(100),
   city: z.string().min(1, "Kota wajib diisi").max(100),
-  leadSource: z.enum(Object.values(LEAD_SOURCE) as [string, ...string[]], { required_error: "Sumber prospek wajib dipilih" }),
+  leadSource: z.enum(Object.values(LEAD_SOURCE) as [string, ...string[]], { error: "Sumber prospek wajib dipilih" }),
   notes: z.string().max(2000).optional(),
 });
 export type AddProspectInput = z.infer<typeof addProspectSchema>;
@@ -15,7 +15,7 @@ export type AddProspectInput = z.infer<typeof addProspectSchema>;
 export const addFollowUpSchema = z.object({
   prospectId: z.string().uuid(),
   activityType: z.enum(Object.values(FOLLOW_UP_ACTIVITY_TYPE) as [string, ...string[]], {
-    required_error: "Jenis aktivitas wajib dipilih",
+    error: "Jenis aktivitas wajib dipilih",
   }),
   activityDate: z.string().min(1, "Tanggal wajib diisi"),
   activityTime: z.string().optional(),
@@ -25,7 +25,7 @@ export type AddFollowUpInput = z.infer<typeof addFollowUpSchema>;
 
 export const recordPaymentSchema = z.object({
   prospectId: z.string().uuid(),
-  paymentType: z.enum(Object.values(PAYMENT_TYPE) as [string, ...string[]], { required_error: "Jenis pembayaran wajib dipilih" }),
+  paymentType: z.enum(Object.values(PAYMENT_TYPE) as [string, ...string[]], { error: "Jenis pembayaran wajib dipilih" }),
   amount: z.coerce.number().positive("Jumlah harus lebih dari 0"),
   paymentDate: z.string().min(1, "Tanggal wajib diisi"),
   notes: z.string().max(2000).optional(),

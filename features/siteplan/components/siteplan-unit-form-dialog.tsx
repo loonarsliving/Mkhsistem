@@ -4,6 +4,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Lock } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ export function SiteplanUnitFormDialog({ trigger, projectId, initialValues, pric
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<SiteplanUnitInput>({
+  } = useForm<z.input<typeof siteplanUnitSchema>, unknown, SiteplanUnitInput>({
     resolver: zodResolver(siteplanUnitSchema),
     defaultValues: initialValues ?? { projectId, blok: "", tipe: "" },
   });
@@ -80,7 +81,7 @@ export function SiteplanUnitFormDialog({ trigger, projectId, initialValues, pric
               <Controller
                 control={control}
                 name="harga"
-                render={({ field }) => <CurrencyInput id="harga" value={field.value} onValueChange={field.onChange} disabled={priceLocked} />}
+                render={({ field }) => <CurrencyInput id="harga" value={field.value as number | undefined} onValueChange={field.onChange} disabled={priceLocked} />}
               />
               {priceLocked && <p className="text-xs text-muted-foreground">Harga unit ini terkunci dan tidak dapat diubah dari sini.</p>}
             </div>

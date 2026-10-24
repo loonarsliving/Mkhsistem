@@ -50,7 +50,7 @@ export const saveRefundCustomerSchema = z
     id: uuid.optional(),
     name: z.string().trim().min(1, "Nama customer wajib diisi").max(200),
     phone: optionalText,
-    refundAmount: z.number({ invalid_type_error: "Jumlah refund wajib diisi" }).min(0, "Tidak boleh negatif"),
+    refundAmount: z.number({ error: "Jumlah refund wajib diisi" }).min(0, "Tidak boleh negatif"),
     openingPaidAmount: z.number().min(0, "Tidak boleh negatif"),
     bankName: optionalText,
     bankAccountNumber: optionalText,
@@ -67,7 +67,7 @@ export const addInstallmentSchema = z.object({
   customerId: uuid,
   /** "YYYY-MM" from <input type="month"> */
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Bulan tidak valid"),
-  amount: z.number({ invalid_type_error: "Nominal wajib diisi" }).positive("Nominal harus lebih dari 0"),
+  amount: z.number({ error: "Nominal wajib diisi" }).positive("Nominal harus lebih dari 0"),
 });
 export type AddInstallmentInput = z.infer<typeof addInstallmentSchema>;
 

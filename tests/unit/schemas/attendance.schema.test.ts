@@ -101,7 +101,7 @@ describe("decideLeaveRequestSchema", () => {
 
   it("accepts a valid approval decision", () => {
     const result = decideLeaveRequestSchema.safeParse({
-      leaveRequestId: "11111111-1111-1111-1111-111111111111",
+      leaveRequestId: "11111111-1111-4111-8111-111111111111",
       approve: true,
     });
     expect(result.success).toBe(true);

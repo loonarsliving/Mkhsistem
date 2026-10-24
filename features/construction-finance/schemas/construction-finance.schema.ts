@@ -63,7 +63,7 @@ export type RecordConstructionFundTransferInput = z.infer<typeof recordConstruct
 const optionalNumber = (schema: z.ZodNumber) => z.preprocess((v) => (typeof v === "number" && Number.isNaN(v) ? undefined : v), schema.optional());
 
 export const syncTukangBorongonSchema = z.object({
-  proyek: z.enum(["LL", "AFP", "IH", "GCI", "GCR"], { errorMap: () => ({ message: "Pilih proyek" }) }),
+  proyek: z.enum(["LL", "AFP", "IH", "GCI", "GCR"], { error: "Pilih proyek" }),
   blok: z.string().trim().max(30).optional().or(z.literal("")),
   nama: z.string().trim().min(2, "Nama tukang wajib diisi").max(150),
   item: z.string().trim().max(200).optional().or(z.literal("")),

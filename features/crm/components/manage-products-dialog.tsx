@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Package, Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,7 @@ export function ManageProductsDialog() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<UpsertProductInput>({
+  } = useForm<z.input<typeof upsertProductSchema>, unknown, UpsertProductInput>({
     resolver: zodResolver(upsertProductSchema),
     defaultValues: { productName: "", category: "", unit: "unit", defaultPrice: 0, defaultCommission: 0, status: "active" },
   });

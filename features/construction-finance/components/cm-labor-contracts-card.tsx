@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, HardHat, Loader2, Plus, Sparkles } from "lucide-react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -68,7 +69,7 @@ function CreateContractorDialog({ onCreated }: { onCreated: () => void }) {
     handleSubmit,
     reset,
     formState: { isSubmitting },
-  } = useForm<CreateContractorInput>({ resolver: zodResolver(createContractorSchema), defaultValues: { fullName: "", contractorType: "tukang", phone: "" } });
+  } = useForm<z.input<typeof createContractorSchema>, unknown, CreateContractorInput>({ resolver: zodResolver(createContractorSchema), defaultValues: { fullName: "", contractorType: "tukang", phone: "" } });
 
   async function onSubmit(values: CreateContractorInput) {
     const result = await createContractorAction(values);
@@ -124,7 +125,7 @@ function CreateContractDialog({ projectId, contractors, projectUnits }: { projec
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateLaborContractInput>({
+  } = useForm<z.input<typeof createLaborContractSchema>, unknown, CreateLaborContractInput>({
     resolver: zodResolver(createLaborContractSchema),
     defaultValues: { projectId, unitId: "", contractorId: "", contractValue: undefined, retentionPct: 0, startDate: today(), targetCompletion: "", notes: "" },
   });
@@ -244,7 +245,7 @@ function SetWeightsDialog({ contract, wbsOptions }: { contract: LaborContractWit
     handleSubmit,
     watch,
     formState: { isSubmitting },
-  } = useForm<SetLaborContractWeightsInput>({
+  } = useForm<z.input<typeof setLaborContractWeightsSchema>, unknown, SetLaborContractWeightsInput>({
     resolver: zodResolver(setLaborContractWeightsSchema),
     defaultValues: { contractId: contract.id, weights: wbsOptions.map((w) => ({ projectWbsId: w.id, weightPct: 0 })) },
   });
@@ -319,7 +320,7 @@ function GeneratePaymentDialog({ contract }: { contract: LaborContractWithSummar
     register,
     handleSubmit,
     formState: { isSubmitting },
-  } = useForm<GenerateLaborPaymentInput>({ resolver: zodResolver(generateLaborPaymentSchema), defaultValues: { contractId: contract.id, periodStart: "", periodEnd: "" } });
+  } = useForm<z.input<typeof generateLaborPaymentSchema>, unknown, GenerateLaborPaymentInput>({ resolver: zodResolver(generateLaborPaymentSchema), defaultValues: { contractId: contract.id, periodStart: "", periodEnd: "" } });
 
   async function onSubmit(values: GenerateLaborPaymentInput) {
     const result = await generateLaborPaymentAction(values);
@@ -375,7 +376,7 @@ function ApplyAdvanceDialog({ contract }: { contract: LaborContractWithSummary }
     handleSubmit,
     reset,
     formState: { isSubmitting },
-  } = useForm<ApplyLaborAdvanceInput>({ resolver: zodResolver(applyLaborAdvanceSchema), defaultValues: { contractId: contract.id, amount: undefined, note: "" } });
+  } = useForm<z.input<typeof applyLaborAdvanceSchema>, unknown, ApplyLaborAdvanceInput>({ resolver: zodResolver(applyLaborAdvanceSchema), defaultValues: { contractId: contract.id, amount: undefined, note: "" } });
 
   async function onSubmit(values: ApplyLaborAdvanceInput) {
     const result = await applyLaborAdvanceAction(values);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Wallet } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ export function RecordPaymentDialog({ prospectId }: { prospectId: string }) {
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<RecordPaymentInput>({
+  } = useForm<z.input<typeof recordPaymentSchema>, unknown, RecordPaymentInput>({
     resolver: zodResolver(recordPaymentSchema),
     defaultValues: {
       prospectId,

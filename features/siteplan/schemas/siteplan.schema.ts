@@ -11,10 +11,10 @@ export const siteplanPurchaseSchema = z
     phone: z.string().max(32).optional(),
     address: z.string().max(500).optional(),
     transactionType: z.enum(Object.values(SITEPLAN_TRANSACTION_TYPE) as [string, ...string[]], {
-      required_error: "Tipe transaksi wajib dipilih",
+      error: "Tipe transaksi wajib dipilih",
     }),
     paymentMethod: z.enum(Object.values(SITEPLAN_PAYMENT_METHOD) as [string, ...string[]], {
-      required_error: "Metode pembayaran wajib dipilih",
+      error: "Metode pembayaran wajib dipilih",
     }),
     price: z.coerce.number().positive("Harga wajib diisi").optional(),
     bookingFee: z.coerce.number().nonnegative().optional(),

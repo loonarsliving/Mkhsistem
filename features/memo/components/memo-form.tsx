@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ export function MemoForm() {
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<MemoFormInput>({
+  } = useForm<z.input<typeof memoFormSchema>, unknown, MemoFormInput>({
     resolver: zodResolver(memoFormSchema),
     defaultValues: {
       title: "",
@@ -116,7 +117,7 @@ export function MemoForm() {
               control={control}
               name="attachments"
               render={({ field }) => (
-                <FileUploadField bucket={STORAGE_BUCKETS.MEMO_ATTACHMENTS} value={field.value} onChange={field.onChange} />
+                <FileUploadField bucket={STORAGE_BUCKETS.MEMO_ATTACHMENTS} value={field.value ?? []} onChange={field.onChange} />
               )}
             />
           </div>

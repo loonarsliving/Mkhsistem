@@ -4,6 +4,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Send } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ export function TukangBorongonSyncCard() {
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<SyncTukangBorongonInput>({
+  } = useForm<z.input<typeof syncTukangBorongonSchema>, unknown, SyncTukangBorongonInput>({
     resolver: zodResolver(syncTukangBorongonSchema),
     defaultValues: emptyValues,
   });

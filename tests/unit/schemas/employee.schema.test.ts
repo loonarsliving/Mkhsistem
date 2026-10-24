@@ -6,10 +6,10 @@ const validCreate = {
   employeeCode: "EMP-0099",
   fullName: "Budi Santoso",
   email: "budi@haluoleo.id",
-  branchId: "11111111-1111-1111-1111-111111111111",
+  branchId: "11111111-1111-4111-8111-111111111111",
   divisionId: null,
   positionId: null,
-  roleId: "22222222-2222-2222-2222-222222222222",
+  roleId: "22222222-2222-4222-8222-222222222222",
   gender: "male" as const,
   joinDate: "2026-01-15",
 };
@@ -43,7 +43,7 @@ describe("createEmployeeSchema", () => {
 describe("updateEmployeeSchema", () => {
   const validUpdate = {
     ...validCreate,
-    id: "33333333-3333-3333-3333-333333333333",
+    id: "33333333-3333-4333-8333-333333333333",
     employmentStatus: "active" as const,
   };
 

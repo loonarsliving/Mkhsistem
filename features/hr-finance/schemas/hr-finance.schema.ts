@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createHrExpenseSchema = z.object({
-  expenseType: z.enum(["bonus", "reimbursement", "other"], { required_error: "Jenis pengeluaran wajib dipilih" }),
+  expenseType: z.enum(["bonus", "reimbursement", "other"], { error: "Jenis pengeluaran wajib dipilih" }),
   employeeId: z.string().uuid("Karyawan wajib dipilih"),
   branchId: z.string().uuid("Cabang wajib dipilih"),
   amount: z.coerce.number().positive("Jumlah harus lebih dari 0"),

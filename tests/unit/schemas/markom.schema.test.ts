@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { assignChecklistSchema, updateTaskSchema, verifyTaskSchema } from "@/features/markom/schemas/markom.schema";
 
 const validAssign = {
-  branchId: "11111111-1111-1111-1111-111111111111",
+  branchId: "11111111-1111-4111-8111-111111111111",
   periodYear: 2026,
   periodMonth: 8,
   periodWeek: 2,
@@ -44,7 +44,7 @@ describe("assignChecklistSchema", () => {
 describe("updateTaskSchema", () => {
   it("accepts a valid update", () => {
     const result = updateTaskSchema.safeParse({
-      taskId: "11111111-1111-1111-1111-111111111111",
+      taskId: "11111111-1111-4111-8111-111111111111",
       title: "5 Instagram Reels (revised)",
       description: "Updated brief",
       dueDate: "2026-08-15",
@@ -54,20 +54,20 @@ describe("updateTaskSchema", () => {
 
   it("rejects an empty title", () => {
     expect(
-      updateTaskSchema.safeParse({ taskId: "11111111-1111-1111-1111-111111111111", title: "A" }).success,
+      updateTaskSchema.safeParse({ taskId: "11111111-1111-4111-8111-111111111111", title: "A" }).success,
     ).toBe(false);
   });
 });
 
 describe("verifyTaskSchema", () => {
   it("accepts completed with no notes", () => {
-    const result = verifyTaskSchema.safeParse({ taskId: "11111111-1111-1111-1111-111111111111", status: "completed" });
+    const result = verifyTaskSchema.safeParse({ taskId: "11111111-1111-4111-8111-111111111111", status: "completed" });
     expect(result.success).toBe(true);
   });
 
   it("accepts rejected with notes", () => {
     const result = verifyTaskSchema.safeParse({
-      taskId: "11111111-1111-1111-1111-111111111111",
+      taskId: "11111111-1111-4111-8111-111111111111",
       status: "rejected",
       notes: "Belum sesuai brief",
     });
@@ -76,7 +76,7 @@ describe("verifyTaskSchema", () => {
 
   it("rejects an invalid status value", () => {
     expect(
-      verifyTaskSchema.safeParse({ taskId: "11111111-1111-1111-1111-111111111111", status: "done" }).success,
+      verifyTaskSchema.safeParse({ taskId: "11111111-1111-4111-8111-111111111111", status: "done" }).success,
     ).toBe(false);
   });
 });
