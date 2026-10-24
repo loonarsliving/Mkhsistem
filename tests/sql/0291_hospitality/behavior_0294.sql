@@ -176,5 +176,20 @@ select mkc_hosp_report_finish(current_setting('t.r')::uuid, '{"kind":"sales"}', 
 select t_check('sales report notifies owner as "Laporan Sales Jogja" (daily_report)',
   exists (select 1 from mkc_notifications where user_id = :owner::uuid and title = 'Laporan Sales Jogja' and category = 'daily_report' and type = 'system'));
 
+reset role;
+-- 0297: realtime -- a new JOG lead reaches the Sales group the moment it is saved (no cron), and the pulse moves
+select set_config('t.pulse0', (select changed_at::text from mkc_connect_pulse p join mkc_chat_departments d on d.id = p.department_id where d.code = 'sales_jogja'), false);
+insert into prospects (id, customer_name, phone, house_type, city, lead_source, sales_id, branch_id)
+values ('30000000-0000-0000-0000-000000000097', 'Lead Realtime', '081200000097', 'Avara', 'Sleman', 'instagram', :ayu::uuid, (select id from branches where code = 'JOG'));
+select t_check('0297: new CRM lead posted to the Sales group at commit, no sync call',
+  exists (select 1 from mkc_chat_messages where dedupe_key = 'lead:30000000-0000-0000-0000-000000000097'));
+select t_check('0297: sales pulse bumped for the live report',
+  (select changed_at from mkc_connect_pulse p join mkc_chat_departments d on d.id = p.department_id where d.code = 'sales_jogja') > current_setting('t.pulse0')::timestamptz);
+set role authenticated;
+select set_config('request.jwt.claim.sub', :ayu, false);
+select t_check('0297: pulse readable like the department (Sales member sees only Sales)',
+  (select string_agg(d.code, ',') from mkc_connect_pulse p join mkc_chat_departments d on d.id = p.department_id) = 'sales_jogja');
+reset role;
+
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

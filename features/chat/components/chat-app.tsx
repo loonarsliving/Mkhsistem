@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +11,7 @@ import type { ChatConversation, ChatPerson, ChatUnit } from "@/repositories/chat
 
 import { listConversationsAction } from "../actions/chat.actions";
 import { ChatContextProvider } from "./chat-context";
+import { ChatNotificationPrompt } from "./chat-notification-prompt";
 import { ChatRoom, ConversationAvatar } from "./chat-room";
 import { formatListStamp } from "./chat-utils";
 
@@ -44,9 +46,61 @@ export function ChatApp({
     if (r.success && r.data) setConversations(r.data);
   }, []);
 
+  const select = React.useCallback(
+    (id: string | null) => {
+      setSelectedId(id);
+      router.replace(id ? `${pathname}?c=${id}` : pathname, { scroll: false });
+    },
+    [router, pathname],
+  );
+  const selectRef = React.useRef(select);
+  React.useEffect(() => {
+    selectRef.current = select;
+  }, [select]);
+
+  // Read by the realtime handler without re-subscribing on every change.
+  const selectedRef = React.useRef(selectedId);
+  const conversationsRef = React.useRef(conversations);
+  React.useEffect(() => {
+    selectedRef.current = selectedId;
+  }, [selectedId]);
+  React.useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  // App-icon badge = unread messages across conversations, like WhatsApp
+  // (iOS home-screen app / installed PWA; skipped where unsupported).
+  React.useEffect(() => {
+    const total = conversations.reduce((sum, c) => sum + c.unread, 0);
+    const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    if (total > 0) void nav.setAppBadge?.(total).catch(() => {});
+    else void nav.clearAppBadge?.().catch(() => {});
+  }, [conversations]);
+
+  // Opening a conversation clears its phone notifications (0297 tags them chat-<id>).
+  React.useEffect(() => {
+    if (!selectedId || !("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.getRegistration("/sw.js").then((reg) =>
+      reg?.getNotifications({ tag: `chat-${selectedId}` }).then((list) => list.forEach((n) => n.close())),
+    );
+  }, [selectedId]);
+
   // Realtime: RLS-scoped, so each user only receives rows they may read.
   React.useEffect(() => {
     let timer: number | undefined;
+    // In-app banner for a message in another conversation (the open one shows it directly).
+    const onMessage = (payload: { new: Record<string, unknown> }) => {
+      const m = payload.new;
+      const conversationId = String(m.conversation_id ?? "");
+      if (!m.sender_id || m.sender_id === userId || conversationId === selectedRef.current) return;
+      const conv = conversationsRef.current.find((c) => c.id === conversationId);
+      if (!conv) return;
+      const text = String(m.body ?? "").trim() || "📷 Foto";
+      toast(conv.name, {
+        description: text.length > 120 ? `${text.slice(0, 117)}…` : text,
+        action: { label: "Buka", onClick: () => selectRef.current(conversationId) },
+      });
+    };
     const bump = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
@@ -56,12 +110,17 @@ export function ChatApp({
     };
     const channel = supabase
       .channel(`loonars-connect:${userId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mkc_chat_messages" }, bump)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mkc_chat_messages" }, (payload) => {
+        onMessage(payload as unknown as { new: Record<string, unknown> });
+        bump();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_hosp_room_tasks" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_hosp_issues" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_mkt_content_plans" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_mkt_kol_collabs" }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "mkc_sales_visits" }, bump)
+      // 0297: CRM leads, follow-ups, Loonars 2 bookings, daily reports, KOL bookings
+      .on("postgres_changes", { event: "*", schema: "public", table: "mkc_connect_pulse" }, bump)
       .subscribe();
     const interval = window.setInterval(() => void reloadList(), LIST_REFRESH_MS);
     return () => {
@@ -71,13 +130,6 @@ export function ChatApp({
     };
   }, [supabase, userId, reloadList]);
 
-  const select = React.useCallback(
-    (id: string | null) => {
-      setSelectedId(id);
-      router.replace(id ? `${pathname}?c=${id}` : pathname, { scroll: false });
-    },
-    [router, pathname],
-  );
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
@@ -111,6 +163,7 @@ export function ChatApp({
             <p className="font-semibold">Chat</p>
             <p className="text-xs text-muted-foreground">Loonars Connect</p>
           </div>
+          <ChatNotificationPrompt />
           <div className="min-h-0 flex-1 overflow-y-auto">
             {conversations.map((c) => (
               <button

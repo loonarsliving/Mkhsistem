@@ -135,7 +135,12 @@ export type NotificationCategoryDb =
   | "construction_project_weekly_report"
   // Refund & Customer Relation module (migration 0287)
   | "refund_reminder"
-  | "refund_customer_message";
+  | "refund_customer_message"
+  // Loonars Connect (migrations 0291, 0294, 0297)
+  | "hospitality_task"
+  | "hospitality_report"
+  | "hospitality_critical_alert"
+  | "chat_message";
 export type NotificationStatusDb = "unread" | "read" | "archived";
 export type AuditActionDb = "INSERT" | "UPDATE" | "DELETE";
 export type ProspectStatusDb = "red" | "yellow" | "green" | "closing" | "inactive";
@@ -6660,6 +6665,7 @@ export interface Database {
       };
       mkc_sales_cards: { Args: { p_department_code: string; p_prospect_ids: string[]; p_visit_ids: string[]; p_purchase_ids: string[] }; Returns: Json };
       mkc_sales_open_work: { Args: { p_department_code: string }; Returns: Json };
+      mkc_chat_unread_total: { Args: { p_employee_id: string }; Returns: number };
       mkc_chat_list: { Args: Record<string, never>; Returns: Json };
       mkc_chat_mark_read: { Args: { p_conversation_id: string }; Returns: undefined };
       mkc_chat_send_text: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: string };

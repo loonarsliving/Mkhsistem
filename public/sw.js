@@ -26,11 +26,16 @@ self.addEventListener("push", (event) => {
   // sender as the title ("Pesan dari ...") and the message itself as the
   // body -- instead of the generic "MK Connect" + title.
   const isRefundChat = payload.category === "refund_customer_message";
-  const title = isRefundChat ? payload.body || "Pesan customer refund" : payload.title || "MK Connect";
-  const body = isRefundChat ? payload.detail || "" : payload.body || "";
+  // Loonars Connect group chat (0297): same WhatsApp shape -- "Sender ·
+  // Group" as the title, the message as the body -- and one notification per
+  // conversation (payload.tag) that each new message replaces and re-alerts.
+  const isGroupChat = payload.category === "chat_message";
+  const isChat = isRefundChat || isGroupChat;
+  const title = isChat ? payload.body || "Pesan baru" : payload.title || "MK Connect";
+  const body = isChat ? payload.detail || "" : payload.body || "";
   const link = payload.link || "/notifications";
 
-  // Home-screen icon badge (refund chat unread count, see /api/push/send).
+  // Home-screen icon badge (refund chat / group chat unread count, see /api/push/send).
   // setAppBadge exists on iOS 16.4+ home-screen apps and installed PWAs;
   // elsewhere it's simply skipped.
   const badgeUpdate =
@@ -44,7 +49,8 @@ self.addEventListener("push", (event) => {
       icon: "/images/icon-192.png",
       badge: "/images/icon-192.png",
       timestamp: payload.timestamp || Date.now(),
-      tag: payload.notificationId || undefined,
+      tag: payload.tag || payload.notificationId || undefined,
+      renotify: Boolean(payload.tag),
       data: { link },
     })]),
   );

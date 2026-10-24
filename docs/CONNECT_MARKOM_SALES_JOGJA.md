@@ -183,6 +183,45 @@ report for today so far**. It uses the same snapshot RPC and the same
 - It also refreshes every minute, because CRM leads have no realtime, and
   when the tab becomes visible again.
 
+## Realtime + WhatsApp-style chat push (0297)
+
+**Chat push**
+- Every message a person sends in an operational group (text, photo, or a
+  card they created) creates a `chat_message` notification for each of the
+  group's other active members.
+- The existing push pipeline (`mkc_notifications` trigger →
+  `/api/push/send` → `public/sw.js`) shows it like WhatsApp:
+  - "Sender · Group" as the title and the message as the body;
+  - one notification per conversation (tag `chat-<id>`), which each new
+    message replaces and re-alerts;
+  - the unread total (`mkc_chat_unread_total`) as the app-icon badge.
+- The rows are stored `archived`, so chat doesn't flood the bell.
+- `chat_message` is not on the WhatsApp-relay allowlist, so no WhatsApp
+  message is sent.
+- The trigger is deferred to commit and skips anyone a workflow
+  notification already reached in the same transaction, so there are no
+  double pushes. Errors never block a message.
+
+**In the app**
+- A message in another conversation shows an in-app banner with "Buka".
+- The app-icon badge follows the unread total.
+- Opening a conversation clears its phone notifications.
+- The chat list offers "Aktifkan notifikasi". iPhone only grants permission
+  from a tap, and only for a home-screen app; the banner says so.
+
+**Realtime pulse**
+- `mkc_connect_pulse` (realtime, readable like the department) is bumped by
+  deferred, error-safe triggers on:
+  - CRM leads and follow-ups;
+  - Loonars 2 bookings;
+  - sales visits and daily reports;
+  - Markom content plans and KOLs;
+  - KOL-voucher villa bookings.
+- The same triggers run the Sales / KOL group sync, so a new lead or a KOL
+  check-in reaches the group at once.
+- The live report refreshes within about 5 s of a pulse. The minute poll and
+  the 10-minute cron stay as safety nets.
+
 ## Rules carried over from Hospitality
 
 - Numbers are computed in code (`lib/connect/*-report.ts`) from SQL snapshots

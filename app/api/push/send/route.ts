@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
   const { data: notification, error: notificationError } = await supabase
     .from("mkc_notifications")
-    .select("id, user_id, type, category, title, body, link, created_at")
+    .select("id, user_id, type, category, title, body, link, metadata, created_at")
     .eq("id", notificationId)
     .single();
 
@@ -92,7 +92,19 @@ export async function POST(request: Request) {
     badge = count ?? undefined;
   }
 
+  // Loonars Connect chat (0297): WhatsApp-style -- badge = the person's
+  // unread chat messages, and one notification per conversation (tag) that a
+  // newer message replaces instead of stacking up.
+  let tag: string | undefined;
+  if (notification.category === "chat_message") {
+    const { data: unread } = await supabase.rpc("mkc_chat_unread_total", { p_employee_id: notification.user_id });
+    badge = typeof unread === "number" ? unread : undefined;
+    const conversationId = (notification.metadata as { conversation_id?: string } | null)?.conversation_id;
+    tag = conversationId ? `chat-${conversationId}` : undefined;
+  }
+
   const payload = JSON.stringify({
+    tag,
     badge,
     title: "MK Connect",
     body: notification.title,
