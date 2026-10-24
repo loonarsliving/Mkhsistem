@@ -300,5 +300,35 @@ select t_check('0296: sync error is swallowed, villa checkout still committed',
   and not exists (select 1 from mkc_hosp_room_tasks where unit_nomor = 'D2'));
 update mkc_chat_departments set settings = settings - 'cleaning_target_minutes' where code = 'hospitality';
 reset role;
+
+-- 0297: workflow cards earlier in this suite (cleaning hand-off, FO decision, incidents) already notified their
+-- targets; those targets must not get a second, chat_message push for the same transaction
+select t_check('0297: no double push -- chat push skips people a workflow notification already reached',
+  (select count(*) from mkc_notifications c join mkc_notifications w on w.user_id = c.user_id and w.created_at = c.created_at
+    where c.category = 'chat_message' and w.category is distinct from 'chat_message') = 0
+  and (select count(*) from mkc_notifications where category = 'chat_message') > 0);
+-- 0297: WhatsApp-style chat push -- a member's message notifies the other members (archived: push only, not the bell)
+delete from mkc_notifications;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :sec1, false);
+select mkc_chat_send_text((select id from mkc_chat_conversations where kind = 'operational_group' and department_id = (select id from mkc_chat_departments where code = 'hospitality')), 'Gerbang depan sudah dikunci');
+reset role;
+select t_check('0297: text message -> chat_message push for every other active member, not the sender',
+  (select count(*) from mkc_notifications where category = 'chat_message' and user_id = :sec1::uuid) = 0
+  and (select count(*) from mkc_notifications where category = 'chat_message') =
+      (select count(*) from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id
+        where c.kind = 'operational_group' and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')
+          and m.removed_at is null and m.employee_id <> :sec1::uuid and mkc_chat_employee_eligible(m.employee_id))
+  and (select count(*) from mkc_notifications where category = 'chat_message') > 0);
+select t_check('0297: chat push is WhatsApp-shaped and stays out of the bell',
+  (select bool_and(status = 'archived' and is_read and title like '% · Hospitality Loonars' and body = 'Gerbang depan sudah dikunci'
+                   and link like '/chat?c=%' and type = 'system') from mkc_notifications where category = 'chat_message'));
+select t_check('0297: push trigger fired for each chat notification',
+  (select count(*) from automation_calls where path = '/api/push/send' and (body->>'notification_id')::uuid in (select id from mkc_notifications where category = 'chat_message'))
+  = (select count(*) from mkc_notifications where category = 'chat_message'));
+select t_check('0297: unread badge counts the new message for a member, not for the sender',
+  mkc_chat_unread_total(:cln1::uuid) >= 1
+  and mkc_chat_unread_total(:sec1::uuid) < mkc_chat_unread_total(:cln1::uuid));
+reset role;
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

@@ -3,6 +3,18 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Connect: notifikasi chat ala WhatsApp + realtime (0297) — 2026-10-24
+
+Pesan grup dari orang → notifikasi push `chat_message` ke anggota lain
+(judul "Pengirim · Grup", satu notifikasi per percakapan, badge belum dibaca),
+tersimpan `archived` (tidak memenuhi lonceng), tidak dikirim ke WhatsApp.
+`mkc_connect_pulse` + trigger aman membuat lead CRM/tanda jadi/kunjungan/
+laporan harian/KOL langsung masuk grup dan laporan live. Catatan: push hanya
+sampai ke HP yang sudah mengizinkan notifikasi (cek 2026-10-24: 6 dari 16
+anggota grup punya langganan push); halaman chat kini punya tombol
+"Aktifkan notifikasi". Aplikasi Android (Capacitor) belum punya pengirim FCM
+di server, jadi push hanya lewat browser/aplikasi Layar Utama.
+
 ## Loonars Connect: Markom Jogja + Sales Jogja — DITERAPKAN (2026-10-24)
 
 Branch `claude/connect-markom-sales-jogja`, migrasi

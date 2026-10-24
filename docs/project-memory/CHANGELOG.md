@@ -6,6 +6,16 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-24 — Loonars Connect: notifikasi chat ala WhatsApp + realtime (0297)
+
+`0297_loonars_connect_chat_push_realtime.sql`: pesan grup → push ke HP anggota
+lain (kategori `chat_message`, tersimpan `archived` agar lonceng tidak penuh,
+tanpa WhatsApp), badge ikon = total belum dibaca, tanpa push ganda; tabel
+`mkc_connect_pulse` + trigger aman di CRM/Loonars 2/kunjungan/laporan
+harian/konten/KOL/booking KOL agar grup Sales/Markom dan laporan live langsung
+ikut. App: banner in-app, badge, notifikasi percakapan dibersihkan saat
+dibuka, tombol "Aktifkan notifikasi". Uji SQL 77/77 + 43/43.
+
 ## 2026-10-24 — Loonars Connect: laporan live Markom/Sales di feed owner
 
 Kartu "Live hari ini" di atas feed Laporan Markom/Sales Jogja: dihitung dari

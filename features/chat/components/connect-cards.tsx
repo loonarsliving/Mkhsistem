@@ -524,16 +524,17 @@ export function ConnectReportCard({ report, title }: { report: ReportRef; title:
   );
 }
 
-/** Live report refresh: on activity (realtime) at most every 15s, otherwise every minute. */
-const LIVE_MIN_GAP_MS = 15_000;
+/** Live report refresh: on activity (realtime pulse, 0297) at most every 5s, otherwise every minute. */
+const LIVE_MIN_GAP_MS = 5_000;
 const LIVE_POLL_MS = 60_000;
 
 /**
  * Pinned at the top of a Markom/Sales owner feed: today so far, computed on
  * the server with the same rules as the 20:00 report (lib/connect), not
  * stored. Refreshes when the room's realtime listener bumps `reloadToken`
- * (content, KOL, visits), every minute (CRM leads have no realtime), and
- * when the tab becomes visible again.
+ * (content, KOL, visits, and the 0297 pulse that CRM leads / follow-ups,
+ * Loonars 2 bookings, daily reports and KOL villa bookings move), every
+ * minute as a safety net, and when the tab becomes visible again.
  */
 export function LiveConnectReportCard({ conversationId, title, reloadToken }: { conversationId: string; title: string; reloadToken: number }) {
   const [data, setData] = React.useState<ConnectReportData | null>(null);
