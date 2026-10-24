@@ -48,6 +48,8 @@ export type Loonars2Aksi =
   | "utang"
   | "daftar_utang"
   | "laporan_utang"
+  | "rekening"
+  | "tanpa_rekening"
   | "ajukan_mingguan"
   | "putuskan_kode"
   | "bayar_kelompok"
@@ -152,15 +154,68 @@ function bersihkan(teks: string): string {
   return teks.replace(UNIT_SEMUA_RE, " ").replace(UANG_RE, " ").replace(/\s+/g, " ").replace(/^[\s,:;-]+|[\s,:;-]+$/g, "").trim();
 }
 
-export type BarisMingguan = { jenis: "cicilan" | "tukang" | "material" | "lain" | "retensi"; toko?: string; unit?: string[]; deskripsi: string; nominal: number | null };
+export type BarisMingguan = {
+  jenis: "cicilan" | "tukang" | "material" | "lain" | "retensi";
+  toko?: string;
+  unit?: string[];
+  deskripsi: string;
+  nominal: number | null;
+  /** Tulisan pelaksana yang memuat rekening tujuan (database yang membaca bank/nomor/a.n.). */
+  rekening?: string;
+};
+
+// ---------------------------------------------------------------------------
+// Rekening tujuan (bank + nomor [+ a.n.]) di tulisan pelaksana
+// ---------------------------------------------------------------------------
+const BANK_RE = "bca|bri|bni|bsi|btn|btpn|mandiri|danamon|cimb(?:\\s+niaga)?|permata|panin|mega|ocbc|maybank|jago|seabank|jenius|sultra|bpd(?:\\s+[a-z]+)?|dana|ovo|gopay|shopeepay";
+const NOREK_RE = "(?:\\d{6,18}|\\d{3,5}(?:[\\s\\-]\\d{3,5}){1,4})";
+const AN_RE = "(?:\\s*[,\\-]?\\s*(?:a\\.?\\s?n\\.?|atas\\s+nama)\\s*[:.]?\\s*[A-Za-z][A-Za-z.' ]{1,40})?";
+const REKENING_RE = new RegExp(
+  `(?:bank\\s+)?\\b(?:${BANK_RE})\\b[\\s:.\\-]*(?:no\\.?\\s*(?:rek(?:ening)?\\.?)?[\\s:.\\-]*|rek(?:ening)?\\.?[\\s:.\\-]*)?${NOREK_RE}${AN_RE}|${NOREK_RE}\\s*(?:bank\\s+)?\\b(?:${BANK_RE})\\b${AN_RE}`,
+  "i",
+);
+
+/**
+ * Pisahkan rekening dari tulisan pelaksana: `sisa` = teks tanpa rekening (supaya nomor rekening tidak terbaca sebagai
+ * nominal), `rekening` = teks asli (database yang mengurai bank/nomor/a.n.), null bila tidak ada rekening.
+ */
+export function pisahRekening(teks: string): { rekening: string | null; sisa: string } {
+  const m = teks.match(REKENING_RE);
+  if (!m) return { rekening: null, sisa: teks };
+  const digit = (m[0].match(/\d[\d\s-]*\d/)?.[0] ?? "").replace(/\D/g, "");
+  if (digit.length < 8 || digit.length > 18) return { rekening: null, sisa: teks };
+  const sisa = (teks.slice(0, m.index) + " " + teks.slice((m.index ?? 0) + m[0].length)).replace(/\s+/g, " ").trim();
+  return { rekening: teks, sisa };
+}
+
+/** Balasan pelaksana atas pertanyaan rekening: "BCA 123 a.n. X" atau bernomor "1. BCA ...\n2. Mandiri ...". */
+export function parseRekeningBalasan(input: string): { no: number | null; rekening: string }[] | null {
+  const baris = input.split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+  if (baris.length === 0 || baris.length > 10 || input.length > 600) return null;
+  const hasil: { no: number | null; rekening: string }[] = [];
+  for (const b of baris) {
+    const nomor = b.match(/^\s*(?:no\.?\s*)?(\d{1,2})\s*[.)\-:]\s+(.+)$/i);
+    const isi = nomor ? nomor[2] : b;
+    if (!pisahRekening(isi).rekening) return null;
+    hasil.push({ no: nomor ? Number(nomor[1]) : null, rekening: isi });
+  }
+  return hasil;
+}
 
 /** Biaya operasional di luar bahan bangunan & upah tukang: dibagi rata ke unit yang sedang dibangun bila unit tidak disebut. */
 const BIAYA_LAIN_RE = /^(?:lain(?:-lain)?|biaya\s+lain)\b|\b(?:listrik|air\s+(?:bersih|pdam|bor)|bensin|solar|bbm|konsumsi|makan|minum|transport|ongkir|ongkos|sewa|asuransi|satpam|keamanan|kebersihan|perizinan|izin)\b/i;
 
 /** Satu baris pengajuan mingguan: cicilan toko, kontraktor/tukang, atau material/lain. */
 export function parseBarisMingguan(baris: string): BarisMingguan | null {
-  const teks = baris.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s*/, "").replace(/\s+/g, " ").trim();
+  const asli = baris.replace(/^\s*(?:[-•*]|\d{1,2}[.)])\s*/, "").replace(/\s+/g, " ").trim();
+  if (!asli) return null;
+  const { rekening, sisa: teks } = pisahRekening(asli);
   if (!teks) return null;
+  const hasil = parseBarisTanpaRekening(teks);
+  return hasil && rekening ? { ...hasil, rekening } : hasil;
+}
+
+function parseBarisTanpaRekening(teks: string): BarisMingguan | null {
   const nominal = parseRupiah(teks.replace(UNIT_SEMUA_RE, " "));
   const cicilan = teks.match(/^(?:cicilan|cicil|angsuran|bayar\s+utang)\s+(?:utang\s+)?(?:ke\s+)?(.+)$/i);
   if (cicilan) {
@@ -266,6 +321,7 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   if (/^(ya|iya)$/.test(kecil)) return { aksi: "ya", data: {} };
   if (/^batal$/.test(kecil)) return { aksi: "batal", data: {} };
 
+  if (/^tanpa\s+rek(?:ening)?$/.test(kecil)) return { aksi: "tanpa_rekening", data: {} };
   if (/^saldo$/.test(kecil)) return { aksi: "saldo", data: {} };
   if (/^tagihan$/.test(kecil)) return { aksi: "tagihan", data: {} };
   if (/^(?:daftar\s+|sisa\s+)?utang(?:\s+toko)?$/.test(kecil) && (awalan || /^utang$/.test(kecil))) {
@@ -342,6 +398,11 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   const profit = kecil.match(/^cairkan\s+profit\s+(.+)$/);
   if (profit) return { aksi: "cairkan_profit", data: { nominal: parseRupiah(profit[1]) } };
 
+  // Balasan atas pertanyaan "nomor rekening tujuan?" -- boleh tanpa awalan "L2"; MKH Property hanya menerimanya bila
+  // pelaksana memang sedang ditanya (selain itu "tidak_ada_pending" dan pesannya dilewatkan ke alur lain).
+  const rekBalasan = parseRekeningBalasan(teks);
+  if (rekBalasan) return { aksi: "rekening", data: { daftar: rekBalasan } };
+
   // Sisanya hanya untuk pesan berawalan "L2" (pelaksana).
   if (!awalan) return null;
 
@@ -408,6 +469,7 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
 export const LOONARS2_BANTUAN =
   "Perintah Loonars 2 (pelaksana selalu diawali L2):\n" +
+  "• Setiap pengajuan (belanja kecil, reimburse, kontraktor, cicilan) sebaiknya langsung melampirkan REKENING tujuan agar Pak Avi tinggal menyalin, mis. \"- Reimburse mas Sarno 972.000 BCA 1234567890 a.n. Sarno\". Kalau belum, sistem menanyakan; rekening yang pernah dikirim diingat. Tidak ada rekening: \"L2 tanpa rekening\"\n" +
   "• Upah tukang mingguan (borongan): \"L2 tukang minggu ini\" — nominal & minggu ke-n dihitung sistem; \"L2 retensi unit 3\" setelah unit selesai\n" +
   "• Catat utang material (langsung sah, tidak perlu persetujuan; sistem hanya menolak nota yang kembar): \"L2 utang TB Maju semen 50 sak 6.500.000\" (+ foto nota). Kalau ditolak karena dikira double tapi notanya memang lain, tambahkan \"nota beda\"; beli tunai: \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"\n" +
   "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
@@ -542,12 +604,13 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
   if (perintah.aksi === "bantuan") return { outcome: "handled", reply: LOONARS2_BANTUAN };
 
   if (perintah.aksi === "ajukan_ai") {
-    const ai = await recognizeConstructionCostRequest(perintah.teks).catch(
+    const { rekening, sisa: teksAi } = pisahRekening(perintah.teks);
+    const ai = await recognizeConstructionCostRequest(teksAi).catch(
       (): CostRequestRecognition => ({ isRequest: false, requestType: null, items: [], nominal: null, weekNumber: null, partyName: null, notes: "Analisa AI gagal." }),
     );
     // AI membaca "total" dari pesan (bisa jumlah beberapa item); angka
     // terbesar di teks hanya cadangan bila AI gagal.
-    const nominal = ai.nominal ?? parseRupiah(perintah.teks.replace(UNIT_RE, ""));
+    const nominal = ai.nominal ?? parseRupiah(teksAi.replace(UNIT_RE, ""));
     if (!nominal) {
       return { outcome: "handled", reply: "Nominal pengajuan belum terbaca. Tulis totalnya, mis. \"L2 unit 5 semen 20 sak total 1.300.000 TB Maju\"." };
     }
@@ -555,19 +618,21 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     return teruskan(sender, "ajukan", {
       unit: perintah.unit,
       kategori: kategoriDariAi(ai.requestType),
-      deskripsi: rincian ? `${rincian}\n📩 ${perintah.teks.slice(0, 300)}` : perintah.teks.slice(0, 500),
+      deskripsi: rincian ? `${rincian}\n📩 ${teksAi.slice(0, 300)}` : teksAi.slice(0, 500),
       items: ai.items,
       toko: ai.partyName,
       nominal,
+      rekening,
     });
   }
 
   if (perintah.aksi === "bahan_ai") {
-    const data = await susunBahan(perintah.teks, perintah.utang, perintah.unit);
+    const { rekening, sisa: teksBahan } = pisahRekening(perintah.teks);
+    const data = await susunBahan(teksBahan, perintah.utang, perintah.unit);
     if (!data.nominal) {
       return { outcome: "handled", reply: "Total pesanan bahan belum terbaca. Tulis totalnya, mis. \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"." };
     }
-    return teruskan(sender, "bahan", { ...data, paksa: NOTA_BEDA_RE.test(perintah.teks) });
+    return teruskan(sender, "bahan", { ...data, rekening, paksa: NOTA_BEDA_RE.test(perintah.teks) });
   }
 
   if (perintah.aksi === "utang_foto") {
@@ -677,7 +742,8 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
   }
 
   if (perintah.aksi === "bahan_ai") {
-    const data = await susunBahan(perintah.teks, perintah.utang, perintah.unit);
+    const { rekening, sisa: teksBahan } = pisahRekening(perintah.teks);
+    const data = await susunBahan(teksBahan, perintah.utang, perintah.unit);
     if (!data.nominal || !data.toko) {
       const image = await fetchImageAsBase64(imageUrl);
       const nota: ExpenseReceiptRecognition | null =
@@ -691,7 +757,7 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
     if (!data.nominal) {
       return { outcome: "handled", reply: "⚠️ Total di nota tidak terbaca. Tulis totalnya di keterangan foto, mis. \"L2 bahan TB Maju semen 100 sak 8,5 juta\"." };
     }
-    return teruskan(sender, "bahan", { ...data, nota_url: imageUrl, paksa: NOTA_BEDA_RE.test(perintah.teks) });
+    return teruskan(sender, "bahan", { ...data, rekening, nota_url: imageUrl, paksa: NOTA_BEDA_RE.test(perintah.teks) });
   }
 
   if (perintah.aksi === "ajukan_ai") {
@@ -703,7 +769,8 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
           )
         : { readable: false, items: [], nominal: null, tanggal: null, supplier: null, notes: "Foto tidak bisa diunduh." };
     // Total yang ditulis pelaksana di keterangan foto mengalahkan bacaan nota.
-    const nominal = parseRupiah(perintah.teks.replace(UNIT_RE, "")) ?? ai.nominal;
+    const { rekening, sisa: teksFoto } = pisahRekening(perintah.teks);
+    const nominal = parseRupiah(teksFoto.replace(UNIT_RE, "")) ?? ai.nominal;
     if (!nominal) {
       return { outcome: "handled", reply: "⚠️ Total di nota tidak terbaca. Kirim ulang foto yang lebih jelas, atau tulis totalnya di keterangan foto." };
     }
@@ -712,10 +779,11 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
     return teruskan(sender, "ajukan", {
       unit: perintah.unit,
       kategori,
-      deskripsi: [rincian, `📩 ${perintah.teks.slice(0, 300)}`].filter(Boolean).join("\n"),
+      deskripsi: [rincian, `📩 ${teksFoto.slice(0, 300)}`].filter(Boolean).join("\n"),
       items: ai.items.map((it) => ({ nama: it.nama, nilai: it.harga })),
       toko: ai.supplier,
       nominal,
+      rekening,
       nota_url: imageUrl,
     });
   }
