@@ -7,6 +7,15 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+
+## 2026-10-24 — Loonars Connect: grup lintas tim "Koordinasi Jogja" (0298)
+
+Satu grup untuk Hospitality, Markom Jogja, Sales Jogja + owner (pilihan
+owner). Anggota diturunkan otomatis dari ketiga grup (`settings.member_of`,
+`include_owners`) lewat `mkc_chat_desired_members()`; tanpa alur kerja,
+feed, atau laporan; push ala WhatsApp dari 0297 ikut berlaku. Uji SQL 77/77
++ 50/50.
+
 ## 2026-10-24 — Keamanan: zod 4 + vite 8.3 (npm audit high/critical bersih)
 
 - `zod` 3.25 → 4.6.7 (GHSA-mrhx-c7xc-m3w5, memori habis saat validasi koleksi

@@ -330,7 +330,7 @@ export function ChatRoom({
   }, [conversation.id]);
 
   const loadWork = React.useCallback(async () => {
-    if (isFeed) return;
+    if (isFeed || deptKind === "koordinasi") return;
     const r = deptKind === "hospitality" ? await loadOpenWorkAction({ conversationId: conversation.id }) : await loadConnectWorkAction({ conversationId: conversation.id });
     if (r.success && r.data) setWork(r.data);
   }, [conversation.id, isFeed, deptKind]);
@@ -440,7 +440,7 @@ export function ChatRoom({
           <Button size="icon" variant="ghost" onClick={() => setSearchOpen((s) => !s)} aria-label="Cari pesan">
             <Search className="h-5 w-5" />
           </Button>
-          {!isFeed && (
+          {!isFeed && deptKind !== "koordinasi" && (
             <Button size="sm" variant="outline" onClick={() => setShowWork(true)} className="gap-1">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">{deptKind === "markom" ? "Kalender & KOL" : deptKind === "sales" ? "Lead & kunjungan" : "Pekerjaan"}</span>
@@ -524,6 +524,8 @@ export function ChatRoom({
                   ? deptKind === "hospitality"
                     ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
                     : "Laporan live ada di atas dan selalu mengikuti data terbaru. Laporan akhir hari (20:00) tersimpan di sini otomatis setiap malam."
+                  : deptKind === "koordinasi"
+                    ? "Grup koordinasi lintas tim Hospitality, Markom, Sales Jogja dan owner. Mulai percakapan di sini."
                   : deptKind === "markom"
                     ? "Belum ada pesan. Susun kalender konten dan ajukan kamar KOL lewat tombol +."
                     : deptKind === "sales"
@@ -572,59 +574,61 @@ export function ChatRoom({
               </div>
             )}
             <div className="flex items-end gap-1.5 px-2 py-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Laporan cepat">
-                    <Plus className="h-6 w-6" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" className="w-60">
-                  {deptKind === "hospitality" && (
-                    <>
-                      <DropdownMenuItem onSelect={() => setIssueOpen(true)}>
-                        <Megaphone className="mr-2 h-4 w-4" /> Lapor masalah / insiden
-                      </DropdownMenuItem>
-                      {(canSecurity || canLateCheckin) && <DropdownMenuSeparator />}
-                      {(canSecurity || canLateCheckin) && <DropdownMenuLabel className="text-xs">Laporan Security</DropdownMenuLabel>}
-                      {SECURITY_MENU.filter((s) => (s.kind === "security_late_checkin" ? canLateCheckin : canSecurity)).map((s) => (
-                        <DropdownMenuItem key={s.kind} onSelect={() => setSecurityKind(s.kind)}>
-                          <s.icon className="mr-2 h-4 w-4" /> {s.label}
+              {deptKind !== "koordinasi" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Laporan cepat">
+                      <Plus className="h-6 w-6" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="top" className="w-60">
+                    {deptKind === "hospitality" && (
+                      <>
+                        <DropdownMenuItem onSelect={() => setIssueOpen(true)}>
+                          <Megaphone className="mr-2 h-4 w-4" /> Lapor masalah / insiden
+                        </DropdownMenuItem>
+                        {(canSecurity || canLateCheckin) && <DropdownMenuSeparator />}
+                        {(canSecurity || canLateCheckin) && <DropdownMenuLabel className="text-xs">Laporan Security</DropdownMenuLabel>}
+                        {SECURITY_MENU.filter((s) => (s.kind === "security_late_checkin" ? canLateCheckin : canSecurity)).map((s) => (
+                          <DropdownMenuItem key={s.kind} onSelect={() => setSecurityKind(s.kind)}>
+                            <s.icon className="mr-2 h-4 w-4" /> {s.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                    {deptKind === "markom" &&
+                      (myRole === "markom" ? (
+                        <>
+                          <DropdownMenuItem onSelect={() => setConnectDialog("content")}>
+                            <CalendarPlus className="mr-2 h-4 w-4" /> Rencana konten
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setConnectDialog("kol")}>
+                            <Handshake className="mr-2 h-4 w-4" /> Kolaborasi KOL (minta kamar)
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <DropdownMenuItem onSelect={() => setShowWork(true)}>
+                          <Handshake className="mr-2 h-4 w-4" /> Lihat KOL menunggu persetujuan
                         </DropdownMenuItem>
                       ))}
-                    </>
-                  )}
-                  {deptKind === "markom" &&
-                    (myRole === "markom" ? (
+                    {deptKind === "sales" && (
                       <>
-                        <DropdownMenuItem onSelect={() => setConnectDialog("content")}>
-                          <CalendarPlus className="mr-2 h-4 w-4" /> Rencana konten
+                        <DropdownMenuItem onSelect={() => setConnectDialog("lead")}>
+                          <UserPlus className="mr-2 h-4 w-4" /> Lead baru
                         </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setConnectDialog("kol")}>
-                          <Handshake className="mr-2 h-4 w-4" /> Kolaborasi KOL (minta kamar)
+                        <DropdownMenuItem onSelect={() => setShowWork(true)}>
+                          <MapPin className="mr-2 h-4 w-4" /> Follow-up / jadwalkan kunjungan
                         </DropdownMenuItem>
+                        {myRole === "sales" && (
+                          <DropdownMenuItem onSelect={() => setConnectDialog("daily")}>
+                            <ClipboardCheck className="mr-2 h-4 w-4" /> Laporan harian
+                          </DropdownMenuItem>
+                        )}
                       </>
-                    ) : (
-                      <DropdownMenuItem onSelect={() => setShowWork(true)}>
-                        <Handshake className="mr-2 h-4 w-4" /> Lihat KOL menunggu persetujuan
-                      </DropdownMenuItem>
-                    ))}
-                  {deptKind === "sales" && (
-                    <>
-                      <DropdownMenuItem onSelect={() => setConnectDialog("lead")}>
-                        <UserPlus className="mr-2 h-4 w-4" /> Lead baru
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setShowWork(true)}>
-                        <MapPin className="mr-2 h-4 w-4" /> Follow-up / jadwalkan kunjungan
-                      </DropdownMenuItem>
-                      {myRole === "sales" && (
-                        <DropdownMenuItem onSelect={() => setConnectDialog("daily")}>
-                          <ClipboardCheck className="mr-2 h-4 w-4" /> Laporan harian
-                        </DropdownMenuItem>
-                      )}
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPhotos((s) => !s)}

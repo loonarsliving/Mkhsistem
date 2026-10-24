@@ -4,11 +4,13 @@
  * the database stays the control, these only drive the forms.
  */
 
-export type ConnectDepartmentKind = "hospitality" | "markom" | "sales";
+export type ConnectDepartmentKind = "hospitality" | "markom" | "sales" | "koordinasi";
 
 export function departmentKind(code: string): ConnectDepartmentKind {
   if (code.startsWith("markom_")) return "markom";
   if (code.startsWith("sales_")) return "sales";
+  // cross-team group (0298): plain chat, no workflow / work panel / report
+  if (code.startsWith("koordinasi_")) return "koordinasi";
   return "hospitality";
 }
 
@@ -16,6 +18,7 @@ const ROLE_LABELS: Record<ConnectDepartmentKind, Record<string, string>> = {
   hospitality: { manager: "Hospitality Manager", front_office: "Front Office", cleaning: "Cleaning", security: "Security" },
   markom: { markom: "Markom", room_approver: "Persetujuan kamar villa" },
   sales: { sales: "Sales", manager: "Kepala Cabang / Manager Sales" },
+  koordinasi: { member: "Anggota" },
 };
 
 export function memberRoleLabel(role: string | null | undefined, departmentCode: string): string {

@@ -19,9 +19,9 @@ for f in supabase/migrations/029[1-9]_loonars_connect*.sql; do psql -d t -v ON_E
 psql -d t -f tests/sql/0291_hospitality/behavior_test.sql   # prints PASS/FAIL per check
 ```
 
-Last run (2026-10-24, incl. 0295–0297): 77 passed, 0 failed.
+Last run (2026-10-24, incl. 0295–0298): 77 passed, 0 failed.
 
 ## 0294 (Markom Jogja + Sales Jogja)
 
 On a separate fresh DB: `stubs.sql`, then `seed_0294.sql`, then migrations
-0291..0297, then `behavior_0294.sql`. Last run (2026-10-24): 43 passed, 0 failed.
+0291..0298, then `behavior_0294.sql`. Last run (2026-10-24): 50 passed, 0 failed.
