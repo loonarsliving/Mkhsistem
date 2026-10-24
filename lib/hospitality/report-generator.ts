@@ -1,6 +1,7 @@
 import "server-only";
 
-import { generateConnectReport, isConnectDepartment } from "@/lib/connect/connect-report-generator";
+import { buildConnectReport, generateConnectReport, isConnectDepartment } from "@/lib/connect/connect-report-generator";
+import type { ConnectReportData } from "@/lib/connect/report-types";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.types";
@@ -219,4 +220,24 @@ export async function generateManualHospitalityReport(departmentCode: string, ge
   const [dept] = await loadDepartments(admin, departmentCode);
   if (!dept) return { status: "skipped", reason: "departemen tidak ditemukan" };
   return generateFor(admin, dept, "manual", localParts(new Date(), dept.timezone).date, generatedBy);
+}
+
+/**
+ * Live report for a Markom/Sales owner feed: today so far, computed now and
+ * not stored (the scheduled 20:00 report stays the record). Pulls new CRM
+ * leads / KOL bookings into the groups first so the numbers are current.
+ * Caller's permission must already be checked.
+ */
+export async function liveConnectReport(departmentCode: string): Promise<ConnectReportData | null> {
+  if (!isConnectDepartment(departmentCode)) return null;
+  const admin = createAdminClient();
+  for (const fn of ["mkc_mkt_sync_kol", "mkc_sales_sync"] as const) {
+    const { error } = await admin.rpc(fn);
+    if (error) logger.warn("live report: source sync skipped", { fn, error: error.message });
+  }
+  const [dept] = await loadDepartments(admin, departmentCode);
+  if (!dept) return null;
+  const now = new Date();
+  const { data } = await buildConnectReport(admin, dept, "manual", localParts(now, dept.timezone).date, now);
+  return data;
 }

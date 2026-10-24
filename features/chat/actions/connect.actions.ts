@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 
+import { PERMISSIONS } from "@/constants/rbac";
 import { departmentKind } from "@/lib/connect/labels";
+import type { ConnectReportData } from "@/lib/connect/report-types";
+import { liveConnectReport } from "@/lib/hospitality/report-generator";
 import { localParts } from "@/lib/hospitality/time";
-import { requireSession } from "@/lib/rbac/session";
+import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
-import { getConversationDepartment } from "@/repositories/chat.repository";
+import { getConversationDepartment, listChatConversations } from "@/repositories/chat.repository";
 import { listMarkomOpenWork, listSalesOpenWork, type MarkomOpenWork, type SalesOpenWork } from "@/repositories/connect.repository";
 import type { FollowUpActivityTypeDb, LeadSourceDb } from "@/types/database.types";
 import { actionError, actionSuccess, type ActionResult } from "@/types/domain";
@@ -64,6 +67,26 @@ export async function loadConnectWorkAction(input: ConversationIdInput): Promise
     return actionError("Bukan grup Markom/Sales");
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal memuat pekerjaan terbuka");
+  }
+}
+
+/**
+ * Live report for a Markom/Sales owner feed (today so far, not stored).
+ * Owner only, like the feed itself; computed with the service role because
+ * the report snapshots read CRM / villa tables staff cannot.
+ */
+export async function loadLiveReportAction(input: ConversationIdInput): Promise<ActionResult<ConnectReportData>> {
+  const session = await requireSession();
+  const parsed = conversationIdSchema.safeParse(input);
+  if (!parsed.success) return invalid(parsed.error);
+  if (!hasPermission(session, PERMISSIONS.HOSPITALITY_OWNER_REPORT)) return actionError("Hanya owner");
+  const conv = (await listChatConversations(await createClient())).find((c) => c.id === parsed.data.conversationId);
+  if (!conv || conv.kind !== "owner_feed" || departmentKind(conv.departmentCode) === "hospitality") return actionError("Bukan feed laporan Markom/Sales");
+  try {
+    const data = await liveConnectReport(conv.departmentCode);
+    return data ? actionSuccess(data) : actionError("Departemen tidak ditemukan");
+  } catch (err) {
+    return actionError(err instanceof Error ? err.message : "Gagal menghitung laporan");
   }
 }
 

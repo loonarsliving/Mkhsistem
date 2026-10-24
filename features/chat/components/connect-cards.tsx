@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, BadgeCheck, CalendarDays, ChevronDown, ExternalLink, Loader2, MapPin, Phone, Ticket } from "lucide-react";
+import { AlertTriangle, BadgeCheck, CalendarDays, ChevronDown, ExternalLink, Loader2, MapPin, Phone, RefreshCw, Ticket } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import type { ReportRef } from "@/repositories/chat.repository";
 import type { ContentPlanRef, DailyReportRef, KolRef, ProspectRef, PurchaseRef, VisitRef } from "@/repositories/connect.repository";
 
 import { acknowledgeReportAction } from "../actions/chat.actions";
-import { updateContentAction } from "../actions/connect.actions";
+import { loadLiveReportAction, updateContentAction } from "../actions/connect.actions";
 import { StatusPill } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
 import { CHAT_TZ, formatDateTime } from "./chat-utils";
@@ -396,22 +396,12 @@ const SECTION_TONE: Record<string, string> = {
   info: "",
 };
 
-export function ConnectReportCard({ report, title }: { report: ReportRef; title: string }) {
-  const { isOwner, people } = useChat();
+/** Metrics, red flags and the expandable detail; shared by the stored and the live report. */
+export function ConnectReportBody({ data }: { data: ConnectReportData }) {
   const [expanded, setExpanded] = React.useState(false);
-  const [acking, setAcking] = React.useState(false);
-  const [acked, setAcked] = React.useState(!!report.acknowledgedAt);
-  const data = report.data as ConnectReportData;
   const flagged = data.sections.filter((s) => s.tone === "bad" && s.items.length > 0);
-
   return (
-    <div className="space-y-2">
-      <span className="font-semibold">
-        {title} · {PERIOD_LABELS[data.periodKind] ?? data.periodKind} · {dmy(data.reportDate)}
-      </span>
-      <p className="text-[11px] text-muted-foreground">
-        Dibuat {formatDateTime(data.generatedAt)} · data {formatDateTime(data.window.from)} – {formatDateTime(data.window.to)}
-      </p>
+    <>
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {data.metrics.map((m) => (
           <div
@@ -485,6 +475,25 @@ export function ConnectReportCard({ report, title }: { report: ReportRef; title:
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+export function ConnectReportCard({ report, title }: { report: ReportRef; title: string }) {
+  const { isOwner, people } = useChat();
+  const [acking, setAcking] = React.useState(false);
+  const [acked, setAcked] = React.useState(!!report.acknowledgedAt);
+  const data = report.data as ConnectReportData;
+
+  return (
+    <div className="space-y-2">
+      <span className="font-semibold">
+        {title} · {PERIOD_LABELS[data.periodKind] ?? data.periodKind} · {dmy(data.reportDate)}
+      </span>
+      <p className="text-[11px] text-muted-foreground">
+        Dibuat {formatDateTime(data.generatedAt)} · data {formatDateTime(data.window.from)} – {formatDateTime(data.window.to)}
+      </p>
+      <ConnectReportBody data={data} />
       <div className="flex items-center justify-between gap-2 border-t pt-2">
         {acked || report.acknowledgedAt ? (
           <span className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300">
@@ -511,6 +520,90 @@ export function ConnectReportCard({ report, title }: { report: ReportRef; title:
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Live report refresh: on activity (realtime) at most every 15s, otherwise every minute. */
+const LIVE_MIN_GAP_MS = 15_000;
+const LIVE_POLL_MS = 60_000;
+
+/**
+ * Pinned at the top of a Markom/Sales owner feed: today so far, computed on
+ * the server with the same rules as the 20:00 report (lib/connect), not
+ * stored. Refreshes when the room's realtime listener bumps `reloadToken`
+ * (content, KOL, visits), every minute (CRM leads have no realtime), and
+ * when the tab becomes visible again.
+ */
+export function LiveConnectReportCard({ conversationId, title, reloadToken }: { conversationId: string; title: string; reloadToken: number }) {
+  const [data, setData] = React.useState<ConnectReportData | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [open, setOpen] = React.useState(true);
+  const lastRun = React.useRef(0);
+  const inFlight = React.useRef(false);
+
+  const load = React.useCallback(
+    async (force = false) => {
+      if (inFlight.current) return;
+      if (!force && Date.now() - lastRun.current < LIVE_MIN_GAP_MS) return;
+      inFlight.current = true;
+      lastRun.current = Date.now();
+      setLoading(true);
+      const r = await loadLiveReportAction({ conversationId });
+      inFlight.current = false;
+      setLoading(false);
+      if (!r.success || !r.data) return void setError(r.error ?? "Gagal memuat laporan live");
+      setError(null);
+      setData(r.data);
+    },
+    [conversationId],
+  );
+
+  React.useEffect(() => {
+    void load(true);
+    const timer = window.setInterval(() => void load(true), LIVE_POLL_MS);
+    const onVisible = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
+  React.useEffect(() => {
+    if (reloadToken > 0) void load();
+  }, [reloadToken, load]);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-emerald-300 bg-white p-3 text-sm shadow-sm dark:border-emerald-800 dark:bg-[#202c33]">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+        </span>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="min-w-0 flex-1 truncate text-left font-semibold">
+          {title} · Live hari ini
+        </button>
+        <button type="button" onClick={() => void load(true)} disabled={loading} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Perbarui">
+          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+        </button>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label={open ? "Ciutkan" : "Buka"}>
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </button>
+      </div>
+      {data && (
+        <p className="text-[11px] text-muted-foreground">
+          Diperbarui {formatDateTime(data.generatedAt)} · sejak {formatDateTime(data.window.from)} · laporan akhir hari tetap tersimpan pukul 20:00
+        </p>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {!data && !error && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Menghitung…
+        </p>
+      )}
+      {data && open && <ConnectReportBody data={data} />}
     </div>
   );
 }

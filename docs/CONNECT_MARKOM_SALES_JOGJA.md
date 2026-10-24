@@ -168,6 +168,21 @@ actions:
 - per sales person: follow-ups, daily report, and verified bookings against
   the monthly target. The target shows "not set" when there is none.
 
+## Live report in the owner feed
+
+The top of "Laporan Markom Jogja" and "Laporan Sales Jogja" shows a **live
+report for today so far**. It uses the same snapshot RPC and the same
+`lib/connect/*-report.ts` rules as the 20:00 report, through
+`buildConnectReport()`, but it is computed on request and **not stored**. The
+20:00 report stays the daily record.
+
+- `loadLiveReportAction` (owner only) runs the KOL and Sales source syncs
+  first, so new CRM leads and KOL bookings are counted.
+- The card refreshes on realtime activity, at most once every 15 s. The
+  activity it reacts to is changes to content plans, KOLs and visits.
+- It also refreshes every minute, because CRM leads have no realtime, and
+  when the tab becomes visible again.
+
 ## Rules carried over from Hospitality
 
 - Numbers are computed in code (`lib/connect/*-report.ts`) from SQL snapshots
