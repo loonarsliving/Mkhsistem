@@ -272,6 +272,33 @@ select mkc_hosp_sync_room_tasks();
 select t_check('0295: next checkout -> one new task for the new row',
   (select count(*) from mkc_hosp_room_tasks where unit_nomor = 'C9' and status = 'pending') = 1
   and (select housekeeping_id from mkc_hosp_room_tasks where unit_nomor = 'C9' and status = 'pending') = '20000000-0000-0000-0000-000000000094');
+
+-- 0296: a villa checkout (unit -> dirty + 'bersih' row, one transaction) creates the task without waiting for cron
+begin;
+insert into units (id, nomor, status) values ('10000000-0000-0000-0000-000000000010','D1','occupied');
+commit;
+begin;
+update units set status = 'dirty' where nomor = 'D1';
+insert into housekeeping (id, unit_id, unit_nomor) values ('20000000-0000-0000-0000-000000000101','10000000-0000-0000-0000-000000000010','D1');
+commit;
+select t_check('0296: villa checkout creates the room task + card at commit, no sync call',
+  (select count(*) from mkc_hosp_room_tasks where unit_nomor = 'D1' and status = 'pending') = 1
+  and exists (select 1 from mkc_chat_messages m join mkc_hosp_room_tasks t on t.id = m.ref_id where t.unit_nomor = 'D1' and m.kind = 'task'));
+update housekeeping set status = 'done' where id = '20000000-0000-0000-0000-000000000101';
+select t_check('0296: room marked clean in villa closes the task immediately',
+  (select status from mkc_hosp_room_tasks where unit_nomor = 'D1') = 'completed');
+-- a broken Loonars Connect setting must never block a villa checkout
+update mkc_chat_departments set settings = settings || '{"cleaning_target_minutes":"x"}' where code = 'hospitality';
+insert into units (id, nomor, status) values ('10000000-0000-0000-0000-000000000011','D2','occupied');
+begin;
+update units set status = 'dirty' where nomor = 'D2';
+insert into housekeeping (id, unit_id, unit_nomor) values ('20000000-0000-0000-0000-000000000102','10000000-0000-0000-0000-000000000011','D2');
+commit;
+select t_check('0296: sync error is swallowed, villa checkout still committed',
+  (select status from units where nomor = 'D2') = 'dirty'
+  and exists (select 1 from housekeeping where id = '20000000-0000-0000-0000-000000000102')
+  and not exists (select 1 from mkc_hosp_room_tasks where unit_nomor = 'D2'));
+update mkc_chat_departments set settings = settings - 'cleaning_target_minutes' where code = 'hospitality';
 reset role;
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

@@ -62,7 +62,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 
 | Job | UTC | WITA | Fungsi |
 |---|---|---|---|
-| `hospitality-sync-room-tasks` | `*/5 * * * *` | tiap 5 mnt | SQL murni: tugas kamar dari housekeeping villa |
+| `hospitality-sync-room-tasks` | `*/5 * * * *` | tiap 5 mnt | SQL murni: tugas kamar dari housekeeping villa (jaring pengaman; sejak 0296 sinkron juga berjalan langsung lewat trigger saat check-out / kamar bersih di aplikasi villa) |
 | `hospitality-report-dispatch` | `7,22,37,52 * * * *` | tiap 15 mnt | HTTP dispatch → `/api/hospitality/reports/dispatch` (laporan yang jatuh tempo saja, idempoten) |
 | `hospitality-evidence-retention` | `40 * * * *` | tiap jam | HTTP dispatch → `/api/hospitality/retention` (hapus bukti > 30 hari) |
 
