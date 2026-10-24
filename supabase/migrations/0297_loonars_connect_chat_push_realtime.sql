@@ -64,7 +64,7 @@ alter table public.mkc_notifications add constraint mkc_notifications_category_c
     'construction_cost_request_submitted', 'construction_cost_request_decided', 'construction_project_weekly_report',
     'occupancy_campaign_launched', 'occupancy_campaign_failed',
     'refund_reminder', 'refund_customer_message',
-    -- This migration
+    -- Loonars Connect Hospitality (0291)
     'hospitality_task', 'hospitality_report', 'hospitality_critical_alert',
     -- Loonars Connect chat (0297)
     'chat_message'
