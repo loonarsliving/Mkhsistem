@@ -160,8 +160,8 @@ select t_check('purchase: pending + verified each posted once', (select count(*)
 -- ===================== Owner =====================
 set role authenticated;
 select set_config('request.jwt.claim.sub', :owner, false);
-select t_check('owner sees the three owner feeds only', (select string_agg(x ->> 'name', ',' order by x ->> 'name') from jsonb_array_elements(mkc_chat_list()) x)
-  = 'Laporan Hospitality,Laporan Markom Jogja,Laporan Sales Jogja');
+select t_check('owner sees the three owner feeds + Koordinasi Jogja (0298), no team group', (select string_agg(x ->> 'name', ',' order by x ->> 'name') from jsonb_array_elements(mkc_chat_list()) x)
+  = 'Koordinasi Jogja,Laporan Hospitality,Laporan Markom Jogja,Laporan Sales Jogja');
 select t_check('owner sees no Markom/Sales group messages', (select count(*) from mkc_chat_messages where conversation_id in (current_setting('t.mgroup')::uuid, current_setting('t.sgroup')::uuid)) = 0);
 select t_check('owner can open supporting records', (select count(*) from mkc_mkt_kol_collabs) = 2 and (select count(*) from mkc_sales_visits) = 1);
 reset role;
@@ -190,6 +190,41 @@ select set_config('request.jwt.claim.sub', :ayu, false);
 select t_check('0297: pulse readable like the department (Sales member sees only Sales)',
   (select string_agg(d.code, ',') from mkc_connect_pulse p join mkc_chat_departments d on d.id = p.department_id) = 'sales_jogja');
 reset role;
+
+reset role;
+-- 0298: Koordinasi Jogja = every member of the Hospitality, Markom Jogja and Sales Jogja groups + the owner, as 'member'
+select mkc_chat_sync_members();
+select set_config('t.kgroup', (select c.id::text from mkc_chat_conversations c join mkc_chat_departments d on d.id = c.department_id where d.code = 'koordinasi_jogja' and c.kind = 'operational_group'), false);
+select t_check('0298: Koordinasi Jogja members = union of the three groups + owner, all as member',
+  (select array_agg(employee_id order by employee_id) from mkc_chat_members where conversation_id = current_setting('t.kgroup')::uuid and removed_at is null)
+  = (select array_agg(distinct x order by x) from (
+       select m.employee_id as x from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id join mkc_chat_departments d on d.id = c.department_id
+        where c.kind = 'operational_group' and d.code in ('hospitality', 'markom_jogja', 'sales_jogja') and m.removed_at is null
+       union select unnest(mkc_hosp_owner_ids())) u)
+  and (select bool_and(member_role = 'member') from mkc_chat_members where conversation_id = current_setting('t.kgroup')::uuid and removed_at is null)
+  and exists (select 1 from mkc_chat_members where conversation_id = current_setting('t.kgroup')::uuid and employee_id = :owner::uuid and removed_at is null and source = 'owner'));
+select t_check('0298: a coordination group has no owner feed (no report)',
+  not exists (select 1 from mkc_chat_conversations c join mkc_chat_departments d on d.id = c.department_id where d.code = 'koordinasi_jogja' and c.kind = 'owner_feed'));
+-- leaving a team leaves Koordinasi on the same sync
+update mkc_chat_role_assignments set revoked_at = now() where employee_id = :vando::uuid and department_id = (select id from mkc_chat_departments where code = 'sales_jogja');
+select t_check('0298: removed from Sales -> removed from Koordinasi Jogja too',
+  exists (select 1 from mkc_chat_members where conversation_id = current_setting('t.kgroup')::uuid and employee_id = :vando::uuid and removed_at is not null));
+update mkc_chat_role_assignments set revoked_at = null where employee_id = :vando::uuid and department_id = (select id from mkc_chat_departments where code = 'sales_jogja');
+select t_check('0298: re-added to Sales -> back in Koordinasi Jogja',
+  exists (select 1 from mkc_chat_members where conversation_id = current_setting('t.kgroup')::uuid and employee_id = :vando::uuid and removed_at is null));
+-- members of different teams talk; everyone else (owner included) gets the WhatsApp-style push
+set role authenticated;
+select set_config('request.jwt.claim.sub', :syifa, false);
+select mkc_chat_send_text(current_setting('t.kgroup')::uuid, 'KOL datang besok jam 2, mohon unit A2 disiapkan');
+select set_config('request.jwt.claim.sub', :ayu, false);
+select t_check('0298: a Sales member reads the Markom member''s message in Koordinasi',
+  exists (select 1 from mkc_chat_messages where conversation_id = current_setting('t.kgroup')::uuid and body like 'KOL datang besok%'));
+select t_check('0298: Sales member still cannot read the Markom group itself',
+  not exists (select 1 from mkc_chat_messages where conversation_id = current_setting('t.mgroup')::uuid));
+reset role;
+select t_check('0298: push to every other Koordinasi member incl. the owner, not the sender',
+  exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :owner::uuid and title like '% · Koordinasi Jogja')
+  and not exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :syifa::uuid and title like '% · Koordinasi Jogja'));
 
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

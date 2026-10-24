@@ -222,6 +222,26 @@ report for today so far**. It uses the same snapshot RPC and the same
 - The live report refreshes within about 5 s of a pulse. The minute poll and
   the 10-minute cron stay as safety nets.
 
+## Koordinasi Jogja: the cross-team group (0298)
+
+One group where the teams talk to each other, as the owner chose:
+Hospitality, Markom Jogja and Sales Jogja, with the owner as a member.
+
+- **Department** `koordinasi_jogja`:
+  - no workflow, no owner feed, no report;
+  - text, photos and the 0297 WhatsApp-style push only.
+- **Members are derived, never maintained by hand:**
+  - `settings.member_of` lists the source departments, and everyone in
+    their operational groups is a `member`;
+  - `settings.include_owners` adds the owners.
+  - `mkc_chat_desired_members()` computes this from the source
+    departments' own desired members, so one membership sync is enough.
+    Joining or leaving a team updates Koordinasi Jogja too.
+- **Access:** a member of Koordinasi still can't read another team's
+  group. They only share the Koordinasi group.
+- **UI:** `departmentKind()` returns `koordinasi`, which hides the "+"
+  menu and the work panel.
+
 ## Rules carried over from Hospitality
 
 - Numbers are computed in code (`lib/connect/*-report.ts`) from SQL snapshots

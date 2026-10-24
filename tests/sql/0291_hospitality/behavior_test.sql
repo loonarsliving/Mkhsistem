@@ -33,10 +33,14 @@ select :markom::uuid, 'Markom', (select id from branches where code='JOG'), (sel
 insert into mkc_chat_role_assignments (department_id, employee_id, member_role, note)
 select id, :rebecca::uuid, 'manager', 'Hospitality Manager' from mkc_chat_departments where code='hospitality';
 
+-- (scoped to the Hospitality group: 0298's Koordinasi Jogja derives its members from it, plus the owner)
 select t_check('members: 4 eligible (rebecca manager, fo1, sec1, cln1)',
-  (select count(*) from mkc_chat_members where removed_at is null) = 4
-  and (select member_role from mkc_chat_members where employee_id = :rebecca::uuid) = 'manager'
-  and not exists (select 1 from mkc_chat_members where employee_id in (:fo2::uuid, :markom::uuid, :owner::uuid)));
+  (select count(*) from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id
+    where m.removed_at is null and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')) = 4
+  and (select member_role from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id
+        where m.employee_id = :rebecca::uuid and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')) = 'manager'
+  and not exists (select 1 from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id
+                  where m.employee_id in (:fo2::uuid, :markom::uuid, :owner::uuid) and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')));
 
 -- villa data
 insert into units (id, nomor, status) values
@@ -76,16 +80,16 @@ select t_expect_error('markom: cannot list units', 'select mkc_hosp_units(''hosp
 
 -- ===================== as Owner =====================
 select set_config('request.jwt.claim.sub', :owner, false);
-select t_check('owner: sees only owner feeds, never an operational group', (select bool_and(x ->> 'kind' = 'owner_feed') and count(*) >= 1 from jsonb_array_elements(mkc_chat_list()) x));
-select t_check('owner: no group messages', (select count(*) from mkc_chat_messages m join mkc_chat_conversations c on c.id = m.conversation_id where c.kind = 'operational_group') = 0);
+select t_check('owner: sees owner feeds (+ the 0298 Koordinasi group), never a team group', (select bool_and(x ->> 'kind' = 'owner_feed' or x ->> 'name' = 'Koordinasi Jogja') and count(*) filter (where x ->> 'kind' = 'owner_feed') >= 1 from jsonb_array_elements(mkc_chat_list()) x));
+select t_check('owner: no Hospitality group messages', (select count(*) from mkc_chat_messages m join mkc_chat_conversations c on c.id = m.conversation_id where c.kind = 'operational_group' and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')) = 0);
 select t_check('owner: can open operational details (tasks)', (select count(*) from mkc_hosp_room_tasks) = 2);
 select t_expect_error('owner: cannot post into group', 'select mkc_chat_send_text((select id from mkc_chat_conversations where kind=''owner_feed''), ''x'')');
 
 -- ===================== workflow =====================
 select set_config('request.jwt.claim.sub', :cln1, false);
 select set_config('t.task', (select id::text from mkc_hosp_room_tasks where unit_nomor='A1'), false);
-select set_config('t.group', (select id::text from mkc_chat_conversations where kind='operational_group'), false);
-select t_check('cleaner: sees group with role cleaning', (select x ->> 'my_role' from jsonb_array_elements(mkc_chat_list()) x) = 'cleaning');
+select set_config('t.group', (select id::text from mkc_chat_conversations where kind='operational_group' and department_id = (select id from mkc_chat_departments where code = 'hospitality')), false);
+select t_check('cleaner: sees group with role cleaning', (select x ->> 'my_role' from jsonb_array_elements(mkc_chat_list()) x where x ->> 'name' = 'Hospitality Loonars') = 'cleaning');
 select mkc_chat_send_text(current_setting('t.group')::uuid, 'Halo tim');
 select t_expect_error('cleaner: submit before start rejected', format('select mkc_hosp_task_submit_cleaning(%L, ''{}'', null)', current_setting('t.task')));
 select mkc_hosp_task_start(current_setting('t.task')::uuid);
@@ -226,9 +230,9 @@ select t_check('owner acknowledged', (select acknowledged_by from mkc_hosp_repor
 -- unread counts
 set role authenticated;
 select set_config('request.jwt.claim.sub', :sec1, false);
-select set_config('t.unread', (select (x ->> 'unread') from jsonb_array_elements(mkc_chat_list()) x), false);
+select set_config('t.unread', (select (x ->> 'unread') from jsonb_array_elements(mkc_chat_list()) x where x ->> 'name' = 'Hospitality Loonars'), false);
 select mkc_chat_mark_read(current_setting('t.group')::uuid);
-select t_check('unread: >0 before, 0 after mark_read', current_setting('t.unread')::int > 0 and (select (x ->> 'unread')::int from jsonb_array_elements(mkc_chat_list()) x) = 0);
+select t_check('unread: >0 before, 0 after mark_read', current_setting('t.unread')::int > 0 and (select (x ->> 'unread')::int from jsonb_array_elements(mkc_chat_list()) x where x ->> 'name' = 'Hospitality Loonars') = 0);
 reset role;
 
 
