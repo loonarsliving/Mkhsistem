@@ -3,6 +3,7 @@ import "server-only";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
 import { sendWhatsAppDocument, sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
+import { createWaMediaUrl } from "@/lib/wa-media/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { buildRefundProofCustomerMessage, formatRefundMonthLong } from "./transfer-proof-format";
@@ -156,22 +157,17 @@ async function forwardProofToCustomer(input: {
   if (phone.length < 10) {
     forwardError = "Nomor HP customer belum ada";
   } else {
-    const { data: signed, error: signError } = await supabase.storage
-      .from(REFUND_PROOF_BUCKET)
-      .createSignedUrl(input.storagePath, FORWARD_URL_TTL_SECONDS);
-    if (signError || !signed) {
-      forwardError = signError?.message ?? "File bukti tidak ditemukan";
-    } else {
-      // A document has no caption on WhatsApp, so the message follows it as text.
-      const result =
-        input.contentType === "application/pdf"
-          ? await sendWhatsAppDocument(phone, signed.signedUrl, "bukti-transfer-refund.pdf").then(async (r) =>
-              r.success ? sendWhatsAppText(phone, input.message) : r,
-            )
-          : await sendWhatsAppImage(phone, signed.signedUrl, input.message);
-      forwarded = result.success;
-      forwardError = result.success ? null : (result.error ?? "unknown error");
-    }
+    // Whacenter rejects Supabase signed URLs (query string) -- use the short link route instead.
+    const fileUrl = createWaMediaUrl(REFUND_PROOF_BUCKET, input.storagePath, FORWARD_URL_TTL_SECONDS);
+    // A document has no caption on WhatsApp, so the message follows it as text.
+    const result =
+      input.contentType === "application/pdf"
+        ? await sendWhatsAppDocument(phone, fileUrl, "bukti-transfer-refund.pdf").then(async (r) =>
+            r.success ? sendWhatsAppText(phone, input.message) : r,
+          )
+        : await sendWhatsAppImage(phone, fileUrl, input.message);
+    forwarded = result.success;
+    forwardError = result.success ? null : (result.error ?? "unknown error");
   }
   if (!forwarded) logger.warn("refund-proof: forward to customer failed", { customer_id: input.customerId, error: forwardError });
 

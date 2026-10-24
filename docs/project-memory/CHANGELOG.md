@@ -14,6 +14,13 @@ route cron `/api/hospitality/reports/dispatch` dan `/api/hospitality/retention`,
 skrip `scripts/provision-hospitality-accounts.ts`, uji unit + suite SQL
 `tests/sql/0291_hospitality`. Lihat `docs/HOSPITALITY_CONNECT.md`.
 
+## 2026-10-24 — Kirim file ke Whacenter lewat tautan pendek (/api/wa-media)
+
+Whacenter menolak tautan bertanda tangan Supabase (HTTP 500). Foto chat
+refund dan penerusan bukti transfer dari dashboard kini memakai
+`lib/wa-media/link.ts` + `app/api/wa-media/[token]/[name]`. Lihat
+CURRENT_STATE.md (Kirim foto di chat refund).
+
 ## 2026-10-23 — Chat refund: kirim foto ke customer
 
 Migrasi `0290_refund_chat_images.sql` (kolom `media_path`). Lihat

@@ -135,6 +135,9 @@ const PUBLIC_PATHS = [
   // here -- see app/api/admin/upload-bukti-transfer/route.ts. Own auth:
   // requireCronAuth (x-cron-secret).
   "/api/admin/upload-bukti-transfer",
+  // Whacenter downloads files to send from here (short HMAC-signed links,
+  // see lib/wa-media/link.ts) -- no session. Own auth: signature + expiry.
+  "/api/wa-media",
 ];
 
 export function isPublicPath(pathname: string) {

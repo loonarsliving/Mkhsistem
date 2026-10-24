@@ -163,7 +163,7 @@ tombol foto di composer `refund-chat-inbox.tsx`; foto dikecilkan di browser
 (1600px JPEG), diunggah langsung ke bucket privat `refund-transfer-proofs`
 (`<customer_id>/...`, policy yang sama dengan bukti transfer), lalu
 `sendRefundChatAction({ mediaPath })` mengirimnya lewat `sendWhatsAppImage`
-(tautan bertanda tangan 1 jam) dengan keterangan opsional. Kolom baru
+dengan keterangan opsional. **Perbaikan 2026-10-24:** Whacenter menjawab HTTP 500 untuk tautan bertanda tangan Supabase (`?token=`), jadi file untuk Whacenter (foto chat refund + bukti transfer dari dashboard) kini lewat tautan pendek ber-HMAC tanpa query `/api/wa-media/<payload>.<sig>/file.<ext>` (`lib/wa-media/link.ts`, kunci turunan dari service-role key, kedaluwarsa 1 jam, hanya bucket `refund-transfer-proofs`; path publik di middleware). Kolom baru
 `mkc_refund_chat_messages.media_path`; body = keterangan atau "📷 Foto".
 `listRefundChatMessages` menandatangani ulang tiap muat (`mediaUrl`), dan
 gambar tampil langsung di gelembung (CSP mengizinkan domain Supabase).
