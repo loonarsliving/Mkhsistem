@@ -186,8 +186,8 @@ actions:
 `crm_create_prospect` / `crm_add_follow_up` need the CRM permissions
 (`prospect.create`, `prospect.follow_up_create`), which come from the app
 role. A Sales group member whose app role is `staff` gets the CRM's
-permission error when adding a lead or follow-up. As of 2026-10-24, Fety's
-app role is `staff`. Whether to change it is the owner's decision.
+permission error when adding a lead or follow-up. On 2026-10-24 the owner
+approved changing Fety's app role from `staff` to `sales`.
 
 ## Tests
 

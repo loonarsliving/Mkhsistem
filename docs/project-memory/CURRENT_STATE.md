@@ -14,11 +14,12 @@ manager; pemakaian kamar + kupon KOL cukup disetujui Rebecca (peran grup
 `/bridge/kol`); Sales Jogja hanya menjual unit Loonars 2, Vando = manager
 grup; lead/follow-up tetap di CRM (lewat RPC CRM yang ada, tanpa nomor HP di
 chat). Laporan owner akhir hari 20:00 WIB per departemen. Uji: unit 499/499,
-SQL 66/66 (Hospitality) + 39/39 (0294), typecheck/lint/build. Setelah 0294
-diterapkan masih perlu dua baris `mkc_chat_role_assignments` (Rebecca →
-markom_jogja room_approver, Vando → sales_jogja manager). Catatan: Fety
-berperan aplikasi `staff`, tanpa izin CRM `prospect.create` /
-`prospect.follow_up_create` — keputusan owner.
+SQL 66/66 (Hospitality) + 40/40 (0294), typecheck/lint/build. Setelah 0294
+diterapkan, anggota diisi sebagai baris `mkc_chat_role_assignments` (tanpa
+pemetaan divisi, atas permintaan owner): Markom = Syifa, Andiko (`markom`) +
+Rebecca (`room_approver`); Sales = Fety, Ayu, Wahyudha (`sales`) + Vando
+(`manager`). Owner menyetujui peran aplikasi Fety diubah `staff` → `sales`
+(agar punya izin CRM).
 
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
