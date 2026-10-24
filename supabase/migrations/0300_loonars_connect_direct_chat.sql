@@ -150,16 +150,14 @@ as $$
   select department_id from public.mkc_chat_conversations where id = p_conversation_id
 $$;
 
-drop policy mkc_chat_members_select on public.mkc_chat_members;
-create policy mkc_chat_members_select on public.mkc_chat_members for select
+-- ALTER POLICY: same policies, new expression, no window without a policy.
+alter policy mkc_chat_members_select on public.mkc_chat_members
   using (public.mkc_chat_can_read(conversation_id)
          or public.mkc_hosp_can_view_department(public.mkc_chat_conversation_department(conversation_id)));
-drop policy mkc_chat_attachments_select on public.mkc_chat_attachments;
-create policy mkc_chat_attachments_select on public.mkc_chat_attachments for select
+alter policy mkc_chat_attachments_select on public.mkc_chat_attachments
   using (public.mkc_chat_can_read(conversation_id)
          or public.mkc_hosp_can_view_department(public.mkc_chat_conversation_department(conversation_id)));
-drop policy hospitality_evidence_select on storage.objects;
-create policy hospitality_evidence_select on storage.objects for select to authenticated
+alter policy hospitality_evidence_select on storage.objects
   using (
     bucket_id = 'hospitality-evidence'
     and exists (
