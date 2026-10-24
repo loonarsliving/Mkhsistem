@@ -8,6 +8,16 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-24 — Laporan Hospitality: angka villa tidak lagi "?" (0299)
+
+Laporan siang & akhir hari 24-10 menampilkan "?" untuk semua angka villa:
+`mkc_hosp_report_villa_snapshot()` kena statement_timeout 8 dtk karena cek
+kesegaran job mengurutkan `cron.job_run_details` (~220 rb baris, tanpa indeks
+start_time) per job — 7,5 dtk diukur di production. 0299 mengambil run
+terbaru lewat `runid` (primary key, mundur): 0,47 dtk, hasil identik. Uji
+SQL 0294: pembanding tanggal voucher KOL kini memakai tanggal Jakarta (gagal
+semu antara 00:00–07:00 WIB).
+
 ## 2026-10-24 — Loonars Connect: tampilan chat pas di HP
 
 Di bawah `lg` chat mengisi layar penuh di bawah top bar (tanpa sisa ruang /
