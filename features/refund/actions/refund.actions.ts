@@ -6,6 +6,7 @@ import { PERMISSIONS, ROLE_KEYS } from "@/constants/rbac";
 import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging.schema";
 import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
+import { createWaMediaUrl } from "@/lib/wa-media/link";
 import { REFUND_PROOF_BUCKET, processRefundTransferProof, resendRefundTransferProof } from "@/lib/refund/transfer-proof";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
@@ -101,10 +102,9 @@ export async function sendRefundChatAction(input: SendRefundChatInput): Promise<
   const { message, mediaPath } = parsed.data;
   let result: { success: boolean; error?: string };
   if (mediaPath) {
-    // Whacenter downloads the photo from this link right away; the chat view signs its own short-lived links.
-    const { data: signed, error: signError } = await supabase.storage.from(REFUND_PROOF_BUCKET).createSignedUrl(mediaPath, 60 * 60);
-    if (signError || !signed) return actionError(`Foto tidak ditemukan: ${signError?.message ?? "unknown error"}`);
-    result = await sendWhatsAppImage(phone, signed.signedUrl, message);
+    // Whacenter downloads the photo right away, and rejects Supabase signed URLs (query string) --
+    // so it gets a short signed link to our own route. The chat view signs its own display links.
+    result = await sendWhatsAppImage(phone, createWaMediaUrl(REFUND_PROOF_BUCKET, mediaPath, 60 * 60), message);
   } else {
     result = await sendWhatsAppText(phone, message);
   }
