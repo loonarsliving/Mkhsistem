@@ -109,6 +109,10 @@ const PUBLIC_PATHS = [
   // retention, 0291) via automation_post/pg_net. Own auth: requireCronAuth.
   "/api/hospitality/reports/dispatch",
   "/api/hospitality/retention",
+  // /chat's home-screen manifest (app/chat-manifest.webmanifest). Browsers
+  // fetch manifests without the session cookie; a redirect to /login here
+  // would silently fall back to the root manifest (start_url "/").
+  "/chat-manifest.webmanifest",
   // pg_cron-triggered (ad-lead-pending-question-timeout-sweep, 0229) via
   // automation_post/pg_net -- same class of bug as
   // crm-promo-sends-worker/construction-tukang-tip above, found the same

@@ -19,6 +19,14 @@ Three parts:
    A future department needs its own division mapping, checklists/workflow
    and report computation; the chat tables/UI are reused as-is.
 
+## Home-screen shortcut
+
+`/chat` links its own manifest (`app/chat-manifest.webmanifest`, `start_url`
+`/chat`, `id` `/chat`) via `app/(app)/chat/layout.tsx`; every other page keeps
+the root manifest (`start_url` `/`). Before this (2026-10-24) an "Add to Home
+Screen" from /chat opened the dashboard. A shortcut added before the fix keeps
+the old start_url: delete it and add it again from /chat.
+
 ## Source of truth — what is read, what is written
 
 | Data | Owner | MK Connect does |
