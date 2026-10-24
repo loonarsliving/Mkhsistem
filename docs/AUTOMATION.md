@@ -66,7 +66,7 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `hospitality-report-dispatch` | `7,22,37,52 * * * *` | tiap 15 mnt | HTTP dispatch → `/api/hospitality/reports/dispatch` (laporan yang jatuh tempo saja, idempoten) |
 | `hospitality-evidence-retention` | `40 * * * *` | tiap jam | HTTP dispatch → `/api/hospitality/retention` (hapus bukti > 30 hari) |
 
-### Loonars Connect Markom + Sales Jogja (0294, belum diterapkan)
+### Loonars Connect Markom + Sales Jogja (0294, aktif sejak 2026-10-24)
 
 | Job | UTC | WITA | Fungsi |
 |---|---|---|---|

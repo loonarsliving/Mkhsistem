@@ -6,7 +6,7 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
-## 2026-10-24 — Loonars Connect: grup Markom Jogja + Sales Jogja (belum diterapkan)
+## 2026-10-24 — Loonars Connect: grup Markom Jogja + Sales Jogja (diterapkan)
 
 Migrasi `0294_loonars_connect_markom_sales_jogja.sql`, `lib/connect/*`,
 `repositories/connect.repository.ts`, `features/chat/{actions/connect.actions.ts,

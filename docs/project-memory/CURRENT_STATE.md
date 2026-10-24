@@ -3,23 +3,27 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Loonars Connect: Markom Jogja + Sales Jogja — DIBANGUN, BELUM DITERAPKAN (2026-10-24)
+## Loonars Connect: Markom Jogja + Sales Jogja — DITERAPKAN (2026-10-24)
 
 Branch `claude/connect-markom-sales-jogja`, migrasi
-`0294_loonars_connect_markom_sales_jogja.sql` (BELUM diterapkan ke produksi —
-menunggu persetujuan owner). Detail: `docs/CONNECT_MARKOM_SALES_JOGJA.md`.
+`0294_loonars_connect_markom_sales_jogja.sql` (diterapkan ke produksi
+2026-10-24 atas persetujuan owner; 21 definisi fungsi dicocokkan md5 dengan
+file commit `b8b1ef0`), PR #110. Detail: `docs/CONNECT_MARKOM_SALES_JOGJA.md`.
 Keputusan owner: hanya Jogja; Markom menyusun kalender konten di grup, tanpa
 manager; pemakaian kamar + kupon KOL cukup disetujui Rebecca (peran grup
 `room_approver`, kupon ditulis ke `villa_kol_vouchers` seperti villa-api
 `/bridge/kol`); Sales Jogja hanya menjual unit Loonars 2, Vando = manager
 grup; lead/follow-up tetap di CRM (lewat RPC CRM yang ada, tanpa nomor HP di
 chat). Laporan owner akhir hari 20:00 WIB per departemen. Uji: unit 499/499,
-SQL 66/66 (Hospitality) + 40/40 (0294), typecheck/lint/build. Setelah 0294
-diterapkan, anggota diisi sebagai baris `mkc_chat_role_assignments` (tanpa
-pemetaan divisi, atas permintaan owner): Markom = Syifa, Andiko (`markom`) +
+SQL 66/66 (Hospitality) + 40/40 (0294), typecheck/lint/build. Diverifikasi
+live: job cron aktif, kedua sync jalan (0 perubahan), semua sumber snapshot
+ok (Loonars 2: 16 tersedia, 1 terjual), RLS sebagai user nyata (Ayu hanya
+Sales Jogja; Rebecca Hospitality + Markom Jogja). Anggota diisi sebagai baris
+`mkc_chat_role_assignments` (tanpa pemetaan divisi, atas permintaan owner): Markom = Syifa, Andiko (`markom`) +
 Rebecca (`room_approver`); Sales = Fety, Ayu, Wahyudha (`sales`) + Vando
-(`manager`). Owner menyetujui peran aplikasi Fety diubah `staff` → `sales`
-(agar punya izin CRM).
+(`manager`). Peran aplikasi Fety diubah `staff` → `sales` (disetujui owner; kini punya
+`prospect.create` + `prospect.follow_up_create`). Alya dan Nyarso tidak
+masuk grup.
 
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
