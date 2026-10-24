@@ -80,7 +80,7 @@ export function Sp1WarningList() {
               </div>
               <p className="text-sm text-muted-foreground">{w.reason}</p>
               {w.ai_draft_content && (
-                <Textarea value={w.ai_draft_content} readOnly rows={10} className="font-mono text-xs" />
+                <Textarea value={w.ai_draft_content} readOnly rows={10} className="font-mono text-xs sm:text-xs" />
               )}
               {w.status === "pending_review" && (
                 <div className="flex justify-end gap-2">

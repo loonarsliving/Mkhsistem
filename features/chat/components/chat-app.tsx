@@ -18,6 +18,35 @@ import { formatListStamp } from "./chat-utils";
 /** Conversation list refresh while open (unread badges), on top of realtime. */
 const LIST_REFRESH_MS = 30_000;
 
+/**
+ * Visible height while the on-screen keyboard is open. iOS Safari does not
+ * shrink 100dvh for the keyboard, so the composer would sit under it; the
+ * visual viewport does shrink. Only tracked below lg (phones / tablets) and
+ * only while it differs from the layout height; null = use 100dvh.
+ */
+function useKeyboardAwareHeight(): number | null {
+  const [height, setHeight] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => {
+      const keyboardOpen = mq.matches && window.innerHeight - vv.height > 80;
+      setHeight(keyboardOpen ? Math.round(vv.height) : null);
+      // iOS scrolls the page up to reveal the focused field; the chat already fits.
+      if (keyboardOpen && window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return height;
+}
+
 export function ChatApp({
   userId,
   isOwner,
@@ -40,6 +69,7 @@ export function ChatApp({
   const [reloadToken, setReloadToken] = React.useState(0);
   const roomRefresh = React.useRef<() => void>(() => {});
   const supabase = React.useMemo(() => createClient(), []);
+  const viewportHeight = useKeyboardAwareHeight();
 
   const reloadList = React.useCallback(async () => {
     const r = await listConversationsAction();
@@ -156,8 +186,13 @@ export function ChatApp({
   );
 
   return (
-    <div className="flex h-[calc(100dvh-8.5rem)] min-h-[520px] overflow-hidden rounded-xl border bg-background shadow-sm sm:h-[calc(100dvh-10rem)]">
-      <div className={cn("h-full w-full border-r md:w-[320px] md:shrink-0", selected ? "hidden md:block" : "block")}>
+    // Below lg the chat fills the screen under the 4rem top bar like a phone app
+    // (cancels <main>'s padding); from lg up it is a card inside the page.
+    <div
+      style={viewportHeight ? ({ "--chat-vh": `${viewportHeight}px` } as React.CSSProperties) : undefined}
+      className="-m-4 flex h-[calc(var(--chat-vh,100dvh)-4rem)] overflow-hidden bg-background sm:-m-6 lg:m-0 lg:h-[calc(100dvh-10rem)] lg:min-h-[520px] lg:rounded-xl lg:border lg:shadow-sm"
+    >
+      <div className={cn("h-full w-full md:w-[320px] md:shrink-0 md:border-r", selected ? "hidden md:block" : "block")}>
         <div className="flex h-full min-h-0 flex-col">
           <div className="border-b px-4 py-3">
             <p className="font-semibold">Chat</p>
