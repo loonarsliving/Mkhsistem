@@ -11,7 +11,9 @@ Owner's decisions (2026-10-24):
 - KOL room use and the KOL voucher need **Rebecca's approval only**. Rebecca
   joins the Markom group for this (group role `room_approver`), because it
   concerns villa rooms.
-- Group members: Syifa is Markom; Fety is Sales.
+- Group members are named by the owner: Markom = Syifa, Andiko; Sales =
+  Fety, Ayu, Wahyudha. Other JOG employees of those divisions (e.g. Alya,
+  Nyarso) are not in the groups.
 - Sales Jogja sells **Loonars 2 units only**.
 - Vando (Kepala Cabang Jogja) is the Sales group's `manager`.
 
@@ -24,18 +26,26 @@ Each department has the same shape as Hospitality:
 
 ## Membership
 
-| Group | Automatic (division → role) | Explicit assignment (`mkc_chat_role_assignments`) |
-|---|---|---|
-| Markom Jogja | "Marketing & Komunikasi", branch JOG → `markom` | Rebecca → `room_approver` |
-| Sales Jogja | "Marketing & Sales", branch JOG → `sales` | Vando → `manager` |
+Membership is **explicit only** (`mkc_chat_role_assignments`, no division
+mapping):
 
-Both divisions are company-wide, so `mkc_chat_division_roles` gained an
-optional `branch_id`. `mkc_chat_desired_members()` keeps only employees of
-that branch. Hospitality's mapping has `branch_id = null`, so its behaviour is
-unchanged.
+| Group | Members (group role) |
+|---|---|
+| Markom Jogja | Syifa, Andiko (`markom`); Rebecca (`room_approver`) |
+| Sales Jogja | Fety, Ayu, Wahyudha (`sales`); Vando (`manager`) |
 
-The two assignment rows are **data, not part of the migration**. They are
-inserted after 0294 is applied, with the owner's approval.
+Adding or removing someone means inserting a row or setting `revoked_at` on
+it; the 5-minute membership sync applies the change. These rows are **data,
+not part of the migration**.
+
+`mkc_chat_division_roles` also gained an optional `branch_id`, because the
+divisions are company-wide. `mkc_chat_desired_members()` honours it, but 0294
+seeds no division mapping for these two departments. Hospitality's mapping
+has `branch_id = null`, so its behaviour is unchanged.
+
+The sync job posts **every** new JOG CRM lead to the Sales group. A lead the
+CRM round-robin assigns to a sales person outside the group, such as Nyarso,
+still appears in the group, but only that person or Vando can act on it.
 
 ## Markom Jogja
 

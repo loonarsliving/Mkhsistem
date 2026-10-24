@@ -19,10 +19,25 @@ begin execute p_sql; perform t_check(p_name, false, 'no error raised');
 exception when others then perform t_check(p_name, true, sqlerrm); end $$;
 grant execute on function t_expect_error to authenticated;
 
+select t_check('migration maps no division into Markom/Sales: only explicit assignments are members',
+  (select count(*) from mkc_chat_division_roles dr join mkc_chat_departments d on d.id = dr.department_id where d.code in ('markom_jogja', 'sales_jogja')) = 0
+  and (select string_agg(e.full_name || ':' || m.member_role, ',' order by e.full_name) from mkc_chat_members m join employees e on e.id = m.employee_id
+       join mkc_chat_conversations c on c.id = m.conversation_id join mkc_chat_departments d on d.id = c.department_id
+       where d.code in ('markom_jogja', 'sales_jogja') and m.removed_at is null) is null);
+
 insert into mkc_chat_role_assignments (department_id, employee_id, member_role)
 select id, :rebecca::uuid, 'room_approver' from mkc_chat_departments where code = 'markom_jogja';
 insert into mkc_chat_role_assignments (department_id, employee_id, member_role)
 select id, :vando::uuid, 'manager' from mkc_chat_departments where code = 'sales_jogja';
+
+-- The suite below uses division membership to exercise the branch filter
+-- (production uses explicit assignments for the named people instead).
+insert into mkc_chat_division_roles (department_id, division_id, member_role, branch_id)
+select d.id, dv.id, v.member_role, d.branch_id
+from mkc_chat_departments d
+join (values ('markom_jogja', 'Marketing & Komunikasi', 'markom'), ('sales_jogja', 'Marketing & Sales', 'sales')) as v(code, division_name, member_role) on v.code = d.code
+join divisions dv on dv.name = v.division_name;
+select mkc_chat_sync_members();
 
 select set_config('t.mgroup', (select c.id::text from mkc_chat_conversations c join mkc_chat_departments d on d.id = c.department_id where d.code = 'markom_jogja' and c.kind = 'operational_group'), false);
 select set_config('t.sgroup', (select c.id::text from mkc_chat_conversations c join mkc_chat_departments d on d.id = c.department_id where d.code = 'sales_jogja' and c.kind = 'operational_group'), false);

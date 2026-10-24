@@ -10,10 +10,11 @@
 --     Rebecca joins the Markom group for exactly this.
 --   * Sales Jogja sells Loonars 2 units only. Vando (Kepala Cabang Jogja) is
 --     the group's manager.
---   * Members: Markom = division "Marketing & Komunikasi" in branch JOG
---     (incl. a staff-role member), Sales = division "Marketing & Sales" in
---     branch JOG. Both divisions are company-wide, so division mappings now
---     carry an optional branch filter.
+--   * Members are named by the owner (Markom: Syifa, Andiko; Sales: Fety,
+--     Ayu, Wahyudha) and added as explicit mkc_chat_role_assignments rows,
+--     not by division -- other JOG employees of those divisions stay out.
+--     Division mappings gain an optional branch filter (the divisions are
+--     company-wide) for when a department does want division membership.
 --
 -- Source of truth stays put:
 --   * KOL vouchers live in the villa app's villa_kol_vouchers. The villa-api
@@ -146,13 +147,10 @@ join (values
 ) as v(code, kind, name, description) on v.code = d.code
 on conflict (department_id, kind) do nothing;
 
-insert into public.mkc_chat_division_roles (department_id, division_id, member_role, branch_id)
-select d.id, dv.id, v.member_role, d.branch_id
-from public.mkc_chat_departments d
-join (values ('markom_jogja', 'Marketing & Komunikasi', 'markom'), ('sales_jogja', 'Marketing & Sales', 'sales'))
-  as v(code, division_name, member_role) on v.code = d.code
-join public.divisions dv on dv.name = v.division_name and dv.deleted_at is null
-on conflict do nothing;
+-- No division mapping: the owner named the members individually (not every
+-- JOG employee of those divisions is in the group), so membership is the
+-- explicit mkc_chat_role_assignments rows, inserted as data after this
+-- migration. The branch_id filter above remains available for later use.
 
 -- ----------------------------------------------------------------------------
 -- Markom: KOL collaborations + content calendar
