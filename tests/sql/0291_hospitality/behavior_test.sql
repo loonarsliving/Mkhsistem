@@ -248,5 +248,30 @@ select set_config('request.jwt.claim.sub', :sec1, false);
 select t_check('member: people directory has names + roles only', (select bool_and(x ?& array['id','name','role','active'] and not x ? 'email') from jsonb_array_elements(mkc_hosp_people('hospitality')) x)
   and jsonb_array_length(mkc_hosp_people('hospitality')) >= 5);
 reset role;
+
+-- 0295: the villa app leaves old 'bersih' rows pending; a dirty unit gets ONE task, for its latest row
+insert into units (id, nomor, status) values ('10000000-0000-0000-0000-000000000009','C9','dirty');
+insert into housekeeping (id, unit_id, unit_nomor, tgl, created_at) values
+ ('20000000-0000-0000-0000-000000000091','10000000-0000-0000-0000-000000000009','C9', current_date - 30, now() - interval '30 days'),
+ ('20000000-0000-0000-0000-000000000092','10000000-0000-0000-0000-000000000009','C9', current_date - 10, now() - interval '10 days'),
+ ('20000000-0000-0000-0000-000000000093','10000000-0000-0000-0000-000000000009','C9', current_date, now());
+select mkc_hosp_sync_room_tasks();
+select mkc_hosp_sync_room_tasks();
+select t_check('0295: stale pending rows -> one task per dirty unit, tied to the latest row',
+  (select count(*) from mkc_hosp_room_tasks where unit_nomor = 'C9') = 1
+  and (select housekeeping_id from mkc_hosp_room_tasks where unit_nomor = 'C9') = '20000000-0000-0000-0000-000000000093'
+  and (select count(*) from mkc_chat_messages m join mkc_hosp_room_tasks t on t.id = m.ref_id where t.unit_nomor = 'C9' and m.kind = 'task') = 1);
+update housekeeping set status = 'done' where id = '20000000-0000-0000-0000-000000000093';
+update units set status = 'available' where nomor = 'C9';
+select mkc_hosp_sync_room_tasks();
+select t_check('0295: cleaned in villa -> task closed, stale rows do not respawn a task',
+  (select string_agg(status, ',') from mkc_hosp_room_tasks where unit_nomor = 'C9') = 'completed');
+update units set status = 'dirty' where nomor = 'C9';
+insert into housekeeping (id, unit_id, unit_nomor) values ('20000000-0000-0000-0000-000000000094','10000000-0000-0000-0000-000000000009','C9');
+select mkc_hosp_sync_room_tasks();
+select t_check('0295: next checkout -> one new task for the new row',
+  (select count(*) from mkc_hosp_room_tasks where unit_nomor = 'C9' and status = 'pending') = 1
+  and (select housekeeping_id from mkc_hosp_room_tasks where unit_nomor = 'C9' and status = 'pending') = '20000000-0000-0000-0000-000000000094');
+reset role;
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

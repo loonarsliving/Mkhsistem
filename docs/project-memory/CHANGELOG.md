@@ -6,6 +6,12 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-24 — Loonars Connect: satu tugas kebersihan per unit (0295, diterapkan)
+
+`0295_loonars_connect_room_task_dedupe.sql`: `mkc_hosp_sync_room_tasks()` tidak
+lagi membuat kartu untuk setiap baris housekeeping lama yang pending. Uji SQL
+Hospitality 69/69 (3 cek baru).
+
 ## 2026-10-24 — Loonars Connect: grup Markom Jogja + Sales Jogja (diterapkan)
 
 Migrasi `0294_loonars_connect_markom_sales_jogja.sql`, `lib/connect/*`,

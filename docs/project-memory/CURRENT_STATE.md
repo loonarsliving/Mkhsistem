@@ -27,6 +27,15 @@ masuk grup.
 
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
+Perbaikan 2026-10-24 (migrasi `0295`, diterapkan sebelum auto-checkout villa
+13:00 WIB): sinkron tugas kamar membuat satu kartu per baris housekeeping
+`bersih` yang masih pending, padahal aplikasi villa membiarkan baris lama
+pending selamanya — B2 muncul 4x, A4 6x. Sekarang satu tugas terbuka per unit
+dirty, terikat ke baris pending terbaru. 8 tugas duplikat dibatalkan dan kartu
+duplikatnya dihapus dari grup. Catatan: unit hanya muncul setelah statusnya
+`dirty` di sistem villa (check-out tercatat); check-out hari itu yang belum
+diproses Front Desk ikut job `villa-auto-checkout` pukul 13:00 WIB.
+
 Perbaikan 2026-10-24 (migrasi `0293`, diterapkan): `mkc_hosp_notify` memakai
 `type='info'` yang ditolak `mkc_notifications_type_check` produksi, sehingga
 semua notifikasi Hospitality gagal (laporan pagi 24-10 gagal 3x; peringatan
