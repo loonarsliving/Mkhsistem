@@ -22,6 +22,10 @@ const optionalText = (max: number) =>
 export const conversationIdSchema = z.object({ conversationId: uuid });
 export type ConversationIdInput = z.input<typeof conversationIdSchema>;
 
+/** Direct chat (0300): the person to chat with. */
+export const openDirectChatSchema = z.object({ employeeId: uuid });
+export type OpenDirectChatInput = z.input<typeof openDirectChatSchema>;
+
 export const loadMessagesSchema = z.object({ conversationId: uuid, before: z.string().datetime({ offset: true }).optional() });
 export type LoadMessagesInput = z.input<typeof loadMessagesSchema>;
 

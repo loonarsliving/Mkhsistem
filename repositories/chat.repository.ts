@@ -15,7 +15,7 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export interface ChatConversation {
   id: string;
-  kind: "operational_group" | "owner_feed";
+  kind: "operational_group" | "owner_feed" | "direct";
   name: string;
   description: string | null;
   departmentCode: string;
@@ -27,6 +27,17 @@ export interface ChatConversation {
   lastKind: string | null;
   lastSender: string | null;
   unread: number;
+  /** direct chats (0300): the other person */
+  peerId: string | null;
+}
+
+/** Someone the caller can start a direct chat with (0300). */
+export interface ChatContact {
+  id: string;
+  name: string;
+  branch: string | null;
+  position: string | null;
+  conversationId: string | null;
 }
 
 export interface ChatPerson {
@@ -154,6 +165,19 @@ export async function listChatConversations(supabase: TypedSupabaseClient): Prom
     lastKind: (r.last_kind as string | null) ?? null,
     lastSender: (r.last_sender as string | null) ?? null,
     unread: Number(r.unread ?? 0),
+    peerId: (r.peer_id as string | null) ?? null,
+  }));
+}
+
+export async function listDirectContacts(supabase: TypedSupabaseClient): Promise<ChatContact[]> {
+  const { data, error } = await supabase.rpc("mkc_chat_direct_contacts");
+  if (error) throw new Error(error.message);
+  return ((data as Record<string, unknown>[] | null) ?? []).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    branch: (r.branch as string | null) ?? null,
+    position: (r.position as string | null) ?? null,
+    conversationId: (r.conversation_id as string | null) ?? null,
   }));
 }
 

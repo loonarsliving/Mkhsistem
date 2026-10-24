@@ -15,11 +15,13 @@ columns mirrored from the live schema. It is NOT a migration.
 ```sh
 createdb t
 psql -d t -f tests/sql/0291_hospitality/stubs.sql
-for f in supabase/migrations/029[1-9]_loonars_connect*.sql; do psql -d t -v ON_ERROR_STOP=1 -f "$f"; done
+for f in supabase/migrations/029[1-9]_loonars_connect*.sql supabase/migrations/030*_loonars_connect*.sql; do psql -d t -v ON_ERROR_STOP=1 -f "$f"; done
 psql -d t -f tests/sql/0291_hospitality/behavior_test.sql   # prints PASS/FAIL per check
 ```
 
-Last run (2026-10-24, incl. 0295–0298): 77 passed, 0 failed.
+Last run (2026-10-25, incl. 0295–0300): 104 passed, 0 failed (27 of them for
+0300 direct chat: scope, one chat per pair, privacy incl. the owner, push,
+membership sync, 30-day photo expiry).
 
 ## 0294 (Markom Jogja + Sales Jogja)
 

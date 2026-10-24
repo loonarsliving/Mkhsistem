@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { departmentKind, memberRoleLabel } from "@/lib/connect/labels";
+import { departmentKind, isPlainChat, memberRoleLabel } from "@/lib/connect/labels";
 import type { ConnectReportData } from "@/lib/connect/report-types";
 import { roleCan, type SecurityKind } from "@/lib/hospitality/checklists";
 import { cn } from "@/lib/utils";
@@ -106,9 +106,10 @@ function connectCard(message: ChatMessage, refs: ChatRefs): React.ReactNode | nu
 }
 
 function MessageView({ message, refs, isFeed, reportTitle }: { message: ChatMessage; refs: ChatRefs; isFeed: boolean; reportTitle: string }) {
-  const { userId, people } = useChat();
+  const { userId, people, conversationKind } = useChat();
   const own = message.senderId === userId;
-  const sender = message.senderId ? personName(people, message.senderId) : null;
+  // 1-on-1: the header already names the other person (WhatsApp style)
+  const sender = message.senderId && conversationKind !== "direct" ? personName(people, message.senderId) : null;
   const meta = (
     <p className="mt-1 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">
       {sender && !own ? `${sender} · ` : ""}
@@ -284,6 +285,8 @@ export function ChatRoom({
   const { userId, myRole, isOwner, people } = useChat();
   const isFeed = conversation.kind === "owner_feed";
   const deptKind = departmentKind(conversation.departmentCode);
+  const plainChat = isPlainChat(deptKind);
+  const isDirect = conversation.kind === "direct";
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [refs, setRefs] = React.useState<ChatRefs>({ tasks: {}, issues: {}, checklists: {}, reports: {}, connect: EMPTY_CONNECT_REFS });
   const [hasMore, setHasMore] = React.useState(false);
@@ -338,10 +341,10 @@ export function ChatRoom({
   }, [conversation.id]);
 
   const loadWork = React.useCallback(async () => {
-    if (isFeed || deptKind === "koordinasi") return;
+    if (isFeed || plainChat) return;
     const r = deptKind === "hospitality" ? await loadOpenWorkAction({ conversationId: conversation.id }) : await loadConnectWorkAction({ conversationId: conversation.id });
     if (r.success && r.data) setWork(r.data);
-  }, [conversation.id, isFeed, deptKind]);
+  }, [conversation.id, isFeed, deptKind, plainChat]);
 
   const refresh = React.useCallback(() => {
     void load();
@@ -434,21 +437,29 @@ export function ChatRoom({
           <button type="button" onClick={onBack} className="rounded-full p-1.5 hover:bg-muted md:hidden" aria-label="Kembali ke daftar">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white", isFeed ? "bg-sky-700" : "bg-emerald-700")}>
-            {isFeed ? <FileBarChart className="h-5 w-5" /> : <Users className="h-5 w-5" />}
-          </div>
+          {isDirect ? (
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white", avatarColor(conversation.name))}>
+              {initials(conversation.name)}
+            </div>
+          ) : (
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white", isFeed ? "bg-sky-700" : "bg-emerald-700")}>
+              {isFeed ? <FileBarChart className="h-5 w-5" /> : <Users className="h-5 w-5" />}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold leading-tight">{conversation.name}</p>
             <p className="truncate text-xs text-muted-foreground">
               {isFeed
                 ? "Laporan konsolidasi & peringatan kritis"
-                : `${conversation.memberCount} anggota${myRole ? ` · Anda: ${memberRoleLabel(myRole, conversation.departmentCode)}` : ""}`}
+                : isDirect
+                  ? conversation.description || "Pesan pribadi"
+                  : `${conversation.memberCount} anggota${myRole ? ` · Anda: ${memberRoleLabel(myRole, conversation.departmentCode)}` : ""}`}
             </p>
           </div>
           <Button size="icon" variant="ghost" onClick={() => setSearchOpen((s) => !s)} aria-label="Cari pesan">
             <Search className="h-5 w-5" />
           </Button>
-          {!isFeed && deptKind !== "koordinasi" && (
+          {!isFeed && !plainChat && (
             <Button size="sm" variant="outline" onClick={() => setShowWork(true)} className="gap-1">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">{deptKind === "markom" ? "Kalender & KOL" : deptKind === "sales" ? "Lead & kunjungan" : "Pekerjaan"}</span>
@@ -532,6 +543,8 @@ export function ChatRoom({
                   ? deptKind === "hospitality"
                     ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
                     : "Laporan live ada di atas dan selalu mengikuti data terbaru. Laporan akhir hari (20:00) tersimpan di sini otomatis setiap malam."
+                  : isDirect
+                    ? `Pesan pribadi dengan ${conversation.name}. Hanya terlihat oleh Anda berdua.`
                   : deptKind === "koordinasi"
                     ? "Grup koordinasi lintas tim Hospitality, Markom, Sales Jogja dan owner. Mulai percakapan di sini."
                   : deptKind === "markom"
@@ -582,7 +595,7 @@ export function ChatRoom({
               </div>
             )}
             <div className="flex items-end gap-1.5 px-2 py-2">
-              {deptKind !== "koordinasi" && (
+              {!plainChat && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button type="button" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Laporan cepat">
@@ -693,7 +706,12 @@ export function ChatRoom({
 export function ConversationAvatar({ conversation }: { conversation: ChatConversation }) {
   const isFeed = conversation.kind === "owner_feed";
   return (
-    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white", isFeed ? "bg-sky-700" : "bg-emerald-700")}>
+    <div
+      className={cn(
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white",
+        conversation.kind === "direct" ? avatarColor(conversation.name) : isFeed ? "bg-sky-700" : "bg-emerald-700",
+      )}
+    >
       {isFeed ? <FileBarChart className="h-5 w-5" /> : <span className="text-sm font-semibold">{initials(conversation.name)}</span>}
     </div>
   );

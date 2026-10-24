@@ -24,7 +24,8 @@ create table public.divisions (id uuid primary key default gen_random_uuid(), br
 create table public.roles (id uuid primary key default gen_random_uuid(), key text unique, name text);
 create table public.permissions (id uuid primary key default gen_random_uuid(), key text unique, description text);
 create table public.role_permissions (role_id uuid references public.roles(id), permission_id uuid references public.permissions(id), primary key (role_id, permission_id));
-create table public.employees (id uuid primary key, full_name text, branch_id uuid, division_id uuid, role_id uuid, employment_status text default 'active', approval_status text default 'approved', is_active boolean default true, deleted_at timestamptz);
+create table public.positions (id uuid primary key default gen_random_uuid(), code text, name text);
+create table public.employees (id uuid primary key, full_name text, branch_id uuid, division_id uuid, position_id uuid, role_id uuid, employment_status text default 'active', approval_status text default 'approved', is_active boolean default true, deleted_at timestamptz);
 create table public.units (id uuid primary key default gen_random_uuid(), nomor text, status text default 'available');
 create table public.housekeeping (id uuid primary key default gen_random_uuid(), unit_id uuid, unit_nomor text, tugas text, tgl date default current_date, status text default 'pending', done_at timestamptz, done_by text, created_at timestamptz default now(), jenis text default 'bersih');
 create table public.audit_logs (id uuid primary key default gen_random_uuid(), table_name text, record_id uuid, action text check (action in ('INSERT','UPDATE','DELETE')), old_data jsonb, new_data jsonb, changed_by uuid, changed_at timestamptz default now());

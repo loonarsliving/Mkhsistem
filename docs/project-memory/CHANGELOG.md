@@ -8,6 +8,13 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: chat pribadi 1-on-1 (0300)
+
+Chat pribadi antar karyawan Jogja + Loonars Private Living + owner, satu
+percakapan per pasangan, teks + foto + push ala WhatsApp. Hanya kedua anggota
+yang bisa membaca (owner pun tidak); tiga policy anggota/lampiran/foto tidak
+lagi bergantung pada jalur NULL `can_view_department`. Uji SQL 104/104 + 50/50.
+
 ## 2026-10-24 — Laporan Hospitality: angka villa tidak lagi "?" (0299)
 
 Laporan siang & akhir hari 24-10 menampilkan "?" untuk semua angka villa:

@@ -145,6 +145,25 @@ group's manager(s) and every owner-feed holder (`mkc_notifications` →
 existing web push trigger, and `hospitality_critical_alert` is on the
 WhatsApp relay allowlist) and posts an alert card in the owner feed.
 
+## Direct (1-on-1) chat (0300)
+
+- Anyone in scope can start a chat with anyone else in scope: active
+  employees of the Jogja (JOG) and Loonars Private Living (LPL) branches, plus
+  the owners. Scope lives in `mkc_chat_departments.settings.direct_scope` of
+  the technical department `pesan_pribadi` (`branch_codes`, `include_owners`),
+  so it can be widened without a deploy.
+- One conversation per pair (`mkc_chat_conversations.direct_key`), kind
+  `direct`, two members with source `direct`. Same text / photo / push /
+  unread / realtime pipeline as the groups; photos expire after 30 days.
+- Only the two members can read it — not the owner. The owner's
+  department-wide access (`mkc_hosp_can_view_department`) excludes the
+  private department, and the member / attachment / storage policies look up
+  the department with `mkc_chat_conversation_department()` (security
+  definer) instead of an RLS subquery that returned NULL.
+- Group membership sync never removes direct members. Someone who leaves the
+  company loses access (`mkc_chat_employee_eligible`); someone who moves to
+  another branch keeps existing chats but can no longer start new ones.
+
 ## Evidence storage & 30-day retention
 
 - Private bucket `hospitality-evidence` (10 MB, jpeg/png/webp/pdf). Browser

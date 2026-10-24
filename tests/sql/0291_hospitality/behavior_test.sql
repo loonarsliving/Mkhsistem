@@ -334,5 +334,111 @@ select t_check('0297: unread badge counts the new message for a member, not for 
   mkc_chat_unread_total(:cln1::uuid) >= 1
   and mkc_chat_unread_total(:sec1::uuid) < mkc_chat_unread_total(:cln1::uuid));
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- 0300: direct (1-on-1) chat. Scope = JOG + LPL employees and owners.
+-- ---------------------------------------------------------------------------
+\set outsider '''00000000-0000-0000-0000-0000000000f9'''
+insert into branches (code, name) values ('MKS', 'Makassar') on conflict do nothing;
+insert into employees (id, full_name, branch_id, role_id, approval_status, is_active)
+select :outsider::uuid, 'Orang Makassar', (select id from branches where code='MKS'), (select id from roles where key='staff'), 'approved', true;
+
+select set_config('t.dept_hosp', (select id from mkc_chat_departments where code = 'hospitality')::text, false);
+select set_config('t.dept_dm', (select id from mkc_chat_departments where code = 'pesan_pribadi')::text, false);
+set role authenticated;
+select set_config('request.jwt.claim.sub', :outsider, false);
+select t_check('0300: out-of-scope branch has no direct chat', not mkc_chat_direct_available());
+select t_expect_error('0300: out-of-scope employee cannot list contacts', 'select mkc_chat_direct_contacts()');
+select t_expect_error('0300: out-of-scope employee cannot open a chat', format('select mkc_chat_direct_open(%L)', :rebecca));
+
+select set_config('request.jwt.claim.sub', :fo1, false);
+select t_check('0300: LPL employee has direct chat', mkc_chat_direct_available());
+select t_check('0300: contacts = in-scope people (JOG + LPL + owner), not self / outsider / pending',
+  (select array_agg(x->>'name' order by x->>'name') from jsonb_array_elements(mkc_chat_direct_contacts()) x)
+  = array['Cleaner Satu', 'Markom', 'Owner', 'Rebecca', 'Sec Satu']);
+select t_expect_error('0300: cannot chat with yourself', format('select mkc_chat_direct_open(%L)', :fo1));
+select t_expect_error('0300: cannot open a chat with an out-of-scope employee', format('select mkc_chat_direct_open(%L)', :outsider));
+select t_expect_error('0300: cannot open a chat with a pending (ineligible) employee', format('select mkc_chat_direct_open(%L)', :fo2));
+select set_config('t.dm', mkc_chat_direct_open(:rebecca::uuid)::text, false);
+select t_check('0300: reopening returns the same chat', mkc_chat_direct_open(:rebecca::uuid) = current_setting('t.dm')::uuid);
+select t_check('0300: empty chat listed for the opener, named after the other person',
+  (select x->>'name' = 'Rebecca' and x->>'kind' = 'direct' and x->>'peer_id' = :rebecca and (x->>'member_count')::int = 2
+   from jsonb_array_elements(mkc_chat_list()) x where x->>'id' = current_setting('t.dm')));
+
+select set_config('request.jwt.claim.sub', :rebecca, false);
+select t_check('0300: the other side opening finds the same chat', mkc_chat_direct_open(:fo1::uuid) = current_setting('t.dm')::uuid);
+select t_check('0300: an empty chat does not appear on the other phone',
+  not exists (select 1 from jsonb_array_elements(mkc_chat_list()) x where x->>'id' = current_setting('t.dm')));
+
+select set_config('request.jwt.claim.sub', :fo1, false);
+select mkc_chat_send_text(current_setting('t.dm')::uuid, 'Bu, kamar B2 sudah siap', '{}');
+
+select set_config('request.jwt.claim.sub', :rebecca, false);
+select t_check('0300: after a message it shows for the receiver, named after the sender, unread 1',
+  (select x->>'name' = 'FO Satu' and (x->>'unread')::int = 1 and x->>'last_body' = 'Bu, kamar B2 sudah siap'
+   from jsonb_array_elements(mkc_chat_list()) x where x->>'id' = current_setting('t.dm')));
+select t_check('0300: receiver reads the message (RLS)',
+  exists (select 1 from mkc_chat_messages where conversation_id = current_setting('t.dm')::uuid and body = 'Bu, kamar B2 sudah siap'));
+select mkc_chat_send_text(current_setting('t.dm')::uuid, 'Oke, makasih', '{}');
+
+-- Privacy: nobody else, the owner included, can see or post in it.
+select set_config('request.jwt.claim.sub', :owner, false);
+select t_check('0300: owner cannot read a chat between two employees (messages, members, conversation, list)',
+  not exists (select 1 from mkc_chat_messages where conversation_id = current_setting('t.dm')::uuid)
+  and not exists (select 1 from mkc_chat_members where conversation_id = current_setting('t.dm')::uuid)
+  and not exists (select 1 from mkc_chat_conversations where id = current_setting('t.dm')::uuid)
+  and not exists (select 1 from jsonb_array_elements(mkc_chat_list()) x where x->>'id' = current_setting('t.dm')));
+select t_check('0300: owner bypass still covers operational departments, not the private one',
+  mkc_hosp_can_view_department(current_setting('t.dept_hosp')::uuid)
+  and not mkc_hosp_can_view_department(current_setting('t.dept_dm')::uuid));
+select t_check('0300: owner still sees Hospitality group members (policy no longer relies on the NULL path)',
+  (select count(*) from mkc_chat_members m where m.removed_at is null and mkc_chat_conversation_department(m.conversation_id) = current_setting('t.dept_hosp')::uuid) = 4);
+select t_expect_error('0300: owner cannot post in a chat between two employees',
+  format('select mkc_chat_send_text(%L, %L, %L)', current_setting('t.dm'), 'halo', '{}'));
+select t_check('0300: owner has direct chat too', mkc_chat_direct_available());
+select set_config('t.dm_owner', mkc_chat_direct_open(:cln1::uuid)::text, false);
+select mkc_chat_send_text(current_setting('t.dm_owner')::uuid, 'Terima kasih kerja kerasnya', '{}');
+
+select set_config('request.jwt.claim.sub', :sec1, false);
+select t_check('0300: another LPL colleague cannot read it either',
+  not exists (select 1 from mkc_chat_messages where conversation_id = current_setting('t.dm')::uuid)
+  and not mkc_chat_can_read(current_setting('t.dm')::uuid));
+
+select set_config('request.jwt.claim.sub', :cln1, false);
+select t_check('0300: owner -> employee chat arrives, titled with the owner name',
+  (select x->>'name' = 'Owner' and (x->>'unread')::int = 1 from jsonb_array_elements(mkc_chat_list()) x where x->>'id' = current_setting('t.dm_owner')));
+reset role;
+
+select t_check('0300: push like WhatsApp: one per message to the other person only, title = sender name',
+  (select count(*) from mkc_notifications where category = 'chat_message' and metadata->>'conversation_id' = current_setting('t.dm')) = 2
+  and exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :rebecca::uuid
+              and metadata->>'conversation_id' = current_setting('t.dm') and title = 'FO Satu' and body = 'Bu, kamar B2 sudah siap' and status = 'archived')
+  and exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :fo1::uuid
+              and metadata->>'conversation_id' = current_setting('t.dm') and title = 'Rebecca'));
+select t_check('0300: unread badge includes direct chats', mkc_chat_unread_total(:cln1::uuid) >= 1);
+
+select mkc_chat_sync_members();
+select t_check('0300: membership sync never removes direct-chat members',
+  (select count(*) from mkc_chat_members where conversation_id = current_setting('t.dm')::uuid and removed_at is null) = 2);
+select t_check('0300: Hospitality group membership unchanged by 0300',
+  (select count(*) from mkc_chat_members m join mkc_chat_conversations c on c.id = m.conversation_id
+    where m.removed_at is null and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')) = 4);
+
+insert into storage.objects (bucket_id, name, owner_id, metadata)
+values ('hospitality-evidence', current_setting('t.dm') || '/' || :fo1 || '/x.jpg', :fo1, '{"mimetype":"image/jpeg","size":"10"}');
+set role authenticated;
+select set_config('request.jwt.claim.sub', :fo1, false);
+select set_config('t.att', mkc_chat_register_attachment(current_setting('t.dm')::uuid, current_setting('t.dm') || '/' || :fo1 || '/x.jpg')::text, false);
+reset role;
+select t_check('0300: photos in direct chats expire after 30 days',
+  (select expires_at - uploaded_at = interval '30 days' from mkc_chat_attachments where id = current_setting('t.att')::uuid));
+
+update employees set is_active = false where id = :fo1::uuid;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :fo1, false);
+select t_check('0300: an employee who left can no longer read their chats', not mkc_chat_can_read(current_setting('t.dm')::uuid));
+reset role;
+update employees set is_active = true where id = :fo1::uuid;
+
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

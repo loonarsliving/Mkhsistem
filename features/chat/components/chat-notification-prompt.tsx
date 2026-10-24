@@ -82,7 +82,7 @@ export function ChatNotificationPrompt() {
       <div className="min-w-0 flex-1 space-y-1">
         {state === "ask" && (
           <>
-            <p>Aktifkan notifikasi agar pesan grup masuk ke HP seperti WhatsApp.</p>
+            <p>Aktifkan notifikasi agar pesan chat masuk ke HP seperti WhatsApp.</p>
             <button
               type="button"
               disabled={busy}
@@ -99,7 +99,7 @@ export function ChatNotificationPrompt() {
             lalu buka dari ikon itu dan aktifkan notifikasi.
           </p>
         )}
-        {state === "denied" && <p>Notifikasi diblokir. Izinkan notifikasi untuk situs ini di pengaturan browser/HP agar pesan grup masuk.</p>}
+        {state === "denied" && <p>Notifikasi diblokir. Izinkan notifikasi untuk situs ini di pengaturan browser/HP agar pesan chat masuk.</p>}
       </div>
       {state !== "ask" && (
         <button type="button" onClick={dismiss} className="rounded-full p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900" aria-label="Tutup">

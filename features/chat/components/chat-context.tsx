@@ -6,7 +6,7 @@ import type { ChatPerson, ChatUnit } from "@/repositories/chat.repository";
 
 export interface ChatContextValue {
   conversationId: string;
-  conversationKind: "operational_group" | "owner_feed";
+  conversationKind: "operational_group" | "owner_feed" | "direct";
   departmentCode: string;
   userId: string;
   /** Caller's role in the department's operational group (null for the owner). */

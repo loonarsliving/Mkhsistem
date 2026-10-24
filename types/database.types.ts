@@ -384,17 +384,21 @@ export interface Database {
         Row: {
           id: string;
           department_id: string;
-          kind: "operational_group" | "owner_feed";
+          kind: "operational_group" | "owner_feed" | "direct";
           name: string;
           description: string | null;
+          direct_key: string | null;
+          created_by: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           department_id?: string;
-          kind?: "operational_group" | "owner_feed";
+          kind?: "operational_group" | "owner_feed" | "direct";
           name?: string;
           description?: string | null;
+          direct_key?: string | null;
+          created_by?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["mkc_chat_conversations"]["Insert"]>;
@@ -6667,6 +6671,10 @@ export interface Database {
       mkc_sales_open_work: { Args: { p_department_code: string }; Returns: Json };
       mkc_chat_unread_total: { Args: { p_employee_id: string }; Returns: number };
       mkc_chat_list: { Args: Record<string, never>; Returns: Json };
+      mkc_chat_direct_available: { Args: Record<string, never>; Returns: boolean };
+      mkc_chat_direct_contacts: { Args: Record<string, never>; Returns: Json };
+      mkc_chat_direct_open: { Args: { p_employee_id: string }; Returns: string };
+      mkc_chat_conversation_department: { Args: { p_conversation_id: string }; Returns: string };
       mkc_chat_mark_read: { Args: { p_conversation_id: string }; Returns: undefined };
       mkc_chat_send_text: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: string };
       mkc_chat_register_attachment: { Args: { p_conversation_id: string; p_object_path: string; p_evidence_slot?: string | null }; Returns: string };
