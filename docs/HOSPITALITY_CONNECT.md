@@ -43,7 +43,7 @@ the old start_url: delete it and add it again from /chat.
 
 1. Guest checks out in the villa app → unit `dirty` + `housekeeping` row
    (`jenis='bersih'`, `pending`). Unchanged.
-2. `mkc_hosp_sync_room_tasks()` (pg_cron every 5 min, and on `/chat` load)
+2. `mkc_hosp_sync_room_tasks()` (at villa checkout / room-cleaned commit via deferred triggers on `units` + `housekeeping` (0296), plus pg_cron every 5 min and on `/chat` load)
    creates one room task per such row whose unit is `dirty`. Cleaning gets a
    notification.
 3. Cleaning: **Mulai** → **Checklist** (all 9 items) → task

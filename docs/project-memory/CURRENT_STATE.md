@@ -27,6 +27,15 @@ masuk grup.
 
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
+Sinkron instan 2026-10-24 (migrasi `0296`): trigger (constraint, deferred) di
+tabel villa `units` (status → dirty) dan `housekeeping` (insert `bersih`,
+perubahan status) menjalankan `mkc_hosp_sync_room_tasks()` saat transaksi
+villa commit — kartu tugas muncul di grup begitu check-out diklik, dan tugas
+tertutup begitu kamar ditandai bersih. Error sinkron ditangkap (WARNING) dan
+tidak pernah menggagalkan check-out villa; cron 5 menit tetap sebagai jaring
+pengaman. Tugas terbuka juga ditautkan ulang ke baris housekeeping pending
+terbaru unitnya.
+
 Perbaikan 2026-10-24 (migrasi `0295`, diterapkan sebelum auto-checkout villa
 13:00 WIB): sinkron tugas kamar membuat satu kartu per baris housekeeping
 `bersih` yang masih pending, padahal aplikasi villa membiarkan baris lama

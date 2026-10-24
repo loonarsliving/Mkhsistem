@@ -13,6 +13,13 @@ data terbaru dengan aturan yang sama dengan laporan 20:00
 (`buildConnectReport`), tidak disimpan; diperbarui saat ada aktivitas
 (realtime) dan tiap menit. Tanpa migrasi.
 
+## 2026-10-24 — Loonars Connect: sinkron tugas kamar instan saat check-out villa (0296)
+
+`0296_loonars_connect_instant_room_sync.sql`: trigger deferred di `units` dan
+`housekeeping` (tabel aplikasi villa) memanggil sinkron tugas kamar saat
+commit; error ditangkap agar check-out villa tidak pernah gagal. Uji SQL
+Hospitality 72/72.
+
 ## 2026-10-24 — Loonars Connect: satu tugas kebersihan per unit (0295, diterapkan)
 
 `0295_loonars_connect_room_task_dedupe.sql`: `mkc_hosp_sync_room_tasks()` tidak
