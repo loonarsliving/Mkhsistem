@@ -6,6 +6,15 @@ rather than listing all 508 commits individually — see `git log` directly
 for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
+## 2026-10-24 — Loonars Connect: grup Markom Jogja + Sales Jogja (belum diterapkan)
+
+Migrasi `0294_loonars_connect_markom_sales_jogja.sql`, `lib/connect/*`,
+`repositories/connect.repository.ts`, `features/chat/{actions/connect.actions.ts,
+schemas/connect.schema.ts, components/connect-*.tsx}`, job pg_cron
+`connect-markom-sales-sync`, uji `tests/unit/lib/connect-reports.test.ts`,
+`tests/unit/schemas/connect.schema.test.ts`, `tests/sql/0291_hospitality/*_0294.sql`.
+Lihat `docs/CONNECT_MARKOM_SALES_JOGJA.md`.
+
 ## 2026-10-23 — Loonars Connect Fase 1: chat Hospitality + laporan owner 
 
 Migrasi `0291_loonars_connect_hospitality_chat.sql` + `0292_loonars_connect_hardening.sql` (keduanya diterapkan), halaman `/chat`,

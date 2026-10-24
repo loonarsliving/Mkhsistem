@@ -66,6 +66,16 @@ Inti dari sebagian besar otomasi cerdas. Alurnya:
 | `hospitality-report-dispatch` | `7,22,37,52 * * * *` | tiap 15 mnt | HTTP dispatch → `/api/hospitality/reports/dispatch` (laporan yang jatuh tempo saja, idempoten) |
 | `hospitality-evidence-retention` | `40 * * * *` | tiap jam | HTTP dispatch → `/api/hospitality/retention` (hapus bukti > 30 hari) |
 
+### Loonars Connect Markom + Sales Jogja (0294, belum diterapkan)
+
+| Job | UTC | WITA | Fungsi |
+|---|---|---|---|
+| `connect-markom-sales-sync` | `3,13,23,33,43,53 * * * *` | tiap 10 mnt | SQL murni: status KOL dari booking villa (`mkc_mkt_sync_kol`), lead CRM baru JOG + status tanda jadi Loonars 2 ke grup Sales (`mkc_sales_sync`) |
+
+Laporan akhir hari Markom/Sales (20:00 WIB) memakai job
+`hospitality-report-dispatch` yang sudah ada (dispatcher memilih generator
+per kode departemen).
+
 ### HR & komunikasi harian
 
 | Job | UTC | WITA | Fungsi |

@@ -248,7 +248,8 @@ export async function acknowledgeReportAction(input: ReportIdInput): Promise<Act
 }
 
 /**
- * "Buat laporan sekarang": owner, or the department's Hospitality Manager.
+ * "Buat laporan sekarang": owner, or the department group's manager
+ * (Hospitality Manager; Kepala Cabang for Sales Jogja -- Markom has none).
  * Checked here (session + group role through RLS) because generation itself
  * runs with the service role.
  */
@@ -261,7 +262,7 @@ export async function generateReportNowAction(input: ConversationIdInput): Promi
   if (!conv) return actionError("Percakapan tidak ditemukan");
   const isOwner = hasPermission(session, PERMISSIONS.HOSPITALITY_OWNER_REPORT);
   const isManager = conversations.some((c) => c.departmentCode === conv.departmentCode && c.kind === "operational_group" && c.myRole === "manager");
-  if (!isOwner && !isManager) return actionError("Hanya owner atau Hospitality Manager");
+  if (!isOwner && !isManager) return actionError("Hanya owner atau manager grup");
 
   const outcome = await generateManualHospitalityReport(conv.departmentCode, session.userId);
   if (outcome.status === "failed") return actionError(`Laporan gagal dibuat: ${outcome.error}`);

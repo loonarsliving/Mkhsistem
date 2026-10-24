@@ -3,6 +3,23 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Connect: Markom Jogja + Sales Jogja — DIBANGUN, BELUM DITERAPKAN (2026-10-24)
+
+Branch `claude/connect-markom-sales-jogja`, migrasi
+`0294_loonars_connect_markom_sales_jogja.sql` (BELUM diterapkan ke produksi —
+menunggu persetujuan owner). Detail: `docs/CONNECT_MARKOM_SALES_JOGJA.md`.
+Keputusan owner: hanya Jogja; Markom menyusun kalender konten di grup, tanpa
+manager; pemakaian kamar + kupon KOL cukup disetujui Rebecca (peran grup
+`room_approver`, kupon ditulis ke `villa_kol_vouchers` seperti villa-api
+`/bridge/kol`); Sales Jogja hanya menjual unit Loonars 2, Vando = manager
+grup; lead/follow-up tetap di CRM (lewat RPC CRM yang ada, tanpa nomor HP di
+chat). Laporan owner akhir hari 20:00 WIB per departemen. Uji: unit 499/499,
+SQL 66/66 (Hospitality) + 39/39 (0294), typecheck/lint/build. Setelah 0294
+diterapkan masih perlu dua baris `mkc_chat_role_assignments` (Rebecca →
+markom_jogja room_approver, Vando → sales_jogja manager). Catatan: Fety
+berperan aplikasi `staff`, tanpa izin CRM `prospect.create` /
+`prospect.follow_up_create` — keputusan owner.
+
 ## Loonars Connect Fase 1 (Hospitality chat + laporan owner) — DITERAPKAN (2026-10-23)
 
 Perbaikan 2026-10-24 (migrasi `0293`, diterapkan): `mkc_hosp_notify` memakai
