@@ -1083,9 +1083,12 @@ begin
 
   begin
     v := v || jsonb_build_object('targets', jsonb_build_object('ok', true, 'fetched_at', now(), 'data', coalesce((
-      select jsonb_object_agg(t.sales_id, t.target_units) from public.sales_targets t
-      join public.mkc_chat_members m on m.employee_id = t.sales_id and m.conversation_id = v_group and m.removed_at is null
-      where t.period_year = extract(year from p_local_date)::int and t.period_month = extract(month from p_local_date)::int), '{}'::jsonb)));
+      -- one row per product: a sales person's monthly target is the sum
+      select jsonb_object_agg(x.sales_id, x.units) from (
+        select t.sales_id, sum(t.target_units)::int as units from public.sales_targets t
+        join public.mkc_chat_members m on m.employee_id = t.sales_id and m.conversation_id = v_group and m.removed_at is null
+        where t.period_year = extract(year from p_local_date)::int and t.period_month = extract(month from p_local_date)::int
+        group by t.sales_id) x), '{}'::jsonb)));
   exception when others then v := v || jsonb_build_object('targets', jsonb_build_object('ok', false, 'error', sqlerrm)); end;
   return v;
 end;
