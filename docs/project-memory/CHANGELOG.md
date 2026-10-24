@@ -8,6 +8,15 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-24 — Loonars Connect: tampilan chat pas di HP
+
+Di bawah `lg` chat mengisi layar penuh di bawah top bar (tanpa sisa ruang /
+scroll halaman); iOS mengikuti `visualViewport` saat keyboard terbuka,
+Android memakai `interactive-widget=resizes-content` (viewport khusus
+/chat); kolom ketik membesar mengikuti teks. `Input`/`Textarea` memakai
+16px di HP (`sm:text-sm` di atasnya) agar iPhone tidak auto-zoom saat
+diketuk. Dicek di 320px, iPhone 14 Pro Max, Pixel 7, iPad Mini, desktop.
+
 ## 2026-10-24 — Loonars Connect: grup lintas tim "Koordinasi Jogja" (0298)
 
 Satu grup untuk Hospitality, Markom Jogja, Sales Jogja + owner (pilihan

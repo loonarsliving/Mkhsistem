@@ -71,7 +71,7 @@ function CardShell({ children, tone }: { children: React.ReactNode; tone?: "aler
     <div className="flex justify-center">
       <div
         className={cn(
-          "w-full max-w-[560px] rounded-xl border bg-white p-3 text-sm shadow-sm dark:bg-[#202c33]",
+          "w-full min-w-0 max-w-[560px] break-words rounded-xl border bg-white p-3 text-sm shadow-sm dark:bg-[#202c33]",
           tone === "alert" && "border-red-300 dark:border-red-800",
           tone === "report" && "border-sky-300 dark:border-sky-800",
         )}
@@ -304,6 +304,14 @@ export function ChatRoom({
   const [results, setResults] = React.useState<{ id: string; body: string; createdAt: string; senderId: string | null }[] | null>(null);
   const [generating, setGenerating] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const composerRef = React.useRef<HTMLTextAreaElement>(null);
+  // Composer grows with the text up to max-h-36, then scrolls (WhatsApp-style).
+  React.useLayoutEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text]);
   const stickToBottom = React.useRef(true);
 
   // The parent passes a fresh onActivity every render (its list reloads after
@@ -504,7 +512,7 @@ export function ChatRoom({
             const el = e.currentTarget;
             stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
           }}
-          className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#efeae2] px-3 py-3 dark:bg-[#0b141a] sm:px-6"
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-[#efeae2] px-2.5 py-3 dark:bg-[#0b141a] sm:px-6"
         >
           {loading ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -567,7 +575,7 @@ export function ChatRoom({
             Feed ini hanya berisi laporan konsolidasi — percakapan operasional tetap di grup {conversation.departmentName}.
           </p>
         ) : myRole ? (
-          <div className="border-t bg-muted/60">
+          <div className="border-t bg-muted/60 pb-[env(safe-area-inset-bottom)]">
             {showPhotos && (
               <div className="px-3 pt-2">
                 <ExtraEvidence conversationId={conversation.id} userId={userId} value={photos} onChange={setPhotos} slot="other" />
@@ -638,6 +646,7 @@ export function ChatRoom({
                 <ImagePlus className="h-5 w-5" />
               </button>
               <textarea
+                ref={composerRef}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
@@ -649,7 +658,7 @@ export function ChatRoom({
                 rows={1}
                 maxLength={4000}
                 placeholder="Tulis pesan"
-                className="max-h-36 min-h-[42px] flex-1 resize-none rounded-3xl border-0 bg-background px-4 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                className="max-h-36 min-h-[42px] min-w-0 flex-1 resize-none rounded-3xl border-0 bg-background px-4 py-2.5 text-base leading-snug shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:text-sm"
               />
               <button
                 type="button"
