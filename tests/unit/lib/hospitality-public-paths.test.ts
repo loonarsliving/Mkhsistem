@@ -12,6 +12,10 @@ describe("hospitality cron routes bypass session middleware", () => {
     expect(isPublicPath(path)).toBe(true);
   });
 
+  it("serves the /chat home-screen manifest without a session", () => {
+    expect(isPublicPath("/chat-manifest.webmanifest")).toBe(true);
+  });
+
   it("does not expose the chat page itself", () => {
     expect(isPublicPath("/chat")).toBe(false);
   });
