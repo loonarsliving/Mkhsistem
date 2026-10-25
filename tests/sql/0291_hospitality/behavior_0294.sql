@@ -226,5 +226,42 @@ select t_check('0298: push to every other Koordinasi member incl. the owner, not
   exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :owner::uuid and title like '% · Koordinasi Jogja')
   and not exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :syifa::uuid and title like '% · Koordinasi Jogja'));
 
+
+-- ---------------------------------------------------------------------------
+-- 0302: Markom inside the Hospitality group + KOL updates copied there
+-- ---------------------------------------------------------------------------
+select set_config('t.hgroup', (select c.id::text from mkc_chat_conversations c join mkc_chat_departments d on d.id = c.department_id where d.code = 'hospitality' and c.kind = 'operational_group'), false);
+select t_check('0302: Markom Jogja people are members of Hospitality (no workflow role), Makassar Markom is not',
+  (select string_agg(e.full_name || ':' || m.member_role || ':' || m.source, ',' order by e.full_name) from mkc_chat_members m join employees e on e.id = m.employee_id
+   where m.conversation_id = current_setting('t.hgroup')::uuid and m.removed_at is null and e.id in (:alya::uuid, :syifa::uuid, :mkmks::uuid))
+  = 'Alya:member:department,Syifa:member:department');
+-- production: Rebecca is the Hospitality manager by assignment and room approver in Markom
+insert into mkc_chat_role_assignments (department_id, employee_id, member_role)
+select id, :rebecca::uuid, 'manager' from mkc_chat_departments where code = 'hospitality'
+on conflict (department_id, employee_id) do update set member_role = 'manager', revoked_at = null;
+select mkc_chat_sync_members();
+select t_check('0302: a Hospitality role wins over the Markom-derived row (Rebecca stays manager)',
+  (select member_role || ':' || source from mkc_chat_members where conversation_id = current_setting('t.hgroup')::uuid and employee_id = :rebecca::uuid and removed_at is null)
+  = 'manager:assignment');
+select t_check('0302: every KOL message of the Markom group is copied once into Hospitality, same text',
+  (select count(*) from mkc_chat_messages m where m.conversation_id = current_setting('t.mgroup')::uuid and m.ref_table = 'kol') > 0
+  and not exists (
+    select 1 from mkc_chat_messages m where m.conversation_id = current_setting('t.mgroup')::uuid and m.ref_table = 'kol'
+      and (select count(*) from mkc_chat_messages h where h.conversation_id = current_setting('t.hgroup')::uuid
+             and h.payload->>'mirrored_from' = m.id::text and h.body = m.body and h.ref_table is null) <> 1));
+select t_check('0302: a new KOL request pushes to the Hospitality team (copy keeps the sender)',
+  exists (select 1 from mkc_notifications n join mkc_chat_messages h on h.id = (n.metadata->>'message_id')::uuid
+          where n.category = 'chat_message' and h.conversation_id = current_setting('t.hgroup')::uuid and h.body like '🤝 KOL%'));
+select t_check('0302: non-KOL Markom messages are not copied',
+  not exists (select 1 from mkc_chat_messages h where h.conversation_id = current_setting('t.hgroup')::uuid
+              and h.payload ? 'mirrored_from'
+              and (select ref_table from mkc_chat_messages m where m.id = (h.payload->>'mirrored_from')::uuid) is distinct from 'kol'));
+set role authenticated;
+select set_config('request.jwt.claim.sub', :syifa, false);
+select t_check('0302: Markom can read and post in the Hospitality group',
+  mkc_chat_can_read(current_setting('t.hgroup')::uuid)
+  and mkc_chat_send_message(current_setting('t.hgroup')::uuid, 'Butuh konten kamar baru? Kami siap', '{}') is not null);
+reset role;
+
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;
