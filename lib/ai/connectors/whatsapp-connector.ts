@@ -41,6 +41,9 @@ function extractMessageId(json: unknown): string | undefined {
  * any source is defused here once instead of needing every call site to
  * remember to sanitize.
  */
+/** Sent as the caption of a photo that has none (see normalizeOutgoingMessage). */
+export const EMPTY_IMAGE_CAPTION = "📷";
+
 function sanitizeRecipientNumber(recipient: string): string {
   return recipient.replace(/[^0-9]/g, "");
 }
@@ -138,7 +141,11 @@ export class WhatsAppConnector {
    */
   normalizeOutgoingMessage(content: OutboundMessageContent): { message: string; file?: string } {
     if (content.kind === "image") {
-      return { message: content.caption ?? "", file: content.url };
+      // Whacenter answers HTTP 500 for a file with an empty message (2026-10-25:
+      // every caption-less photo from the villa guest chat failed, the same photos
+      // with a caption went through) -- so a photo always carries some text.
+      const caption = content.caption?.trim();
+      return { message: caption ? content.caption! : EMPTY_IMAGE_CAPTION, file: content.url };
     }
     if (content.kind === "pdf") {
       return { message: content.filename, file: content.url };
