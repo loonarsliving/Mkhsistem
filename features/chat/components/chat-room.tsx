@@ -32,10 +32,11 @@ import { departmentKind, isPlainChat, memberRoleLabel } from "@/lib/connect/labe
 import type { ConnectReportData } from "@/lib/connect/report-types";
 import { roleCan, type SecurityKind } from "@/lib/hospitality/checklists";
 import { cn } from "@/lib/utils";
-import type { ChatConversation, ChatMessage, ChatRefs, ChatReplyRef, IssueRef, RoomTaskRef } from "@/repositories/chat.repository";
+import { createClient } from "@/lib/supabase/client";
+import { listChatMessages, type ChatConversation, type ChatMessage, type ChatRefs, type ChatReplyRef, type IssueRef, type RoomTaskRef } from "@/repositories/chat.repository";
 import { EMPTY_CONNECT_REFS, type MarkomOpenWork, type SalesOpenWork } from "@/repositories/connect.repository";
 
-import { generateReportNowAction, loadMessagesAction, loadOpenWorkAction, markReadAction, searchMessagesAction, sendTextAction } from "../actions/chat.actions";
+import { generateReportNowAction, loadOpenWorkAction, searchMessagesAction, sendTextAction } from "../actions/chat.actions";
 import { loadConnectWorkAction } from "../actions/connect.actions";
 import { AttachmentStrip, ChecklistCard, IssueCard, SystemLine, TaskCard } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
@@ -52,6 +53,24 @@ import { IssueDialog, SecurityDialog } from "./workflow-dialogs";
 const POLL_MS = 30_000;
 /** Give up waiting for a message load and offer "Coba lagi" after this long. */
 const LOAD_TIMEOUT_MS = 15_000;
+
+/**
+ * Last loaded page per user + conversation (this browser tab): reopening a chat
+ * shows it at once while the fresh page loads in the background.
+ */
+const roomCache = new Map<string, { messages: ChatMessage[]; refs: ChatRefs; hasMore: boolean }>();
+
+/** Message page straight from Supabase (RLS: members only), or null after a failure / LOAD_TIMEOUT_MS. */
+async function fetchMessages(
+  supabase: ReturnType<typeof createClient>,
+  conversationId: string,
+  before?: string,
+): Promise<{ messages: ChatMessage[]; refs: ChatRefs; hasMore: boolean } | { error: string } | null> {
+  return Promise.race([
+    listChatMessages(supabase, conversationId, { before }).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "Gagal memuat pesan" })),
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), LOAD_TIMEOUT_MS)),
+  ]);
+}
 
 function Bubble({ own, children, className, onReply }: { own: boolean; children: React.ReactNode; className?: string; onReply?: () => void }) {
   return (
@@ -334,10 +353,12 @@ export function ChatRoom({
   const deptKind = departmentKind(conversation.departmentCode);
   const plainChat = isPlainChat(deptKind);
   const isDirect = conversation.kind === "direct";
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  const [refs, setRefs] = React.useState<ChatRefs>({ tasks: {}, issues: {}, checklists: {}, reports: {}, connect: EMPTY_CONNECT_REFS });
-  const [hasMore, setHasMore] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
+  const supabase = React.useMemo(() => createClient(), []);
+  const cached = roomCache.get(`${userId}:${conversation.id}`);
+  const [messages, setMessages] = React.useState<ChatMessage[]>(cached?.messages ?? []);
+  const [refs, setRefs] = React.useState<ChatRefs>(cached?.refs ?? { tasks: {}, issues: {}, checklists: {}, reports: {}, connect: EMPTY_CONNECT_REFS });
+  const [hasMore, setHasMore] = React.useState(cached?.hasMore ?? false);
+  const [loading, setLoading] = React.useState(!cached);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = React.useState(false);
   const [text, setText] = React.useState("");
@@ -374,26 +395,26 @@ export function ChatRoom({
     onActivityRef.current = onActivity;
   }, [onActivity]);
 
-  const loadedRef = React.useRef(false);
+  const loadedRef = React.useRef(!!cached);
+  // Straight from the browser to Supabase (RLS decides access): no server
+  // action round trip, no session re-check per load, no queueing behind other
+  // actions. A dropped request (weak signal) gives up after LOAD_TIMEOUT_MS.
   const load = React.useCallback(async () => {
-    // A dropped request (weak signal) used to leave "Memuat percakapan…" up forever.
-    const r = await Promise.race([
-      loadMessagesAction({ conversationId: conversation.id }).catch(() => null),
-      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), LOAD_TIMEOUT_MS)),
-    ]);
+    const r = await fetchMessages(supabase, conversation.id);
     setLoading(false);
-    if (!r || !r.success || !r.data) {
+    if (!r || "error" in r) {
       // A failed background refresh keeps what is already on screen.
-      if (!loadedRef.current) setLoadError(r ? (r.error ?? "Gagal memuat pesan") : "Koneksi lambat, pesan belum termuat.");
+      if (!loadedRef.current) setLoadError(r ? r.error : "Koneksi lambat, pesan belum termuat.");
       return;
     }
     loadedRef.current = true;
+    roomCache.set(`${userId}:${conversation.id}`, r);
     setLoadError(null);
-    setMessages(r.data.messages);
-    setRefs(r.data.refs);
-    setHasMore(r.data.hasMore);
-    void markReadAction({ conversationId: conversation.id }).then(() => onActivityRef.current());
-  }, [conversation.id]);
+    setMessages(r.messages);
+    setRefs(r.refs);
+    setHasMore(r.hasMore);
+    void supabase.rpc("mkc_chat_mark_read", { p_conversation_id: conversation.id }).then(() => onActivityRef.current());
+  }, [supabase, conversation.id, userId]);
 
   const loadWork = React.useCallback(async () => {
     if (isFeed || plainChat) return;
@@ -412,12 +433,17 @@ export function ChatRoom({
   // Reset only when the conversation changes; background refreshes keep what
   // is on screen and just replace it when the new data arrives.
   React.useEffect(() => {
-    setLoading(true);
-    setMessages([]);
+    const fromCache = roomCache.get(`${userId}:${conversation.id}`);
+    setLoading(!fromCache);
+    setMessages(fromCache?.messages ?? []);
+    if (fromCache) {
+      setRefs(fromCache.refs);
+      setHasMore(fromCache.hasMore);
+    }
     setWork(null);
-    loadedRef.current = false;
+    loadedRef.current = !!fromCache;
     stickToBottom.current = true;
-  }, [conversation.id]);
+  }, [conversation.id, userId]);
 
   React.useEffect(() => {
     refresh();
@@ -439,10 +465,9 @@ export function ChatRoom({
     if (!first) return;
     setLoadingOlder(true);
     stickToBottom.current = false;
-    const r = await loadMessagesAction({ conversationId: conversation.id, before: first.createdAt });
+    const older = await fetchMessages(supabase, conversation.id, first.createdAt);
     setLoadingOlder(false);
-    if (!r.success || !r.data) return void toast.error(r.error ?? "Gagal memuat");
-    const older = r.data;
+    if (!older || "error" in older) return void toast.error(older ? older.error : "Koneksi lambat, coba lagi");
     setMessages((m) => [...older.messages, ...m]);
     setRefs((prev) => ({
       tasks: { ...older.refs.tasks, ...prev.tasks },

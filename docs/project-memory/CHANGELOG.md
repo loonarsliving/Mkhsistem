@@ -8,6 +8,16 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: pesan dimuat langsung dari browser
+
+Membuka chat masih terasa lambat setelah #124: setiap pemuatan pesan adalah
+server action (Vercel → cek sesi: auth.getUser + karyawan + izin → beberapa
+query berurutan, latensi DB 84–485 ms per perjalanan) dan server action Next
+berjalan satu per satu. Kini pesan, tanda-sudah-dibaca dan daftar percakapan
+diambil langsung dari browser ke Supabase dengan fungsi repository yang sama
+(RLS tetap memutuskan akses), dan halaman terakhir tiap percakapan disimpan di
+memori tab sehingga membuka ulang chat langsung tampil.
+
 ## 2026-10-25 — Loonars Connect: Markom di grup Hospitality (0302)
 
 Grup Hospitality kini berisi tim Markom Jogja (`settings.member_of`, sama

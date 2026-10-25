@@ -7,9 +7,8 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import type { ChatConversation, ChatPerson, ChatUnit } from "@/repositories/chat.repository";
+import { listChatConversations, type ChatConversation, type ChatPerson, type ChatUnit } from "@/repositories/chat.repository";
 
-import { listConversationsAction } from "../actions/chat.actions";
 import { ChatContextProvider } from "./chat-context";
 import { ChatNotificationPrompt } from "./chat-notification-prompt";
 import { ChatRoom, ConversationAvatar } from "./chat-room";
@@ -75,10 +74,14 @@ export function ChatApp({
   const supabase = React.useMemo(() => createClient(), []);
   const viewportHeight = useKeyboardAwareHeight();
 
+  // Straight from the browser (RLS-scoped RPC): no server action round trip.
   const reloadList = React.useCallback(async () => {
-    const r = await listConversationsAction();
-    if (r.success && r.data) setConversations(r.data);
-  }, []);
+    try {
+      setConversations(await listChatConversations(supabase));
+    } catch {
+      // keep the current list; the next refresh / realtime event retries
+    }
+  }, [supabase]);
 
   const select = React.useCallback(
     (id: string | null) => {
