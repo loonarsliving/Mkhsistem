@@ -8,6 +8,16 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Lead WA: klik iklan dikenali dari pesan pembuka (0304)
+
+Whacenter berhenti mengirim data iklan (`ad_reply`) sejak 2026-09-06, sehingga
+sejak itu tidak ada lead iklan yang terbaca (87 pesan pembuka iklan
+7-09 s.d. 13-10). Pesan pertama berisi teks isian bawaan Meta ("Halo! Bisakah
+saya mendapatkan info selengkapnya tentang ini?") atau pesan sambutan kampanye
+aktif kini dikenali sebagai klik iklan, selama iklan aktif hanya di satu
+cabang. Baris "Lead WA Jogja" tampil untuk pemantau sebelum lead pertama.
+Uji SQL 18/18 baru.
+
 ## 2026-10-25 — Loonars Connect: lead WhatsApp iklan Jogja dibalas dari Chat (0303)
 
 Customer yang menghubungi lewat iklan Meta cabang Jogja kini masuk Loonars

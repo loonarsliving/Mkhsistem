@@ -330,3 +330,22 @@ sales person answers from Loonars Connect and the owner can watch it.
   lead is never moved automatically.
 - **Retention**: photos follow the 30-day chat retention
   (`settings.retention_days`).
+
+### Ad clicks without ad data (0304)
+
+Whacenter changed its webhook payload on 2026-09-06 and no longer sends
+`ad_reply` (Meta's ad data); 87 Click-to-WhatsApp first messages between
+2026-09-07 and 2026-10-13 arrived without it. `mkc_wa_lead_prefill_campaign`
+now also recognises an ad click by its pre-filled first message:
+
+- exactly an active campaign's own `welcome_message` -> that campaign;
+- starts with one of Meta's default pre-filled texts
+  (`settings.ad_prefill_prefixes` on the lead department; Meta used these,
+  not the drafted welcome message, while ad data still arrived) -> the active
+  WhatsApp campaign, only while every active campaign belongs to one branch.
+  With ads of several branches running at once the default text says nothing
+  about which ad was tapped, so nothing is guessed.
+
+The branch must still be in a lead department's scope. The monitor row
+("Lead WA Jogja") now shows for monitors before the first lead
+(`mkc_wa_lead_my_monitor_departments`).

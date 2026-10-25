@@ -37,3 +37,9 @@ lead, the one-time greeting, privacy (other sales, non-monitors), monitors,
 queue_out, reassign, the 15 / 30-minute alerts, an existing prospect keeping
 its sales person, and grants. Last run (2026-10-25): 41 passed, 0 failed
 (behavior_test 110/110, behavior_0294 56/56 on the same migrations).
+
+## 0304 (ad clicks recognised by the pre-filled message)
+
+`behavior_0304.sql` on a fresh DB (stubs + migrations 0291..0304). Last run
+(2026-10-25): 18 passed, 0 failed (with 110/110, 56/56, 41/41 on the same
+migrations).
