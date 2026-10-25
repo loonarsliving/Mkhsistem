@@ -5,7 +5,7 @@ import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engi
 import { generateManualHospitalityReport } from "@/lib/hospitality/report-generator";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createWaMediaUrl } from "@/lib/wa-media/link";
+import { stageWaOutboxFile } from "@/lib/wa-media/outbox";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -119,7 +119,11 @@ export async function sendWaLeadMessageAction(input: SendWaLeadInput): Promise<A
       // delivered (2026-10-25), and stopping there left the next photo unsent.
       const failures: string[] = [];
       for (const [i, path] of photos.entries()) {
-        const sent = await sendWhatsAppImage(queued.phone, createWaMediaUrl("hospitality-evidence", path, 60 * 60), i === 0 ? parsed.data.body || undefined : undefined);
+        // A public wa-outbox copy (0306): the only kind of link Whacenter reliably downloads.
+        const sent = await stageWaOutboxFile("hospitality-evidence", path).then(
+          (url) => sendWhatsAppImage(queued.phone, url, i === 0 ? parsed.data.body || undefined : undefined),
+          (err: unknown) => ({ success: false, error: err instanceof Error ? err.message : String(err) }),
+        );
         if (!sent.success) failures.push(`foto ${i + 1}: ${sent.error ?? "unknown error"}`);
       }
       if (failures.length > 0) result = { success: false, error: failures.join("; ") };

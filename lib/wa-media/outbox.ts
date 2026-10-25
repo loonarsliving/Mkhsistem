@@ -1,0 +1,54 @@
+import "server-only";
+
+import { randomUUID } from "node:crypto";
+
+import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * Public copies of files Whacenter must download before sending them on
+ * WhatsApp (0306). Whacenter only reliably accepts a plain public Supabase
+ * Storage URL; the app-served /api/wa-media link and signed URLs come back
+ * HTTP 500. A copy lives under a random name for a day, then the hourly
+ * evidence-retention run deletes it (cleanupWaOutbox).
+ */
+
+export const WA_OUTBOX_BUCKET = "wa-outbox";
+const CONTENT_TYPES: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf" };
+
+/** Copies a private file into wa-outbox and returns its public URL. Throws when the copy fails. */
+export async function stageWaOutboxFile(sourceBucket: string, sourcePath: string): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(sourceBucket).download(sourcePath);
+  if (error || !data) throw new Error(`wa-outbox: source file unavailable (${error?.message ?? "empty"})`);
+
+  const ext = sourcePath.split(".").pop()?.toLowerCase() ?? "";
+  const safeExt = CONTENT_TYPES[ext] ? ext : "jpg";
+  const contentType = data.type && data.type !== "application/octet-stream" ? data.type : CONTENT_TYPES[safeExt];
+  const path = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${safeExt}`;
+
+  const { error: uploadError } = await admin.storage
+    .from(WA_OUTBOX_BUCKET)
+    .upload(path, Buffer.from(await data.arrayBuffer()), { contentType, upsert: false });
+  if (uploadError) throw new Error(`wa-outbox: copy failed (${uploadError.message})`);
+
+  return admin.storage.from(WA_OUTBOX_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/** Deletes copies older than a day. Never throws: a failed pass is retried next hour. */
+export async function cleanupWaOutbox(): Promise<{ deleted: number; error?: string }> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.rpc("mkc_wa_outbox_due", {});
+    if (error) return { deleted: 0, error: error.message };
+    const names = (data as string[] | null) ?? [];
+    if (names.length === 0) return { deleted: 0 };
+    const { data: removed, error: removeError } = await admin.storage.from(WA_OUTBOX_BUCKET).remove(names);
+    if (removeError) return { deleted: 0, error: removeError.message };
+    return { deleted: removed?.length ?? 0 };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn("wa-outbox cleanup failed", { error: message });
+    return { deleted: 0, error: message };
+  }
+}

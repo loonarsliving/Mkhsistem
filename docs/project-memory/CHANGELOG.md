@@ -8,6 +8,15 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Lead WA: foto dikirim lewat salinan publik (0306)
+
+Foto ke lead tetap gagal setelah #131 (6/6 kiriman lewat `/api/wa-media`
+dijawab HTTP 500 oleh Whacenter). Di seluruh log kirim file, yang berhasil
+adalah URL publik Supabase Storage (265 kali). Kini foto disalin ke bucket
+publik `wa-outbox` dengan nama acak, Whacenter menerima URL publik itu, dan
+salinan dihapus setelah sehari oleh run retensi per jam. Foto asli tetap di
+bucket privat.
+
 ## 2026-10-25 — Lead WA: foto ke customer tidak berhenti di foto pertama
 
 Fety mengirim 2 foto ke lead; Whacenter menjawab HTTP 500 untuk foto pertama

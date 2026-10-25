@@ -6684,6 +6684,7 @@ export interface Database {
       mkc_wa_lead_stats: { Args: { p_department_code: string }; Returns: Json };
       mkc_wa_lead_is_monitor: { Args: { p_department_id: string }; Returns: boolean };
       mkc_wa_lead_my_monitor_departments: { Args: Record<string, never>; Returns: string[] };
+      mkc_wa_outbox_due: { Args: { p_older_than?: string; p_limit?: number }; Returns: string[] };
       mkc_chat_direct_contacts: { Args: Record<string, never>; Returns: Json };
       mkc_chat_direct_open: { Args: { p_employee_id: string }; Returns: string };
       mkc_chat_conversation_department: { Args: { p_conversation_id: string }; Returns: string };
