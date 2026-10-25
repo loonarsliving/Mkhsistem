@@ -50,6 +50,8 @@ import { IssueDialog, SecurityDialog } from "./workflow-dialogs";
 
 /** Safety net if a realtime event is missed (flaky phone network). */
 const POLL_MS = 30_000;
+/** Give up waiting for a message load and offer "Coba lagi" after this long. */
+const LOAD_TIMEOUT_MS = 15_000;
 
 function Bubble({ own, children, className, onReply }: { own: boolean; children: React.ReactNode; className?: string; onReply?: () => void }) {
   return (
@@ -372,13 +374,20 @@ export function ChatRoom({
     onActivityRef.current = onActivity;
   }, [onActivity]);
 
+  const loadedRef = React.useRef(false);
   const load = React.useCallback(async () => {
-    const r = await loadMessagesAction({ conversationId: conversation.id });
+    // A dropped request (weak signal) used to leave "Memuat percakapan…" up forever.
+    const r = await Promise.race([
+      loadMessagesAction({ conversationId: conversation.id }).catch(() => null),
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), LOAD_TIMEOUT_MS)),
+    ]);
     setLoading(false);
-    if (!r.success || !r.data) {
-      setLoadError(r.error ?? "Gagal memuat pesan");
+    if (!r || !r.success || !r.data) {
+      // A failed background refresh keeps what is already on screen.
+      if (!loadedRef.current) setLoadError(r ? (r.error ?? "Gagal memuat pesan") : "Koneksi lambat, pesan belum termuat.");
       return;
     }
+    loadedRef.current = true;
     setLoadError(null);
     setMessages(r.data.messages);
     setRefs(r.data.refs);
@@ -406,6 +415,7 @@ export function ChatRoom({
     setLoading(true);
     setMessages([]);
     setWork(null);
+    loadedRef.current = false;
     stickToBottom.current = true;
   }, [conversation.id]);
 

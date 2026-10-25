@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { MessageSquarePlus, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 
@@ -66,7 +66,6 @@ export function ChatApp({
   peopleByDepartment: Record<string, ChatPerson[]>;
   unitsByDepartment: Record<string, ChatUnit[]>;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [conversations, setConversations] = React.useState(initialConversations);
   const [selectedId, setSelectedId] = React.useState<string | null>(initialConversationId);
@@ -84,9 +83,12 @@ export function ChatApp({
   const select = React.useCallback(
     (id: string | null) => {
       setSelectedId(id);
-      router.replace(id ? `${pathname}?c=${id}` : pathname, { scroll: false });
+      // Shallow URL update (deep link / back button) -- router.replace() re-ran the
+      // whole server page (room sync, every group's people and units) on each
+      // open, and the room's message load queued behind it.
+      window.history.replaceState(null, "", id ? `${pathname}?c=${id}` : pathname);
     },
-    [router, pathname],
+    [pathname],
   );
   const selectRef = React.useRef(select);
   React.useEffect(() => {

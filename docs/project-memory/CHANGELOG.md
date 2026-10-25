@@ -8,6 +8,15 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: membuka percakapan lebih cepat
+
+Membuka chat memanggil `router.replace('/chat?c=…')`, yang me-render ulang
+seluruh halaman server (sinkron kamar villa, daftar chat, orang & unit tiap
+grup) dan pemuatan pesan mengantre di belakangnya. Kini URL diperbarui dengan
+`history.replaceState` (tanpa request ke server; terverifikasi: 1 request,
+sebelumnya 2). Pemuatan pesan yang gagal/terputus kini berhenti setelah 15
+detik dengan tombol "Coba lagi", bukan "Memuat percakapan…" selamanya.
+
 ## 2026-10-25 — Loonars Connect: balas pesan dengan geser kanan (0301)
 
 Geser gelembung pesan ke kanan (HP) atau tombol balas saat hover (desktop)
