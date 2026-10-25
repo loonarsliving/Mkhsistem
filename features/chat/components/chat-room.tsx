@@ -32,7 +32,7 @@ import { departmentKind, isPlainChat, memberRoleLabel } from "@/lib/connect/labe
 import type { ConnectReportData } from "@/lib/connect/report-types";
 import { roleCan, type SecurityKind } from "@/lib/hospitality/checklists";
 import { cn } from "@/lib/utils";
-import type { ChatConversation, ChatMessage, ChatRefs, IssueRef, RoomTaskRef } from "@/repositories/chat.repository";
+import type { ChatConversation, ChatMessage, ChatRefs, ChatReplyRef, IssueRef, RoomTaskRef } from "@/repositories/chat.repository";
 import { EMPTY_CONNECT_REFS, type MarkomOpenWork, type SalesOpenWork } from "@/repositories/connect.repository";
 
 import { generateReportNowAction, loadMessagesAction, loadOpenWorkAction, markReadAction, searchMessagesAction, sendTextAction } from "../actions/chat.actions";
@@ -45,14 +45,16 @@ import { MarkomWorkPanel, SalesWorkPanel } from "./connect-panels";
 import { avatarColor, dayKey, formatDateTime, formatDaySeparator, formatTime, initials } from "./chat-utils";
 import { ExtraEvidence, type UploadedEvidence } from "./evidence-picker";
 import { ReportCard } from "./report-card";
+import { ReplyButton, SwipeToReply } from "./swipe-reply";
 import { IssueDialog, SecurityDialog } from "./workflow-dialogs";
 
 /** Safety net if a realtime event is missed (flaky phone network). */
 const POLL_MS = 30_000;
 
-function Bubble({ own, children, className }: { own: boolean; children: React.ReactNode; className?: string }) {
+function Bubble({ own, children, className, onReply }: { own: boolean; children: React.ReactNode; className?: string; onReply?: () => void }) {
   return (
-    <div className={cn("flex", own ? "justify-end" : "justify-start")}>
+    <div className={cn("flex items-center gap-1", own ? "justify-end" : "justify-start")}>
+      {own && onReply && <ReplyButton onReply={onReply} />}
       <div
         className={cn(
           "max-w-[88%] rounded-lg px-3 py-2 text-sm shadow-sm sm:max-w-[75%]",
@@ -62,7 +64,33 @@ function Bubble({ own, children, className }: { own: boolean; children: React.Re
       >
         {children}
       </div>
+      {!own && onReply && <ReplyButton onReply={onReply} />}
     </div>
+  );
+}
+
+/** Snippet of a message for quotes and the reply bar (0301). */
+function replySnippet(body: string, hasPhoto: boolean): string {
+  const text = body.trim();
+  if (text) return text.length > 140 ? `${text.slice(0, 137)}…` : text;
+  return hasPhoto ? "📷 Foto" : "Pesan";
+}
+
+/** The quoted original above a reply; tap jumps to it when it is loaded. */
+function ReplyQuote({ reply, onJump }: { reply: ChatReplyRef; onJump: (id: string) => void }) {
+  const { userId, people } = useChat();
+  const name = reply.senderId === userId ? "Anda" : reply.senderId ? personName(people, reply.senderId) : "Sistem";
+  return (
+    <button
+      type="button"
+      onClick={() => onJump(reply.id)}
+      className="mb-1 block w-full rounded-md border-l-4 border-emerald-500 bg-black/5 px-2 py-1 text-left dark:bg-white/10"
+    >
+      <span className={cn("block text-[11px] font-semibold", reply.senderId === userId ? "text-emerald-700 dark:text-emerald-400" : avatarColor(name).replace("bg-", "text-"))}>
+        {name}
+      </span>
+      <span className="line-clamp-2 block text-xs text-[#54656f] dark:text-[#aebac1]">{replySnippet(reply.body, reply.hasPhoto)}</span>
+    </button>
   );
 }
 
@@ -105,7 +133,21 @@ function connectCard(message: ChatMessage, refs: ChatRefs): React.ReactNode | nu
   }
 }
 
-function MessageView({ message, refs, isFeed, reportTitle }: { message: ChatMessage; refs: ChatRefs; isFeed: boolean; reportTitle: string }) {
+function MessageView({
+  message,
+  refs,
+  isFeed,
+  reportTitle,
+  onReply,
+  onJump,
+}: {
+  message: ChatMessage;
+  refs: ChatRefs;
+  isFeed: boolean;
+  reportTitle: string;
+  onReply?: (message: ChatMessage) => void;
+  onJump: (id: string) => void;
+}) {
   const { userId, people, conversationKind } = useChat();
   const own = message.senderId === userId;
   // 1-on-1: the header already names the other person (WhatsApp style)
@@ -118,9 +160,11 @@ function MessageView({ message, refs, isFeed, reportTitle }: { message: ChatMess
   );
 
   if (message.kind === "text") {
-    return (
-      <Bubble own={own}>
+    const reply = onReply ? () => onReply(message) : undefined;
+    const bubble = (
+      <Bubble own={own} onReply={reply}>
         {!own && sender && <p className={cn("mb-0.5 text-[11px] font-semibold", avatarColor(sender).replace("bg-", "text-"))}>{sender}</p>}
+        {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJump} />}
         {message.attachments.length > 0 && (
           <div className="mb-1">
             <AttachmentStrip attachments={message.attachments} />
@@ -130,6 +174,7 @@ function MessageView({ message, refs, isFeed, reportTitle }: { message: ChatMess
         <p className="mt-0.5 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">{formatTime(message.createdAt)}</p>
       </Bubble>
     );
+    return reply ? <SwipeToReply onReply={reply}>{bubble}</SwipeToReply> : bubble;
   }
 
   const task = message.refTable === "room_task" && message.refId ? refs.tasks[message.refId] : undefined;
@@ -294,6 +339,7 @@ export function ChatRoom({
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = React.useState(false);
   const [text, setText] = React.useState("");
+  const [replyTo, setReplyTo] = React.useState<ChatMessage | null>(null);
   const [photos, setPhotos] = React.useState<UploadedEvidence[]>([]);
   const [showPhotos, setShowPhotos] = React.useState(false);
   const [sending, setSending] = React.useState(false);
@@ -409,10 +455,11 @@ export function ChatRoom({
     if (sending || (!text.trim() && photos.length === 0)) return;
     setSending(true);
     stickToBottom.current = true;
-    const r = await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds: photos.map((p) => p.id) });
+    const r = await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds: photos.map((p) => p.id), replyToId: replyTo?.id });
     setSending(false);
     if (!r.success) return void toast.error(r.error ?? "Pesan gagal terkirim");
     setText("");
+    setReplyTo(null);
     setPhotos([]);
     setShowPhotos(false);
     void load();
@@ -424,6 +471,21 @@ export function ChatRoom({
     if (!r.success) return void toast.error(r.error ?? "Pencarian gagal");
     setResults(r.data ?? []);
   }
+
+  // Swipe / hover reply (0301): quote the message above the composer and focus it.
+  const startReply = React.useCallback((message: ChatMessage) => {
+    setReplyTo(message);
+    composerRef.current?.focus();
+  }, []);
+
+  // Tap on a quote: scroll to the original and flash it, if it is loaded.
+  const jumpTo = React.useCallback((id: string) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return void toast("Pesan aslinya ada di riwayat yang lebih lama", { description: "Ketuk “Pesan sebelumnya” di atas untuk memuatnya." });
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("chat-msg-flash");
+    window.setTimeout(() => el.classList.remove("chat-msg-flash"), 1600);
+  }, []);
 
   const workCount = openWorkCount(work);
   const canSecurity = roleCan(myRole, "security");
@@ -523,7 +585,7 @@ export function ChatRoom({
             const el = e.currentTarget;
             stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
           }}
-          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-[#efeae2] px-2.5 py-3 dark:bg-[#0b141a] sm:px-6"
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#efeae2] px-2.5 py-3 dark:bg-[#0b141a] sm:px-6"
         >
           {loading ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -574,7 +636,16 @@ export function ChatRoom({
                         </span>
                       </div>
                     )}
-                    <MessageView message={m} refs={refs} isFeed={isFeed} reportTitle={conversation.name} />
+                    <div id={`msg-${m.id}`} className="rounded-lg transition-colors">
+                      <MessageView
+                        message={m}
+                        refs={refs}
+                        isFeed={isFeed}
+                        reportTitle={conversation.name}
+                        onReply={!isFeed && myRole ? startReply : undefined}
+                        onJump={jumpTo}
+                      />
+                    </div>
                   </React.Fragment>
                 );
               })}
@@ -589,6 +660,24 @@ export function ChatRoom({
           </p>
         ) : myRole ? (
           <div className="border-t bg-muted/60 pb-[env(safe-area-inset-bottom)]">
+            {replyTo && (
+              <div className="flex items-center gap-2 px-3 pt-2">
+                <div className="min-w-0 flex-1 rounded-md border-l-4 border-emerald-500 bg-background px-2 py-1">
+                  <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    Membalas {replyTo.senderId === userId ? "pesan Anda" : replyTo.senderId ? personName(people, replyTo.senderId) : "Sistem"}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{replySnippet(replyTo.body, replyTo.attachments.length > 0)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                  aria-label="Batal membalas"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             {showPhotos && (
               <div className="px-3 pt-2">
                 <ExtraEvidence conversationId={conversation.id} userId={userId} value={photos} onChange={setPhotos} slot="other" />
@@ -663,6 +752,11 @@ export function ChatRoom({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
+                  if (e.key === "Escape" && replyTo) {
+                    e.preventDefault();
+                    setReplyTo(null);
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(pointer: fine)").matches) {
                     e.preventDefault();
                     void send();

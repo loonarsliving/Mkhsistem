@@ -19,9 +19,9 @@ for f in supabase/migrations/029[1-9]_loonars_connect*.sql supabase/migrations/0
 psql -d t -f tests/sql/0291_hospitality/behavior_test.sql   # prints PASS/FAIL per check
 ```
 
-Last run (2026-10-25, incl. 0295–0300): 104 passed, 0 failed (27 of them for
+Last run (2026-10-25, incl. 0295–0301): 110 passed, 0 failed (27 of them for
 0300 direct chat: scope, one chat per pair, privacy incl. the owner, push,
-membership sync, 30-day photo expiry).
+membership sync, 30-day photo expiry; 6 for 0301 replies).
 
 ## 0294 (Markom Jogja + Sales Jogja)
 

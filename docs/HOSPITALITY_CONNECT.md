@@ -164,6 +164,16 @@ WhatsApp relay allowlist) and posts an alert card in the owner feed.
   company loses access (`mkc_chat_employee_eligible`); someone who moves to
   another branch keeps existing chats but can no longer start new ones.
 
+## Replies (0301)
+
+- Swipe a text bubble to the right (touch) or use the hover reply button
+  (mouse) to reply; the composer shows what is being answered (Esc / × to
+  cancel). The reply stores `mkc_chat_messages.reply_to_id`, sent through
+  `mkc_chat_send_message()`, which rejects a message from another
+  conversation. The quote is read live from the original row, so RLS limits
+  it to the same conversation; tapping it scrolls to the original when it is
+  loaded.
+
 ## Evidence storage & 30-day retention
 
 - Private bucket `hospitality-evidence` (10 MB, jpeg/png/webp/pdf). Browser

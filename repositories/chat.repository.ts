@@ -131,6 +131,16 @@ export interface ChatMessage {
   payload: Record<string, unknown>;
   createdAt: string;
   attachments: ChatAttachment[];
+  /** 0301: the message this one replies to (live from its row), or null */
+  replyTo: ChatReplyRef | null;
+}
+
+/** Quoted original of a reply; its own row may sit outside the loaded page. */
+export interface ChatReplyRef {
+  id: string;
+  senderId: string | null;
+  body: string;
+  hasPhoto: boolean;
 }
 
 export interface ChatRefs {
@@ -349,7 +359,7 @@ export async function listChatMessages(
   const limit = Math.min(options.limit ?? 50, 100);
   let query = supabase
     .from("mkc_chat_messages")
-    .select("id, conversation_id, sender_id, kind, body, ref_table, ref_id, payload, created_at")
+    .select("id, conversation_id, sender_id, kind, body, ref_table, ref_id, payload, created_at, reply_to_id")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(limit + 1);
@@ -404,6 +414,20 @@ export async function listChatMessages(
   }
 
   const attByMessage = await signAttachments(supabase, (attachments.data ?? []) as Parameters<typeof signAttachments>[1]);
+
+  // Quoted originals (0301): taken from this page when loaded, else fetched (RLS: same conversation only).
+  const replyRefs = new Map<string, ChatReplyRef>();
+  for (const m of page) replyRefs.set(m.id, { id: m.id, senderId: m.sender_id, body: m.body, hasPhoto: (attByMessage.get(m.id) ?? []).length > 0 });
+  const missingReplyIds = [...new Set(page.map((m) => m.reply_to_id).filter((id): id is string => !!id && !replyRefs.has(id)))];
+  if (missingReplyIds.length) {
+    const [originals, originalPhotos] = await Promise.all([
+      supabase.from("mkc_chat_messages").select("id, sender_id, body").in("id", missingReplyIds),
+      supabase.from("mkc_chat_attachments").select("message_id").in("message_id", missingReplyIds),
+    ]);
+    if (originals.error) throw new Error(originals.error.message);
+    const withPhoto = new Set((originalPhotos.data ?? []).map((a) => a.message_id));
+    for (const o of originals.data ?? []) replyRefs.set(o.id, { id: o.id, senderId: o.sender_id, body: o.body, hasPhoto: withPhoto.has(o.id) });
+  }
 
   const refs: ChatRefs = { tasks: {}, issues: {}, checklists: {}, reports: {}, connect };
   for (const t of (tasks.data ?? []) as TaskRow[]) refs.tasks[t.id] = mapTask(t);
@@ -471,6 +495,7 @@ export async function listChatMessages(
       payload: (m.payload as Record<string, unknown>) ?? {},
       createdAt: m.created_at,
       attachments: attByMessage.get(m.id) ?? [],
+      replyTo: m.reply_to_id ? (replyRefs.get(m.reply_to_id) ?? null) : null,
     })),
     refs,
     hasMore,

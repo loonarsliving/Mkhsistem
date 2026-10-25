@@ -169,3 +169,8 @@
     display: none !important;
   }
 }
+
+/* Loonars Connect (0301): briefly highlight the original when a reply quote is tapped */
+.chat-msg-flash {
+  background-color: rgb(16 185 129 / 0.18);
+}

@@ -8,6 +8,14 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: balas pesan dengan geser kanan (0301)
+
+Geser gelembung pesan ke kanan (HP) atau tombol balas saat hover (desktop)
+untuk membalas, seperti WhatsApp. `mkc_chat_messages.reply_to_id` + RPC
+`mkc_chat_send_message()` (memeriksa pesan yang dibalas ada di percakapan yang
+sama); kutipan dibaca langsung dari baris aslinya (RLS) dan bisa diketuk untuk
+melompat ke pesan asli. Uji SQL 110/110 + 50/50.
+
 ## 2026-10-25 — Loonars Connect: chat pribadi 1-on-1 (0300)
 
 Chat pribadi antar karyawan Jogja + Loonars Private Living + owner, satu
