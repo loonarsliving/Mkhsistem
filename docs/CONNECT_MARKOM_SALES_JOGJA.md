@@ -274,3 +274,13 @@ approved changing Fety's app role from `staff` to `sales`.
   Rebecca-only approval, voucher creation and overlap refusal, the booking
   sync, CRM write-through and phone-free cards, the branch filter and
   snapshots.
+
+## Markom inside the Hospitality group (0302)
+
+- Hospitality's `settings.member_of = ['markom_jogja']`: the Markom Jogja team
+  is in the Hospitality group as `member` (talk, read, report an issue; no
+  cleaning / FO / security role). Membership follows the Markom group.
+- Markom Jogja's `settings.mirror_kol_to = 'hospitality'`: every KOL message
+  in the Markom group is copied once into the Hospitality group
+  (`payload.mirrored_from`, dedupe `mirror:<id>`), keeping its sender, so a
+  new room request pushes to the Hospitality team. Remove the key to stop.

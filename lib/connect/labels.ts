@@ -22,7 +22,8 @@ export function isPlainChat(kind: ConnectDepartmentKind): boolean {
 }
 
 const ROLE_LABELS: Record<ConnectDepartmentKind, Record<string, string>> = {
-  hospitality: { manager: "Hospitality Manager", front_office: "Front Office", cleaning: "Cleaning", security: "Security" },
+  // member = derived from settings.member_of (0302: the Markom Jogja team)
+  hospitality: { manager: "Hospitality Manager", front_office: "Front Office", cleaning: "Cleaning", security: "Security", member: "Markom" },
   markom: { markom: "Markom", room_approver: "Persetujuan kamar villa" },
   sales: { sales: "Sales", manager: "Kepala Cabang / Manager Sales" },
   koordinasi: { member: "Anggota" },

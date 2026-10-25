@@ -8,6 +8,15 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: Markom di grup Hospitality (0302)
+
+Grup Hospitality kini berisi tim Markom Jogja (`settings.member_of`, sama
+seperti Koordinasi Jogja; peran `member`, tanpa peran alur kerja). Setiap
+pesan KOL di grup Markom (pengajuan kamar, persetujuan/penolakan, booking,
+check-in, check-out) disalin sekali ke grup Hospitality lewat trigger
+`mkc_chat_messages_mirror_kol` (`settings.mirror_kol_to`); pengajuan baru
+ikut mengirim push ke tim Hospitality. Uji SQL 110/110 + 56/56.
+
 ## 2026-10-25 — Loonars Connect: membuka percakapan lebih cepat
 
 Membuka chat memanggil `router.replace('/chat?c=…')`, yang me-render ulang
