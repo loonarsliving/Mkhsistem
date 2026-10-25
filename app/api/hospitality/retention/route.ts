@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { runEvidenceRetention } from "@/lib/hospitality/retention-runner";
 import { logger } from "@/lib/logger";
+import { cleanupWaOutbox } from "@/lib/wa-media/outbox";
 import { requireCronAuth } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
@@ -13,6 +14,7 @@ export const maxDuration = 60;
  * expired chat/evidence files from the private 'hospitality-evidence' bucket
  * (the Storage objects themselves) and records each run in
  * mkc_chat_retention_runs. Messages, checklists, issues and reports stay.
+ * Also deletes the day-old public copies of files sent on WhatsApp (0306).
  */
 export async function POST(request: Request) {
   const unauthorized = requireCronAuth(request);
@@ -20,7 +22,8 @@ export async function POST(request: Request) {
 
   try {
     const result = await runEvidenceRetention();
-    return NextResponse.json({ status: "ok", ...result });
+    const waOutbox = await cleanupWaOutbox();
+    return NextResponse.json({ status: "ok", ...result, waOutbox });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error("evidence retention run failed", { error: message });
