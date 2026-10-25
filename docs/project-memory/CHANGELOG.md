@@ -8,6 +8,14 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Lead WA: foto ke customer tidak berhenti di foto pertama
+
+Fety mengirim 2 foto ke lead; Whacenter menjawab HTTP 500 untuk foto pertama
+(foto tetap sampai), lalu pengiriman berhenti sehingga foto kedua tidak pernah
+dikirim. Kini setiap foto dikirim sendiri-sendiri, dan `/api/wa-media`
+menyajikan file utuh dengan `Content-Length` dan tipe gambar (sebelumnya
+streaming tanpa ukuran; dua kiriman pertama lewat rute ini sama-sama 500).
+
 ## 2026-10-25 — Loonars Connect: tandai orang di grup chat (0305)
 
 Ketik `@` di grup chat untuk memilih anggota; nama yang ditandai disorot di
