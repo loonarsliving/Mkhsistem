@@ -345,5 +345,21 @@ describe("pembayaran lain-lain & cicilan utang", () => {
     expect(parseLoonars2Perintah("L2 tanpa rekening")?.aksi).toBe("tanpa_rekening");
     expect(parseLoonars2Perintah("selamat pagi")).toBeNull();
   });
+
+  it("kalimat pembelian dengan rekening adalah pengajuan, bukan balasan rekening", () => {
+    const a = parseLoonars2Perintah("L2 pembelian cat 495.000 Mandiri 1850 0066 1464 5 Sarno");
+    expect(a?.aksi).toBe("ajukan_mingguan");
+    const baris = (a as unknown as { data: { baris: { nominal: number | null; rekening?: string }[] } }).data.baris;
+    expect(baris[0].nominal).toBe(495000);
+    expect(baris[0].rekening).toContain("1850 0066 1464 5");
+    expect(parseLoonars2Perintah("L2 pembelian cat loonars 1 495.000 BCA 0600492233 Wibowo")?.aksi).toBe("ajukan_mingguan");
+    expect(parseLoonars2Perintah("L2 beli semen 10 sak 650.000 BCA 1234567890 a.n. Toko Maju")?.aksi).toBe("ajukan_mingguan");
+  });
+
+  it("balasan rekening murni tetap dikenali; kalimat dengan nominal tidak", () => {
+    expect(parseLoonars2Perintah("Mandiri 1850 0066 1464 5 a.n. Sarno")?.aksi).toBe("rekening");
+    expect(parseLoonars2Perintah("2. BCA 0600492233 Wibowo")?.aksi).toBe("rekening");
+    expect(parseRekeningBalasan("pembelian cat 495.000 BCA 0600492233 Wibowo")).toBeNull();
+  });
 });
 

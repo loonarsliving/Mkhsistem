@@ -168,7 +168,7 @@ export type BarisMingguan = {
 // Rekening tujuan (bank + nomor [+ a.n.]) di tulisan pelaksana
 // ---------------------------------------------------------------------------
 const BANK_RE = "bca|bri|bni|bsi|btn|btpn|mandiri|danamon|cimb(?:\\s+niaga)?|permata|panin|mega|ocbc|maybank|jago|seabank|jenius|sultra|bpd(?:\\s+[a-z]+)?|dana|ovo|gopay|shopeepay";
-const NOREK_RE = "(?:\\d{6,18}|\\d{3,5}(?:[\\s\\-]\\d{3,5}){1,4})";
+const NOREK_RE = "(?:\\d{6,18}|\\d{3,5}(?:[\\s\\-]\\d{3,5}){1,3}(?:[\\s\\-]\\d{1,5})?)";
 const AN_RE = "(?:\\s*[,\\-]?\\s*(?:a\\.?\\s?n\\.?|atas\\s+nama)\\s*[:.]?\\s*[A-Za-z][A-Za-z.' ]{1,40})?";
 const REKENING_RE = new RegExp(
   `(?:bank\\s+)?\\b(?:${BANK_RE})\\b[\\s:.\\-]*(?:no\\.?\\s*(?:rek(?:ening)?\\.?)?[\\s:.\\-]*|rek(?:ening)?\\.?[\\s:.\\-]*)?${NOREK_RE}${AN_RE}|${NOREK_RE}\\s*(?:bank\\s+)?\\b(?:${BANK_RE})\\b${AN_RE}`,
@@ -196,7 +196,10 @@ export function parseRekeningBalasan(input: string): { no: number | null; rekeni
   for (const b of baris) {
     const nomor = b.match(/^\s*(?:no\.?\s*)?(\d{1,2})\s*[.)\-:]\s+(.+)$/i);
     const isi = nomor ? nomor[2] : b;
-    if (!pisahRekening(isi).rekening) return null;
+    const { rekening, sisa } = pisahRekening(isi);
+    if (!rekening) return null;
+    // Balasan rekening = hampir hanya rekening. Kalimat panjang atau yang memuat nominal adalah pengajuan/pesan lain.
+    if (sisa.split(/\s+/).filter(Boolean).length > 6 || /\d{1,3}(?:\.\d{3})+|\d+\s*(?:jt|juta|rb|ribu)\b/i.test(sisa)) return null;
     hasil.push({ no: nomor ? Number(nomor[1]) : null, rekening: isi });
   }
   return hasil;
@@ -262,7 +265,7 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   let isi: string[];
   if (header) {
     isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());
-  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi)\b|borongan\s+\S)/i.test(kepala) || /^(?:lain(?:-lain)?|biaya\s+lain|listrik|bensin|solar|bbm|konsumsi|transport|ongkir|sewa|asuransi|satpam|kebersihan)\b/i.test(kepala)) {
+  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi|pembelian|beli|belanja)\b|borongan\s+\S)/i.test(kepala) || /^(?:lain(?:-lain)?|biaya\s+lain|listrik|bensin|solar|bbm|konsumsi|transport|ongkir|sewa|asuransi|satpam|kebersihan)\b/i.test(kepala)) {
     isi = [kepala];
   } else {
     return null;
@@ -600,6 +603,16 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
   if (!perintah) return { outcome: "not_applicable" };
 
   if (perintah.aksi === "laporan_utang") return kirimLaporanUtang(sender);
+
+  // Perintah L2 khusus Loonars 2; pengajuan yang menyebut Loonars 1 / Living tidak diproses di sini (jangan sampai
+  // tercatat di proyek yang salah).
+  if ((perintah.aksi === "ajukan_mingguan" || perintah.aksi === "ajukan_ai" || perintah.aksi === "bahan_ai") && /\bloonars\s*(?:1|satu|living)\b/i.test(text)) {
+    return {
+      outcome: "handled",
+      reply:
+        "⚠️ Pesan ini menyebut Loonars 1, sedangkan perintah \"L2\" khusus Loonars 2, jadi belum saya catat. Pengajuan Loonars 1 tidak lewat \"L2\": kirim dengan cara Loonars 1 seperti biasa. Kalau ini memang untuk Loonars 2, kirim ulang tanpa kata \"Loonars 1\".",
+    };
+  }
 
   if (perintah.aksi === "bantuan") return { outcome: "handled", reply: LOONARS2_BANTUAN };
 
