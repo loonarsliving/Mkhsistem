@@ -8,6 +8,13 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: tandai orang di grup chat (0305)
+
+Ketik `@` di grup chat untuk memilih anggota; nama yang ditandai disorot di
+pesan dan orang itu menerima push "📣 <pengirim> menandai Anda · <grup>".
+Tag disimpan di `payload.mentions` (hanya anggota percakapan itu, maks. 20).
+Uji SQL 9/9 baru.
+
 ## 2026-10-25 — Lead WA: klik iklan dikenali dari pesan pembuka (0304)
 
 Whacenter berhenti mengirim data iklan (`ad_reply`) sejak 2026-09-06, sehingga

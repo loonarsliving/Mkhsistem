@@ -43,3 +43,8 @@ its sales person, and grants. Last run (2026-10-25): 41 passed, 0 failed
 `behavior_0304.sql` on a fresh DB (stubs + migrations 0291..0304). Last run
 (2026-10-25): 18 passed, 0 failed (with 110/110, 56/56, 41/41 on the same
 migrations).
+
+## 0305 (tags)
+
+`behavior_0305.sql` on a fresh DB (stubs + migrations 0291..0305). Last run
+(2026-10-25): 9 passed, 0 failed (with 110/110, 56/56, 41/41, 18/18).
