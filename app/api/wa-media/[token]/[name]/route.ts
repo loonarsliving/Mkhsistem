@@ -22,11 +22,25 @@ export async function GET(
   const { data, error } = await createAdminClient().storage.from(grant.bucket).download(grant.path);
   if (error || !data) return new NextResponse("Not found", { status: 404 });
 
-  return new NextResponse(data, {
+  // A complete body with its exact length and an image type. The first sends
+  // through this route (2026-10-25) came back HTTP 500 from Whacenter while the
+  // response was streamed (chunked, no Content-Length); file links Whacenter
+  // does accept are plain static files, so this one now looks like one.
+  const body = Buffer.from(await data.arrayBuffer());
+  return new NextResponse(body, {
     headers: {
-      "Content-Type": data.type || "application/octet-stream",
+      "Content-Type": waMediaContentType(data.type, grant.path),
+      "Content-Length": String(body.length),
+      "Content-Disposition": "inline",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+/** Storage's type when it is a real one, else from the file extension. */
+function waMediaContentType(stored: string | undefined, path: string): string {
+  if (stored && stored !== "application/octet-stream") return stored;
+  const ext = path.split(".").pop()?.toLowerCase();
+  return { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf" }[ext ?? ""] ?? "application/octet-stream";
 }

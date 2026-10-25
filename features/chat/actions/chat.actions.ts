@@ -115,13 +115,14 @@ export async function sendWaLeadMessageAction(input: SendWaLeadInput): Promise<A
       result = await sendWhatsAppText(queued.phone, parsed.data.body);
     } else {
       // Whacenter fetches each photo right away; the caption rides on the first one.
+      // Every photo is attempted: Whacenter has answered 500 for a photo it still
+      // delivered (2026-10-25), and stopping there left the next photo unsent.
+      const failures: string[] = [];
       for (const [i, path] of photos.entries()) {
         const sent = await sendWhatsAppImage(queued.phone, createWaMediaUrl("hospitality-evidence", path, 60 * 60), i === 0 ? parsed.data.body || undefined : undefined);
-        if (!sent.success) {
-          result = sent;
-          break;
-        }
+        if (!sent.success) failures.push(`foto ${i + 1}: ${sent.error ?? "unknown error"}`);
       }
+      if (failures.length > 0) result = { success: false, error: failures.join("; ") };
     }
   } catch (err) {
     result = { success: false, error: err instanceof Error ? err.message : String(err) };
