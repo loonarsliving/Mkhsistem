@@ -52,6 +52,7 @@ export function ChatApp({
   userId,
   isOwner,
   canDirectChat,
+  waLeadMonitorCodes,
   initialConversations,
   initialConversationId,
   peopleByDepartment,
@@ -61,6 +62,8 @@ export function ChatApp({
   isOwner: boolean;
   /** direct 1-on-1 chat available to this user (0300) */
   canDirectChat: boolean;
+  /** WhatsApp lead departments the caller monitors (0304), even with no lead yet */
+  waLeadMonitorCodes: string[];
   initialConversations: ChatConversation[];
   initialConversationId: string | null;
   peopleByDepartment: Record<string, ChatPerson[]>;
@@ -184,6 +187,7 @@ export function ChatApp({
   const listed = conversations.filter((c) => !(c.waLead?.monitor && !c.waLead.canReply));
   const monitorWaiting = monitorLeads.filter((c) => c.waLead?.waitingSince).length;
   const monitorUnread = monitorLeads.reduce((sum, c) => sum + c.unread, 0);
+  const monitorDepartment = waLeadMonitorCodes[0] ?? monitorLeads[0]?.departmentCode ?? null;
 
   const registerRefresh = React.useCallback((fn: () => void) => {
     roomRefresh.current = fn;
@@ -221,9 +225,9 @@ export function ChatApp({
       className="-m-4 flex h-[calc(var(--chat-vh,100dvh)-4rem)] overflow-hidden bg-background sm:-m-6 lg:m-0 lg:h-[calc(100dvh-10rem)] lg:min-h-[520px] lg:rounded-xl lg:border lg:shadow-sm"
     >
       <div className={cn("h-full w-full md:w-[320px] md:shrink-0 md:border-r", selected ? "hidden md:block" : "block")}>
-        {monitorOpen && monitorLeads.length > 0 ? (
+        {monitorOpen && monitorDepartment ? (
           <WaLeadMonitor
-            departmentCode={monitorLeads[0].departmentCode}
+            departmentCode={monitorDepartment}
             leads={monitorLeads}
             selectedId={selectedId}
             onSelect={select}
@@ -260,13 +264,15 @@ export function ChatApp({
           </div>
           <ChatNotificationPrompt />
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {monitorLeads.length > 0 && (
+            {monitorDepartment && (
               <button type="button" onClick={() => setMonitorOpen(true)} className="flex w-full items-center gap-3 border-b bg-[#25d366]/10 px-3 py-3 text-left transition-colors hover:bg-[#25d366]/20">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#25d366] text-xs font-bold text-white">WA</div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">Lead WA Jogja</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {monitorLeads.length} lead · {monitorWaiting > 0 ? `${monitorWaiting} belum dibalas` : "semua sudah dibalas"}
+                    {monitorLeads.length === 0
+                      ? "Belum ada lead · lihat kinerja sales"
+                      : `${monitorLeads.length} lead · ${monitorWaiting > 0 ? `${monitorWaiting} belum dibalas` : "semua sudah dibalas"}`}
                   </p>
                 </div>
                 {monitorUnread > 0 && (

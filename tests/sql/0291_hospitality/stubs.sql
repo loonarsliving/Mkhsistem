@@ -68,7 +68,8 @@ create table public.prospects (id uuid primary key default gen_random_uuid(), cu
 create unique index prospects_phone_normalized_key on public.prospects (phone_normalized) where deleted_at is null;
 create table public.crm_projects (id uuid primary key default gen_random_uuid(), name text, city text, project_type text, branch_id uuid);
 create table public.meta_ad_campaigns (id uuid primary key default gen_random_uuid(), name text, headline text, project_id uuid references public.crm_projects(id),
-  branch_id uuid not null references public.branches(id), meta_ad_id text, meta_adset_id text, meta_creative_id text);
+  branch_id uuid not null references public.branches(id), meta_ad_id text, meta_adset_id text, meta_creative_id text,
+  status text not null default 'active', welcome_message text, updated_at timestamptz not null default now());
 create table public.prospect_follow_ups (id uuid primary key default gen_random_uuid(), prospect_id uuid references public.prospects(id), activity_type text,
   activity_date date, activity_time time, notes text, created_by uuid, created_at timestamptz default now());
 create function public.crm_add_follow_up(p_prospect_id uuid, p_activity_type text, p_activity_date date, p_activity_time time, p_notes text default null)

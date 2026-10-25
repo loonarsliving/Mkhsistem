@@ -47,13 +47,18 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
   );
 
   const initialId = c && conversations.some((conv) => conv.id === c) ? c : null;
-  const { data: canDirectChat } = await supabase.rpc("mkc_chat_direct_available");
+  const [{ data: canDirectChat }, { data: waLeadMonitorCodes }] = await Promise.all([
+    supabase.rpc("mkc_chat_direct_available"),
+    // WhatsApp lead departments the caller watches (0304): the monitor view shows before the first lead.
+    supabase.rpc("mkc_wa_lead_my_monitor_departments"),
+  ]);
 
   return (
     <ChatApp
       userId={session.userId}
       isOwner={hasPermission(session, PERMISSIONS.HOSPITALITY_OWNER_REPORT)}
       canDirectChat={canDirectChat === true}
+      waLeadMonitorCodes={waLeadMonitorCodes ?? []}
       initialConversations={conversations}
       initialConversationId={initialId}
       peopleByDepartment={peopleByDepartment}
