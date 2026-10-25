@@ -41,7 +41,8 @@ export type LoadMessagesInput = z.input<typeof loadMessagesSchema>;
 
 export const sendTextSchema = z
   // replyToId (0301): the message being answered (swipe right); same conversation, checked by the RPC
-  .object({ conversationId: uuid, body: z.string().trim().max(4000), attachmentIds, replyToId: uuid.optional() })
+  // mentionIds (0305): people tagged with @name; the RPC keeps only members of this conversation
+  .object({ conversationId: uuid, body: z.string().trim().max(4000), attachmentIds, replyToId: uuid.optional(), mentionIds: z.array(uuid).max(20).default([]) })
   .refine((v) => v.body.length > 0 || v.attachmentIds.length > 0, { message: "Pesan kosong", path: ["body"] });
 export type SendTextInput = z.input<typeof sendTextSchema>;
 

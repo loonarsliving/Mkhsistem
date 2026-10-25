@@ -349,3 +349,16 @@ now also recognises an ad click by its pre-filled first message:
 The branch must still be in a lead department's scope. The monitor row
 ("Lead WA Jogja") now shows for monitors before the first lead
 (`mkc_wa_lead_my_monitor_departments`).
+
+## Tagging people in a group chat (0305)
+
+Typing `@` in a group chat's composer lists the conversation's active members
+(people with a role in it, not the caller); picking one writes `@Full Name`
+and remembers the person. On send, the ids whose `@Name` is still in the text
+go to `mkc_chat_send_message(..., p_mention_ids)`, which keeps only active
+members of that conversation other than the sender (max 20) in
+`payload.mentions`. The bubble highlights each tagged `@Name` (amber for the
+reader), and the tagged member's push reads
+"📣 <sender> menandai Anda · <group>" (`metadata.mentioned`); everyone else
+gets the normal push. The 4-argument send is unchanged (calls the new form
+with no tags). Not offered in 1-on-1 chats or WhatsApp leads.

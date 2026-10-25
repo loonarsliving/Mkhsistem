@@ -45,6 +45,7 @@ import { ContentPlanDialog, DailyReportDialog, KolDialog, LeadDialog } from "./c
 import { MarkomWorkPanel, SalesWorkPanel } from "./connect-panels";
 import { avatarColor, dayKey, formatDateTime, formatDaySeparator, formatTime, initials } from "./chat-utils";
 import { ExtraEvidence, type UploadedEvidence } from "./evidence-picker";
+import { findMentionQuery, insertMention, MentionPicker, MentionText, mentionCandidates, mentionIdsInText, type PickedMention } from "./mentions";
 import { ReportCard } from "./report-card";
 import { ReplyButton, SwipeToReply } from "./swipe-reply";
 import { formatPhone, InboundMedia, MoveLeadMenu, useNow, WaDeliveryState, WaitingBadge } from "./wa-lead";
@@ -205,7 +206,11 @@ function MessageView({
           </div>
         )}
         {mediaUrl && <InboundMedia url={mediaUrl} />}
-        {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
+        {message.body && (
+          <p className="whitespace-pre-wrap break-words">
+            <MentionText body={message.body} mentions={Array.isArray(message.payload.mentions) ? (message.payload.mentions as string[]) : []} people={people} userId={userId} />
+          </p>
+        )}
         <p className="mt-0.5 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">
           {formatTime(message.createdAt)}
           {wa === "out" && (
@@ -388,6 +393,9 @@ export function ChatRoom({
   const [loadingOlder, setLoadingOlder] = React.useState(false);
   const [text, setText] = React.useState("");
   const [replyTo, setReplyTo] = React.useState<ChatMessage | null>(null);
+  // @tags (0305): the "@query" being typed and the people picked so far
+  const [mentionQuery, setMentionQuery] = React.useState<{ start: number; query: string } | null>(null);
+  const [picked, setPicked] = React.useState<PickedMention[]>([]);
   const [photos, setPhotos] = React.useState<UploadedEvidence[]>([]);
   const [showPhotos, setShowPhotos] = React.useState(false);
   const [sending, setSending] = React.useState(false);
@@ -518,13 +526,15 @@ export function ChatRoom({
     const attachmentIds = photos.map((p) => p.id);
     const r = lead
       ? await sendWaLeadMessageAction({ conversationId: conversation.id, body: text, attachmentIds })
-      : await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds, replyToId: replyTo?.id });
+      : await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds, replyToId: replyTo?.id, mentionIds: mentionIdsInText(text, picked) });
     setSending(false);
     if (!r.success) return void toast.error(r.error ?? "Pesan gagal terkirim");
     const delivery = r.data as { delivered?: boolean; error?: string } | undefined;
     if (delivery?.delivered === false) toast.error("Pesan tersimpan tapi gagal terkirim ke WhatsApp customer", { description: delivery.error });
     setText("");
     setReplyTo(null);
+    setPicked([]);
+    setMentionQuery(null);
     setPhotos([]);
     setShowPhotos(false);
     void load();
@@ -551,6 +561,23 @@ export function ChatRoom({
     el.classList.add("chat-msg-flash");
     window.setTimeout(() => el.classList.remove("chat-msg-flash"), 1600);
   }, []);
+
+  // Tags only in group chats (a 1-on-1 or a WhatsApp lead has no one else to tag).
+  const canMention = conversation.kind === "operational_group";
+  const candidates = canMention && mentionQuery ? mentionCandidates(people, userId, mentionQuery.query) : [];
+  const trackMention = (value: string, caret: number | null) => setMentionQuery(canMention && caret !== null ? findMentionQuery(value, caret) : null);
+  const pickMention = (person: { id: string; name: string }) => {
+    const el = composerRef.current;
+    if (!el || !mentionQuery) return;
+    const next = insertMention(text, mentionQuery.start, el.selectionStart ?? text.length, person.name);
+    setText(next.text);
+    setPicked((list) => (list.some((m) => m.id === person.id) ? list : [...list, { id: person.id, name: person.name }]));
+    setMentionQuery(null);
+    window.requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+    });
+  };
 
   const workCount = openWorkCount(work);
   const canSecurity = roleCan(myRole, "security");
@@ -759,6 +786,7 @@ export function ChatRoom({
                 </button>
               </div>
             )}
+            <MentionPicker candidates={candidates} onPick={pickMention} />
             {showPhotos && (
               <div className="px-3 pt-2">
                 <ExtraEvidence conversationId={conversation.id} userId={userId} value={photos} onChange={setPhotos} slot="other" />
@@ -831,8 +859,22 @@ export function ChatRoom({
               <textarea
                 ref={composerRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  trackMention(e.target.value, e.target.selectionStart);
+                }}
+                onSelect={(e) => trackMention(e.currentTarget.value, e.currentTarget.selectionStart)}
                 onKeyDown={(e) => {
+                  if (candidates.length > 0 && (e.key === "Enter" || e.key === "Tab")) {
+                    e.preventDefault();
+                    pickMention(candidates[0]);
+                    return;
+                  }
+                  if (e.key === "Escape" && mentionQuery) {
+                    e.preventDefault();
+                    setMentionQuery(null);
+                    return;
+                  }
                   if (e.key === "Escape" && replyTo) {
                     e.preventDefault();
                     setReplyTo(null);
@@ -845,7 +887,7 @@ export function ChatRoom({
                 }}
                 rows={1}
                 maxLength={4000}
-                placeholder={lead ? "Balas ke WhatsApp customer" : "Tulis pesan"}
+                placeholder={lead ? "Balas ke WhatsApp customer" : canMention ? "Tulis pesan atau @tag" : "Tulis pesan"}
                 className="max-h-36 min-h-[42px] min-w-0 flex-1 resize-none rounded-3xl border-0 bg-background px-4 py-2.5 text-base leading-snug shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:text-sm"
               />
               <button

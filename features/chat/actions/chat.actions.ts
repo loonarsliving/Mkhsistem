@@ -210,6 +210,8 @@ export async function sendTextAction(input: SendTextInput): Promise<ActionResult
     p_body: parsed.data.body,
     p_attachment_ids: parsed.data.attachmentIds,
     p_reply_to_id: parsed.data.replyToId ?? null,
+    // 0305: the 5-argument form (no defaults) only when someone is tagged
+    ...(parsed.data.mentionIds.length > 0 ? { p_mention_ids: parsed.data.mentionIds } : {}),
   });
   return error ? dbError(error.message) : actionSuccess({ id: data as string });
 }
