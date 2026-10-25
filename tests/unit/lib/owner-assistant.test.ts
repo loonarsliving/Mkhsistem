@@ -246,10 +246,27 @@ describe("formatKeuanganVilla", () => {
     );
     expect(text).toContain("2 booking OTA belum punya angka bersih");
     expect(text).toContain(
-      "bagian investor Rp12.635.000 untuk 13 investor (Rp971.923 per investor, jaminan aktif: top-up Rp4.028.077 per investor)",
+      "bagian investor Rp12.635.000 untuk 13 investor (bagi hasil Rp971.923 per investor)",
+    );
+    expect(text).toContain(
+      "Jaminan minimal investor Rp5.000.000 per investor per bulan BERLAKU bulan ini: bagi hasil Rp971.923 + top-up jaminan Rp4.028.077 = total transfer Rp5.000.000 per investor.",
     );
     expect(text).toContain("kafe Rp1.000.000");
     expect(text).toContain("Peringatan Finance: 2 settlement");
+  });
+
+  it("says no top-up is needed when bagi hasil already covers the guarantee", () => {
+    const text = formatKeuanganVilla({
+      ...dasar,
+      laporan_investor: {
+        ...dasar.laporan_investor,
+        per_investor_amount: 6_000_000,
+        jaminan_aktif: false,
+        jaminan_topup: 0,
+      },
+    });
+    expect(text).toContain("tidak perlu top-up; total transfer Rp6.000.000 per investor");
+    expect(text).not.toContain("BERLAKU");
   });
 });
 

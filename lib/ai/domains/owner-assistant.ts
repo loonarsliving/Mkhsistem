@@ -352,7 +352,13 @@ export function formatKeuanganVilla(k: KeuanganVilla): string {
       `${k.channel.bersih_belum_tersedia} booking OTA belum punya angka bersih dari Cloudbeds.`,
     );
   out.push(
-    `Laporan investor (rumus bagi hasil villa, dari transaksi pemasukan bulan ini): pendapatan ${rupiah(inv.gross_revenue)}, opex ${rupiah(inv.opex_per_unit)}, marketing ${rupiah(inv.marketing_amount)}, bersih ${rupiah(inv.net)}, bagian investor ${rupiah(inv.owner_amount)} untuk ${inv.investor_count} investor (${rupiah(inv.per_investor_amount)} per investor${inv.jaminan_aktif ? `, jaminan aktif: top-up ${rupiah(inv.jaminan_topup)} per investor` : ""}), bagian pengelola ${rupiah(inv.pengelola_amount)}.`,
+    `Laporan investor (rumus bagi hasil villa, dari transaksi pemasukan bulan ini): pendapatan ${rupiah(inv.gross_revenue)}, opex ${rupiah(inv.opex_per_unit)}, marketing ${rupiah(inv.marketing_amount)}, bersih ${rupiah(inv.net)}, bagian investor ${rupiah(inv.owner_amount)} untuk ${inv.investor_count} investor (bagi hasil ${rupiah(inv.per_investor_amount)} per investor), bagian pengelola ${rupiah(inv.pengelola_amount)}.`,
+    // villa-api only sends the top-up, not the guarantee amount itself, so
+    // without this line the model answered "jaminan Rp5 jt tidak tersedia".
+    // Guarantee = bagi hasil + top-up (villa-api's own definition).
+    inv.jaminan_aktif
+      ? `Jaminan minimal investor ${rupiah(inv.per_investor_amount + inv.jaminan_topup)} per investor per bulan BERLAKU bulan ini: bagi hasil ${rupiah(inv.per_investor_amount)} + top-up jaminan ${rupiah(inv.jaminan_topup)} = total transfer ${rupiah(inv.per_investor_amount + inv.jaminan_topup)} per investor.`
+      : `Bagi hasil per investor sudah di atas jaminan minimal, tidak perlu top-up; total transfer ${rupiah(inv.per_investor_amount)} per investor.`,
     `Non-kamar (tidak masuk bagi hasil): kafe ${rupiah(inv.walkin_income.cafe)}, spa ${rupiah(inv.walkin_income.spa)}, lainnya ${rupiah(inv.walkin_income.lainnya)}.`,
   );
   if (f.alerts.length)
