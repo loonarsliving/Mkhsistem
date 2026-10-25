@@ -29,6 +29,35 @@ export interface ChatConversation {
   unread: number;
   /** direct chats (0300): the other person */
   peerId: string | null;
+  /** WhatsApp ad lead (0303), or null for every other conversation */
+  waLead: ChatWaLead | null;
+}
+
+/** The lead behind a WhatsApp-lead conversation (0303). */
+export interface ChatWaLead {
+  leadId: string;
+  phone: string;
+  salesId: string;
+  salesName: string | null;
+  /** first customer message not yet answered by Sales, or null */
+  waitingSince: string | null;
+  source: string | null;
+  status: string;
+  /** the caller holds the lead (may answer the customer) */
+  canReply: boolean;
+  /** the caller is the owner / lead manager (reads all, may move leads) */
+  monitor: boolean;
+}
+
+/** Per sales person numbers for the lead monitor view (0303). */
+export interface WaLeadSalesStats {
+  salesId: string;
+  name: string;
+  leadsToday: number;
+  leads7d: number;
+  waiting: number;
+  oldestWaitingSince: string | null;
+  avgFirstResponseMin7d: number | null;
 }
 
 /** Someone the caller can start a direct chat with (0300). */
@@ -176,6 +205,37 @@ export async function listChatConversations(supabase: TypedSupabaseClient): Prom
     lastSender: (r.last_sender as string | null) ?? null,
     unread: Number(r.unread ?? 0),
     peerId: (r.peer_id as string | null) ?? null,
+    waLead: mapWaLead(r.wa_lead),
+  }));
+}
+
+function mapWaLead(raw: unknown): ChatWaLead | null {
+  if (!raw || typeof raw !== "object") return null;
+  const w = raw as Record<string, unknown>;
+  return {
+    leadId: String(w.lead_id),
+    phone: String(w.phone ?? ""),
+    salesId: String(w.sales_id ?? ""),
+    salesName: (w.sales_name as string | null) ?? null,
+    waitingSince: (w.waiting_since as string | null) ?? null,
+    source: (w.source as string | null) ?? null,
+    status: String(w.status ?? "open"),
+    canReply: w.can_reply === true,
+    monitor: w.monitor === true,
+  };
+}
+
+export async function getWaLeadStats(supabase: TypedSupabaseClient, departmentCode: string): Promise<WaLeadSalesStats[]> {
+  const { data, error } = await supabase.rpc("mkc_wa_lead_stats", { p_department_code: departmentCode });
+  if (error) throw new Error(error.message);
+  return ((data as Record<string, unknown>[] | null) ?? []).map((r) => ({
+    salesId: String(r.sales_id),
+    name: String(r.name ?? ""),
+    leadsToday: Number(r.leads_today ?? 0),
+    leads7d: Number(r.leads_7d ?? 0),
+    waiting: Number(r.waiting ?? 0),
+    oldestWaitingSince: (r.oldest_waiting_since as string | null) ?? null,
+    avgFirstResponseMin7d: r.avg_first_response_min_7d == null ? null : Number(r.avg_first_response_min_7d),
   }));
 }
 

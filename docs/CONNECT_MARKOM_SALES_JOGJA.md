@@ -284,3 +284,49 @@ approved changing Fety's app role from `staff` to `sales`.
   in the Markom group is copied once into the Hospitality group
   (`payload.mirrored_from`, dedupe `mirror:<id>`), keeping its sender, so a
   new room request pushes to the Hospitality team. Remove the key to stop.
+
+## WhatsApp ad leads answered from Chat (0303)
+
+Owner's request (2026-10-25): every WhatsApp conversation with a customer who
+came from a Meta ad for the Jogja branch should live in the system, so the
+sales person answers from Loonars Connect and the owner can watch it.
+
+- **Scope**: department `lead_wa_jogja` (`settings.kind = 'wa_lead'`,
+  `campaign_branch_codes = ['JOG']`). A customer opens a lead when their
+  first message carries a Meta ad of a JOG campaign (or, when the ad data is
+  missing, after they pick a JOG project in lead-nurture's project
+  selection). Later messages from the same number join the open lead, with or
+  without an ad. Other branches keep the existing flow unchanged.
+- **Rotation**: the department's active `sales` role assignments, least
+  recently served first (`mkc_wa_lead_pick_sales`). A customer who already is a
+  prospect keeps their sales person if that person is in the rotation. The CRM
+  `crm_sales_rotation` flags do not apply here. People are set as data, not
+  in the migration: `sales` (the rotation) and `manager` (lead monitor).
+- **Greeting**: the first message of a new lead gets `settings.greeting` once,
+  sent from the system's WhatsApp number (Whacenter) and recorded in the chat
+  as "Pesan otomatis". No AI / nurture reply ever goes to a captured lead
+  (the capture runs in `webhook-handler.ts` right after the refund chat, and
+  first in `resolveProjectSelectionAndNurture`). The WhatsApp Business app's
+  own greeting / away message on the Whacenter phone must be switched off by
+  hand, otherwise the customer gets two greetings.
+- **Conversation**: one `direct` conversation per lead (`direct_key
+  wa:<lead id>`), the assigned sales person as its only member. Customer
+  messages: `sender_id null`, `payload.wa = 'in'` (+ `media_url` for a photo,
+  shown as a link because the app's CSP blocks external images). Sales replies
+  go through `mkc_wa_lead_queue_out` (assigned sales only; plain
+  `mkc_chat_send_message` rejects lead conversations), are sent on WhatsApp
+  by `sendWaLeadMessageAction` (text, or photos via `createWaMediaUrl`) and
+  marked `wa_status` sent / failed. A reply also sets the prospect's
+  `last_follow_up_at`, which stops the existing 30-minute CRM escalation.
+- **Monitors** (owner with `monitor_owners`, plus `manager` assignments): read
+  every lead (`mkc_chat_can_read`), see "Lead WA Jogja" in the chat list with
+  per-sales numbers (`mkc_wa_lead_stats`: leads today / 7 days, waiting,
+  oldest wait, average first reply) and can move a lead to another sales
+  person in the rotation (`mkc_wa_lead_reassign`). They cannot reply.
+- **Alerts**: `connect-wa-lead-reply-alerts` (every 2 min,
+  `mkc_wa_lead_alerts`) warns the sales person after
+  `alert_sales_minutes` (15) and the monitors after `alert_monitor_minutes`
+  (30) of an unanswered customer message, once per wait. Warning only; the
+  lead is never moved automatically.
+- **Retention**: photos follow the 30-day chat retention
+  (`settings.retention_days`).

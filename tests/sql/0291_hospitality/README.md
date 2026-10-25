@@ -27,3 +27,13 @@ membership sync, 30-day photo expiry; 6 for 0301 replies).
 
 On a separate fresh DB: `stubs.sql`, then `seed_0294.sql`, then migrations
 0291..0298, then `behavior_0294.sql`. Last run (2026-10-24): 50 passed, 0 failed.
+
+## 0303 (WhatsApp ad leads)
+
+`behavior_0303.sql` runs on the same DB as `behavior_test.sql` (stubs +
+migrations 0291..0303; it seeds its own campaign / project / sales rows).
+Covers scope (JOG ad / project only), rotation, follow-ups joining the open
+lead, the one-time greeting, privacy (other sales, non-monitors), monitors,
+queue_out, reassign, the 15 / 30-minute alerts, an existing prospect keeping
+its sales person, and grants. Last run (2026-10-25): 41 passed, 0 failed
+(behavior_test 110/110, behavior_0294 56/56 on the same migrations).

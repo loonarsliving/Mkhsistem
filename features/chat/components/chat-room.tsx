@@ -36,7 +36,7 @@ import { createClient } from "@/lib/supabase/client";
 import { listChatMessages, type ChatConversation, type ChatMessage, type ChatRefs, type ChatReplyRef, type IssueRef, type RoomTaskRef } from "@/repositories/chat.repository";
 import { EMPTY_CONNECT_REFS, type MarkomOpenWork, type SalesOpenWork } from "@/repositories/connect.repository";
 
-import { generateReportNowAction, loadOpenWorkAction, searchMessagesAction, sendTextAction } from "../actions/chat.actions";
+import { generateReportNowAction, loadOpenWorkAction, searchMessagesAction, sendTextAction, sendWaLeadMessageAction } from "../actions/chat.actions";
 import { loadConnectWorkAction } from "../actions/connect.actions";
 import { AttachmentStrip, ChecklistCard, IssueCard, SystemLine, TaskCard } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
@@ -47,6 +47,7 @@ import { avatarColor, dayKey, formatDateTime, formatDaySeparator, formatTime, in
 import { ExtraEvidence, type UploadedEvidence } from "./evidence-picker";
 import { ReportCard } from "./report-card";
 import { ReplyButton, SwipeToReply } from "./swipe-reply";
+import { formatPhone, InboundMedia, MoveLeadMenu, useNow, WaDeliveryState, WaitingBadge } from "./wa-lead";
 import { IssueDialog, SecurityDialog } from "./workflow-dialogs";
 
 /** Safety net if a realtime event is missed (flaky phone network). */
@@ -170,9 +171,21 @@ function MessageView({
   onJump: (id: string) => void;
 }) {
   const { userId, people, conversationKind } = useChat();
-  const own = message.senderId === userId;
-  // 1-on-1: the header already names the other person (WhatsApp style)
-  const sender = message.senderId && conversationKind !== "direct" ? personName(people, message.senderId) : null;
+  // WhatsApp lead (0303): "out" = to the customer (right), "in" = from the customer (left)
+  const wa = message.payload.wa as string | undefined;
+  const own = wa ? wa === "out" : message.senderId === userId;
+  // 1-on-1: the header already names the other person (WhatsApp style). On a
+  // lead, a reply by someone else (as a monitor sees it) is named on its bubble.
+  const sender = wa
+    ? wa === "out" && message.senderId !== userId
+      ? message.senderId
+        ? personName(people, message.senderId)
+        : "Pesan otomatis"
+      : null
+    : message.senderId && conversationKind !== "direct"
+      ? personName(people, message.senderId)
+      : null;
+  const mediaUrl = typeof message.payload.media_url === "string" ? message.payload.media_url : null;
   const meta = (
     <p className="mt-1 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">
       {sender && !own ? `${sender} · ` : ""}
@@ -184,15 +197,24 @@ function MessageView({
     const reply = onReply ? () => onReply(message) : undefined;
     const bubble = (
       <Bubble own={own} onReply={reply}>
-        {!own && sender && <p className={cn("mb-0.5 text-[11px] font-semibold", avatarColor(sender).replace("bg-", "text-"))}>{sender}</p>}
+        {(!own || wa) && sender && <p className={cn("mb-0.5 text-[11px] font-semibold", avatarColor(sender).replace("bg-", "text-"))}>{sender}</p>}
         {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJump} />}
         {message.attachments.length > 0 && (
           <div className="mb-1">
             <AttachmentStrip attachments={message.attachments} />
           </div>
         )}
+        {mediaUrl && <InboundMedia url={mediaUrl} />}
         {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
-        <p className="mt-0.5 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">{formatTime(message.createdAt)}</p>
+        <p className="mt-0.5 text-right text-[10px] text-[#667781] dark:text-[#8696a0]">
+          {formatTime(message.createdAt)}
+          {wa === "out" && (
+            <>
+              {" "}
+              <WaDeliveryState message={message} />
+            </>
+          )}
+        </p>
       </Bubble>
     );
     return reply ? <SwipeToReply onReply={reply}>{bubble}</SwipeToReply> : bubble;
@@ -353,6 +375,9 @@ export function ChatRoom({
   const deptKind = departmentKind(conversation.departmentCode);
   const plainChat = isPlainChat(deptKind);
   const isDirect = conversation.kind === "direct";
+  // WhatsApp ad lead (0303): answered by its sales person, watched by monitors
+  const lead = conversation.waLead;
+  const now = useNow();
   const supabase = React.useMemo(() => createClient(), []);
   const cached = roomCache.get(`${userId}:${conversation.id}`);
   const [messages, setMessages] = React.useState<ChatMessage[]>(cached?.messages ?? []);
@@ -490,9 +515,14 @@ export function ChatRoom({
     if (sending || (!text.trim() && photos.length === 0)) return;
     setSending(true);
     stickToBottom.current = true;
-    const r = await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds: photos.map((p) => p.id), replyToId: replyTo?.id });
+    const attachmentIds = photos.map((p) => p.id);
+    const r = lead
+      ? await sendWaLeadMessageAction({ conversationId: conversation.id, body: text, attachmentIds })
+      : await sendTextAction({ conversationId: conversation.id, body: text, attachmentIds, replyToId: replyTo?.id });
     setSending(false);
     if (!r.success) return void toast.error(r.error ?? "Pesan gagal terkirim");
+    const delivery = r.data as { delivered?: boolean; error?: string } | undefined;
+    if (delivery?.delivered === false) toast.error("Pesan tersimpan tapi gagal terkirim ke WhatsApp customer", { description: delivery.error });
     setText("");
     setReplyTo(null);
     setPhotos([]);
@@ -548,11 +578,14 @@ export function ChatRoom({
             <p className="truncate text-xs text-muted-foreground">
               {isFeed
                 ? "Laporan konsolidasi & peringatan kritis"
+                : lead
+                  ? [formatPhone(lead.phone), lead.salesName ? `Sales: ${lead.salesName}` : null].filter(Boolean).join(" · ")
                 : isDirect
                   ? conversation.description || "Pesan pribadi"
                   : `${conversation.memberCount} anggota${myRole ? ` · Anda: ${memberRoleLabel(myRole, conversation.departmentCode)}` : ""}`}
             </p>
           </div>
+          {lead?.monitor && <MoveLeadMenu conversation={conversation} onMoved={onActivity} />}
           <Button size="icon" variant="ghost" onClick={() => setSearchOpen((s) => !s)} aria-label="Cari pesan">
             <Search className="h-5 w-5" />
           </Button>
@@ -582,6 +615,13 @@ export function ChatRoom({
             </Button>
           )}
         </div>
+
+        {lead && (lead.source || lead.waitingSince) && (
+          <div className="flex flex-wrap items-center gap-2 border-b bg-[#25d366]/10 px-3 py-1.5 text-xs">
+            {lead.source && <span className="min-w-0 truncate text-muted-foreground">Iklan: {lead.source}</span>}
+            <WaitingBadge since={lead.waitingSince} now={now} />
+          </div>
+        )}
 
         {searchOpen && (
           <div className="space-y-2 border-b bg-background p-3">
@@ -640,6 +680,8 @@ export function ChatRoom({
                   ? deptKind === "hospitality"
                     ? "Belum ada laporan. Laporan pagi, siang dan akhir hari muncul di sini otomatis; insiden kritis langsung."
                     : "Laporan live ada di atas dan selalu mengikuti data terbaru. Laporan akhir hari (20:00) tersimpan di sini otomatis setiap malam."
+                  : lead
+                    ? "Percakapan WhatsApp dengan customer ini."
                   : isDirect
                     ? `Pesan pribadi dengan ${conversation.name}. Hanya terlihat oleh Anda berdua.`
                   : deptKind === "koordinasi"
@@ -677,7 +719,7 @@ export function ChatRoom({
                         refs={refs}
                         isFeed={isFeed}
                         reportTitle={conversation.name}
-                        onReply={!isFeed && myRole ? startReply : undefined}
+                        onReply={!isFeed && myRole && !lead ? startReply : undefined}
                         onJump={jumpTo}
                       />
                     </div>
@@ -692,6 +734,10 @@ export function ChatRoom({
         {isFeed ? (
           <p className="border-t bg-muted/60 px-3 py-3 text-center text-xs text-muted-foreground">
             Feed ini hanya berisi laporan konsolidasi — percakapan operasional tetap di grup {conversation.departmentName}.
+          </p>
+        ) : lead && !lead.canReply ? (
+          <p className="border-t bg-muted/60 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground">
+            Mode pantau — hanya {lead.salesName ?? "sales"} yang membalas customer ini.{lead.monitor ? " Gunakan “Pindahkan” untuk mengalihkan lead." : ""}
           </p>
         ) : myRole ? (
           <div className="border-t bg-muted/60 pb-[env(safe-area-inset-bottom)]">
@@ -799,7 +845,7 @@ export function ChatRoom({
                 }}
                 rows={1}
                 maxLength={4000}
-                placeholder="Tulis pesan"
+                placeholder={lead ? "Balas ke WhatsApp customer" : "Tulis pesan"}
                 className="max-h-36 min-h-[42px] min-w-0 flex-1 resize-none rounded-3xl border-0 bg-background px-4 py-2.5 text-base leading-snug shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:text-sm"
               />
               <button

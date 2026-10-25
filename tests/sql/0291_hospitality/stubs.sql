@@ -61,7 +61,14 @@ create table public.villa_kol_vouchers (id uuid primary key default gen_random_u
   malam_gratis integer check (malam_gratis between 1 and 7), berlaku_sampai date, aktif boolean default true, catatan text, dibuat_lewat text default 'wa', created_at timestamptz default now());
 create table public.prospects (id uuid primary key default gen_random_uuid(), customer_name text, phone text, project_id uuid, house_type text, city text,
   lead_source text, notes text, status text default 'red', sales_id uuid, branch_id uuid, last_follow_up_at timestamptz, deleted_at timestamptz,
-  lead_temperature text default 'cold', created_at timestamptz default now(), updated_by uuid);
+  lead_temperature text default 'cold', created_at timestamptz default now(), updated_by uuid,
+  -- mirrors live (0303 needs them)
+  phone_normalized text generated always as (regexp_replace(phone, '[^0-9]', '', 'g')) stored,
+  ai_mode text not null default 'nurture' check (ai_mode in ('nurture', 'standby')), updated_at timestamptz default now());
+create unique index prospects_phone_normalized_key on public.prospects (phone_normalized) where deleted_at is null;
+create table public.crm_projects (id uuid primary key default gen_random_uuid(), name text, city text, project_type text, branch_id uuid);
+create table public.meta_ad_campaigns (id uuid primary key default gen_random_uuid(), name text, headline text, project_id uuid references public.crm_projects(id),
+  branch_id uuid not null references public.branches(id), meta_ad_id text, meta_adset_id text, meta_creative_id text);
 create table public.prospect_follow_ups (id uuid primary key default gen_random_uuid(), prospect_id uuid references public.prospects(id), activity_type text,
   activity_date date, activity_time time, notes text, created_by uuid, created_at timestamptz default now());
 create function public.crm_add_follow_up(p_prospect_id uuid, p_activity_type text, p_activity_date date, p_activity_time time, p_notes text default null)

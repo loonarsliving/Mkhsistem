@@ -9,6 +9,7 @@ import { sendWhatsAppImage, sendWhatsAppText } from "../notifications/engine";
 import { enqueueLeadNurtureReplyJob } from "../queue/ai-job-queue";
 import { generateAIText } from "../service";
 import { routeAdDrivenLead } from "./ad-lead-routing";
+import { tryCaptureWaLeadForProject } from "./wa-lead-chat";
 
 /**
  * AI-nurture-first replacement for the old "ad click -> instantly notify a
@@ -831,6 +832,11 @@ export async function resolveProjectSelectionAndNurture(
     .eq("id", projectId)
     .maybeSingle();
   if (!projectRow) return { outcome: "no_recipient_available" };
+
+  // 0303: a project of a branch whose ad leads are answered by Sales from
+  // Loonars Connect (Jogja) -> hand the lead to the sales rotation, no bot.
+  const waLead = await tryCaptureWaLeadForProject(sender, senderName, originalMessageText, projectId);
+  if (waLead.outcome === "captured") return { outcome: "replied" };
 
   const campaign = projectToCampaignMatch(projectRow as ActiveProjectRow);
   let prospect = await findProspectByPhone(sender);
