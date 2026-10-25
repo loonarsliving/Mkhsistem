@@ -6673,6 +6673,16 @@ export interface Database {
       mkc_chat_unread_total: { Args: { p_employee_id: string }; Returns: number };
       mkc_chat_list: { Args: Record<string, never>; Returns: Json };
       mkc_chat_direct_available: { Args: Record<string, never>; Returns: boolean };
+      mkc_wa_lead_inbound: {
+        Args: { p_phone: string; p_name: string | null; p_body: string; p_media_url?: string | null; p_ad_source_id?: string | null; p_project_id?: string | null };
+        Returns: Json;
+      };
+      mkc_wa_lead_record_system_out: { Args: { p_lead_id: string; p_body: string; p_ok: boolean; p_error?: string | null }; Returns: string };
+      mkc_wa_lead_queue_out: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: Json };
+      mkc_wa_lead_mark_out: { Args: { p_message_id: string; p_ok: boolean; p_error?: string | null }; Returns: undefined };
+      mkc_wa_lead_reassign: { Args: { p_lead_id: string; p_sales_id: string }; Returns: undefined };
+      mkc_wa_lead_stats: { Args: { p_department_code: string }; Returns: Json };
+      mkc_wa_lead_is_monitor: { Args: { p_department_id: string }; Returns: boolean };
       mkc_chat_direct_contacts: { Args: Record<string, never>; Returns: Json };
       mkc_chat_direct_open: { Args: { p_employee_id: string }; Returns: string };
       mkc_chat_conversation_department: { Args: { p_conversation_id: string }; Returns: string };

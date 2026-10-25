@@ -3,7 +3,20 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Loonars Connect: chat pribadi 1-on-1 (0300) — DIBANGUN, BELUM DITERAPKAN (2026-10-25)
+## Loonars Connect: lead WhatsApp iklan Jogja di Chat (0303) — DIBANGUN, BELUM DITERAPKAN (2026-10-25)
+
+- Customer dari iklan Meta cabang JOG → satu percakapan lead per nomor,
+  dibagi bergiliran ke sales (`mkc_chat_role_assignments` peran `sales` di
+  departemen `lead_wa_jogja`), sapaan otomatis sekali, dibalas sales dari
+  Chat lewat Whacenter. Bot AI / nurture tidak membalas lead yang tertangkap.
+- Pemantau: owner + peran `manager`; baca semua, angka per sales, pindahkan
+  lead; tidak membalas. Peringatan 15 mnt (sales) / 30 mnt (pemantau).
+- Saat deploy: isi peran sebagai data (bukan di migration) dan matikan
+  pesan sambutan / pesan tidak di tempat di aplikasi WhatsApp Business pada
+  HP Whacenter.
+- Detail: `docs/CONNECT_MARKOM_SALES_JOGJA.md` (bagian 0303).
+
+## Loonars Connect: chat pribadi 1-on-1 (0300) — DITERAPKAN (2026-10-25)
 
 - Permintaan owner: chat pribadi dengan karyawan. Pilihan owner: semua orang
   dalam cakupan boleh memulai; cakupan = karyawan cabang Jogja (JOG) + Loonars

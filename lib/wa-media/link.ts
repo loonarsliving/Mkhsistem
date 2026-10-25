@@ -15,7 +15,8 @@ import { APP_URL } from "@/constants/app";
  * served by app/api/wa-media/[token]/[name]/route.ts. Only the private
  * buckets listed here can be reached, and only until the expiry.
  */
-const ALLOWED_BUCKETS = new Set(["refund-transfer-proofs"]);
+// hospitality-evidence: photos Sales send to a WhatsApp lead from Loonars Connect (0303)
+const ALLOWED_BUCKETS = new Set(["refund-transfer-proofs", "hospitality-evidence"]);
 
 interface WaMediaPayload {
   b: string;

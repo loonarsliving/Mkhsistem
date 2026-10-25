@@ -8,6 +8,17 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-25 — Loonars Connect: lead WhatsApp iklan Jogja dibalas dari Chat (0303)
+
+Customer yang menghubungi lewat iklan Meta cabang Jogja kini masuk Loonars
+Connect sebagai percakapan WhatsApp: dibagi bergiliran ke sales di rotasi
+`lead_wa_jogja`, dapat satu sapaan otomatis, lalu dibalas sales dari Chat
+(terkirim lewat nomor WhatsApp sistem, dengan status terkirim/gagal). Bot AI /
+nurture tidak membalas lead ini. Owner dan manager lead memantau semua lead
+(angka per sales, lead yang belum dibalas) dan bisa memindahkan lead, tanpa
+membalas. Peringatan 15 menit ke sales dan 30 menit ke pemantau. Detail di
+`docs/CONNECT_MARKOM_SALES_JOGJA.md`. Uji SQL 110/110 + 56/56 + 41/41.
+
 ## 2026-10-25 — Loonars Connect: pesan dimuat langsung dari browser
 
 Membuka chat masih terasa lambat setelah #124: setiap pemuatan pesan adalah

@@ -50,6 +50,7 @@ import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confi
 import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
 import { tryHandleLoonars2Image, tryHandleLoonars2Text } from "./domains/loonars2-wa";
 import { tryCaptureRefundCustomerMessage } from "./domains/refund-customer-chat";
+import { tryCaptureWaLeadMessage } from "./domains/wa-lead-chat";
 import { tryHandleRefundTransferProofViaWhatsApp } from "./domains/refund-transfer-proof-wa";
 import { tryVillaPromoViaWhatsApp } from "./domains/villa-promo-campaign";
 import { tryVillaKolCouponViaWhatsApp } from "./domains/villa-kol-coupon";
@@ -290,6 +291,20 @@ export async function handleWhatsAppWebhookEvent(
       }
       trace.push("tryCaptureRefundCustomerMessage:not_applicable");
     }
+
+    // WhatsApp ad leads answered from Loonars Connect (0303): a customer who
+    // clicked an ad of a branch in scope (Jogja) is handed to the next sales
+    // person in turn and the conversation lives in their Chat -- follow-ups
+    // from the same number join it. Before the villa receptionist and every
+    // AI / nurture route below, so such a lead never gets a bot reply. Not in
+    // scope (another branch, no ad, not a lead) -> falls through unchanged.
+    trace.push("tryCaptureWaLeadMessage:calling");
+    const waLead = await tryCaptureWaLeadMessage(inbound.sender, inbound.senderName, inbound.content, inbound.adReferral?.sourceId ?? null);
+    if (waLead.outcome === "captured") {
+      trace.push(`tryCaptureWaLeadMessage:captured(${waLead.isNew ? "new" : "existing"})`);
+      return { status: "processed", sender: inbound.sender, replySent: waLead.isNew, reason: "WhatsApp lead -- answered by sales from Loonars Connect", trace };
+    }
+    trace.push("tryCaptureWaLeadMessage:not_applicable");
 
     // Villa guest chat (owner decision 2026-09-27): a villa guest or someone
     // asking about a stay is answered by villa's receptionist, never by any

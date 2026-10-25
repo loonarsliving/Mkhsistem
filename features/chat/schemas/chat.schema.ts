@@ -22,6 +22,16 @@ const optionalText = (max: number) =>
 export const conversationIdSchema = z.object({ conversationId: uuid });
 export type ConversationIdInput = z.input<typeof conversationIdSchema>;
 
+/** WhatsApp lead (0303): Sales' reply, sent to the customer's WhatsApp. */
+export const sendWaLeadSchema = z
+  .object({ conversationId: uuid, body: z.string().trim().max(4000), attachmentIds })
+  .refine((v) => v.body.length > 0 || v.attachmentIds.length > 0, { message: "Pesan kosong", path: ["body"] });
+export type SendWaLeadInput = z.input<typeof sendWaLeadSchema>;
+
+/** WhatsApp lead (0303): move a lead to another sales person in the rotation (owner / manager). */
+export const reassignWaLeadSchema = z.object({ leadId: uuid, salesId: uuid });
+export type ReassignWaLeadInput = z.input<typeof reassignWaLeadSchema>;
+
 /** Direct chat (0300): the person to chat with. */
 export const openDirectChatSchema = z.object({ employeeId: uuid });
 export type OpenDirectChatInput = z.input<typeof openDirectChatSchema>;

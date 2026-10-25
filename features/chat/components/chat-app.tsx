@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
-import { MessageSquarePlus, MessagesSquare } from "lucide-react";
+import { ChevronRight, MessageSquarePlus, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { ChatNotificationPrompt } from "./chat-notification-prompt";
 import { ChatRoom, ConversationAvatar } from "./chat-room";
 import { formatListStamp } from "./chat-utils";
 import { NewDirectChat } from "./new-direct-chat";
+import { useNow, WaitingBadge, WaLeadMonitor, WaTag } from "./wa-lead";
 
 /** Conversation list refresh while open (unread badges), on top of realtime. */
 const LIST_REFRESH_MS = 30_000;
@@ -70,6 +71,8 @@ export function ChatApp({
   const [selectedId, setSelectedId] = React.useState<string | null>(initialConversationId);
   const [reloadToken, setReloadToken] = React.useState(0);
   const [newChatOpen, setNewChatOpen] = React.useState(false);
+  const [monitorOpen, setMonitorOpen] = React.useState(false);
+  const now = useNow();
   const roomRefresh = React.useRef<() => void>(() => {});
   const supabase = React.useMemo(() => createClient(), []);
   const viewportHeight = useKeyboardAwareHeight();
@@ -132,9 +135,12 @@ export function ChatApp({
     const onMessage = (payload: { new: Record<string, unknown> }) => {
       const m = payload.new;
       const conversationId = String(m.conversation_id ?? "");
-      if (!m.sender_id || m.sender_id === userId || conversationId === selectedRef.current) return;
+      // WhatsApp lead (0303): the customer's messages have no sender but should still alert.
+      const fromCustomer = !m.sender_id && (m.payload as Record<string, unknown> | null)?.wa === "in";
+      if ((!m.sender_id && !fromCustomer) || m.sender_id === userId || conversationId === selectedRef.current) return;
       const conv = conversationsRef.current.find((c) => c.id === conversationId);
-      if (!conv) return;
+      // Monitors watch leads in their own view; no banner per customer / sales message.
+      if (!conv || (conv.waLead && !conv.waLead.canReply)) return;
       const text = String(m.body ?? "").trim() || "📷 Foto";
       toast(conv.name, {
         description: text.length > 120 ? `${text.slice(0, 117)}…` : text,
@@ -172,6 +178,12 @@ export function ChatApp({
 
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
+  // WhatsApp leads the caller only watches (owner / lead manager, 0303) live in
+  // their own monitor view instead of crowding the conversation list.
+  const monitorLeads = conversations.filter((c) => c.waLead?.monitor && !c.waLead.canReply);
+  const listed = conversations.filter((c) => !(c.waLead?.monitor && !c.waLead.canReply));
+  const monitorWaiting = monitorLeads.filter((c) => c.waLead?.waitingSince).length;
+  const monitorUnread = monitorLeads.reduce((sum, c) => sum + c.unread, 0);
 
   const registerRefresh = React.useCallback((fn: () => void) => {
     roomRefresh.current = fn;
@@ -187,8 +199,9 @@ export function ChatApp({
             // The owner feed has no group role; actions there come from the owner permission.
             myRole: selected.kind === "owner_feed" ? null : selected.myRole,
             isOwner,
-            people:
-              selected.kind === "direct"
+            people: selected.waLead
+              ? [{ id: selected.waLead.salesId, name: selected.waLead.salesName ?? "Sales", role: "sales", active: true }]
+              : selected.kind === "direct"
                 ? selected.peerId
                   ? [{ id: selected.peerId, name: selected.name, role: null, active: true }]
                   : []
@@ -208,7 +221,16 @@ export function ChatApp({
       className="-m-4 flex h-[calc(var(--chat-vh,100dvh)-4rem)] overflow-hidden bg-background sm:-m-6 lg:m-0 lg:h-[calc(100dvh-10rem)] lg:min-h-[520px] lg:rounded-xl lg:border lg:shadow-sm"
     >
       <div className={cn("h-full w-full md:w-[320px] md:shrink-0 md:border-r", selected ? "hidden md:block" : "block")}>
-        {newChatOpen ? (
+        {monitorOpen && monitorLeads.length > 0 ? (
+          <WaLeadMonitor
+            departmentCode={monitorLeads[0].departmentCode}
+            leads={monitorLeads}
+            selectedId={selectedId}
+            onSelect={select}
+            onBack={() => setMonitorOpen(false)}
+            reloadToken={reloadToken}
+          />
+        ) : newChatOpen ? (
           <NewDirectChat
             onBack={() => setNewChatOpen(false)}
             onOpened={async (id) => {
@@ -238,7 +260,24 @@ export function ChatApp({
           </div>
           <ChatNotificationPrompt />
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {conversations.map((c) => (
+            {monitorLeads.length > 0 && (
+              <button type="button" onClick={() => setMonitorOpen(true)} className="flex w-full items-center gap-3 border-b bg-[#25d366]/10 px-3 py-3 text-left transition-colors hover:bg-[#25d366]/20">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#25d366] text-xs font-bold text-white">WA</div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">Lead WA Jogja</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {monitorLeads.length} lead · {monitorWaiting > 0 ? `${monitorWaiting} belum dibalas` : "semua sudah dibalas"}
+                  </p>
+                </div>
+                {monitorUnread > 0 && (
+                  <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-semibold text-white">
+                    {monitorUnread > 99 ? "99+" : monitorUnread}
+                  </span>
+                )}
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            )}
+            {listed.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -248,7 +287,10 @@ export function ChatApp({
                 <ConversationAvatar conversation={c} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate font-medium">{c.name}</p>
+                    <p className="flex min-w-0 items-center gap-1.5 font-medium">
+                      {c.waLead && <WaTag />}
+                      <span className="truncate">{c.name}</span>
+                    </p>
                     {c.lastAt && (
                       <span className={cn("shrink-0 text-[11px]", c.unread > 0 ? "font-semibold text-emerald-600" : "text-muted-foreground")}>{formatListStamp(c.lastAt)}</span>
                     )}
@@ -269,6 +311,7 @@ export function ChatApp({
                       </span>
                     )}
                   </div>
+                  {c.waLead && <WaitingBadge since={c.waLead.waitingSince} now={now} className="mt-1" />}
                 </div>
               </button>
             ))}

@@ -1,7 +1,11 @@
 "use server";
 
 import { PERMISSIONS } from "@/constants/rbac";
+import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { generateManualHospitalityReport } from "@/lib/hospitality/report-generator";
+import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createWaMediaUrl } from "@/lib/wa-media/link";
 import { hasPermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -28,6 +32,8 @@ import {
   foInspectSchema,
   loadMessagesSchema,
   openDirectChatSchema,
+  reassignWaLeadSchema,
+  sendWaLeadSchema,
   registerAttachmentSchema,
   reportIdSchema,
   retentionHoldSchema,
@@ -44,6 +50,8 @@ import {
   type FoInspectInput,
   type LoadMessagesInput,
   type OpenDirectChatInput,
+  type ReassignWaLeadInput,
+  type SendWaLeadInput,
   type RegisterAttachmentInput,
   type ReportIdInput,
   type RetentionHoldInput,
@@ -79,6 +87,64 @@ export async function listConversationsAction(): Promise<ActionResult<ChatConver
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal memuat percakapan");
   }
+}
+
+/**
+ * WhatsApp lead (0303): the assigned sales person's reply. The RPC records it
+ * (pending) after checking the caller holds the lead; then it goes to the
+ * customer's WhatsApp from the company number (Whacenter, like the refund
+ * chat) and the outcome is stored on the message -- a failed send stays
+ * visible as "gagal terkirim".
+ */
+export async function sendWaLeadMessageAction(input: SendWaLeadInput): Promise<ActionResult<{ id: string; delivered: boolean; error?: string }>> {
+  await requireSession();
+  const parsed = sendWaLeadSchema.safeParse(input);
+  if (!parsed.success) return invalid(parsed.error);
+  const { data, error } = await (await createClient()).rpc("mkc_wa_lead_queue_out", {
+    p_conversation_id: parsed.data.conversationId,
+    p_body: parsed.data.body,
+    p_attachment_ids: parsed.data.attachmentIds,
+  });
+  if (error) return dbError(error.message);
+  const queued = data as { message_id: string; phone: string; object_paths: string[] };
+
+  let result: { success: boolean; error?: string } = { success: true };
+  try {
+    const photos = queued.object_paths ?? [];
+    if (photos.length === 0) {
+      result = await sendWhatsAppText(queued.phone, parsed.data.body);
+    } else {
+      // Whacenter fetches each photo right away; the caption rides on the first one.
+      for (const [i, path] of photos.entries()) {
+        const sent = await sendWhatsAppImage(queued.phone, createWaMediaUrl("hospitality-evidence", path, 60 * 60), i === 0 ? parsed.data.body || undefined : undefined);
+        if (!sent.success) {
+          result = sent;
+          break;
+        }
+      }
+    }
+  } catch (err) {
+    result = { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  if (!result.success) logger.warn("wa-lead: WhatsApp send to customer failed", { messageId: queued.message_id, error: result.error });
+
+  const { error: markError } = await createAdminClient().rpc("mkc_wa_lead_mark_out", {
+    p_message_id: queued.message_id,
+    p_ok: result.success,
+    p_error: result.success ? null : (result.error ?? "unknown error"),
+  });
+  if (markError) logger.warn("wa-lead: delivery status not recorded", { messageId: queued.message_id, error: markError.message });
+  // Saved either way (the bubble shows "Gagal terkirim"); the composer must not resend it.
+  return actionSuccess({ id: queued.message_id, delivered: result.success, error: result.success ? undefined : (result.error ?? "unknown error") });
+}
+
+/** WhatsApp lead (0303): owner / manager moves a lead; the RPC checks the role and the rotation. */
+export async function reassignWaLeadAction(input: ReassignWaLeadInput): Promise<ActionResult> {
+  await requireSession();
+  const parsed = reassignWaLeadSchema.safeParse(input);
+  if (!parsed.success) return invalid(parsed.error);
+  const { error } = await (await createClient()).rpc("mkc_wa_lead_reassign", { p_lead_id: parsed.data.leadId, p_sales_id: parsed.data.salesId });
+  return error ? dbError(error.message) : actionSuccess();
 }
 
 /** Direct chat (0300): people in scope; the RPC rejects callers outside it. */
