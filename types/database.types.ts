@@ -458,6 +458,7 @@ export interface Database {
           payload: Json;
           dedupe_key: string | null;
           created_at: string;
+          reply_to_id: string | null;
         };
         Insert: {
           id?: string;
@@ -6677,6 +6678,7 @@ export interface Database {
       mkc_chat_conversation_department: { Args: { p_conversation_id: string }; Returns: string };
       mkc_chat_mark_read: { Args: { p_conversation_id: string }; Returns: undefined };
       mkc_chat_send_text: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[] }; Returns: string };
+      mkc_chat_send_message: { Args: { p_conversation_id: string; p_body: string; p_attachment_ids?: string[]; p_reply_to_id?: string | null }; Returns: string };
       mkc_chat_register_attachment: { Args: { p_conversation_id: string; p_object_path: string; p_evidence_slot?: string | null }; Returns: string };
       mkc_chat_set_retention_hold: { Args: { p_attachment_id: string; p_until: string; p_reason: string }; Returns: undefined };
       mkc_chat_sync_members: { Args: Record<string, never>; Returns: number };

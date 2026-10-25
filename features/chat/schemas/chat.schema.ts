@@ -30,7 +30,8 @@ export const loadMessagesSchema = z.object({ conversationId: uuid, before: z.str
 export type LoadMessagesInput = z.input<typeof loadMessagesSchema>;
 
 export const sendTextSchema = z
-  .object({ conversationId: uuid, body: z.string().trim().max(4000), attachmentIds })
+  // replyToId (0301): the message being answered (swipe right); same conversation, checked by the RPC
+  .object({ conversationId: uuid, body: z.string().trim().max(4000), attachmentIds, replyToId: uuid.optional() })
   .refine((v) => v.body.length > 0 || v.attachmentIds.length > 0, { message: "Pesan kosong", path: ["body"] });
 export type SendTextInput = z.input<typeof sendTextSchema>;
 

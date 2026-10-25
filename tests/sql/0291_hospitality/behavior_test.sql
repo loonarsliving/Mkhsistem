@@ -440,5 +440,30 @@ select t_check('0300: an employee who left can no longer read their chats', not 
 reset role;
 update employees set is_active = true where id = :fo1::uuid;
 
+
+-- ---------------------------------------------------------------------------
+-- 0301: reply to a message (swipe right)
+-- ---------------------------------------------------------------------------
+select set_config('t.orig', (select id from mkc_chat_messages where conversation_id = current_setting('t.dm')::uuid and body = 'Bu, kamar B2 sudah siap')::text, false);
+select set_config('t.grp_msg', (select m.id from mkc_chat_messages m join mkc_chat_conversations c on c.id = m.conversation_id
+                                where c.kind = 'operational_group' and m.sender_id is not null limit 1)::text, false);
+set role authenticated;
+select set_config('request.jwt.claim.sub', :rebecca, false);
+select set_config('t.reply', mkc_chat_send_message(current_setting('t.dm')::uuid, 'Siap, terima kasih', '{}', current_setting('t.orig')::uuid)::text, false);
+select t_check('0301: a reply stores the message it answers',
+  (select reply_to_id from mkc_chat_messages where id = current_setting('t.reply')::uuid) = current_setting('t.orig')::uuid);
+select t_check('0301: the receiver can read the quoted original (same conversation, RLS)',
+  exists (select 1 from mkc_chat_messages where id = current_setting('t.orig')::uuid));
+select t_expect_error('0301: cannot reply to a message from another conversation',
+  format('select mkc_chat_send_message(%L, %L, %L, %L)', current_setting('t.dm'), 'x', '{}', current_setting('t.grp_msg')));
+select t_check('0301: a plain message (no reply) still works', mkc_chat_send_message(current_setting('t.dm')::uuid, 'Pesan biasa', '{}') is not null);
+select set_config('request.jwt.claim.sub', :sec1, false);
+select t_expect_error('0301: a non-member cannot reply into the chat',
+  format('select mkc_chat_send_message(%L, %L, %L, %L)', current_setting('t.dm'), 'x', '{}', current_setting('t.orig')));
+reset role;
+select t_check('0301: a reply pushes like any message (to the other person, title = sender)',
+  exists (select 1 from mkc_notifications where category = 'chat_message' and user_id = :fo1::uuid
+          and metadata->>'message_id' = current_setting('t.reply') and title = 'Rebecca' and body = 'Siap, terima kasih'));
+
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(coalesce(detail, ''), 90) as detail from t_results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t_results;

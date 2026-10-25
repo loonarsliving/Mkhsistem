@@ -139,10 +139,11 @@ export async function sendTextAction(input: SendTextInput): Promise<ActionResult
   await requireSession();
   const parsed = sendTextSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
-  const { data, error } = await (await createClient()).rpc("mkc_chat_send_text", {
+  const { data, error } = await (await createClient()).rpc("mkc_chat_send_message", {
     p_conversation_id: parsed.data.conversationId,
     p_body: parsed.data.body,
     p_attachment_ids: parsed.data.attachmentIds,
+    p_reply_to_id: parsed.data.replyToId ?? null,
   });
   return error ? dbError(error.message) : actionSuccess({ id: data as string });
 }
