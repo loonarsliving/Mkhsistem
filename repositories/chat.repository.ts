@@ -470,7 +470,7 @@ export async function listChatMessages(
   let connect: ConnectRefs = EMPTY_CONNECT_REFS;
   if (Object.keys(connectIds).length) {
     const dept = await getConversationDepartment(supabase, conversationId);
-    if (dept) connect = await loadConnectRefs(supabase, dept.code, connectIds);
+    if (dept) connect = await loadConnectRefs(supabase, dept.code, connectIds, conversationId);
   }
 
   const attByMessage = await signAttachments(supabase, (attachments.data ?? []) as Parameters<typeof signAttachments>[1]);

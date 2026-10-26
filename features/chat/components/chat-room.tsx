@@ -9,6 +9,7 @@ import {
   Handshake,
   MapPin,
   FileBarChart,
+  Receipt,
   ImagePlus,
   Loader2,
   Megaphone,
@@ -38,6 +39,7 @@ import { EMPTY_CONNECT_REFS, type MarkomOpenWork, type SalesOpenWork } from "@/r
 
 import { generateReportNowAction, loadOpenWorkAction, searchMessagesAction, sendTextAction, sendWaLeadMessageAction } from "../actions/chat.actions";
 import { loadConnectWorkAction } from "../actions/connect.actions";
+import { BiayaCard, BiayaDialog, BiayaTransferLine } from "./biaya";
 import { AttachmentStrip, ChecklistCard, IssueCard, SystemLine, TaskCard } from "./chat-cards";
 import { personName, useChat } from "./chat-context";
 import { ConnectReportCard, ContentPlanCard, LiveConnectReportCard, DailyReportCard, KolCard, ProspectCard, PurchaseCard, VisitCard } from "./connect-cards";
@@ -151,6 +153,8 @@ function connectCard(message: ChatMessage, refs: ChatRefs): React.ReactNode | nu
       return c.purchases[id] ? <PurchaseCard purchase={c.purchases[id]} /> : null;
     case "daily_report":
       return c.dailyReports[id] ? <DailyReportCard report={c.dailyReports[id]} /> : null;
+    case "biaya":
+      return c.biaya[id] ? <BiayaCard biaya={c.biaya[id]} /> : null;
     default:
       return null;
   }
@@ -294,6 +298,10 @@ function MessageView({
       </CardShell>
     );
   }
+  // Finance's transfer (0307): the proof is sent to the chat with the line.
+  if (message.refTable === "biaya" && message.payload.status === "ditransfer" && message.refId && refs.connect.biaya[message.refId]) {
+    return <BiayaTransferLine body={message.body} at={message.createdAt} biaya={refs.connect.biaya[message.refId]} />;
+  }
   return <SystemLine body={message.body} at={message.createdAt} />;
 }
 
@@ -403,7 +411,7 @@ export function ChatRoom({
   const [showWork, setShowWork] = React.useState(false);
   const [securityKind, setSecurityKind] = React.useState<SecurityKind | null>(null);
   const [issueOpen, setIssueOpen] = React.useState(false);
-  const [connectDialog, setConnectDialog] = React.useState<"content" | "kol" | "lead" | "daily" | null>(null);
+  const [connectDialog, setConnectDialog] = React.useState<"content" | "kol" | "lead" | "daily" | "biaya" | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [term, setTerm] = React.useState("");
   const [results, setResults] = React.useState<{ id: string; body: string; createdAt: string; senderId: string | null }[] | null>(null);
@@ -514,6 +522,7 @@ export function ChatRoom({
         visits: { ...older.refs.connect.visits, ...prev.connect.visits },
         purchases: { ...older.refs.connect.purchases, ...prev.connect.purchases },
         dailyReports: { ...older.refs.connect.dailyReports, ...prev.connect.dailyReports },
+        biaya: { ...older.refs.connect.biaya, ...prev.connect.biaya },
       },
     }));
     setHasMore(older.hasMore);
@@ -713,6 +722,8 @@ export function ChatRoom({
                     ? `Pesan pribadi dengan ${conversation.name}. Hanya terlihat oleh Anda berdua.`
                   : deptKind === "koordinasi"
                     ? "Grup koordinasi lintas tim Hospitality, Markom, Sales Jogja dan owner. Mulai percakapan di sini."
+                  : deptKind === "biaya"
+                    ? "Ajukan laundry, Netflix, atau biaya lain lewat tombol +. Keputusan dan bukti transfer Finance villa masuk ke sini."
                   : deptKind === "markom"
                     ? "Belum ada pesan. Susun kalender konten dan ajukan kamar KOL lewat tombol +."
                     : deptKind === "sales"
@@ -793,7 +804,7 @@ export function ChatRoom({
               </div>
             )}
             <div className="flex items-end gap-1.5 px-2 py-2">
-              {!plainChat && (
+              {(!plainChat || (deptKind === "biaya" && myRole === "manager")) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button type="button" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" aria-label="Laporan cepat">
@@ -830,6 +841,11 @@ export function ChatRoom({
                           <Handshake className="mr-2 h-4 w-4" /> Lihat KOL menunggu persetujuan
                         </DropdownMenuItem>
                       ))}
+                    {deptKind === "biaya" && (
+                      <DropdownMenuItem onSelect={() => setConnectDialog("biaya")}>
+                        <Receipt className="mr-2 h-4 w-4" /> Ajukan biaya (laundry, Netflix, lain-lain)
+                      </DropdownMenuItem>
+                    )}
                     {deptKind === "sales" && (
                       <>
                         <DropdownMenuItem onSelect={() => setConnectDialog("lead")}>
@@ -913,6 +929,7 @@ export function ChatRoom({
       {securityKind && <SecurityDialog kind={securityKind} open onOpenChange={(o) => !o && setSecurityKind(null)} />}
       {connectDialog === "content" && <ContentPlanDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
       {connectDialog === "kol" && <KolDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
+      {connectDialog === "biaya" && <BiayaDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
       {connectDialog === "lead" && <LeadDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
       {connectDialog === "daily" && <DailyReportDialog open onOpenChange={(o) => !o && setConnectDialog(null)} />}
       {issueOpen && <IssueDialog open onOpenChange={setIssueOpen} defaultCategory={canSecurity && myRole === "security" ? "security" : "room"} />}

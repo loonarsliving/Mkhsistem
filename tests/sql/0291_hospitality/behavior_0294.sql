@@ -160,7 +160,8 @@ select t_check('purchase: pending + verified each posted once', (select count(*)
 -- ===================== Owner =====================
 set role authenticated;
 select set_config('request.jwt.claim.sub', :owner, false);
-select t_check('owner sees the three owner feeds + Koordinasi Jogja (0298), no team group', (select string_agg(x ->> 'name', ',' order by x ->> 'name') from jsonb_array_elements(mkc_chat_list()) x)
+-- (0307's Pengajuan Biaya Villa group, which owners also join, is checked in behavior_0307.sql)
+select t_check('owner sees the three owner feeds + Koordinasi Jogja (0298), no team group', (select string_agg(x ->> 'name', ',' order by x ->> 'name') from jsonb_array_elements(mkc_chat_list()) x where x ->> 'name' <> 'Pengajuan Biaya Villa')
   = 'Koordinasi Jogja,Laporan Hospitality,Laporan Markom Jogja,Laporan Sales Jogja');
 select t_check('owner sees no Markom/Sales group messages', (select count(*) from mkc_chat_messages where conversation_id in (current_setting('t.mgroup')::uuid, current_setting('t.sgroup')::uuid)) = 0);
 select t_check('owner can open supporting records', (select count(*) from mkc_mkt_kol_collabs) = 2 and (select count(*) from mkc_sales_visits) = 1);
