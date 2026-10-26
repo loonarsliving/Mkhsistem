@@ -48,3 +48,20 @@ migrations).
 
 `behavior_0305.sql` on a fresh DB (stubs + migrations 0291..0305). Last run
 (2026-10-25): 9 passed, 0 failed (with 110/110, 56/56, 41/41, 18/18).
+
+## 0307 (Pengajuan Biaya Villa)
+
+Needs the villa app's table, so on a fresh DB: `stubs.sql`, `seed_0294.sql`,
+migrations 0291..0306, then a `villa_users` stub
+(`create table public.villa_users (id uuid primary key default gen_random_uuid(), nama text);`),
+the villa repo's `supabase/migrations/20261026000001_villa_pengajuan_biaya.sql`,
+then 0307, then `behavior_0307.sql`. Covers: members (Rebecca by assignment +
+owners, Finance not in the group), every submit rule (same as villa-api),
+files only from the caller's own folder in the villa bucket, the villa row
+and its history, cards posted for chat and dashboard requests, Finance's
+approve / transfer / reject lines + the manager's notification, cancel,
+cards without storage paths, file paths for members only, and that an
+inactive or broken chat never fails a villa write. Last run (2026-10-26):
+37 passed, 0 failed; on the same migrations behavior_test 110/110,
+behavior_0294 56/56, 0303 41/41, 0304 18/18, 0305 9/9 (the two owner
+chat-list checks now allow the 0307 group, which owners join).

@@ -3,6 +3,30 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars Connect: Pengajuan Biaya Villa (0307) — DITERAPKAN (2026-10-26)
+
+- Owner: manager villa (Rebecca) mengajukan laundry, Netflix, dan biaya lain
+  (nama ditulis sendiri) dari chat; Finance villa memutuskan dan mengunggah
+  bukti transfer di dashboard Finance villa (Finance TIDAK masuk grup); kabar
+  dan bukti transfer kembali ke chat. Semua tercatat di villa
+  (`villa_pengajuan_biaya`, migrasi villa `20261026000001`, harus diterapkan
+  lebih dulu).
+- Departemen `pengajuan_biaya_villa` (grup saja, tanpa feed/laporan),
+  `include_owners`; Rebecca lewat baris `mkc_chat_role_assignments`
+  (`manager`) sebagai data setelah migrasi. RPC `mkc_biaya_create`,
+  `mkc_biaya_cancel`, `mkc_biaya_cards`; `mkc_biaya_file_path` (service role);
+  trigger `mkc_biaya_to_chat` di tabel villa (error ditangkap, tidak pernah
+  menggagalkan tulisan villa). File di bucket villa `villa-pengajuan-biaya`
+  folder `chat/<employee>/`, diunggah server action setelah isi file dicek.
+- Uji: SQL `behavior_0307.sql` 37/37 (lokal), suite lama tetap lulus;
+  unit 534/534; typecheck, lint, build.
+- Diterapkan 2026-10-26 atas persetujuan owner ("Bawa ke production") lewat
+  `execute_sql` (satu transaksi, isi = file commit, md5 dicocokkan; dicatat
+  manual di schema_migrations) karena `apply_migration` menunggu konfirmasi
+  yang tidak tampil di sesi ini dan timeout. Rebecca
+  (`d68f5975-…`) ditambah sebagai `manager`; grup = Avi (owner) + Rebecca.
+- Detail: villa CURRENT_STATE 2026-10-26.
+
 ## Loonars Connect: lead WhatsApp iklan Jogja di Chat (0303) — DIBANGUN, BELUM DITERAPKAN (2026-10-25)
 
 - Customer dari iklan Meta cabang JOG → satu percakapan lead per nomor,

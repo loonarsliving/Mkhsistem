@@ -105,6 +105,35 @@ export interface DailyReportRef {
   notes: string | null;
 }
 
+/** Villa cost request (0307), as mkc_biaya_cards returns it: no storage paths. */
+export interface BiayaRef {
+  id: string;
+  nomor: number;
+  kategori: "laundry" | "netflix" | "lain_lain";
+  kategoriNama: string | null;
+  jenis: "permintaan_dana" | "reimburse";
+  periode: string;
+  nominal: number;
+  keterangan: string;
+  penerimaNama: string | null;
+  penerimaBank: string | null;
+  penerimaRekening: string | null;
+  status: "diajukan" | "disetujui" | "ditolak" | "ditransfer" | "dibatalkan";
+  diajukanLewat: "dashboard" | "chat";
+  diajukanOlehNama: string;
+  diajukanOlehEmployee: string | null;
+  diputusOlehNama: string | null;
+  catatanFinance: string | null;
+  alasanTolak: string | null;
+  tanggalTransfer: string | null;
+  ditransferOlehNama: string | null;
+  alasanBatal: string | null;
+  createdAt: string;
+  adaNota: boolean;
+  adaBuktiBayar: boolean;
+  adaBuktiTransfer: boolean;
+}
+
 export interface ConnectRefs {
   contentPlans: Record<string, ContentPlanRef>;
   kols: Record<string, KolRef>;
@@ -112,11 +141,12 @@ export interface ConnectRefs {
   visits: Record<string, VisitRef>;
   purchases: Record<string, PurchaseRef>;
   dailyReports: Record<string, DailyReportRef>;
+  biaya: Record<string, BiayaRef>;
 }
 
-export const EMPTY_CONNECT_REFS: ConnectRefs = { contentPlans: {}, kols: {}, prospects: {}, visits: {}, purchases: {}, dailyReports: {} };
+export const EMPTY_CONNECT_REFS: ConnectRefs = { contentPlans: {}, kols: {}, prospects: {}, visits: {}, purchases: {}, dailyReports: {}, biaya: {} };
 
-export const CONNECT_REF_TABLES = ["content_plan", "kol", "prospect", "visit", "purchase", "daily_report"] as const;
+export const CONNECT_REF_TABLES = ["content_plan", "kol", "prospect", "visit", "purchase", "daily_report", "biaya"] as const;
 export type ConnectRefTable = (typeof CONNECT_REF_TABLES)[number];
 
 const CONTENT_COLS = "id, planned_date, platform, format, topic, title, brief, pic_id, kol_id, status, published_url, published_at, cancel_reason";
@@ -282,8 +312,10 @@ export async function loadConnectRefs(
   supabase: TypedSupabaseClient,
   departmentCode: string,
   ids: Partial<Record<ConnectRefTable, string[]>>,
+  conversationId: string,
 ): Promise<ConnectRefs> {
-  const refs: ConnectRefs = { contentPlans: {}, kols: {}, prospects: {}, visits: {}, purchases: {}, dailyReports: {} };
+  const refs: ConnectRefs = { contentPlans: {}, kols: {}, prospects: {}, visits: {}, purchases: {}, dailyReports: {}, biaya: {} };
+  const biaya = ids.biaya ?? [];
   const content = ids.content_plan ?? [];
   const kols = ids.kol ?? [];
   const daily = ids.daily_report ?? [];
@@ -292,7 +324,7 @@ export async function loadConnectRefs(
   const purchases = ids.purchase ?? [];
   const none = Promise.resolve({ data: [], error: null });
 
-  const [c, k, d, cards] = await Promise.all([
+  const [c, k, d, cards, biayaCards] = await Promise.all([
     content.length ? supabase.from("mkc_mkt_content_plans").select(CONTENT_COLS).in("id", content) : none,
     kols.length ? supabase.from("mkc_mkt_kol_collabs").select(KOL_COLS).in("id", kols) : none,
     daily.length
@@ -306,8 +338,10 @@ export async function loadConnectRefs(
           p_purchase_ids: purchases,
         })
       : Promise.resolve({ data: null, error: null }),
+    biaya.length ? supabase.rpc("mkc_biaya_cards", { p_conversation_id: conversationId, p_ids: biaya }) : Promise.resolve({ data: null, error: null }),
   ]);
-  for (const r of [c, k, d, cards]) if (r.error) throw new Error(r.error.message);
+  for (const r of [c, k, d, cards, biayaCards]) if (r.error) throw new Error(r.error.message);
+  for (const b of ((biayaCards.data ?? []) as Record<string, unknown>[])) refs.biaya[String(b.id)] = mapBiaya(b);
 
   for (const row of (c.data ?? []) as ContentRow[]) refs.contentPlans[row.id] = mapContent(row);
   for (const row of (k.data ?? []) as KolRow[]) refs.kols[row.id] = mapKol(row);
@@ -407,5 +441,36 @@ export async function listSalesOpenWork(supabase: TypedSupabaseClient, departmen
     leads: (d.leads ?? []).map((l) => ({ ...mapProspect(l), overdue: !!l.overdue })),
     visits: (d.visits ?? []).map(mapVisit),
     units: d.units ?? {},
+  };
+}
+
+function mapBiaya(b: Record<string, unknown>): BiayaRef {
+  const text = (v: unknown) => (v == null ? null : String(v));
+  return {
+    id: String(b.id),
+    nomor: Number(b.nomor),
+    kategori: b.kategori as BiayaRef["kategori"],
+    kategoriNama: text(b.kategori_nama),
+    jenis: b.jenis as BiayaRef["jenis"],
+    periode: String(b.periode),
+    nominal: Number(b.nominal),
+    keterangan: String(b.keterangan ?? ""),
+    penerimaNama: text(b.penerima_nama),
+    penerimaBank: text(b.penerima_bank),
+    penerimaRekening: text(b.penerima_rekening),
+    status: b.status as BiayaRef["status"],
+    diajukanLewat: b.diajukan_lewat === "dashboard" ? "dashboard" : "chat",
+    diajukanOlehNama: String(b.diajukan_oleh_nama ?? ""),
+    diajukanOlehEmployee: text(b.diajukan_oleh_employee),
+    diputusOlehNama: text(b.diputus_oleh_nama),
+    catatanFinance: text(b.catatan_finance),
+    alasanTolak: text(b.alasan_tolak),
+    tanggalTransfer: text(b.tanggal_transfer),
+    ditransferOlehNama: text(b.ditransfer_oleh_nama),
+    alasanBatal: text(b.alasan_batal),
+    createdAt: String(b.created_at),
+    adaNota: b.ada_nota === true,
+    adaBuktiBayar: b.ada_bukti_bayar === true,
+    adaBuktiTransfer: b.ada_bukti_transfer === true,
   };
 }

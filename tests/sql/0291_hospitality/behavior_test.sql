@@ -80,7 +80,7 @@ select t_expect_error('markom: cannot list units', 'select mkc_hosp_units(''hosp
 
 -- ===================== as Owner =====================
 select set_config('request.jwt.claim.sub', :owner, false);
-select t_check('owner: sees owner feeds (+ the 0298 Koordinasi group), never a team group', (select bool_and(x ->> 'kind' = 'owner_feed' or x ->> 'name' = 'Koordinasi Jogja') and count(*) filter (where x ->> 'kind' = 'owner_feed') >= 1 from jsonb_array_elements(mkc_chat_list()) x));
+select t_check('owner: sees owner feeds (+ the 0298 Koordinasi group, the 0307 Pengajuan Biaya Villa group), never a team group', (select bool_and(x ->> 'kind' = 'owner_feed' or x ->> 'name' in ('Koordinasi Jogja', 'Pengajuan Biaya Villa')) and count(*) filter (where x ->> 'kind' = 'owner_feed') >= 1 from jsonb_array_elements(mkc_chat_list()) x));
 select t_check('owner: no Hospitality group messages', (select count(*) from mkc_chat_messages m join mkc_chat_conversations c on c.id = m.conversation_id where c.kind = 'operational_group' and c.department_id = (select id from mkc_chat_departments where code = 'hospitality')) = 0);
 select t_check('owner: can open operational details (tasks)', (select count(*) from mkc_hosp_room_tasks) = 2);
 select t_expect_error('owner: cannot post into group', 'select mkc_chat_send_text((select id from mkc_chat_conversations where kind=''owner_feed''), ''x'')');

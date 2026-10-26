@@ -6660,6 +6660,26 @@ export interface Database {
         Returns: Json;
       };
       mkc_mkt_kol_update: { Args: { p_kol_id: string; p_action: string; p_key?: string | null; p_url?: string | null; p_note?: string | null }; Returns: undefined };
+      // 0307 Pengajuan Biaya Villa (writes the villa app's villa_pengajuan_biaya)
+      mkc_biaya_create: {
+        Args: {
+          p_kategori: string;
+          p_kategori_nama: string | null;
+          p_jenis: string;
+          p_periode: string;
+          p_nominal: number;
+          p_keterangan: string;
+          p_penerima_nama: string;
+          p_penerima_bank: string;
+          p_penerima_rekening: string;
+          p_nota_path?: string | null;
+          p_bukti_bayar_path?: string | null;
+        };
+        Returns: string;
+      };
+      mkc_biaya_cancel: { Args: { p_id: string; p_reason: string }; Returns: undefined };
+      mkc_biaya_cards: { Args: { p_conversation_id: string; p_ids: string[] }; Returns: Json };
+      mkc_biaya_file_path: { Args: { p_user: string; p_conversation_id: string; p_id: string; p_file: string }; Returns: string | null };
       mkc_sales_post_lead: { Args: { p_department_code: string; p_prospect_id: string }; Returns: string };
       mkc_sales_follow_up: { Args: { p_department_code: string; p_prospect_id: string; p_activity_type: string; p_notes?: string | null }; Returns: string };
       mkc_sales_visit_schedule: { Args: { p_department_code: string; p_prospect_id: string; p_scheduled_at: string; p_note?: string | null }; Returns: string };
