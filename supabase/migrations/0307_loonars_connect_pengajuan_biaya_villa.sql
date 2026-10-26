@@ -262,7 +262,6 @@ begin
 end;
 $$;
 
-drop trigger if exists mkc_biaya_to_chat on public.villa_pengajuan_biaya;
 create trigger mkc_biaya_to_chat
   after insert or update of status on public.villa_pengajuan_biaya
   for each row execute function public.mkc_biaya_to_chat();
