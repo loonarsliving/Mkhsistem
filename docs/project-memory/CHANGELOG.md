@@ -8,6 +8,11 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, belum diterapkan)
+
+Grup chat untuk pengajuan biaya manager villa ke Finance villa; catatan di
+tabel villa `villa_pengajuan_biaya`. Lihat CURRENT_STATE.md.
+
 ## 2026-10-25 — Lead WA: foto dikirim lewat salinan publik (0306)
 
 Foto ke lead tetap gagal setelah #131 (6/6 kiriman lewat `/api/wa-media`
