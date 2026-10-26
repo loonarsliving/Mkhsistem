@@ -8,7 +8,7 @@ line below corresponds to one or more actual commit messages.
 
 
 
-## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, belum diterapkan)
+## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, diterapkan)
 
 Grup chat untuk pengajuan biaya manager villa ke Finance villa; catatan di
 tabel villa `villa_pengajuan_biaya`. Lihat CURRENT_STATE.md.

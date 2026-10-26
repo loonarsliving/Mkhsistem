@@ -3,7 +3,7 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Loonars Connect: Pengajuan Biaya Villa (0307) — DIBANGUN, BELUM DITERAPKAN (2026-10-26)
+## Loonars Connect: Pengajuan Biaya Villa (0307) — DITERAPKAN (2026-10-26)
 
 - Owner: manager villa (Rebecca) mengajukan laundry, Netflix, dan biaya lain
   (nama ditulis sendiri) dari chat; Finance villa memutuskan dan mengunggah
@@ -20,8 +20,12 @@ and existing docs — not from any external issue tracker (none found).
   folder `chat/<employee>/`, diunggah server action setelah isi file dicek.
 - Uji: SQL `behavior_0307.sql` 37/37 (lokal), suite lama tetap lulus;
   unit 534/534; typecheck, lint, build.
-- Detail: branch `claude/pengajuan-biaya-villa-chat`; villa CURRENT_STATE
-  2026-10-26.
+- Diterapkan 2026-10-26 atas persetujuan owner ("Bawa ke production") lewat
+  `execute_sql` (satu transaksi, isi = file commit, md5 dicocokkan; dicatat
+  manual di schema_migrations) karena `apply_migration` menunggu konfirmasi
+  yang tidak tampil di sesi ini dan timeout. Rebecca
+  (`d68f5975-…`) ditambah sebagai `manager`; grup = Avi (owner) + Rebecca.
+- Detail: villa CURRENT_STATE 2026-10-26.
 
 ## Loonars Connect: lead WhatsApp iklan Jogja di Chat (0303) — DIBANGUN, BELUM DITERAPKAN (2026-10-25)
 
