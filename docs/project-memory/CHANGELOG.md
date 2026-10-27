@@ -8,6 +8,15 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-27 — Refund: kartu bukti pembayaran + tombol "Kirim Bukti"
+
+Customer refund kini menerima gambar "Bukti Pembayaran Refund" buatan sistem
+(nominal termin, total, sudah dibayarkan, sisa, termin berikutnya / LUNAS;
+tanpa data bank) dengan keterangan bergaya bukti dividen villa, bukan foto
+dari bank. Tidak lagi otomatis: unggah bukti hanya menyimpan + mencentang
+termin; petugas mengirim lewat "Kirim Bukti" (dengan pratinjau). Kartu dikirim
+lewat salinan publik wa-outbox. Tanpa perubahan database.
+
 ## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, diterapkan)
 
 Grup chat untuk pengajuan biaya manager villa ke Finance villa; catatan di

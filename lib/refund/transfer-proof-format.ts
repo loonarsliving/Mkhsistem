@@ -106,21 +106,50 @@ function rupiah(value: number): string {
   return `Rp ${Math.round(value).toLocaleString("id-ID")}`;
 }
 
-/** Caption sent to the customer with the transfer proof. */
+type RefundTermin = { dueMonth: string; amount: number };
+
+/** Earliest unpaid termin -- what the customer is told comes next. */
+export function findNextUnpaidTermin<T extends { due_month: string; amount: number | string; is_paid: boolean }>(installments: T[]): RefundTermin | null {
+  const next = installments.filter((i) => !i.is_paid).sort((a, b) => a.due_month.localeCompare(b.due_month))[0];
+  return next ? { dueMonth: next.due_month, amount: Number(next.amount) } : null;
+}
+
+/**
+ * Caption sent to the customer with the transfer proof. Same tone as the
+ * villa dividend proof (villa-api /bridge/dividend-proof-forward): says the
+ * money went to "rekening Anda" without naming any bank, then the amounts
+ * and when the next termin is paid (owner's ask 2026-10-27).
+ */
 export function buildRefundProofCustomerMessage(input: {
   customerName: string;
-  installment: { dueMonth: string; amount: number } | null;
+  installment: RefundTermin | null;
+  refundAmount: number;
   paidAmount: number;
   remainingAmount: number;
+  nextInstallment: RefundTermin | null;
 }): string {
-  const termin = input.installment
-    ? ` termin ${formatRefundMonthLong(input.installment.dueMonth)} sebesar ${rupiah(input.installment.amount)}`
-    : "";
+  const opening = input.installment
+    ? `Dengan hormat, kami sampaikan bahwa pembayaran refund Bapak/Ibu termin ${formatRefundMonthLong(input.installment.dueMonth)} sebesar ${rupiah(input.installment.amount)} telah kami transfer ke rekening Bapak/Ibu. Bukti transfer terlampir.`
+    : "Dengan hormat, kami sampaikan bahwa pembayaran refund Bapak/Ibu telah kami transfer ke rekening Bapak/Ibu. Bukti transfer terlampir.";
+
+  let next: string;
+  if (input.remainingAmount <= 0) {
+    next = "Dengan pembayaran ini, refund Bapak/Ibu telah *lunas*.";
+  } else if (input.nextInstallment) {
+    next = `Pembayaran berikutnya: termin *${formatRefundMonthLong(input.nextInstallment.dueMonth)}* sebesar *${rupiah(input.nextInstallment.amount)}*.`;
+  } else {
+    next = "Jadwal pembayaran berikutnya akan kami informasikan kembali.";
+  }
+
   return (
     `Yth. Bapak/Ibu ${input.customerName},\n\n` +
-    `Berikut kami kirimkan bukti transfer pembayaran refund${termin}.\n\n` +
-    `Total terbayar: ${rupiah(input.paidAmount)}\n` +
-    `Sisa refund: ${rupiah(input.remainingAmount)}\n\n` +
-    "Terima kasih.\nPT Maha Karya Haluoleo"
+    `${opening}\n\n` +
+    "Rincian refund:\n" +
+    `• Total refund: ${rupiah(input.refundAmount)}\n` +
+    `• Sudah dibayarkan: ${rupiah(input.paidAmount)}\n` +
+    `• Sisa refund: ${rupiah(input.remainingAmount)}\n\n` +
+    `${next}\n\n` +
+    "Terima kasih atas kesabaran dan kepercayaan Bapak/Ibu.\n\n" +
+    "Hormat kami,\nPT Maha Karya Haluoleo"
   );
 }

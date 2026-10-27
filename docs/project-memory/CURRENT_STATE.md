@@ -253,6 +253,27 @@ lalu `recordRefundTransferProofAction`). Otomatis (pilihan owner): termin
 dicentang (termin tertua belum dibayar, atau bulan di keterangan), bukti
 diteruskan ke WA customer dengan ringkasan terbayar/sisa, dicatat di chat
 customer. Tombol "Lihat" (signed URL 10 menit) dan "Kirim ulang".
+**Diubah 2026-10-27 (permintaan owner): tidak lagi otomatis, dan customer
+menerima kartu buatan sistem, bukan foto dari bank.** Unggah bukti (dashboard
+atau WA "REFUND ...") kini hanya menyimpan bukti + mencentang termin
+(`forward_status` tetap `pending`). Customer baru menerima apa pun setelah
+petugas klik **"Kirim Bukti"** di kartu customer /refund → dialog pratinjau
+(`previewRefundTransferProofAction`) → "Kirim ke Customer"
+(`sendRefundTransferProofAction` → `sendRefundTransferProof`); tombol yang
+sama menjadi "Kirim ulang" setelah terkirim/gagal. Yang dikirim: gambar PNG
+"Bukti Pembayaran Refund" (`lib/refund/transfer-proof-image.tsx`, `next/og`,
+logo diambil dari `${APP_URL}/branding/logo-mkh.png`, jatuh ke teks bila
+gagal) berisi termin + nominal yang ditransfer, total refund, sudah
+dibayarkan, sisa, progres, dan termin berikutnya (bulan + nominal, termin
+tertua yang belum dibayar, `findNextUnpaidTermin`) / LUNAS. Tanpa nama bank
+atau nomor rekening; foto bank tetap di bucket privat untuk internal
+(tombol "Lihat"). Keterangan WA bergaya bukti dividen villa ("telah kami
+transfer ke rekening Bapak/Ibu", tanpa bank) dengan rincian yang sama.
+Kartu disimpan di `refund-transfer-proofs/<customer_id>/kartu-<ts>.png`,
+tampil di chat refund (`media_path`), dan dikirim ke Whacenter lewat salinan
+publik `wa-outbox` (0306) — aman karena kartu tidak memuat data bank. Angka
+di kartu dihitung saat tombol diklik (bukan saat unggah). Tanpa perubahan
+database.
 Jadwal termin diselaraskan dengan PDF skema manajemen 2026-10-20 (142 termin,
 data langsung di DB).
 

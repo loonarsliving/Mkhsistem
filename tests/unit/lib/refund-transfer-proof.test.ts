@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRefundProofCustomerMessage,
+  findNextUnpaidTermin,
   matchRefundCustomers,
   parseRefundProofCaption,
 } from "@/lib/refund/transfer-proof-format";
@@ -51,16 +52,50 @@ describe("matchRefundCustomers", () => {
   });
 });
 
+describe("findNextUnpaidTermin", () => {
+  it("picks the earliest unpaid termin regardless of row order", () => {
+    expect(
+      findNextUnpaidTermin([
+        { due_month: "2026-12-01", amount: "5000000", is_paid: false },
+        { due_month: "2026-10-01", amount: 5_000_000, is_paid: true },
+        { due_month: "2026-11-01", amount: "4000000.00", is_paid: false },
+      ]),
+    ).toEqual({ dueMonth: "2026-11-01", amount: 4_000_000 });
+  });
+
+  it("returns null when every termin is paid", () => {
+    expect(findNextUnpaidTermin([{ due_month: "2026-10-01", amount: 1, is_paid: true }])).toBeNull();
+  });
+});
+
 describe("buildRefundProofCustomerMessage", () => {
-  it("names the termin, amount, paid total and remaining", () => {
-    const text = buildRefundProofCustomerMessage({
-      customerName: "Budi",
-      installment: { dueMonth: "2026-10-01", amount: 10_000_000 },
-      paidAmount: 20_000_000,
-      remainingAmount: 30_000_000,
-    });
-    expect(text).toContain("termin Oktober 2026 sebesar Rp 10.000.000");
-    expect(text).toContain("Total terbayar: Rp 20.000.000");
+  const base = {
+    customerName: "Budi",
+    installment: { dueMonth: "2026-10-01", amount: 10_000_000 },
+    refundAmount: 50_000_000,
+    paidAmount: 20_000_000,
+    remainingAmount: 30_000_000,
+    nextInstallment: { dueMonth: "2026-11-01", amount: 10_000_000 },
+  };
+
+  it("names the termin, amounts and the next termin, without any bank", () => {
+    const text = buildRefundProofCustomerMessage(base);
+    expect(text).toContain("termin Oktober 2026 sebesar Rp 10.000.000 telah kami transfer ke rekening Bapak/Ibu");
+    expect(text).toContain("Total refund: Rp 50.000.000");
+    expect(text).toContain("Sudah dibayarkan: Rp 20.000.000");
     expect(text).toContain("Sisa refund: Rp 30.000.000");
+    expect(text).toContain("Pembayaran berikutnya: termin *November 2026* sebesar *Rp 10.000.000*");
+    expect(text.toLowerCase()).not.toMatch(/\bbank\b|bca|bri|bni|mandiri/);
+  });
+
+  it("says lunas once nothing remains", () => {
+    const text = buildRefundProofCustomerMessage({ ...base, paidAmount: 50_000_000, remainingAmount: 0, nextInstallment: null });
+    expect(text).toContain("refund Bapak/Ibu telah *lunas*");
+    expect(text).not.toContain("Pembayaran berikutnya");
+  });
+
+  it("promises a schedule when money remains but no termin is planned", () => {
+    const text = buildRefundProofCustomerMessage({ ...base, nextInstallment: null });
+    expect(text).toContain("Jadwal pembayaran berikutnya akan kami informasikan kembali");
   });
 });
