@@ -253,6 +253,13 @@ lalu `recordRefundTransferProofAction`). Otomatis (pilihan owner): termin
 dicentang (termin tertua belum dibayar, atau bulan di keterangan), bukti
 diteruskan ke WA customer dengan ringkasan terbayar/sisa, dicatat di chat
 customer. Tombol "Lihat" (signed URL 10 menit) dan "Kirim ulang".
+Pesan ke customer (2026-10-27, permintaan owner): gaya bukti dividen villa —
+"telah kami transfer ke rekening Bapak/Ibu, bukti transfer terlampir", tanpa
+menyebut bank; lalu total refund, sudah dibayarkan, sisa, dan "Pembayaran
+berikutnya: termin <bulan> sebesar Rp X" (termin tertua yang belum dibayar,
+`findNextUnpaidTermin`), atau "telah lunas" bila sisa 0, atau "akan kami
+informasikan kembali" bila masih ada sisa tetapi tidak ada termin terjadwal.
+Balasan WA ke pengirim bukti juga menyebut termin berikutnya.
 Jadwal termin diselaraskan dengan PDF skema manajemen 2026-10-20 (142 termin,
 data langsung di DB).
 

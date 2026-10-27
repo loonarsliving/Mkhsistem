@@ -134,6 +134,9 @@ export async function tryHandleRefundTransferProofViaWhatsApp(
         ? `☑️ Termin ${formatRefundMonthLong(result.installment.dueMonth)} (${rupiah(result.installment.amount)}) ditandai terbayar.\n`
         : "ℹ️ Tidak ada termin yang belum dibayar — bukti disimpan tanpa mencentang termin.\n") +
       `💰 Sisa refund: ${rupiah(result.remainingAmount)}\n` +
+      (result.nextInstallment
+        ? `📅 Termin berikutnya: ${formatRefundMonthLong(result.nextInstallment.dueMonth)} (${rupiah(result.nextInstallment.amount)})\n`
+        : "") +
       (result.forwarded
         ? `📤 Sudah diteruskan ke WhatsApp customer (${result.customerPhone}).`
         : `⚠️ Gagal diteruskan ke customer: ${result.forwardError ?? "unknown"} — bisa dikirim ulang dari modul Refund.`),

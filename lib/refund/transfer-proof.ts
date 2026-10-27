@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { createWaMediaUrl } from "@/lib/wa-media/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { buildRefundProofCustomerMessage, formatRefundMonthLong } from "./transfer-proof-format";
+import { buildRefundProofCustomerMessage, findNextUnpaidTermin, formatRefundMonthLong } from "./transfer-proof-format";
 
 export const REFUND_PROOF_BUCKET = "refund-transfer-proofs";
 
@@ -32,6 +32,7 @@ export type ProcessRefundProofResult =
       customerName: string;
       customerPhone: string | null;
       installment: { dueMonth: string; amount: number } | null;
+      nextInstallment: { dueMonth: string; amount: number } | null;
       paidAmount: number;
       remainingAmount: number;
       forwarded: boolean;
@@ -90,10 +91,11 @@ export async function processRefundTransferProof(input: ProcessRefundProofInput)
     target = { ...target, is_paid: true };
   }
 
-  const paidInstallments = all.map((i) => (target && i.id === target.id ? { ...i, is_paid: true } : i)).filter((i) => i.is_paid);
-  const paidAmount = Number(customer.opening_paid_amount) + paidInstallments.reduce((s, i) => s + Number(i.amount), 0);
+  const afterPayment = all.map((i) => (target && i.id === target.id ? { ...i, is_paid: true } : i));
+  const paidAmount = Number(customer.opening_paid_amount) + afterPayment.filter((i) => i.is_paid).reduce((s, i) => s + Number(i.amount), 0);
   const remainingAmount = Math.max(Number(customer.refund_amount) - paidAmount, 0);
   const installment = target ? { dueMonth: target.due_month, amount: Number(target.amount) } : null;
+  const nextInstallment = findNextUnpaidTermin(afterPayment);
 
   const { data: proof, error: proofError } = await supabase
     .from("mkc_refund_transfer_proofs")
@@ -109,7 +111,14 @@ export async function processRefundTransferProof(input: ProcessRefundProofInput)
     .single();
   if (proofError || !proof) return { ok: false, error: proofError?.message ?? "Gagal menyimpan bukti transfer" };
 
-  const message = buildRefundProofCustomerMessage({ customerName: customer.customer_name, installment, paidAmount, remainingAmount });
+  const message = buildRefundProofCustomerMessage({
+    customerName: customer.customer_name,
+    installment,
+    refundAmount: Number(customer.refund_amount),
+    paidAmount,
+    remainingAmount,
+    nextInstallment,
+  });
 
   const { forwarded, forwardError } = await forwardProofToCustomer({
     proofId: proof.id,
@@ -127,6 +136,7 @@ export async function processRefundTransferProof(input: ProcessRefundProofInput)
     customerName: customer.customer_name,
     customerPhone: customer.phone,
     installment,
+    nextInstallment,
     paidAmount,
     remainingAmount,
     forwarded,
@@ -216,8 +226,10 @@ export async function resendRefundTransferProof(proofId: string, actorEmployeeId
   const message = buildRefundProofCustomerMessage({
     customerName: customer.customer_name,
     installment,
+    refundAmount: Number(customer.refund_amount),
     paidAmount,
     remainingAmount: Math.max(Number(customer.refund_amount) - paidAmount, 0),
+    nextInstallment: findNextUnpaidTermin(all),
   });
 
   const { forwarded, forwardError } = await forwardProofToCustomer({

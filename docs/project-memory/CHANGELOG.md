@@ -8,6 +8,12 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-27 — Refund: pesan bukti transfer menyebut termin berikutnya
+
+Pesan yang ikut bukti transfer refund ke customer kini bergaya bukti dividen
+villa (tanpa nama bank) dan memuat total refund, sudah dibayarkan, sisa, serta
+bulan + nominal termin berikutnya (atau "lunas"). Tanpa perubahan database.
+
 ## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, diterapkan)
 
 Grup chat untuk pengajuan biaya manager villa ke Finance villa; catatan di
