@@ -10,9 +10,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Refund transfer proof over WhatsApp (0289): the owner (any active Super
  * Admin) or a Refund & CR officer sends the transfer photo to the company
  * number captioned "REFUND <nama customer / no urut> [bulan]" -- the same
- * habit as the villa dividend proof ("A2"). The photo is stored, the termin
- * ticked, and the proof forwarded to the customer; the sender gets a
- * confirmation reply.
+ * habit as the villa dividend proof ("A2"). The photo is stored and the
+ * termin ticked; the sender gets a confirmation reply. The customer only
+ * gets the proof card once an officer presses "Kirim Bukti" in /refund.
  *
  * Sender-gated like LUNAS/PROMO: from any other number a "REFUND ..." photo
  * is not_applicable and falls through untouched.
@@ -137,8 +137,6 @@ export async function tryHandleRefundTransferProofViaWhatsApp(
       (result.nextInstallment
         ? `📅 Termin berikutnya: ${formatRefundMonthLong(result.nextInstallment.dueMonth)} (${rupiah(result.nextInstallment.amount)})\n`
         : "") +
-      (result.forwarded
-        ? `📤 Sudah diteruskan ke WhatsApp customer (${result.customerPhone}).`
-        : `⚠️ Gagal diteruskan ke customer: ${result.forwardError ?? "unknown"} — bisa dikirim ulang dari modul Refund.`),
+      "📝 Belum dikirim ke customer — buka modul Refund lalu klik *Kirim Bukti* di kartu customer ini.",
   };
 }

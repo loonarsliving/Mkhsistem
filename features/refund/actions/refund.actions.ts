@@ -7,7 +7,7 @@ import { normalizeIndonesianPhone } from "@/features/messaging/schemas/messaging
 import { sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { createWaMediaUrl } from "@/lib/wa-media/link";
-import { REFUND_PROOF_BUCKET, processRefundTransferProof, resendRefundTransferProof } from "@/lib/refund/transfer-proof";
+import { REFUND_PROOF_BUCKET, previewRefundTransferProof, processRefundTransferProof, sendRefundTransferProof } from "@/lib/refund/transfer-proof";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
 import { createClient } from "@/lib/supabase/server";
 import { listRefundChatMessages, type RefundChatMessage } from "@/repositories/refund.repository";
@@ -237,12 +237,13 @@ export async function deleteInstallmentAction(input: DeleteInstallmentInput): Pr
 /**
  * Dashboard "Upload Bukti" (0289). The browser uploads the file straight to
  * the private refund-transfer-proofs bucket (storage RLS: refund.manage),
- * then calls this -- same automatic path as the WhatsApp "REFUND <nama>"
- * photo: tick the termin, store the record, forward to the customer.
+ * then calls this -- same path as the WhatsApp "REFUND <nama>" photo: tick
+ * the termin and store the record. Sending to the customer is a separate
+ * click ("Kirim Bukti", sendRefundTransferProofAction).
  */
 export async function recordRefundTransferProofAction(
   input: RecordRefundProofInput,
-): Promise<ActionResult<{ forwarded: boolean; forwardError: string | null; termin: string | null }>> {
+): Promise<ActionResult<{ proofId: string; termin: string | null }>> {
   const session = await requirePermission(PERMISSIONS.REFUND_MANAGE);
   const parsed = recordRefundProofSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid", parsed.error.flatten().fieldErrors);
@@ -263,11 +264,7 @@ export async function recordRefundTransferProofAction(
   if (!result.ok) return actionError(result.error);
 
   revalidatePath(REFUND_PATH);
-  return actionSuccess({
-    forwarded: result.forwarded,
-    forwardError: result.forwardError,
-    termin: result.installment?.dueMonth ?? null,
-  });
+  return actionSuccess({ proofId: result.proofId, termin: result.installment?.dueMonth ?? null });
 }
 
 /** Short-lived link to view a stored proof. RLS on the table and bucket decides who can read it. */
@@ -292,12 +289,23 @@ export async function getRefundProofUrlAction(input: RefundProofIdInput): Promis
   return actionSuccess({ url: data.signedUrl });
 }
 
-export async function resendRefundTransferProofAction(input: RefundProofIdInput): Promise<ActionResult> {
+/** The card + caption "Kirim Bukti" would send, shown for the officer to check first. */
+export async function previewRefundTransferProofAction(input: RefundProofIdInput): Promise<ActionResult<{ image: string; message: string }>> {
+  await requirePermission(PERMISSIONS.REFUND_MANAGE);
+  const parsed = refundProofIdSchema.safeParse(input);
+  if (!parsed.success) return actionError("Data tidak valid");
+
+  const result = await previewRefundTransferProof(parsed.data.proofId);
+  return result.ok ? actionSuccess({ image: result.image, message: result.message }) : actionError(result.error);
+}
+
+/** "Kirim Bukti": sends the proof card to the customer's WhatsApp (also used to send again). */
+export async function sendRefundTransferProofAction(input: RefundProofIdInput): Promise<ActionResult> {
   const session = await requirePermission(PERMISSIONS.REFUND_MANAGE);
   const parsed = refundProofIdSchema.safeParse(input);
   if (!parsed.success) return actionError("Data tidak valid");
 
-  const result = await resendRefundTransferProof(parsed.data.proofId, session.userId);
+  const result = await sendRefundTransferProof(parsed.data.proofId, session.userId);
   revalidatePath(REFUND_PATH);
-  return result.ok ? actionSuccess() : actionError(result.error ?? "Gagal mengirim ulang");
+  return result.ok ? actionSuccess() : actionError(result.error ?? "Gagal mengirim");
 }

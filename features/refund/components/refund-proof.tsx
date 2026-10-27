@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Loader2, Paperclip, RotateCw, Upload } from "lucide-react";
+import { Eye, Loader2, Paperclip, RotateCw, Send, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,12 @@ import { uploadEntityFile } from "@/lib/supabase/storage";
 import { formatCurrency } from "@/lib/utils";
 import type { RefundCustomer } from "@/repositories/refund.repository";
 
-import { getRefundProofUrlAction, recordRefundTransferProofAction, resendRefundTransferProofAction } from "../actions/refund.actions";
+import {
+  getRefundProofUrlAction,
+  previewRefundTransferProofAction,
+  recordRefundTransferProofAction,
+  sendRefundTransferProofAction,
+} from "../actions/refund.actions";
 import { formatRefundMonth } from "../schemas/refund.schema";
 
 const BUCKET = "refund-transfer-proofs";
@@ -23,8 +28,9 @@ const AUTO = "auto";
 
 /**
  * "Upload Bukti" (0289): the file goes straight from the browser to the
- * private bucket, then the Server Action ticks the termin and forwards the
- * proof to the customer's WhatsApp -- same path as the WA "REFUND <nama>" photo.
+ * private bucket, then the Server Action ticks the termin and stores the
+ * record -- same path as the WA "REFUND <nama>" photo. Sending to the
+ * customer is the separate "Kirim Bukti" button on the stored proof.
  */
 export function RefundProofDialog({ customer, onOpenChange }: { customer: RefundCustomer | null; onOpenChange: (open: boolean) => void }) {
   const [installmentId, setInstallmentId] = React.useState<string>(AUTO);
@@ -59,8 +65,7 @@ export function RefundProofDialog({ customer, onOpenChange }: { customer: Refund
         return;
       }
       const termin = result.data?.termin ? ` · termin ${formatRefundMonth(result.data.termin)} dicentang` : "";
-      if (result.data?.forwarded) toast.success(`Bukti tersimpan${termin} · diteruskan ke WhatsApp customer`);
-      else toast.warning(`Bukti tersimpan${termin}, tapi gagal diteruskan ke customer: ${result.data?.forwardError ?? "unknown"}`);
+      toast.success(`Bukti tersimpan${termin} · klik "Kirim Bukti" untuk mengirim ke customer`);
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal mengunggah file");
@@ -75,8 +80,9 @@ export function RefundProofDialog({ customer, onOpenChange }: { customer: Refund
         <DialogHeader>
           <DialogTitle>Bukti Transfer — {customer?.name}</DialogTitle>
           <DialogDescription>
-            Bukti disimpan di sistem, termin otomatis dicentang terbayar, lalu diteruskan ke WhatsApp customer. Bisa juga lewat WA: kirim foto ke nomor
-            perusahaan dengan keterangan <b>REFUND {customer?.name.split(/[\s,]/)[0]}</b>.
+            Bukti disimpan di sistem (hanya untuk internal) dan termin otomatis dicentang terbayar. Customer belum menerima apa-apa sampai Anda klik{" "}
+            <b>Kirim Bukti</b>. Bisa juga lewat WA: kirim foto ke nomor perusahaan dengan keterangan{" "}
+            <b>REFUND {customer?.name.split(/[\s,]/)[0]}</b>.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -106,7 +112,7 @@ export function RefundProofDialog({ customer, onOpenChange }: { customer: Refund
             Batal
           </Button>
           <Button onClick={handleSave} disabled={saving || !file}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Simpan & Teruskan
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Simpan
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -114,9 +120,80 @@ export function RefundProofDialog({ customer, onOpenChange }: { customer: Refund
   );
 }
 
-/** Stored proofs on a customer card: view (signed link) and, for managers, resend. */
+/**
+ * "Kirim Bukti": shows the company-made proof card and its caption (no bank
+ * details), and only sends to the customer's WhatsApp on confirm.
+ */
+function RefundProofSendDialog({ proofId, customerName, onClose }: { proofId: string | null; customerName: string; onClose: () => void }) {
+  const [preview, setPreview] = React.useState<{ image: string; message: string } | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!proofId) return;
+    let cancelled = false;
+    setPreview(null);
+    setLoading(true);
+    void previewRefundTransferProofAction({ proofId }).then((result) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (result.success && result.data) setPreview(result.data);
+      else {
+        toast.error(result.error ?? "Gagal membuat kartu bukti");
+        onClose();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [proofId, onClose]);
+
+  async function send() {
+    if (!proofId) return;
+    setSending(true);
+    const result = await sendRefundTransferProofAction({ proofId });
+    setSending(false);
+    if (result.success) {
+      toast.success(`Bukti terkirim ke WhatsApp ${customerName}`);
+      onClose();
+    } else toast.error(result.error ?? "Gagal mengirim");
+  }
+
+  return (
+    <Dialog open={proofId !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Kirim Bukti — {customerName}</DialogTitle>
+          <DialogDescription>Periksa dulu. Gambar dan pesan ini yang akan diterima customer di WhatsApp.</DialogDescription>
+        </DialogHeader>
+        {loading || !preview ? (
+          <div className="flex h-60 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL from the server, nothing to optimise */}
+            <img src={preview.image} alt="Kartu bukti pembayaran refund" className="w-full rounded-md border" />
+            <p className="whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{preview.message}</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={() => void send()} disabled={!preview || sending}>
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Kirim ke Customer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Stored proofs on a customer card: view the bank proof (signed link, internal) and, for managers, "Kirim Bukti". */
 export function RefundProofList({ customer, canManage }: { customer: RefundCustomer; canManage: boolean }) {
-  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [sendingProofId, setSendingProofId] = React.useState<string | null>(null);
+  const closeSend = React.useCallback(() => setSendingProofId(null), []);
   if (customer.proofs.length === 0) return null;
 
   const terminLabel = (installmentId: string | null) => {
@@ -137,14 +214,6 @@ export function RefundProofList({ customer, canManage }: { customer: RefundCusto
     else window.location.href = result.data.url;
   }
 
-  async function resend(proofId: string) {
-    setBusyId(proofId);
-    const result = await resendRefundTransferProofAction({ proofId });
-    setBusyId(null);
-    if (result.success) toast.success("Bukti transfer dikirim ulang ke customer");
-    else toast.error(result.error ?? "Gagal mengirim ulang");
-  }
-
   return (
     <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
       <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
@@ -157,19 +226,29 @@ export function RefundProofList({ customer, canManage }: { customer: RefundCusto
             {new Date(p.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Makassar" })} ·{" "}
             {p.source === "whatsapp" ? "via WA" : "via dashboard"}
           </span>
-          <Badge variant={p.forwardStatus === "sent" ? "secondary" : "destructive"} className="h-5 px-1.5 text-[10px]">
-            {p.forwardStatus === "sent" ? "Terkirim ke customer" : "Belum terkirim"}
+          <Badge
+            variant={p.forwardStatus === "sent" ? "secondary" : p.forwardStatus === "failed" ? "destructive" : "outline"}
+            className="h-5 px-1.5 text-[10px]"
+            title={p.forwardStatus === "failed" ? (p.forwardError ?? undefined) : undefined}
+          >
+            {p.forwardStatus === "sent" ? "Terkirim ke customer" : p.forwardStatus === "failed" ? "Gagal terkirim" : "Belum dikirim"}
           </Badge>
           <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => void view(p.id)}>
             <Eye className="h-3.5 w-3.5" /> Lihat
           </Button>
-          {canManage && (
-            <Button size="sm" variant="ghost" className="h-6 px-2" disabled={busyId === p.id} onClick={() => void resend(p.id)}>
-              {busyId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />} Kirim ulang
-            </Button>
-          )}
+          {canManage &&
+            (p.forwardStatus === "pending" ? (
+              <Button size="sm" className="h-6 px-2" onClick={() => setSendingProofId(p.id)}>
+                <Send className="h-3.5 w-3.5" /> Kirim Bukti
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setSendingProofId(p.id)}>
+                <RotateCw className="h-3.5 w-3.5" /> Kirim ulang
+              </Button>
+            ))}
         </div>
       ))}
+      <RefundProofSendDialog proofId={sendingProofId} customerName={customer.name} onClose={closeSend} />
     </div>
   );
 }

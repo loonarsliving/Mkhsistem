@@ -8,11 +8,14 @@ line below corresponds to one or more actual commit messages.
 
 
 
-## 2026-10-27 — Refund: pesan bukti transfer menyebut termin berikutnya
+## 2026-10-27 — Refund: kartu bukti pembayaran + tombol "Kirim Bukti"
 
-Pesan yang ikut bukti transfer refund ke customer kini bergaya bukti dividen
-villa (tanpa nama bank) dan memuat total refund, sudah dibayarkan, sisa, serta
-bulan + nominal termin berikutnya (atau "lunas"). Tanpa perubahan database.
+Customer refund kini menerima gambar "Bukti Pembayaran Refund" buatan sistem
+(nominal termin, total, sudah dibayarkan, sisa, termin berikutnya / LUNAS;
+tanpa data bank) dengan keterangan bergaya bukti dividen villa, bukan foto
+dari bank. Tidak lagi otomatis: unggah bukti hanya menyimpan + mencentang
+termin; petugas mengirim lewat "Kirim Bukti" (dengan pratinjau). Kartu dikirim
+lewat salinan publik wa-outbox. Tanpa perubahan database.
 
 ## 2026-10-26 — Loonars Connect: Pengajuan Biaya Villa (0307, diterapkan)
 
