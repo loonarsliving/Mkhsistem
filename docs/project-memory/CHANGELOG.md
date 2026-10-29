@@ -8,6 +8,12 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-29 — Jembatan villa: baca mutasi bank
+
+`/api/villa/ai/bank-statement` menyalin baris mutasi rekening (foto/PDF) untuk
+Checklist Dana Masuk villa. Hanya transkripsi; villa yang mencocokkan dan
+finance yang mencatat.
+
 ## 2026-10-27 — Refund: kartu bukti pembayaran + tombol "Kirim Bukti"
 
 Customer refund kini menerima gambar "Bukti Pembayaran Refund" buatan sistem
