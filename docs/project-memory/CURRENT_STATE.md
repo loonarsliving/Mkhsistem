@@ -3,6 +3,16 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Jembatan villa: baca mutasi bank (2026-10-29, BELUM MERGE)
+
+- `POST /api/villa/ai/bank-statement` (x-internal-secret = `VILLA_BRIDGE_SECRET`,
+  pola sama dengan `cctv-vision`): menerima foto/screenshot/PDF mutasi rekening
+  (`data` base64, `mimeType` JPG/PNG/WebP/PDF, `hariIni`), Gemini menyalin baris
+  (tanggal, keterangan, nominal, masuk/keluar) lewat
+  `lib/ai/domains/villa-bank-statement.ts` (+ tes `parseMutasiReply`). Hanya
+  menyalin; pencocokan dengan pencairan OTA dan pencatatan ada di villa
+  (`/finance/checklist-dana`). Tanpa tabel, env, atau rahasia baru.
+
 ## Loonars Connect: Pengajuan Biaya Villa (0307) — DITERAPKAN (2026-10-26)
 
 - Owner: manager villa (Rebecca) mengajukan laundry, Netflix, dan biaya lain
