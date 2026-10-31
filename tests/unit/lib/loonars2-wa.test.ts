@@ -363,3 +363,54 @@ describe("pembayaran lain-lain & cicilan utang", () => {
   });
 });
 
+
+describe("pengajuan Vando 31 Okt 2026 (awalan nyasar & nama rekening di tengah)", () => {
+  it("rekening dengan nama di antara bank dan nomor terbaca, ditulis ulang bank -> nomor -> a.n.", () => {
+    const r = pisahRekening("bahan (no drop, semen putih, lem fox, solasi, fiber no drop) 392.000 bank Mandiri Sarno 1850 0066 1464 5");
+    expect(r.rekening).toContain("Mandiri 1850 0066 1464 5 a.n. Sarno");
+    expect(r.sisa).toContain("392.000");
+    expect(r.sisa).not.toContain("1850");
+    expect(parseRupiah(r.sisa)).toBe(392_000);
+  });
+
+  it("nama di tengah tidak salah tangkap kata biasa / angka nominal", () => {
+    expect(pisahRekening("pasir 2 rit 1.600.000").rekening).toBeNull();
+    expect(pisahRekening("BCA no rek 1234567890").rekening).not.toBeNull();
+    expect(pisahRekening("bayar BCA unit 5 1.300.000").rekening).toBeNull();
+  });
+
+  it("pengajuan lengkap dengan rekening nama di tengah tidak lagi kekurangan rekening", () => {
+    const p = parseLoonars2Perintah(
+      "L2 pengajuan minggu ini\n• Cicilan Toko besi & kaca sedia nurut 15 juta Bank Danamon 903692710811 a.n. Papang\n• pasir 3,5 juta BCA 8466119208 a.n. Nanang\n• bahan (no drop, semen putih, lem fox, solasi, fiber no drop) 392.000 bank Mandiri Sarno 1850 0066 1464 5",
+    );
+    expect(p?.aksi).toBe("ajukan_mingguan");
+    const baris = (p as unknown as { data: { baris: { nominal: number | null; rekening?: string }[] } }).data.baris;
+    expect(baris.map((b) => b.nominal)).toEqual([15_000_000, 3_500_000, 392_000]);
+    expect(baris.every((b) => b.rekening)).toBe(true);
+    expect(baris[2].rekening).toContain("a.n. Sarno");
+  });
+
+  it("kata nyasar sebelum \"L2 pengajuan\" di pesan berbaris dibuang", () => {
+    const p = parseLoonars2Perintah(
+      "Bank Mandiri L2 pengajuan minggu ini\n• Cicilan Toko besi & kaca sedia nurut 15 juta Bank Danamon 903692710811 a.n. Papang\n• Pasir & matrial 5.897.000 BCA 7855066190 Naimuddin Irfan",
+    );
+    expect(p?.aksi).toBe("ajukan_mingguan");
+    const baris = (p as unknown as { data: { baris: { nominal: number | null; rekening?: string }[] } }).data.baris;
+    expect(baris.map((b) => b.nominal)).toEqual([15_000_000, 5_897_000]);
+    expect(baris.every((b) => b.rekening)).toBe(true);
+  });
+
+  it("pertanyaan satu baris yang menyebut L2 tidak dibaca sebagai pengajuan", () => {
+    expect(parseLoonars2Perintah("kenapa L2 pengajuan vando tidak masuk")).toBeNull();
+    expect(parseLoonars2Perintah("berapa saldo loonars 2")).toBeNull();
+    expect(parseLoonars2Perintah("Halo kak\nmau tanya villa")).toBeNull();
+  });
+});
+
+describe("L2 tidak di depan (satu baris)", () => {
+  it("pengajuan bernominal dengan kata nyasar dibalas petunjuk, bukan dilempar ke asisten umum", async () => {
+    const { tryHandleLoonars2Text, L2_TIDAK_DI_AWAL } = await import("@/lib/ai/domains/loonars2-wa");
+    await expect(tryHandleLoonars2Text("62800", "Bank Mandiri L2 cicilan TB Maju 3 juta")).resolves.toEqual({ outcome: "handled", reply: L2_TIDAK_DI_AWAL });
+    await expect(tryHandleLoonars2Text("62800", "kenapa L2 pengajuan vando tidak masuk")).resolves.toEqual({ outcome: "not_applicable" });
+  });
+});
