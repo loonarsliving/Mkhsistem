@@ -54,6 +54,39 @@ async function findAuthorizedSender(sender: string): Promise<{ id: string } | nu
   return (employees ?? []).find((e) => digitsOnly(e.phone ?? "").endsWith(suffix)) ?? null;
 }
 
+/**
+ * Whacenter's media endpoint (app.whacenter.com/api/media?path=...) is
+ * sometimes slow to serve a just-received photo: on 2026-10-31 one proof
+ * timed out at 15s three resends in a row while others minutes earlier
+ * went through. So: a longer per-attempt timeout plus one retry after a
+ * short pause, still well inside the webhook function's time budget.
+ */
+const DOWNLOAD_ATTEMPTS = [20_000, 20_000];
+const RETRY_PAUSE_MS = 2_000;
+
+async function downloadMediaWithRetry(mediaUrl: string): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+  let lastError: unknown;
+  for (let i = 0; i < DOWNLOAD_ATTEMPTS.length; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, RETRY_PAUSE_MS));
+    try {
+      const res = await fetch(mediaUrl, { signal: AbortSignal.timeout(DOWNLOAD_ATTEMPTS[i]), cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let contentType = (res.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim().toLowerCase();
+      if (!ALLOWED_TYPES.has(contentType)) contentType = "image/jpeg";
+      const bytes = await res.arrayBuffer();
+      if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) throw new Error("ukuran file tidak valid");
+      return { bytes, contentType };
+    } catch (err) {
+      lastError = err;
+      logger.warn("refund-proof-wa: media download attempt failed", {
+        attempt: i + 1,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 export async function tryHandleRefundTransferProofViaWhatsApp(
   sender: string,
   mediaUrl: string,
@@ -93,19 +126,14 @@ export async function tryHandleRefundTransferProofViaWhatsApp(
 
   // Store our own copy: the WhatsApp media link is temporary, and the
   // proof must stay checkable in the system later.
-  let bytes: ArrayBuffer;
-  let contentType: string;
+  let media: { bytes: ArrayBuffer; contentType: string };
   try {
-    const res = await fetch(mediaUrl, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    contentType = (res.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim().toLowerCase();
-    if (!ALLOWED_TYPES.has(contentType)) contentType = "image/jpeg";
-    bytes = await res.arrayBuffer();
-    if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) throw new Error("ukuran file tidak valid");
+    media = await downloadMediaWithRetry(mediaUrl);
   } catch (err) {
     logger.warn("refund-proof-wa: media download failed", { error: err instanceof Error ? err.message : String(err) });
     return { outcome: "handled", reply: "⚠️ Foto bukti transfer gagal diunduh dari WhatsApp. Coba kirim ulang ya." };
   }
+  const { bytes, contentType } = media;
 
   const ext = contentType === "application/pdf" ? "pdf" : contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
   const storagePath = `${customer.id}/wa-${Date.now()}.${ext}`;
