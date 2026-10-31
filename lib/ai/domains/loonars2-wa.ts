@@ -181,11 +181,39 @@ const REKENING_RE = new RegExp(
  */
 export function pisahRekening(teks: string): { rekening: string | null; sisa: string } {
   const m = teks.match(REKENING_RE);
-  if (!m) return { rekening: null, sisa: teks };
+  if (!m) return pisahRekeningNamaDiTengah(teks);
   const digit = (m[0].match(/\d[\d\s-]*\d/)?.[0] ?? "").replace(/\D/g, "");
   if (digit.length < 8 || digit.length > 18) return { rekening: null, sisa: teks };
   const sisa = (teks.slice(0, m.index) + " " + teks.slice((m.index ?? 0) + m[0].length)).replace(/\s+/g, " ").trim();
   return { rekening: teks, sisa };
+}
+
+/**
+ * Nama pemilik ditulis di antara bank dan nomor: "bank Mandiri Sarno 1850 0066 1464 5" (real incident 31 Okt 2026:
+ * pengajuan Vando tertahan "menunggu rekening" lalu kedaluwarsa karena rekening ini tidak terbaca). Database
+ * (`_loonars2_ekstrak_rekening`) hanya membaca urutan bank -> nomor -> a.n., jadi bagian itu ditulis ulang menjadi
+ * "Mandiri 1850 0066 1464 5 a.n. Sarno" sebelum dikirim.
+ */
+const REKENING_NAMA_DI_TENGAH_RE = new RegExp(
+  `(?:bank\\s+)?\\b(${BANK_RE})\\b[\\s:.\\-]+(?:(?:a\\.?\\s?n\\.?|atas\\s+nama)[\\s:.]*)?([A-Za-z][A-Za-z.']*(?:\\s+[A-Za-z][A-Za-z.']*){0,3})[\\s:.\\-]+(${NOREK_RE})(?!\\d)`,
+  "i",
+);
+const BUKAN_NAMA_RE = /\b(?:no|nomor|nmr|rek|rekening|norek|an|a\.n|atas|nama|bank|unit|blok|total|juta|jt|ribu|rb|rp)\b/i;
+
+function pisahRekeningNamaDiTengah(teks: string): { rekening: string | null; sisa: string } {
+  const m = teks.match(REKENING_NAMA_DI_TENGAH_RE);
+  if (!m || m.index === undefined) return { rekening: null, sisa: teks };
+  const [segmen, bank, nama, nomor] = m;
+  if (BUKAN_NAMA_RE.test(nama) || new RegExp(`^(?:${BANK_RE})$`, "i").test(nama.trim())) return { rekening: null, sisa: teks };
+  const digit = nomor.replace(/\D/g, "");
+  if (digit.length < 8 || digit.length > 18) return { rekening: null, sisa: teks };
+  const awal = teks.slice(0, m.index);
+  const akhir = teks.slice(m.index + segmen.length);
+  const rapi = `${bank} ${nomor} a.n. ${nama.trim()}`;
+  return {
+    rekening: `${awal} ${rapi} ${akhir}`.replace(/\s+/g, " ").trim(),
+    sisa: `${awal} ${akhir}`.replace(/\s+/g, " ").trim(),
+  };
 }
 
 /** Balasan pelaksana atas pertanyaan rekening: "BCA 123 a.n. X" atau bernomor "1. BCA ...\n2. Mandiri ...". */
@@ -308,7 +336,32 @@ export function parseBorongan(input: string): Loonars2Perintah | null {
   };
 }
 
+/**
+ * Pengajuan berbaris-baris yang baris pertamanya diawali kata lain sebelum "L2" ("Bank Mandiri L2 pengajuan minggu
+ * ini\n- ...", real incident 31 Okt 2026: pesan itu jatuh ke asisten umum yang lalu mengarang jawaban). Kata nyasar
+ * (maks. 4 kata) dibuang hanya bila sesudah "L2" langsung ada kepala pengajuan DAN ada baris rincian di bawahnya,
+ * supaya pertanyaan satu baris ("kenapa L2 pengajuan vando tidak masuk") tidak ikut dibaca sebagai pengajuan.
+ */
+const AWALAN_NYASAR_RE = /^\s*((?:[^\s\n]+\s+){1,4}?)((?:l2|loonars\s*2)\b[\s:,.-]*(?:pengajuan|ajuan|mingguan)\b)/i;
+
+export function rapikanAwalanL2(input: string): string {
+  const baris = input.split(/\r?\n/);
+  if (baris.filter((b) => b.trim()).length < 2) return input;
+  const i = baris.findIndex((b) => b.trim());
+  if (PREFIX_RE.test(baris[i].trim())) return input;
+  const m = baris[i].match(AWALAN_NYASAR_RE);
+  if (!m) return input;
+  baris[i] = baris[i].slice(m[0].length - m[2].length);
+  return baris.join("\n");
+}
+
+/** "Bank Mandiri L2 pengajuan ..." satu baris berisi nominal: jelas maksudnya L2 tapi tidak diawali "L2". */
+const L2_DI_TENGAH_RE = /^\s*(?:[^\s\n]+\s+){1,4}?(?:l2|loonars\s*2)\b[\s:,.-]*(?:pengajuan|ajuan|mingguan|cicilan|bahan|utang|kontraktor|tukang)\b/i;
+export const L2_TIDAK_DI_AWAL =
+  "⚠️ Pengajuan Loonars 2 harus diawali kata \"L2\" di paling depan, jadi pesan ini belum saya catat. Kirim ulang dengan \"L2\" sebagai kata pertama, mis.\nL2 pengajuan minggu ini\n- cicilan TB Maju 3 juta BCA 1234567890 a.n. Budi";
+
 export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
+  input = rapikanAwalanL2(input);
   const borongan = parseBorongan(input);
   if (borongan) return borongan;
   const mingguan = parsePengajuanMingguan(input);
@@ -600,7 +653,12 @@ async function kirimLaporanUtang(sender: string): Promise<Loonars2Outcome> {
 
 export async function tryHandleLoonars2Text(sender: string, text: string): Promise<Loonars2Outcome> {
   const perintah = parseLoonars2Perintah(text);
-  if (!perintah) return { outcome: "not_applicable" };
+  if (!perintah) {
+    // Jelas pengajuan L2 (ada nominal) tapi "L2" tidak di depan: jangan dilempar ke asisten umum yang tidak tahu
+    // Loonars 2 dan bisa mengarang jawaban.
+    if (L2_DI_TENGAH_RE.test(text) && parseRupiah(text) !== null) return { outcome: "handled", reply: L2_TIDAK_DI_AWAL };
+    return { outcome: "not_applicable" };
+  }
 
   if (perintah.aksi === "laporan_utang") return kirimLaporanUtang(sender);
 

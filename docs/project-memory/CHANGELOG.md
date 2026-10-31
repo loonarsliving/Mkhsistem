@@ -8,6 +8,20 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-10-31 — Loonars 2 WA: pengajuan pelaksana tidak lagi hilang diam-diam
+
+Insiden: dua pengajuan mingguan Vando (31 Okt) tidak sampai ke owner.
+(1) Rekening "bank Mandiri Sarno 1850 0066 1464 5" (nama di antara bank dan
+nomor) tidak terbaca, pengajuan tertahan `menunggu_rekening` 30 menit lalu
+kedaluwarsa. (2) Pesan ulang diawali "Bank Mandiri L2 pengajuan ..." sehingga
+tidak dikenali sebagai L2 dan jatuh ke asisten umum yang mengarang jawaban.
+Perbaikan di `lib/ai/domains/loonars2-wa.ts` (tanpa perubahan database):
+`pisahRekening` membaca nama-di-tengah dan menulis ulang menjadi
+"Mandiri 1850... a.n. Sarno" (format yang dibaca `_loonars2_ekstrak_rekening`);
+`rapikanAwalanL2` membuang maks. 4 kata nyasar sebelum "L2 pengajuan" pada
+pesan berbaris; pesan satu baris bernominal dengan "L2" tidak di depan
+dibalas petunjuk format, bukan diteruskan ke asisten umum.
+
 ## 2026-10-29 — Jembatan villa: baca mutasi bank
 
 `/api/villa/ai/bank-statement` menyalin baris mutasi rekening (foto/PDF) untuk
