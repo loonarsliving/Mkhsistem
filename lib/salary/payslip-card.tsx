@@ -15,11 +15,15 @@ import { maskAccount, rupiah } from "./payslip-format";
  */
 
 export const PAYSLIP_WIDTH = 1080;
-export const PAYSLIP_HEIGHT = 1500;
+export const PAYSLIP_HEIGHT = 1560;
+
+/** Loonars Private Living Villa logo (owner's choice 2026-11-02), public/branding/logo-loonars-villa.png is 902x708. */
+export const PAYSLIP_LOGO = { path: "/branding/logo-loonars-villa.png", width: 191, height: 150 };
 
 const C = {
-  brand: "#0f766e",
-  brandSoft: "#ccfbf1",
+  // Olive green taken from the Loonars logo.
+  brand: "#4a4d38",
+  brandSoft: "#eeefe6",
   ink: "#0f172a",
   muted: "#64748b",
   line: "#e2e8f0",
@@ -36,7 +40,7 @@ export interface PayslipCardInput {
   bankAccountNumber: string;
   bankAccountHolder: string | null;
   transferredAt: Date;
-  /** Data URI of the company logo, or null for a text-only header. */
+  /** Data URI of the logo (PAYSLIP_LOGO), or null for a text-only header. */
   logo: string | null;
 }
 
@@ -63,9 +67,9 @@ export function PayslipCard(input: PayslipCardInput) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           {input.logo ? (
             // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-            <img src={input.logo} width={331} height={80} />
+            <img src={input.logo} width={PAYSLIP_LOGO.width} height={PAYSLIP_LOGO.height} />
           ) : (
-            <div style={{ display: "flex", fontSize: 40, color: C.brand }}>PT Maha Karya Haluoleo</div>
+            <div style={{ display: "flex", fontSize: 40, color: C.brand }}>Loonars Private Living Villa</div>
           )}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <div style={{ display: "flex", fontSize: 26, color: C.muted }}>No. Slip</div>
