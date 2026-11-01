@@ -108,6 +108,21 @@ export function matchSalaryTransfers(rows: RecognizedTransferRow[], candidates: 
   });
 }
 
+/**
+ * Whether an unmatched screenshot still has to be treated as a gaji proof
+ * (and kept away from the amount-only bahan/tukang matchers): it lists
+ * several transfers (those matchers only ever read one nominal), or one of
+ * its rows pays an account that has received salary before.
+ */
+export function looksLikeSalaryBatch(rows: RecognizedTransferRow[], knownSalaryAccounts: string[]): boolean {
+  if (rows.length >= 2) return true;
+  const known = new Set(knownSalaryAccounts.map((a) => accountDigits(a)).filter((a): a is string => a !== null));
+  return rows.some((r) => {
+    const digits = accountDigits(r.rekening);
+    return digits !== null && known.has(digits);
+  });
+}
+
 /** "•••• 7150" -- the slip is sent as a picture over WhatsApp, so the full account number never goes on it. */
 export function maskAccount(account: string): string {
   const digits = accountDigits(account) ?? account.replace(/\D/g, "");

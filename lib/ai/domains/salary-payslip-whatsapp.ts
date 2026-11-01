@@ -11,6 +11,8 @@ import {
   matchSalaryTransfers,
   payslipNumber,
   rupiah,
+  looksLikeSalaryBatch,
+  type RecognizedTransferRow,
   type SalaryCandidate,
 } from "@/lib/salary/payslip-format";
 import { renderPayslipImage } from "@/lib/salary/payslip-image";
@@ -21,7 +23,7 @@ import { recognizeTransferList } from "./salary-transfer-list-recognition";
 
 export type SalaryPayslipOutcome =
   /** Not Super Admin, no salary waiting, unreadable, or nothing in the photo is a salary -- caller falls through to the other bukti-transfer matchers. */
-  | { outcome: "not_applicable" }
+  | { outcome: "not_applicable"; reason: string }
   | { outcome: "processed"; replyText: string; sentCount: number };
 
 type Supa = ReturnType<typeof createAdminClient>;
@@ -71,6 +73,28 @@ async function kepalaCabangPhones(supabase: Supa, branchId: string): Promise<{ n
     .map((e) => ({ name: e.full_name, phone: e.phone as string }));
 }
 
+/** Image fetch + AI read, retried once: a single unreadable/failed read must not hand a gaji screenshot to the amount-only matchers. */
+async function readTransferRows(imageUrl: string): Promise<{ ok: true; rows: RecognizedTransferRow[] } | { ok: false; reason: string }> {
+  let reason = "unknown";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (attempt > 1) await new Promise((r) => setTimeout(r, 1500));
+    const image = await fetchImageAsBase64(imageUrl);
+    if (!image || image.fetchError) {
+      reason = `image_fetch_failed(${image?.fetchError ?? "null"})`;
+      continue;
+    }
+    try {
+      const recognition = await recognizeTransferList({ imageBase64: image.data, imageMimeType: image.mimeType });
+      if (recognition.readable && recognition.rows.length > 0) return { ok: true, rows: recognition.rows };
+      reason = recognition.readable ? "no_rows" : "unreadable";
+    } catch (err) {
+      reason = `recognition_failed(${err instanceof Error ? err.message.slice(0, 80) : "error"})`;
+    }
+  }
+  logger.warn("salary-payslip: could not read transfer rows", { reason });
+  return { ok: false, reason };
+}
+
 /**
  * Owner's ask (2026-11-02): Super Admin sends the bank's bukti transfer
  * gaji -- one receipt or a whole bulk-payroll screenshot -- to the system
@@ -85,24 +109,15 @@ async function kepalaCabangPhones(supabase: Supa, branchId: string): Promise<{ n
  * gets a text summary of their branch's payments.
  */
 export async function trySalaryPayslipFromTransferProof(sender: { id: string; roleKey: string | null }, imageUrl: string): Promise<SalaryPayslipOutcome> {
-  if (sender.roleKey !== "super_admin") return { outcome: "not_applicable" };
+  if (sender.roleKey !== "super_admin") return { outcome: "not_applicable", reason: "not_super_admin" };
 
   const supabase = createAdminClient();
   const submissions = await loadCandidates(supabase);
-  if (!submissions.some((s) => s.status === "pending_transfer")) return { outcome: "not_applicable" };
+  if (!submissions.some((s) => s.status === "pending_transfer")) return { outcome: "not_applicable", reason: "no_pending_salary" };
 
-  const image = await fetchImageAsBase64(imageUrl);
-  if (!image || image.fetchError) return { outcome: "not_applicable" };
-
-  let rows;
-  try {
-    const recognition = await recognizeTransferList({ imageBase64: image.data, imageMimeType: image.mimeType });
-    if (!recognition.readable || recognition.rows.length === 0) return { outcome: "not_applicable" };
-    rows = recognition.rows;
-  } catch (err) {
-    logger.warn("salary-payslip: recognition failed", { error: err instanceof Error ? err.message : String(err) });
-    return { outcome: "not_applicable" };
-  }
+  const read = await readTransferRows(imageUrl);
+  if (!read.ok) return { outcome: "not_applicable", reason: read.reason };
+  const rows = read.rows;
 
   const byId = new Map(submissions.map((s) => [s.id, s]));
   const candidates: SalaryCandidate[] = submissions.map((s) => ({
@@ -115,8 +130,27 @@ export async function trySalaryPayslipFromTransferProof(sender: { id: string; ro
   }));
   const matches = matchSalaryTransfers(rows, candidates);
   if (!matches.some((m) => m.kind === "matched" || m.kind === "already_transferred")) {
-    // Nothing here is a salary (e.g. a bahan/tukang transfer) -- let the other matchers have it.
-    return { outcome: "not_applicable" };
+    // Real incident 2026-11-02: a bulk gaji screenshot fell through to the
+    // bahan/tukang matcher, which can't read a multi-row list, FIFO-confirmed
+    // an unrelated Rp 4.400.000 laundry pengajuan and forwarded the whole
+    // screenshot (everyone's salary) to two staff. A multi-row list, or any
+    // row paying an employee's salary account, is never handed on -- Super
+    // Admin gets told what couldn't be matched instead.
+    const { data: accountRows } = await supabase.from("employee_salary_submissions").select("bank_account_number");
+    const knownAccounts = (accountRows ?? []).map((r) => r.bank_account_number as string);
+    if (!looksLikeSalaryBatch(rows, knownAccounts)) {
+      // Nothing here is a salary (e.g. a single bahan/tukang transfer) -- let the other matchers have it.
+      return { outcome: "not_applicable", reason: `no_salary_match(rows=${rows.length})` };
+    }
+    logger.info("salary-payslip: salary-like screenshot without a match", { rows: rows.map(describeRow) });
+    return {
+      outcome: "processed",
+      sentCount: 0,
+      replyText:
+        `⚠️ Foto ini terbaca sebagai bukti transfer gaji (${rows.length} transfer), tapi tidak ada yang cocok dengan pengajuan gaji yang menunggu transfer. Tidak ada yang dicatat dan foto tidak diteruskan ke siapa pun.\n` +
+        rows.map((r) => `• ${describeRow(r)}`).join("\n") +
+        "\nCek /hr/salary (nominal/rekening yang diinput Kepala Cabang), atau kirim ulang foto yang lebih jelas.",
+    };
   }
 
   const transferredAt = new Date();
