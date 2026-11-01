@@ -4,6 +4,7 @@ import { parseTransferListRecognition } from "@/lib/ai/domains/salary-transfer-l
 import {
   accountDigits,
   buildPayslipAdminReply,
+  looksLikeSalaryBatch,
   maskAccount,
   matchSalaryTransfers,
   payslipNumber,
@@ -78,6 +79,21 @@ describe("matchSalaryTransfers", () => {
 
   it("skips rows whose account number couldn't be read", () => {
     expect(matchSalaryTransfers([row("ANI", null, 2_000_000)], [cand("a", "1111111111", 2_000_000)])[0].kind).toBe("unmatched");
+  });
+});
+
+describe("looksLikeSalaryBatch", () => {
+  it("keeps any multi-row list away from the single-nominal matchers", () => {
+    expect(looksLikeSalaryBatch([row("ANI", "1", 1), row("BUDI", "2", 2)], [])).toBe(true);
+  });
+
+  it("flags a single transfer to a known salary account, even with the wrong amount", () => {
+    expect(looksLikeSalaryBatch([row("ANI", "1111 111 111", 9_999)], ["1111111111"])).toBe(true);
+  });
+
+  it("lets a single unrelated transfer through to the bahan/tukang matchers", () => {
+    expect(looksLikeSalaryBatch([row("TOKO", "5555555555", 4_400_000)], ["1111111111"])).toBe(false);
+    expect(looksLikeSalaryBatch([row("TOKO", null, 4_400_000)], ["1111111111"])).toBe(false);
   });
 });
 

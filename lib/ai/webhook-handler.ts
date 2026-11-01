@@ -855,7 +855,7 @@ export async function handleWhatsAppWebhookEvent(
         // falls through untouched when nothing in the photo is a salary.
         trace.push("trySalaryPayslipFromTransferProof:calling");
         const payslipResult = await trySalaryPayslipFromTransferProof({ id: employee.id, roleKey: imageRoleKey }, inbound.content.url);
-        trace.push(`trySalaryPayslipFromTransferProof:${payslipResult.outcome}`);
+        trace.push(`trySalaryPayslipFromTransferProof:${payslipResult.outcome}${payslipResult.outcome === "not_applicable" ? `(${payslipResult.reason})` : ""}`);
         if (payslipResult.outcome === "processed") {
           trace.push("sendWhatsAppText:calling(salary-payslip)");
           const sendResult = await sendWhatsAppText(inbound.sender, payslipResult.replyText);
