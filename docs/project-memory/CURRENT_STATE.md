@@ -3,6 +3,26 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Asisten Owner WA lebih pintar: agen + pengetahuan sistem (2026-11-01)
+
+Owner: "apa ai di wa itu tidak bisa lebih pintar seperti chatbot yang memiliki
+data pengetahuan sistemku" → "Ya" (tahap 1: model tetap Gemini Flash-Lite).
+
+- `lib/ai/domains/owner-knowledge.ts` — `PENGETAHUAN_SISTEM`: struktur MKH,
+  Loonars 1/2, rekening A–D, Loonars Coffee di L2, proyek & karyawan yang
+  ditutup 1 Nov 2026, aturan owner (tanpa sarapan gratis, AI hanya baca).
+  Tanpa angka berubah & tanpa rahasia (dites). **Perbarui setiap ada
+  keputusan owner baru.**
+- `tryOwnerAssistant` kini agen: klasifikasi awal (dengan pengetahuan) →
+  jalankan tool → `mintaToolLanjutan` boleh meminta tool tambahan maks 2
+  putaran → jawaban dengan pengetahuan di system prompt. Pertanyaan
+  cara-kerja (`isSystemQuestion`) dijawab dari pengetahuan tanpa angka.
+- `lib/ai/domains/owner-angka.ts` — penjaga angka: nominal ≥ 1.000 di
+  jawaban harus ada di DATA tool (toleransi pembulatan 1%); bila tidak →
+  diulang sekali, lalu fallback kirim data mentah.
+- Tahap berikut (belum): model lebih kuat khusus chat owner — perlu
+  keputusan biaya owner.
+
 ## Karyawan cabang Makassar, Jabodetabek, Kendari ditutup (2026-11-01, migrasi 0310) — DITERAPKAN
 
 Keputusan owner: hanya Loonars 1 (hospitality Yogyakarta) & Loonars 2 (Loonars

@@ -24,6 +24,7 @@ describe("parseOwnerIntentJson", () => {
     );
     expect(intent).toEqual({
       isDataQuestion: true,
+      isSystemQuestion: false,
       tools: ["keuangan_ringkasan", "villa_okupansi_ke_depan", "attendance_today"],
       branchName: "Jogja",
       bulanDari: "2026-09",
@@ -385,6 +386,13 @@ describe("formatRefund", () => {
 
   it("says so when the module has no customers", () => {
     expect(formatRefund([], "2026-10-01")).toContain("Belum ada customer refund");
+  });
+});
+
+describe("parseOwnerIntentJson isSystemQuestion", () => {
+  it("membaca isSystemQuestion; default false", () => {
+    expect(parseOwnerIntentJson('{"isDataQuestion": false, "isSystemQuestion": true, "tools": []}').isSystemQuestion).toBe(true);
+    expect(parseOwnerIntentJson('{"isDataQuestion": true, "tools": ["ai_cfo"]}').isSystemQuestion).toBe(false);
   });
 });
 
