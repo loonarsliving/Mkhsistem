@@ -62,7 +62,8 @@ type OwnerToolName =
   | "keuangan_ringkasan"
   | "loonars2_saldo"
   | "loonars2_tagihan"
-  | "loonars2_utang";
+  | "loonars2_utang"
+  | "loonars2_borongan";
 type ToolName = QueryToolName | OwnerToolName;
 
 const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
@@ -108,6 +109,11 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
     description: "Loonars 2: tagihan/pembayaran pembeli unit yang belum lunas",
   },
   { name: "loonars2_utang", description: "Loonars 2: daftar sisa utang toko bangunan" },
+  {
+    name: "loonars2_borongan",
+    description:
+      "Loonars 2: borongan tukang/mandor (mis. Sarno) — nilai borongan per unit, upah mingguan yang sudah diajukan & dibayar (total dan jumlah minggu), retensi",
+  },
 ];
 
 const SEMUA_TOOL: { name: ToolName; description: string }[] = [
@@ -594,7 +600,7 @@ async function runKeuangan(sender: string, dari: string, sampai: string): Promis
 
 async function runLoonars2(
   sender: string,
-  aksi: "saldo" | "tagihan" | "daftar_utang",
+  aksi: "saldo" | "tagihan" | "daftar_utang" | "daftar_borongan",
   judul: string,
 ): Promise<string> {
   const teks = await bacaLoonars2(sender, aksi);
@@ -636,7 +642,7 @@ export const OWNER_MENU_TEXT = [
   "• pendapatan villa bulan ini per channel?",
   "• bagi hasil investor villa bulan lalu?",
   "• kas dan utang bank sekarang?",
-  "• saldo / tagihan / utang Loonars 2?",
+  "• saldo / tagihan / utang / upah borongan Loonars 2?",
   "• properti prospek Loonars (loonars.id/hitung)?",
   "",
   "👥 *MK Connect*",
@@ -760,6 +766,8 @@ export async function tryOwnerAssistant(
           return runLoonars2(sender, "tagihan", "Loonars 2 Tagihan");
         case "loonars2_utang":
           return runLoonars2(sender, "daftar_utang", "Loonars 2 Utang Toko");
+        case "loonars2_borongan":
+          return runLoonars2(sender, "daftar_borongan", "Loonars 2 Borongan Tukang");
         default:
           return runTool(supabase, tool, branchId, intent.branchName);
       }
