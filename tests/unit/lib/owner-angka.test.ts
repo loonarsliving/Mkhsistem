@@ -36,3 +36,11 @@ describe("PENGETAHUAN_SISTEM", () => {
     expect(PENGETAHUAN_SISTEM).not.toMatch(/\d{6,}/);
   });
 });
+
+describe("pengetahuan holding & gaji", () => {
+  it("menjelaskan gaji tim = beban holding dan tahun buku 2027", () => {
+    expect(PENGETAHUAN_SISTEM).toMatch(/PT Loonars Mahakarya/);
+    expect(PENGETAHUAN_SISTEM).toMatch(/BEBAN HOLDING, bukan Loonars 1 maupun Loonars 2/);
+    expect(PENGETAHUAN_SISTEM).toMatch(/Tahun buku resmi pertama: 2027/);
+  });
+});
