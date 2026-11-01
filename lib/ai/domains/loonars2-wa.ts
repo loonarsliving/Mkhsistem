@@ -274,6 +274,7 @@ const LAPORAN_UTANG_PDF_DULU_RE = /^utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?\
 export const TRANSFER_BEDA_RE = /\b(?:(?:transfer|trf|bukti|cicilan)\s+(?:beda|berbeda|lain)|beda\s+(?:transfer|trf|bukti)|bukan\s+(?:transfer\s+|bukti\s+)?(?:double|dobel|ganda))\b/i;
 
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
+const UNIT_LALU_UPAH_RE = /^(?:unit|blok)\s+[\w\s,&-]*?\b(?:kontraktor|tukang|upah|mandor)\b/i;
 
 /**
  * Pengajuan mingguan berbaris-baris (dibaca SEBELUM spasi/baris diratakan):
@@ -293,7 +294,10 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   let isi: string[];
   if (header) {
     isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());
-  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi|pembelian|beli|belanja)\b|borongan\s+\S)/i.test(kepala) || /^(?:lain(?:-lain)?|biaya\s+lain|listrik|bensin|solar|bbm|konsumsi|transport|ongkir|sewa|asuransi|satpam|kebersihan)\b/i.test(kepala)) {
+  } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi|pembelian|beli|belanja)\b|borongan\s+\S)/i.test(kepala) ||
+    // "L2 unit 1-6 tukang minggu ini 20.000.000" (real incident 21 Okt 2026): unit ditulis sebelum kata "tukang". Dulu
+    // jatuh ke pengajuan satuan (hanya unit 1, tidak tertaut borongan); sekarang baris upah mingguan seperti biasa.
+    baris.length === 1 && UNIT_LALU_UPAH_RE.test(kepala) || /^(?:lain(?:-lain)?|biaya\s+lain|listrik|bensin|solar|bbm|konsumsi|transport|ongkir|sewa|asuransi|satpam|kebersihan)\b/i.test(kepala)) {
     isi = [kepala];
   } else {
     return null;
@@ -579,7 +583,7 @@ async function panggilMkhProperty(nomor: string | null, aksi: string, data: Reco
  * "tagihan" / "L2 utang"; MKH Property tetap memeriksa bahwa nomornya owner.
  * null = tidak tersedia (bukan owner, atau MKH Property tidak bisa dihubungi).
  */
-export async function bacaLoonars2(sender: string, aksi: "saldo" | "tagihan" | "daftar_utang"): Promise<string | null> {
+export async function bacaLoonars2(sender: string, aksi: "saldo" | "tagihan" | "daftar_utang" | "daftar_borongan"): Promise<string | null> {
   const hasil = await panggilMkhProperty(sender, aksi, {});
   if (!hasil || hasil.status !== "ok" || typeof hasil.balasan !== "string") return null;
   return hasil.balasan;

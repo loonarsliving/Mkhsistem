@@ -414,3 +414,20 @@ describe("L2 tidak di depan (satu baris)", () => {
     await expect(tryHandleLoonars2Text("62800", "kenapa L2 pengajuan vando tidak masuk")).resolves.toEqual({ outcome: "not_applicable" });
   });
 });
+
+describe("upah tukang dengan unit di depan (L2-67, 21 Okt 2026)", () => {
+  it("\"L2 unit 1-6 tukang minggu ini 20.000.000\" dibaca baris upah mingguan untuk unit 1-6, bukan pengajuan satuan unit 1", () => {
+    const p = parseLoonars2Perintah("L2 unit 1-6 tukang minggu ini 20.000.000");
+    expect(p?.aksi).toBe("ajukan_mingguan");
+    const baris = (p as unknown as { data: { baris: { jenis: string; unit?: string[]; nominal: number | null }[] } }).data.baris;
+    expect(baris).toHaveLength(1);
+    expect(baris[0].jenis).toBe("tukang");
+    expect(baris[0].nominal).toBe(20_000_000);
+    expect(baris[0].unit).toEqual(["1", "2", "3", "4", "5", "6"]);
+  });
+
+  it("pengajuan bahan dengan unit di depan tetap lewat jalur lama (AI)", () => {
+    expect(parseLoonars2Perintah("L2 unit 5 semen 20 sak total 1.300.000 TB Maju")?.aksi).toBe("ajukan_ai");
+    expect(parseLoonars2Perintah("L2 unit 1-6")?.aksi).toBe("unit_dibangun");
+  });
+});

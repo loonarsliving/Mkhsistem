@@ -8,6 +8,21 @@ line below corresponds to one or more actual commit messages.
 
 
 
+## 2026-11-01 — Loonars 2: upah tukang "unit 1-6 tukang ..." tertaut borongan + chatbot bisa jawab borongan
+
+Insiden: pembayaran upah Sarno Rp 20 jt (L2-67, 21 Okt) dikirim sebagai
+"L2 unit 1-6 tukang minggu ini 20.000.000". Karena diawali "unit", parser
+mengirimnya ke pengajuan satuan: hanya unit 1, tidak tertaut borongan. Borongan
+jadi tercatat Rp 38 jt / 2 minggu (seharusnya Rp 58 jt / 3 minggu) dan M-59
+terhitung minggu ke-2. Data dikoreksi langsung di MKH Property atas persetujuan
+owner (L2-67 dipecah rata ke unit 1-6 sebagai borongan minggu ke-2, M-59 jadi
+minggu ke-3; tercatat di loonars2_audit_log, aktor "sistem:koreksi borongan").
+Kode: `parsePengajuanMingguan` membaca "unit … tukang/upah/kontraktor/mandor"
+sebagai baris upah mingguan (dipecah per unit & ditautkan ke borongan oleh
+database); asisten owner mendapat tool `loonars2_borongan` (aksi
+`daftar_borongan` yang sudah ada) — sebelumnya pertanyaan upah borongan dijawab
+"belum tersedia".
+
 ## 2026-10-31 — Loonars 2 WA: pengajuan pelaksana tidak lagi hilang diam-diam
 
 Insiden: dua pengajuan mingguan Vando (31 Okt) tidak sampai ke owner.

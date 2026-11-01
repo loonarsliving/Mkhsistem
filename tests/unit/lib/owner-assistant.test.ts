@@ -42,6 +42,11 @@ describe("parseOwnerIntentJson", () => {
     expect(intent.jumlahHari).toBe(14);
   });
 
+  it("accepts the Loonars 2 borongan tool (upah borongan Sarno)", () => {
+    const intent = parseOwnerIntentJson('{"isDataQuestion": true, "tools": ["loonars2_borongan"]}');
+    expect(intent.tools).toEqual(["loonars2_borongan"]);
+  });
+
   it("treats anything but literal true as not a data question", () => {
     expect(
       parseOwnerIntentJson('{"isDataQuestion": "true", "tools": ["lead_stats"]}').isDataQuestion,
