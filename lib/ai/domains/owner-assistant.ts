@@ -48,6 +48,7 @@ import { bacaLoonars2 } from "./loonars2-wa";
 
 const VILLA_API_BASE = "https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api";
 const MKH_PROPERTY_RINGKASAN_URL = "https://finance.haluoleo.id/api/laporan-investor/ringkasan-wa";
+const MKH_PROPERTY_CFO_URL = "https://finance.haluoleo.id/api/cfo/tanya-wa";
 const MAKS_HARI_OKUPANSI = 14;
 const RIWAYAT_MAKS_GILIRAN = 6;
 const RIWAYAT_JENDELA_MS = 3 * 60 * 60 * 1000;
@@ -63,7 +64,8 @@ type OwnerToolName =
   | "loonars2_saldo"
   | "loonars2_tagihan"
   | "loonars2_utang"
-  | "loonars2_borongan";
+  | "loonars2_borongan"
+  | "ai_cfo";
 type ToolName = QueryToolName | OwnerToolName;
 
 const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
@@ -113,6 +115,11 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
     name: "loonars2_borongan",
     description:
       "Loonars 2: borongan tukang/mandor (mis. Sarno) — nilai borongan per unit, upah mingguan yang sudah diajukan & dibayar (total dan jumlah minggu), retensi",
+  },
+  {
+    name: "ai_cfo",
+    description:
+      "AI CFO MKH Property (Loonars 1 + Loonars 2 terpusat): posisi kas, forecast arus kas 13 minggu & prediksi defisit (optimis/normal/pesimis), kebutuhan dana, kewajiban & urutan bayar yang disarankan, peringatan risiko, rekonsiliasi, EBITDA villa & bagian MKH setelah jaminan investor, budget vs aktual konstruksi, DAN menilai rencana pengeluaran/keputusan owner (\"mau beli/bangun/keluarkan Rp X, boleh?\") -- pilih ini untuk pertanyaan analisis keuangan, risiko, atau keputusan",
   },
 ];
 
@@ -598,6 +605,36 @@ async function runKeuangan(sender: string, dari: string, sampai: string): Promis
   }
 }
 
+/** AI CFO MKH Property: jawaban dihitung deterministik di MKH Property (src/lib/cfo), hanya baca. */
+async function runAiCfo(sender: string, pertanyaan: string): Promise<string> {
+  const { data: secret, error } = await createAdminClient().rpc("get_sync_secret");
+  if (error || !secret) {
+    logger.error("owner-assistant: rahasia sync tidak tersedia", { error: error?.message });
+    return "[AI CFO MKH Property] data tidak tersedia (rahasia sync tidak bisa dibaca)";
+  }
+  try {
+    const res = await fetch(MKH_PROPERTY_CFO_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-sync-secret": secret as string },
+      body: JSON.stringify({ nomor: sender, pertanyaan: pertanyaan.slice(0, 1000) }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      logger.error("owner-assistant: AI CFO menolak", { status: res.status });
+      return `[AI CFO MKH Property] data tidak tersedia (MKH Property HTTP ${res.status})`;
+    }
+    const j = (await res.json()) as { jawaban?: string; putusan?: string | null };
+    if (!j.jawaban) return "[AI CFO MKH Property] data tidak tersedia";
+    return `[AI CFO MKH Property${j.putusan ? `, putusan: ${j.putusan.toUpperCase()}` : ""}]\n${j.jawaban}`;
+  } catch (e) {
+    logger.error("owner-assistant: gagal menghubungi AI CFO", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return "[AI CFO MKH Property] data tidak tersedia (MKH Property tidak bisa dihubungi)";
+  }
+}
+
 async function runLoonars2(
   sender: string,
   aksi: "saldo" | "tagihan" | "daftar_utang" | "daftar_borongan",
@@ -644,6 +681,11 @@ export const OWNER_MENU_TEXT = [
   "• kas dan utang bank sekarang?",
   "• saldo / tagihan / utang / upah borongan Loonars 2?",
   "• properti prospek Loonars (loonars.id/hitung)?",
+  "",
+  "🧠 *AI CFO*",
+  "• kapan kas berisiko defisit? kebutuhan dana?",
+  "• utang mana yang harus dibayar dulu?",
+  "• mau bangun 3 unit lagi 480 jt, boleh?",
   "",
   "👥 *MK Connect*",
   "• siapa yang belum absen hari ini?",
@@ -768,6 +810,8 @@ export async function tryOwnerAssistant(
           return runLoonars2(sender, "daftar_utang", "Loonars 2 Utang Toko");
         case "loonars2_borongan":
           return runLoonars2(sender, "daftar_borongan", "Loonars 2 Borongan Tukang");
+        case "ai_cfo":
+          return runAiCfo(sender, question);
         default:
           return runTool(supabase, tool, branchId, intent.branchName);
       }
@@ -775,7 +819,7 @@ export async function tryOwnerAssistant(
   );
 
   const answer = await askAI(
-    'Anda adalah asisten pribadi owner PT Maha Karya Haluoleo di WhatsApp. Jawab HANYA berdasarkan DATA NYATA di bawah -- jangan mengarang angka, jangan menghitung angka baru yang tidak ada di data, dan salin angka persis. Bila suatu data tertulis "tidak tersedia" atau "belum tersedia", katakan itu apa adanya, jangan ditebak. Jawab singkat dan langsung ke inti dalam Bahasa Indonesia, format WhatsApp (boleh *tebal* dan poin), sebutkan periode/tanggal datanya.',
+    'Anda adalah asisten pribadi owner PT Maha Karya Haluoleo di WhatsApp. Jawab HANYA berdasarkan DATA NYATA di bawah -- jangan mengarang angka, jangan menghitung angka baru yang tidak ada di data, dan salin angka persis. Bila suatu data tertulis "tidak tersedia" atau "belum tersedia", katakan itu apa adanya, jangan ditebak. Jawab singkat dan langsung ke inti dalam Bahasa Indonesia, format WhatsApp (boleh *tebal* dan poin), sebutkan periode/tanggal datanya. Bila data [AI CFO MKH Property] memuat putusan (AMAN/WASPADA/TIDAK MENYARANKAN), sampaikan putusan itu apa adanya beserta alasan & alternatifnya -- jangan dilunakkan.',
     `${riwayat ? `Percakapan sebelumnya:\n${riwayat}\n\n` : ""}Pertanyaan owner: ${question}\n\nData dari sistem (hari ini ${hariIni}):\n${hasil.join("\n\n")}`,
     { maxAttempts: 1, jobId: opts?.jobId },
   );

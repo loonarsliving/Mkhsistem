@@ -3,6 +3,29 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## AI CFO MKH Property: kirim snapshot + tool WA `ai_cfo` (2026-11-01, BELUM MERGE, migrasi BELUM DITERAPKAN)
+
+Branch `claude/ai-cfo-snapshot-mkh-property`. Pasangan dari mkh-properti
+migrasi 0057 (AI CFO, branch `claude/ai-cfo-financial-manager`).
+
+- Migrasi `0308_cfo_kirim_snapshot_mkh_property.sql` (BELUM diterapkan —
+  menunggu persetujuan owner): fungsi `cfo_kirim_snapshot_mkh()` (security
+  definer, HANYA BACA) + pg_cron `cfo-kirim-snapshot-mkh` (11,41 * * * *).
+  Mengirim lewat `net.http_post` ke RPC `cfo_sumber_terima` MKH Property:
+  `loonars_unit_purchases` (LNR2), `mkc_refund_customers`+`installments`,
+  `finance_pending_transfers` (terbuka), `finance_settlements` (villa, belum
+  RECEIVED), `villa_pengajuan_biaya` (diajukan/disetujui). Auth = jalur
+  `sync_dispatch_pending` yang sudah ada (`sync_config` peer URL/anon key +
+  Vault `mk_sync_shared_secret`). Tanpa tabel/kolom baru; NIK, telepon, alamat,
+  nomor rekening tidak dikirim. Semua query baca sudah diuji read-only di
+  produksi (2 penjualan LNR2, 20 refund, 112 settlement, 1 transfer, 2 biaya villa).
+- `lib/ai/domains/owner-assistant.ts`: tool `ai_cfo` → `POST
+  https://finance.haluoleo.id/api/cfo/tanya-wa` (x-sync-secret + nomor) untuk
+  pertanyaan analisis/forecast/risiko/keputusan owner; putusan CFO
+  (AMAN/WASPADA/TIDAK MENYARANKAN) diteruskan apa adanya. Menu owner ditambah
+  bagian "AI CFO". Tes `tests/unit/lib/owner-assistant.test.ts` (16 lulus).
+  Sebelum route mkh-properti live, tool menjawab "data tidak tersedia".
+
 ## Jembatan villa: baca mutasi bank (2026-10-29, BELUM MERGE)
 
 - `POST /api/villa/ai/bank-statement` (x-internal-secret = `VILLA_BRIDGE_SECRET`,

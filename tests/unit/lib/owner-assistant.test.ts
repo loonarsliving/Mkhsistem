@@ -9,6 +9,7 @@ import {
   formatRefund,
   formatRingkasanKeuangan,
   isOwnerMenuRequest,
+  OWNER_MENU_TEXT,
   parseOwnerIntentJson,
   tambahBulan,
   tanggalWib,
@@ -40,6 +41,12 @@ describe("parseOwnerIntentJson", () => {
     expect(intent.bulanSampai).toBeNull();
     expect(intent.tanggalMulai).toBeNull();
     expect(intent.jumlahHari).toBe(14);
+  });
+
+  it("accepts the AI CFO tool (MKH Property /api/cfo/tanya-wa) and lists it in the menu", () => {
+    const intent = parseOwnerIntentJson('{"isDataQuestion": true, "tools": ["ai_cfo", "bukan_tool"]}');
+    expect(intent.tools).toEqual(["ai_cfo"]);
+    expect(OWNER_MENU_TEXT).toContain("AI CFO");
   });
 
   it("accepts the Loonars 2 borongan tool (upah borongan Sarno)", () => {
