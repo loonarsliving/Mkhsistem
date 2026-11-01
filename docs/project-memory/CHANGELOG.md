@@ -7,8 +7,8 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
-## 2026-11-01 — AI CFO MKH Property: snapshot keuangan + tool WA `ai_cfo` (migrasi 0308)
-- `cfo_kirim_snapshot_mkh()` + pg_cron 30 menit mengirim salinan hanya-baca (penjualan LNR2, refund, transfer tertunda, settlement OTA villa, pengajuan biaya villa) ke MKH Property `cfo_sumber_terima`, jalur & rahasia sama dengan sync dispatcher. Asisten WA owner mendapat tool `ai_cfo` (MKH Property `/api/cfo/tanya-wa`). Migrasi belum diterapkan; lihat CURRENT_STATE.md.
+## 2026-11-01 — AI CFO MKH Property: snapshot keuangan + tool WA `ai_cfo` (migrasi 0308, PR #141) — LIVE
+- `cfo_kirim_snapshot_mkh()` + pg_cron 30 menit mengirim salinan hanya-baca (penjualan LNR2, refund, transfer tertunda, settlement OTA villa, pengajuan biaya villa) ke MKH Property `cfo_sumber_terima`, jalur & rahasia sama dengan sync dispatcher. Asisten WA owner mendapat tool `ai_cfo` (MKH Property `/api/cfo/tanya-wa`). Migrasi diterapkan ke produksi; layanan `/api/mkh-property/ai-cfo/narasi` (system prompt tetap di MK Connect); `/api/villa/ai/bank-statement` ditambahkan ke PUBLIC_PATHS. Lihat CURRENT_STATE.md.
 
 
 

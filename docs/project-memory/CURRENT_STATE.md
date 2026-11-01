@@ -3,13 +3,19 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## AI CFO MKH Property: kirim snapshot + tool WA `ai_cfo` (2026-11-01, BELUM MERGE, migrasi BELUM DITERAPKAN)
+## AI CFO MKH Property: kirim snapshot + tool WA `ai_cfo` (2026-11-01) — LIVE
 
-Branch `claude/ai-cfo-snapshot-mkh-property`. Pasangan dari mkh-properti
+PR #141 di-merge ke `claude/mk-connect-app-o9zw2p` (disetujui owner). Migrasi
+0308 diterapkan ke produksi (svcmyb) via Supabase MCP; dijalankan sekali manual:
+7 jenis / 306 baris diterima MKH Property (`cfo_sync_log`). CodeQL menandai
+`js/system-prompt-injection` pada versi awal route narasi — diperbaiki sebelum
+merge (system prompt jadi konstanta `SISTEM_AI_CFO` di route).
+Diuji di produksi dari database MKH Property (pg_net): narasi tanpa tanda tangan
+401, bertanda tangan 200; `/api/villa/ai/bank-statement` tanpa rahasia kini 401
+(bukan halaman /login). Pasangan dari mkh-properti
 migrasi 0057 (AI CFO, branch `claude/ai-cfo-financial-manager`).
 
-- Migrasi `0308_cfo_kirim_snapshot_mkh_property.sql` (BELUM diterapkan —
-  menunggu persetujuan owner): fungsi `cfo_kirim_snapshot_mkh()` (security
+- Migrasi `0308_cfo_kirim_snapshot_mkh_property.sql` (LIVE): fungsi `cfo_kirim_snapshot_mkh()` (security
   definer, HANYA BACA) + pg_cron `cfo-kirim-snapshot-mkh` (11,41 * * * *).
   Mengirim lewat `net.http_post` ke RPC `cfo_sumber_terima` MKH Property:
   `loonars_unit_purchases` (LNR2), `mkc_refund_customers`+`installments`,
