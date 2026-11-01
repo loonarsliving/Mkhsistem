@@ -15,6 +15,8 @@ import type { RoomTypeAvailability } from "@/lib/occupancy/types";
 import { askAI, generateAIText } from "../service";
 import { QUERY_TOOL_CATALOG, runTool, type QueryToolName } from "./data-queries";
 import { bacaLoonars2 } from "./loonars2-wa";
+import { angkaTakBerdasar } from "./owner-angka";
+import { PENGETAHUAN_SISTEM } from "./owner-knowledge";
 
 /**
  * Asisten WhatsApp owner (owner 2026-10-18: "jadikan WhatsApp saya dashboard
@@ -134,6 +136,8 @@ const SEMUA_TOOL: { name: ToolName; description: string }[] = [
 
 export interface OwnerIntent {
   isDataQuestion: boolean;
+  /** Pertanyaan tentang cara kerja bisnis/sistem (dijawab dari PENGETAHUAN_SISTEM, tanpa angka). */
+  isSystemQuestion?: boolean;
   tools: ToolName[];
   branchName: string | null;
   bulanDari: string | null;
@@ -157,6 +161,7 @@ export function parseOwnerIntentJson(text: string): OwnerIntent {
   const hari = Number(p.jumlahHari);
   return {
     isDataQuestion: p.isDataQuestion === true,
+    isSystemQuestion: p.isSystemQuestion === true,
     tools: Array.isArray(p.tools)
       ? p.tools.filter((t): t is ToolName => SEMUA_TOOL.some((c) => c.name === t))
       : [],
@@ -697,6 +702,10 @@ export const OWNER_MENU_TEXT = [
   "• pengajuan & cuti yang masih pending?",
   "• refund customer bulan ini? sisa refund?",
   "",
+  "🧩 *Pertanyaan bebas & gabungan*",
+  "• Loonars 2 sudah keluar berapa termasuk Loonars Coffee, dan utangnya?",
+  "• rekening C Loonars 2 itu untuk apa?",
+  "",
   'Pertanyaan lanjutan juga bisa ("kalau bulan lalu?"). Perintah lama (LUNAS, setujui L2-…, lapkeu, dst.) tetap berjalan seperti biasa.',
 ].join("\n");
 
@@ -720,13 +729,16 @@ Pertanyaan terbaru: "${question}"
 Data yang tersedia (masing-masing "tool" terpisah):
 ${katalog}
 
-Tentukan apakah pertanyaan terbaru BUTUH data nyata dari sistem. Kalau ya, pilih tool yang relevan (boleh lebih dari satu). Isi juga parameter bila relevan:
+Pengetahuan tentang perusahaan & sistem (untuk memahami istilah dan memilih tool yang tepat):
+${PENGETAHUAN_SISTEM}
+
+Tentukan apakah pertanyaan terbaru BUTUH data nyata dari sistem. Kalau ya, pilih SEMUA tool yang dibutuhkan untuk menjawab lengkap (boleh lebih dari satu; pertanyaan gabungan/perbandingan biasanya butuh beberapa tool). Bila pertanyaan hanya tentang cara kerja/aturan/struktur bisnis atau sistem tanpa butuh angka (mis. "rekening C itu untuk apa?", "Loonars Coffee masuk mana?"), isi isSystemQuestion = true. Isi juga parameter bila relevan:
 - branchName: nama cabang MK Connect yang disebut (mis. "Jogja", "Kendari"), atau null
 - bulanDari/bulanSampai: rentang bulan "YYYY-MM" untuk keuangan_ringkasan dan villa_keuangan (mis. "bulan lalu" = bulan kalender sebelumnya; tidak disebut = null)
 - tanggalMulai: "YYYY-MM-DD" tanggal (pertama) untuk okupansi ke depan atau harga kamar (tidak disebut = null, berarti hari ini; "malam minggu" = Sabtu terdekat)
 - jumlahHari: jumlah tanggal berurutan untuk okupansi ke depan atau harga kamar (maks ${MAKS_HARI_OKUPANSI}; satu tanggal = 1; tidak disebut = null)
 
-Balas HANYA dengan JSON (tanpa markdown code fence): {"isDataQuestion": true/false, "tools": ["nama_tool", ...], "branchName": null, "bulanDari": null, "bulanSampai": null, "tanggalMulai": null, "jumlahHari": null}`;
+Balas HANYA dengan JSON (tanpa markdown code fence): {"isDataQuestion": true/false, "isSystemQuestion": true/false, "tools": ["nama_tool", ...], "branchName": null, "bulanDari": null, "bulanSampai": null, "tanggalMulai": null, "jumlahHari": null}`;
 
   try {
     const response = await generateAIText({
@@ -754,6 +766,125 @@ export interface OwnerAssistantResult {
   /** False if the question didn't need data -- caller falls through to the normal chat/file-request flow. */
   applicable: boolean;
   answer: string;
+}
+
+const MAKS_PUTARAN_AGEN = 2;
+
+const SISTEM_JAWAB = `Anda adalah Asisten Owner PT Maha Karya Haluoleo di WhatsApp: asisten yang paham seluruh bisnis dan sistem owner.
+
+PENGETAHUAN SISTEM:
+${PENGETAHUAN_SISTEM}
+
+ATURAN KERAS:
+- Angka HANYA disalin persis dari DATA. Jangan mengarang, jangan menjumlah/menghitung angka baru. Bila data "tidak tersedia", katakan apa adanya.
+- Bila data [AI CFO MKH Property] memuat putusan (AMAN/WASPADA/TIDAK MENYARANKAN), sampaikan apa adanya beserta alasan & alternatifnya -- jangan dilunakkan.
+- Anda hanya membaca data. Jangan pernah menyatakan sudah membayar, menyetujui, atau mengubah sesuatu.
+- Gunakan pengetahuan untuk menafsirkan data (mis. uang investor Loonars 2 = uang muka, bukan pendapatan; Loonars Coffee bagian dari Loonars 2).
+- Jawab singkat, langsung ke inti, Bahasa Indonesia, format WhatsApp (*tebal*, poin), sebutkan periode/tanggal data.`;
+
+interface KonteksTool {
+  branchId: string | null;
+  branchName: string | null;
+  mulai: string;
+  jumlahHari: number | null;
+  dari: string;
+  sampai: string;
+}
+
+async function konteksTool(supabase: SupabaseClient, it: OwnerIntent, hariIni: string): Promise<KonteksTool> {
+  let branchId: string | null = null;
+  if (it.branchName) {
+    const { data: branchRow } = await supabase
+      .from("branches")
+      .select("id")
+      .ilike("name", `%${it.branchName}%`)
+      .maybeSingle();
+    branchId = branchRow?.id ?? null;
+  }
+  const bulanIni = hariIni.slice(0, 7);
+  const sampai = it.bulanSampai ?? it.bulanDari ?? bulanIni;
+  const dari = it.bulanDari ?? tambahBulan(sampai, -2);
+  return {
+    branchId,
+    branchName: it.branchName,
+    mulai: it.tanggalMulai && it.tanggalMulai >= hariIni ? it.tanggalMulai : hariIni,
+    jumlahHari: it.jumlahHari,
+    dari: dari <= sampai ? dari : sampai,
+    sampai,
+  };
+}
+
+function kunciTool(t: ToolName, c: KonteksTool): string {
+  return [t, c.branchId, c.mulai, c.jumlahHari, c.dari, c.sampai].join("|");
+}
+
+function jalankanToolOwner(
+  tool: ToolName,
+  c: KonteksTool,
+  sender: string,
+  question: string,
+  supabase: SupabaseClient,
+): Promise<string> {
+  switch (tool) {
+    case "villa_okupansi_hari_ini":
+      return runVillaHariIni();
+    case "villa_okupansi_ke_depan":
+      return runVillaKeDepan(c.mulai, c.jumlahHari ?? 7);
+    case "villa_harga":
+      return runVillaHarga(c.mulai, c.jumlahHari ?? 1);
+    case "villa_keuangan":
+      return runVillaKeuangan(c.sampai);
+    case "refund_customer":
+      return runRefund();
+    case "loonars_properti":
+      return runLoonarsProperti();
+    case "keuangan_ringkasan":
+      return runKeuangan(sender, c.dari, c.sampai);
+    case "loonars2_saldo":
+      return runLoonars2(sender, "saldo", "Loonars 2 Saldo");
+    case "loonars2_tagihan":
+      return runLoonars2(sender, "tagihan", "Loonars 2 Tagihan");
+    case "loonars2_utang":
+      return runLoonars2(sender, "daftar_utang", "Loonars 2 Utang Toko");
+    case "loonars2_borongan":
+      return runLoonars2(sender, "daftar_borongan", "Loonars 2 Borongan Tukang");
+    case "ai_cfo":
+      return runAiCfo(sender, question);
+    default:
+      return runTool(supabase, tool, c.branchId, c.branchName);
+  }
+}
+
+/** Langkah agen: setelah melihat DATA, apakah perlu tool lain? Exported for tests via parseOwnerIntentJson. */
+async function mintaToolLanjutan(
+  question: string,
+  riwayat: string,
+  hariIni: string,
+  dataSudah: string[],
+): Promise<OwnerIntent> {
+  const katalog = SEMUA_TOOL.map((t) => `- ${t.name}: ${t.description}`).join("\n");
+  const response = await generateAIText({
+    systemPrompt:
+      "Kamu adalah perencana data untuk asisten owner. Balas HANYA dengan JSON sesuai instruksi, tanpa penjelasan tambahan.",
+    userPrompt: `Hari ini ${hariIni} (WIB).
+${riwayat ? `Percakapan sebelumnya:\n${riwayat}\n` : ""}
+Pertanyaan owner: "${question}"
+
+Pengetahuan sistem:
+${PENGETAHUAN_SISTEM}
+
+Data yang SUDAH diambil:
+${dataSudah.join("\n\n").slice(0, 12000)}
+
+Tool yang tersedia:
+${katalog}
+
+Apakah data di atas SUDAH cukup untuk menjawab pertanyaan secara lengkap dan benar? Bila belum, sebutkan tool TAMBAHAN yang dibutuhkan (jangan ulang tool yang datanya sudah ada, kecuali dengan parameter berbeda). Bila sudah cukup, tools = [].
+Balas HANYA JSON: {"isDataQuestion": true, "tools": [], "branchName": null, "bulanDari": null, "bulanSampai": null, "tanggalMulai": null, "jumlahHari": null}`,
+    maxOutputTokens: 384,
+    maxAttempts: 1,
+  });
+  return parseOwnerIntentJson(response.text);
 }
 
 /**
@@ -787,67 +918,68 @@ export async function tryOwnerAssistant(
   const hariIni = tanggalWib();
   const riwayat = await ambilRiwayat(sender).catch(() => "");
   const intent = arahkanPengeluaranLoonars2(question, await extractOwnerIntent(question, riwayat, hariIni));
-  if (!intent.isDataQuestion) return { applicable: false, answer: "" };
+  if (!intent.isDataQuestion) {
+    if (!intent.isSystemQuestion) return { applicable: false, answer: "" };
+    const answer = await askAI(
+      `${SISTEM_JAWAB}\n\nPertanyaan ini tentang cara kerja bisnis/sistem: jawab dari PENGETAHUAN saja dan JANGAN menyebut angka nominal apa pun (angka hanya boleh dari data tool, dan tidak ada data tool di sini). Bila pengetahuan tidak mencakup, katakan belum tercatat.`,
+      `${riwayat ? `Percakapan sebelumnya:\n${riwayat}\n\n` : ""}Pertanyaan owner: ${question}`,
+      { maxAttempts: 1, jobId: opts?.jobId },
+    );
+    // Tanpa data tool, nominal apa pun pasti karangan → jangan dikirim.
+    if (angkaTakBerdasar(answer, question).length) {
+      return { applicable: true, answer: OWNER_BELUM_TERSAMBUNG_TEXT };
+    }
+    return { applicable: true, answer };
+  }
   // A data question no tool covers: say so plainly instead of letting the
   // general chat answer "tidak tersedia" as if the data were empty (owner,
   // 2026-10-19: "refund customer knpa tidak tersedia?" before that tool existed).
   if (intent.tools.length === 0) return { applicable: true, answer: OWNER_BELUM_TERSAMBUNG_TEXT };
 
   const supabase = createAdminClient();
-  let branchId: string | null = null;
-  if (intent.branchName) {
-    const { data: branchRow } = await supabase
-      .from("branches")
-      .select("id")
-      .ilike("name", `%${intent.branchName}%`)
-      .maybeSingle();
-    branchId = branchRow?.id ?? null;
+  const sudah = new Map<string, string>();
+  const jalankan = async (it: OwnerIntent) => {
+    const ctx = await konteksTool(supabase, it, hariIni);
+    const baru = it.tools.filter((t) => !sudah.has(kunciTool(t, ctx)));
+    const hasil = await Promise.all(
+      baru.map((t) =>
+        jalankanToolOwner(t, ctx, sender, question, supabase).catch(
+          (err: unknown) => `[${t}] data tidak tersedia (${err instanceof Error ? err.message : "gagal"})`,
+        ),
+      ),
+    );
+    baru.forEach((t, n) => sudah.set(kunciTool(t, ctx), hasil[n]));
+    return baru.length;
+  };
+  await jalankan(intent);
+
+  // Agen: model boleh meminta data tambahan (maks 2 putaran) setelah melihat
+  // data yang sudah ada -- mis. pertanyaan perbandingan/gabungan lintas modul.
+  for (let putaran = 0; putaran < MAKS_PUTARAN_AGEN; putaran++) {
+    const lanjut = await mintaToolLanjutan(question, riwayat, hariIni, [...sudah.values()]).catch(() => null);
+    if (!lanjut || lanjut.tools.length === 0) break;
+    if ((await jalankan(lanjut)) === 0) break;
   }
 
-  const bulanIni = hariIni.slice(0, 7);
-  const sampai = intent.bulanSampai ?? intent.bulanDari ?? bulanIni;
-  const dari = intent.bulanDari ?? tambahBulan(sampai, -2);
-  const mulai =
-    intent.tanggalMulai && intent.tanggalMulai >= hariIni ? intent.tanggalMulai : hariIni;
+  const data = [...sudah.values()].join("\n\n");
+  const userPrompt = `${riwayat ? `Percakapan sebelumnya:\n${riwayat}\n\n` : ""}Pertanyaan owner: ${question}\n\nDATA dari sistem (hari ini ${hariIni}):\n${data}`;
+  let answer = await askAI(SISTEM_JAWAB, userPrompt, { maxAttempts: 1, jobId: opts?.jobId });
 
-  const hasil = await Promise.all(
-    intent.tools.map((tool): Promise<string> => {
-      switch (tool) {
-        case "villa_okupansi_hari_ini":
-          return runVillaHariIni();
-        case "villa_okupansi_ke_depan":
-          return runVillaKeDepan(mulai, intent.jumlahHari ?? 7);
-        case "villa_harga":
-          return runVillaHarga(mulai, intent.jumlahHari ?? 1);
-        case "villa_keuangan":
-          return runVillaKeuangan(sampai);
-        case "refund_customer":
-          return runRefund();
-        case "loonars_properti":
-          return runLoonarsProperti();
-        case "keuangan_ringkasan":
-          return runKeuangan(sender, dari <= sampai ? dari : sampai, sampai);
-        case "loonars2_saldo":
-          return runLoonars2(sender, "saldo", "Loonars 2 Saldo");
-        case "loonars2_tagihan":
-          return runLoonars2(sender, "tagihan", "Loonars 2 Tagihan");
-        case "loonars2_utang":
-          return runLoonars2(sender, "daftar_utang", "Loonars 2 Utang Toko");
-        case "loonars2_borongan":
-          return runLoonars2(sender, "daftar_borongan", "Loonars 2 Borongan Tukang");
-        case "ai_cfo":
-          return runAiCfo(sender, question);
-        default:
-          return runTool(supabase, tool, branchId, intent.branchName);
-      }
-    }),
-  );
-
-  const answer = await askAI(
-    'Anda adalah asisten pribadi owner PT Maha Karya Haluoleo di WhatsApp. Jawab HANYA berdasarkan DATA NYATA di bawah -- jangan mengarang angka, jangan menghitung angka baru yang tidak ada di data, dan salin angka persis. Bila suatu data tertulis "tidak tersedia" atau "belum tersedia", katakan itu apa adanya, jangan ditebak. Jawab singkat dan langsung ke inti dalam Bahasa Indonesia, format WhatsApp (boleh *tebal* dan poin), sebutkan periode/tanggal datanya. Bila data [AI CFO MKH Property] memuat putusan (AMAN/WASPADA/TIDAK MENYARANKAN), sampaikan putusan itu apa adanya beserta alasan & alternatifnya -- jangan dilunakkan.',
-    `${riwayat ? `Percakapan sebelumnya:\n${riwayat}\n\n` : ""}Pertanyaan owner: ${question}\n\nData dari sistem (hari ini ${hariIni}):\n${hasil.join("\n\n")}`,
-    { maxAttempts: 1, jobId: opts?.jobId },
-  );
+  // Penjaga angka: nominal yang tidak ada di DATA → minta ulang sekali; bila
+  // masih, kirim data apa adanya (lebih baik kaku daripada angka karangan).
+  let tak = angkaTakBerdasar(answer, `${data}\n${question}`);
+  if (tak.length) {
+    logger.warn("owner-assistant: angka tak berdasar, diulang", { jumlah: tak.length });
+    answer = await askAI(
+      `${SISTEM_JAWAB}\n\nPERINGATAN: jawaban sebelumnya memuat angka yang TIDAK ada di DATA (${tak.slice(0, 5).map((n) => n.toLocaleString("id-ID")).join(", ")}). Tulis ulang: salin angka persis dari DATA, jangan menjumlah/menghitung sendiri.`,
+      userPrompt,
+      { maxAttempts: 1, jobId: opts?.jobId },
+    );
+    tak = angkaTakBerdasar(answer, `${data}\n${question}`);
+    if (tak.length) {
+      answer = `Berikut data dari sistem (hari ini ${hariIni}):\n\n${data}`.slice(0, 3500);
+    }
+  }
 
   return { applicable: true, answer };
 }
