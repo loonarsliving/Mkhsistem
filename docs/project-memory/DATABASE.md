@@ -198,3 +198,6 @@ set is `UNKNOWN — NEEDS CONFIRMATION` (not visible from repo contents).
 
 ## 2026-11-01 — migrasi 0308 (LIVE)
 - Fungsi `public.cfo_kirim_snapshot_mkh()` (security definer, revoke dari public/anon/authenticated) + cron `cfo-kirim-snapshot-mkh`. Membaca `loonars_unit_purchases`/`loonars_units`/`loonars_projects` (LNR2), `mkc_refund_customers`, `mkc_refund_installments`, `finance_pending_transfers`, `finance_settlements`, `villa_pengajuan_biaya`, `sync_config`, Vault. Tidak menulis tabel apa pun di database ini.
+
+## 2026-11-01 — migrasi 0309
+- `cfo_kirim_snapshot_mkh()` dinyatakan ulang dengan jenis `proyek_konstruksi` (membaca construction_projects, construction_cost_requests, construction_expenses, branches). Tanpa tabel baru.

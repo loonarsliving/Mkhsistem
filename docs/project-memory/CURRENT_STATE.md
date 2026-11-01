@@ -3,6 +3,16 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## AI CFO MKH Property: kirim proyek konstruksi Loonars (2026-11-01, migrasi 0309)
+
+Owner: Loonars Coffee memakai keuangan Loonars 2 → harus masuk laporan L2 di MKH
+Property. `cfo_kirim_snapshot_mkh()` (0308) kini juga mengirim jenis
+`proyek_konstruksi`: hanya proyek Loonars (cabang/nama `loonars%`, saat ini
+Loonars Coffee) — budget total/material/tenaga, realisasi cost request
+(posted/paid) per jenis, komitmen (approved/transferred), utang toko lunas/belum
+(construction_expenses payment_method='utang'). Hanya baca. Penerima:
+mkh-properti 0059.
+
 ## AI CFO MKH Property: kirim snapshot + tool WA `ai_cfo` (2026-11-01) — LIVE
 
 PR #141 di-merge ke `claude/mk-connect-app-o9zw2p` (disetujui owner). Migrasi
