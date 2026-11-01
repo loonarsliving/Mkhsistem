@@ -11,6 +11,13 @@
 --   transfer_tertunda      finance_pending_transfers (belum dikonfirmasi/ditolak)
 --   ota_settlement         finance_settlements (villa, belum RECEIVED)
 --   pengajuan_biaya_villa  villa_pengajuan_biaya (diajukan/disetujui)
+--   villa_kas_masuk        uang villa yang benar-benar masuk 120 hari terakhir:
+--                          finance_settlements RECEIVED (OTA + website, nilai
+--                          diterima) + walkin_payments lunas (kafe/spa/lainnya)
+--   villa_kas_keluar       villa_pengajuan_biaya yang sudah ditransfer (120 hari)
+--
+-- Kas Loonars 1 di MKH Property = saldo rekening villa yang dicatat CFO +
+-- mutasi di atas sesudah tanggal saldo (sistem villa tidak bisa membaca bank).
 --
 -- Fungsi ini HANYA MEMBACA tabel-tabel di atas lalu mengirim salinannya ke
 -- RPC public.cfo_sumber_terima di MKH Property lewat pg_net — jalur dan
@@ -62,7 +69,8 @@ begin
     'x-sync-secret', v_secret
   );
 
-  foreach v_jenis in array array['investor_penjualan', 'refund_customer', 'transfer_tertunda', 'ota_settlement', 'pengajuan_biaya_villa'] loop
+  foreach v_jenis in array array['investor_penjualan', 'refund_customer', 'transfer_tertunda', 'ota_settlement', 'pengajuan_biaya_villa',
+                                 'villa_kas_masuk', 'villa_kas_keluar'] loop
     if v_jenis = 'investor_penjualan' then
       select coalesce(jsonb_agg(jsonb_build_object(
                'id', lup.id::text,
@@ -112,6 +120,39 @@ begin
         into v_baris
         from public.finance_settlements s
        where s.settlement_status <> 'RECEIVED';
+    elsif v_jenis = 'villa_kas_masuk' then
+      select coalesce(jsonb_agg(x.baris order by x.tgl), '[]'::jsonb)
+        into v_baris
+        from (
+          select s.received_date as tgl, jsonb_build_object(
+                   'id', 'settlement:' || s.id::text,
+                   'diubah_pada', s.updated_at,
+                   'data', jsonb_build_object('tanggal', s.received_date, 'nominal', s.amount_received,
+                                              'jenis', 'settlement_' || coalesce(s.sumber, 'lain'), 'ket', s.sumber)) as baris
+            from public.finance_settlements s
+           where s.settlement_status = 'RECEIVED' and coalesce(s.amount_received, 0) > 0
+             and s.received_date >= current_date - 120
+          union all
+          select (w.paid_at at time zone 'Asia/Jakarta')::date, jsonb_build_object(
+                   'id', 'walkin:' || w.id::text,
+                   'diubah_pada', w.paid_at,
+                   'data', jsonb_build_object('tanggal', (w.paid_at at time zone 'Asia/Jakarta')::date, 'nominal', w.jumlah,
+                                              'jenis', 'walkin', 'ket', w.kategori))
+            from public.walkin_payments w
+           where w.status = 'lunas' and w.paid_at is not null and coalesce(w.jumlah, 0) > 0
+             and w.paid_at >= now() - interval '120 days'
+        ) x;
+    elsif v_jenis = 'villa_kas_keluar' then
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'id', 'biaya:' || b.id::text,
+               'diubah_pada', b.updated_at,
+               'data', jsonb_build_object('tanggal', coalesce(b.tanggal_transfer, (b.ditransfer_at at time zone 'Asia/Jakarta')::date),
+                                          'nominal', b.nominal, 'jenis', 'biaya_villa', 'ket', coalesce(b.kategori_nama, b.kategori)))
+             order by b.tanggal_transfer), '[]'::jsonb)
+        into v_baris
+        from public.villa_pengajuan_biaya b
+       where b.status = 'ditransfer'
+         and coalesce(b.tanggal_transfer, (b.ditransfer_at at time zone 'Asia/Jakarta')::date) >= current_date - 120;
     else
       select coalesce(jsonb_agg(jsonb_build_object(
                'id', b.id::text,

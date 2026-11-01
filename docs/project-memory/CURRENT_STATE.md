@@ -25,6 +25,17 @@ migrasi 0057 (AI CFO, branch `claude/ai-cfo-financial-manager`).
   (AMAN/WASPADA/TIDAK MENYARANKAN) diteruskan apa adanya. Menu owner ditambah
   bagian "AI CFO". Tes `tests/unit/lib/owner-assistant.test.ts` (16 lulus).
   Sebelum route mkh-properti live, tool menjawab "data tidak tersedia".
+- `POST /api/mkh-property/ai-cfo/narasi`: layanan AI untuk AI CFO MKH Property
+  (MKH Property tidak punya kunci AI sendiri). Auth: HMAC-SHA256 rahasia sync
+  dari database MKH Property (RPC `cfo_tanda_ai`), berlaku 5 menit, terikat
+  isi body (`lib/security/mkh-property-cfo.ts`, tes lintas Postgres↔Node).
+  Masuk `PUBLIC_PATHS`. Memakai `askAI` (penyedia + circuit breaker yang ada).
+- 0308 juga mengirim `villa_kas_masuk` (finance_settlements RECEIVED + walk-in
+  lunas, 120 hari) dan `villa_kas_keluar` (villa_pengajuan_biaya ditransfer)
+  untuk kas Loonars 1 di MKH Property.
+- PERBAIKAN: `/api/villa/ai/bank-statement` (#135) belum ada di `PUBLIC_PATHS`
+  sehingga fitur villa "Cocokkan dari Mutasi Bank" diarahkan ke /login (tes
+  `villa-bridge-public-paths` merah di produksi). Kini ditambahkan.
 
 ## Jembatan villa: baca mutasi bank (2026-10-29, BELUM MERGE)
 

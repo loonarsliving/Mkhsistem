@@ -60,6 +60,10 @@ const PUBLIC_PATHS = [
   // tanpa sesi login; route-nya sendiri mencocokkan x-sync-secret dengan
   // rahasia sync yang sudah ada (get_sync_secret).
   "/api/loonars2/outbox",
+  // Dipanggil server MKH Property (AI CFO) tanpa sesi login; route-nya
+  // memverifikasi tanda tangan HMAC dari database MKH Property (rahasia sync
+  // yang sudah ada, berlaku 5 menit, terikat isi body).
+  "/api/mkh-property/ai-cfo/narasi",
   // Server-to-server bridge endpoints called by loonarsliving/villa's
   // server-side code (Supabase Edge Function / Vercel route handlers,
   // never a browser session) -- found missing here the same way every
@@ -78,6 +82,10 @@ const PUBLIC_PATHS = [
   // them to /login. Same shared-secret check in their handlers.
   "/api/villa/ai/translate",
   "/api/villa/ai/chat-reply",
+  // Same bug a third time (found 2026-11-01 by villa-bridge-public-paths.test):
+  // the bank-statement reader (#135, villa "Cocokkan dari Mutasi Bank") was
+  // never added here, so villa got the /login page. Same x-internal-secret check.
+  "/api/villa/ai/bank-statement",
   // Called cross-origin by the Ultron voice assistant (separate "filehub"
   // deployment) with a Supabase access token in the Authorization header,
   // never a same-site session cookie -- must stay out of the cookie-based
