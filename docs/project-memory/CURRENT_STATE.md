@@ -3,6 +3,17 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Karyawan cabang Makassar, Jabodetabek, Kendari ditutup (2026-11-01, migrasi 0310) — DITERAPKAN
+
+Keputusan owner: hanya Loonars 1 (hospitality Yogyakarta) & Loonars 2 (Loonars
+Living) yang aktif (lihat juga mkh-properti migrasi 0060: proyek AFP, IH, GCI,
+GCR, KDI dikunci). 17 karyawan aktif di cabang Makassar (6), Jabodetabek (10,
+sebelumnya `inactive`), Kendari (1) dinonaktifkan dengan pola tombol
+"Nonaktifkan" (`deleted_at`, `employment_status='terminated'`, `is_active=false`):
+tidak bisa login, keluar dari chat, tercatat di audit log. Tidak ada baris yang
+dihapus. Head Office, Jogja, Loonars Private Living tidak disentuh. Baris
+`branches` cabang tersebut TIDAK diubah (belum diminta).
+
 ## AI CFO MKH Property: kirim proyek konstruksi Loonars (2026-11-01, migrasi 0309)
 
 Owner: Loonars Coffee memakai keuangan Loonars 2 → harus masuk laporan L2 di MKH
