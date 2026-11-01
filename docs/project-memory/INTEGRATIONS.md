@@ -191,3 +191,8 @@ Every external integration below is evidenced by dependency + code +
 - **Auth method**: `VILLA_DEPLOY_SECRET` env var.
 - **Status**: PARTIAL/UNKNOWN — routes exist; exact protocol and the
   identity of the other system are `UNKNOWN — NEEDS CONFIRMATION`.
+
+## MKH Property AI CFO (2026-11-01, belum di-deploy)
+- Keluar: pg_cron `cfo-kirim-snapshot-mkh` → `https://gluoioiimapyhchdasfl.supabase.co/rest/v1/rpc/cfo_sumber_terima` (diturunkan dari `sync_config.peer_sync_url`), header `X-Sync-Secret` = Vault `mk_sync_shared_secret`. Hanya baca di sisi ini.
+- Keluar: owner-assistant tool `ai_cfo` → `https://finance.haluoleo.id/api/cfo/tanya-wa`.
+- Masuk (sudah ada, dipakai ulang): briefing WA AI CFO tiba lewat `/api/loonars2/outbox` (antrean `loonars2_outbox` MKH Property, jenis `cfo_*`) dan dikirim Whacenter.
