@@ -45,6 +45,7 @@ import { formatFileSaveReply, looksLikeFileSaveCaption, tryHandleFileSaveViaWhat
 import { tryHandleReceiptPhotoSubmission } from "./domains/material-receipt-submission";
 import { tryConfirmTransferProofViaWhatsApp } from "./domains/transfer-proof-confirmation";
 import { trySalaryTransferProofViaWhatsApp } from "./domains/salary-transfer-proof-confirmation";
+import { trySalaryPayslipFromTransferProof } from "./domains/salary-payslip-whatsapp";
 import { tryRejectPendingTransferViaWhatsApp } from "./domains/transfer-rejection";
 import { tryConfirmVillaPaymentViaWhatsApp } from "./domains/villa-payment-confirmation";
 import { tryHandleLapkeuViaWhatsApp } from "./domains/laporan-investor-wa";
@@ -840,6 +841,26 @@ export async function handleWhatsAppWebhookEvent(
           const sendResult = await sendWhatsAppText(inbound.sender, replyText);
           trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[gambar]", replyText, employee.id);
+          trace.push("saveAiConversationTurn:done");
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
+
+        // Bukti transfer gaji → slip gaji (owner's ask 2026-11-02): one
+        // receipt or a whole bulk-payroll screenshot. Each line is matched
+        // on exact account number + amount against
+        // employee_salary_submissions, and every matched employee gets a
+        // rendered slip gaji picture (never the screenshot, which shows
+        // everyone's salary). Runs before the amount-only matchers below so
+        // a bulk screenshot can't be mistaken for one Rp 2.000.000 transfer;
+        // falls through untouched when nothing in the photo is a salary.
+        trace.push("trySalaryPayslipFromTransferProof:calling");
+        const payslipResult = await trySalaryPayslipFromTransferProof({ id: employee.id, roleKey: imageRoleKey }, inbound.content.url);
+        trace.push(`trySalaryPayslipFromTransferProof:${payslipResult.outcome}`);
+        if (payslipResult.outcome === "processed") {
+          trace.push("sendWhatsAppText:calling(salary-payslip)");
+          const sendResult = await sendWhatsAppText(inbound.sender, payslipResult.replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer gaji]", payslipResult.replyText, employee.id);
           trace.push("saveAiConversationTurn:done");
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }

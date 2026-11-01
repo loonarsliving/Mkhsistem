@@ -3,6 +3,14 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Slip gaji otomatis dari bukti transfer WA (2026-11-02) — DIBANGUN, BELUM MERGE
+Branch `claude/payslip-whatsapp-feature-8m9ln1`. Tanpa migrasi / perubahan skema / env baru.
+- Super Admin kirim foto bukti transfer gaji (satu struk ATAU screenshot bulk payroll, mis. Kopra Mandiri) ke WA sistem → `trySalaryPayslipFromTransferProof` (`lib/ai/domains/salary-payslip-whatsapp.ts`), dipanggil di `lib/ai/webhook-handler.ts` sebelum matcher bukti transfer lain (fund transfer / fee Loonars / settlement / gaji 0250 / bahan-tukang).
+- AI (`salary-transfer-list-recognition.ts`) membaca SEMUA baris transfer (nama, bank, rekening, nominal). Pencocokan (`lib/salary/payslip-format.ts`) wajib rekening PERSIS + nominal (±Rp 1.000) ke `employee_salary_submissions` `pending_transfer`; tidak pernah nominal saja. Dua pengajuan cocok (mis. Oktober belum ditandai + November) → periode mayoritas batch menang, kalau tidak bisa → "ambigu" dilaporkan, tidak ditebak. Baris yang sudah `transferred` ≤7 hari (screenshot kedua yang tumpang tindih) dilaporkan "sudah tercatat", slip tidak dikirim ulang.
+- Tiap yang cocok: status → `transferred`, notifikasi `salary_transferred` (in-app + WA teks, sama seperti 0250), lalu gambar Slip Gaji (`lib/salary/payslip-card.tsx` via next/og, rekening disamarkan 4 digit terakhir) diunggah ke `wa-outbox` (`stageWaOutboxBytes`) dan dikirim ke WA karyawan. Screenshot bank TIDAK diteruskan (berisi gaji semua karyawan). Kepala Cabang dapat ringkasan teks per cabang. Super Admin dapat balasan rekap (terkirim / gagal / sudah tercatat / tidak cocok).
+- Batasan: slip hanya memuat total take-home (tabel tidak menyimpan rincian pokok/tunjangan/potongan). Tanpa baris cocok sama sekali → jatuh ke alur lama tanpa perubahan.
+
+
 ## Asisten Owner WA lebih pintar: agen + pengetahuan sistem (2026-11-01)
 
 Owner: "apa ai di wa itu tidak bisa lebih pintar seperti chatbot yang memiliki
