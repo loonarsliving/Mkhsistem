@@ -7,7 +7,7 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
-## 2026-11-02 — Slip gaji otomatis dari bukti transfer gaji via WA (BELUM MERGE)
+## 2026-11-02 — Slip gaji otomatis dari bukti transfer gaji via WA (PR #147) — LIVE
 - Foto bukti transfer gaji (termasuk screenshot bulk payroll berisi banyak karyawan) yang dikirim Super Admin ke WA sistem dicocokkan per baris (rekening + nominal) ke `employee_salary_submissions`, ditandai ditransfer, dan tiap karyawan menerima gambar Slip Gaji buatan sistem (bukan screenshot bank). Kepala Cabang dapat ringkasan teks. Tanpa migrasi. Lihat CURRENT_STATE.md.
 
 ## 2026-11-01 — AI CFO MKH Property: snapshot keuangan + tool WA `ai_cfo` (migrasi 0308, PR #141) — LIVE
