@@ -12,10 +12,10 @@
  *   - TIDAK ADA rahasia (password, kunci API, nomor rekening, nomor HP).
  *   - Setiap keputusan owner baru yang mengubah struktur → perbarui berkas ini.
  */
-export const PENGETAHUAN_SISTEM_DIPERBARUI = "2026-11-01";
+export const PENGETAHUAN_SISTEM_DIPERBARUI = "2026-11-02";
 
 export const PENGETAHUAN_SISTEM = `
-PERUSAHAAN: PT Maha Karya Haluoleo (MKH). Penanya adalah OWNER (super admin).
+PERUSAHAAN: PT Loonars Mahakarya (nama baru PT Maha Karya Haluoleo / MKH). Penanya adalah OWNER (super admin).
 
 SISTEM (semua milik MKH):
 - MK Connect (mkh.haluoleo.id): karyawan, absensi, cuti, CRM/lead & iklan, pengajuan biaya, refund customer, bot WhatsApp ini.
@@ -36,6 +36,12 @@ LINI BISNIS AKTIF (keputusan owner 1 Nov 2026 — hanya dua ini yang dilaporkan)
    - Pengeluaran pembangunan villa: material, tukang (borongan mingguan + retensi), lain-lain; utang toko bangunan dicicil.
    - LOONARS COFFEE (Yogyakarta) memakai keuangan Loonars 2 → biaya & utangnya DIGABUNG ke Loonars 2. Budget & realisasinya dicatat di MK Connect. Owner mengonfirmasi pembayaran kontraktor Loonars Coffee sudah dibayar.
    - "Total pengeluaran Loonars 2" = pembangunan villa + Loonars Coffee (AI CFO menghitung gabungannya).
+
+LAPORAN KEUANGAN HOLDING (SAK EMKM) — keputusan owner 2 Nov 2026:
+- Laporan holding PT Loonars Mahakarya = Loonars 1 + Loonars 2 + tingkat holding (biaya bersama). Dipakai untuk laporan tahunan SAK EMKM: Laporan Posisi Keuangan, Laporan Laba Rugi, Catatan atas Laporan Keuangan. Halaman: MKH Property → AI CFO → Laporan Holding.
+- Tahun buku resmi pertama: 2027. Tahun 2026 = periode persiapan; saldo akhir 31 Des 2026 menjadi saldo awal 2027.
+- Pendapatan villa dicatat KOTOR penuh; bagi hasil investor (pool 70%) dan top-up jaminan = beban.
+- GAJI: slip gaji karyawan MK Connect (tim Jogja, Head Office, dll. — sales, markom, pengawas, refund) = BEBAN HOLDING, bukan Loonars 1 maupun Loonars 2. Gaji staf villa sudah termasuk OPEX laporan villa (Loonars 1). Slip yang belum ditransfer = utang gaji holding. Data gaji dibaca lewat AI CFO (laporan holding).
 
 DITUTUP / DIKUNCI per 1 Nov 2026 (data lama tetap ada sebagai arsip, tidak bisa ditambah):
 - Proyek MKH Property: AFP (Al Fath Puuwatu), IH (Introvert House), GCI (Griya Cariu Indah), GCR (Green Cibarusah Residence), KDI (Pembangunan Cabang Kendari). Utang bank AFP tetap ada secara hukum tetapi di luar laporan.

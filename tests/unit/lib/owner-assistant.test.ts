@@ -4,6 +4,7 @@ import type { RefundCustomer } from "@/repositories/refund.repository";
 
 import {
   arahkanPengeluaranLoonars2,
+  jawabanAman,
   formatHargaVilla,
   formatKeuanganVilla,
   formatOkupansiKeDepan,
@@ -413,5 +414,15 @@ describe("arahkanPengeluaranLoonars2", () => {
     const i = { ...dasar, tools: ["loonars2_saldo" as const] };
     expect(arahkanPengeluaranLoonars2("saldo loonars 2?", i)).toBe(i);
     expect(arahkanPengeluaranLoonars2("pengeluaran villa bulan ini", i)).toBe(i);
+  });
+});
+
+describe("jawabanAman", () => {
+  it("tidak mengirim seluruh data mentah; hanya baris terkait, maks 8", () => {
+    const data = ["[AI CFO]\n" + Array.from({ length: 30 }, (_, i) => `• Loonars 1 baris ${i}: Rp ${i + 1}.000.000`).join("\n") + "\n• Holding: gaji cabang Jogja Rp 12.000.000"];
+    const j = jawabanAman("Gaji ini masuk mana?", data, "2026-11-02");
+    expect(j).toMatch(/^Maaf, saya belum bisa/);
+    expect(j).toContain("gaji cabang Jogja Rp 12.000.000");
+    expect(j).not.toContain("Loonars 1 baris 5");
   });
 });

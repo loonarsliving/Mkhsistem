@@ -12,6 +12,18 @@ Di-merge ke produksi lewat PR #147 (deploy Vercel READY, /api/health ok). Tanpa 
 - Batasan: slip hanya memuat total take-home (tabel tidak menyimpan rincian pokok/tunjangan/potongan). Tanpa baris cocok sama sekali → jatuh ke alur lama tanpa perubahan.
 
 
+## Laporan holding PT Loonars Mahakarya + gaji = beban holding (2026-11-02, migrasi 0311)
+
+Keputusan owner: PT Loonars Mahakarya = nama baru PT MKH; laporan holding SAK
+EMKM = Loonars 1 + Loonars 2 + biaya holding; pendapatan villa kotor (bagi
+hasil & top-up = beban); gaji tim bersama = beban holding; tahun buku resmi
+pertama 2027.
+- Migrasi `0311_cfo_kirim_gaji_karyawan.sql`: `cfo_kirim_snapshot_mkh()` +
+  jenis `gaji_karyawan` (cabang, periode, nominal, status, tanggal transfer —
+  tanpa nama/rekening). Pasangan mkh-properti 0061 + halaman /cfo/holding.
+- `owner-knowledge.ts` diperbarui (holding, gaji). Penjaga angka tidak lagi
+  mengirim data mentah: `jawabanAman` = pengakuan singkat + maks 8 baris terkait.
+
 ## Asisten Owner WA lebih pintar: agen + pengetahuan sistem (2026-11-01)
 
 Owner: "apa ai di wa itu tidak bisa lebih pintar seperti chatbot yang memiliki

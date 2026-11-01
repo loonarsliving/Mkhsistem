@@ -125,7 +125,7 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
   {
     name: "ai_cfo",
     description:
-      "AI CFO MKH Property (Loonars 1 + Loonars 2 terpusat): posisi kas, forecast arus kas 13 minggu & prediksi defisit (optimis/normal/pesimis), kebutuhan dana, kewajiban & urutan bayar yang disarankan, peringatan risiko, rekonsiliasi, EBITDA villa & bagian MKH setelah jaminan investor, budget vs aktual konstruksi, TOTAL PENGELUARAN / biaya / belanja pembangunan Loonars 2 yang sudah DIGABUNG dengan Loonars Coffee (dan total sisa utang toko gabungan), DAN menilai rencana pengeluaran/keputusan owner (\"mau beli/bangun/keluarkan Rp X, boleh?\") -- pilih ini untuk pertanyaan analisis keuangan, risiko, atau keputusan",
+      "AI CFO MKH Property (Loonars 1 + Loonars 2 terpusat): posisi kas, forecast arus kas 13 minggu & prediksi defisit (optimis/normal/pesimis), kebutuhan dana, kewajiban & urutan bayar yang disarankan, peringatan risiko, rekonsiliasi, EBITDA villa & bagian MKH setelah jaminan investor, budget vs aktual konstruksi, LAPORAN HOLDING SAK EMKM (laba rugi & neraca gabungan L1+L2+holding, gaji karyawan/beban holding & utang gaji), TOTAL PENGELUARAN / biaya / belanja pembangunan Loonars 2 yang sudah DIGABUNG dengan Loonars Coffee (dan total sisa utang toko gabungan), DAN menilai rencana pengeluaran/keputusan owner (\"mau beli/bangun/keluarkan Rp X, boleh?\") -- pilih ini untuk pertanyaan analisis keuangan, risiko, atau keputusan",
   },
 ];
 
@@ -770,6 +770,34 @@ export interface OwnerAssistantResult {
 
 const MAKS_PUTARAN_AGEN = 2;
 
+/**
+ * Bila jawaban model dua kali memuat angka yang tidak ada di DATA: jangan
+ * kirim seluruh data mentah (owner 2026-11-02: "sy bahas apa dia jawab apa").
+ * Kirim pengakuan singkat + hanya baris data yang paling relevan dengan kata
+ * di pertanyaan (maks 8 baris). Exported for tests.
+ */
+export function jawabanAman(question: string, data: string[], hariIni: string): string {
+  const kata = question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((k) => k.length >= 4 && !["yang", "ini", "itu", "berapa", "mana", "atau", "sudah", "kamu", "masukkan"].includes(k));
+  const barisSkor = data
+    .flatMap((d) => d.split("\n"))
+    .map((b) => b.trim())
+    .filter((b) => b && /\d/.test(b))
+    .map((b) => ({ b, skor: kata.filter((k) => b.toLowerCase().includes(k)).length }))
+    .filter((x) => x.skor > 0)
+    .sort((a, b) => b.skor - a.skor)
+    .slice(0, 8)
+    .map((x) => x.b);
+  return [
+    "Maaf, saya belum bisa merangkai jawaban yang angkanya pasti benar untuk pertanyaan ini.",
+    ...(barisSkor.length ? ["", `Data sistem yang paling terkait (hari ini ${hariIni}):`, ...barisSkor] : []),
+    "",
+    "Coba tanyakan lebih spesifik (mis. sebut Loonars 1/Loonars 2/holding dan periodenya).",
+  ].join("\n");
+}
+
 const SISTEM_JAWAB = `Anda adalah Asisten Owner PT Maha Karya Haluoleo di WhatsApp: asisten yang paham seluruh bisnis dan sistem owner.
 
 PENGETAHUAN SISTEM:
@@ -977,7 +1005,7 @@ export async function tryOwnerAssistant(
     );
     tak = angkaTakBerdasar(answer, `${data}\n${question}`);
     if (tak.length) {
-      answer = `Berikut data dari sistem (hari ini ${hariIni}):\n\n${data}`.slice(0, 3500);
+      answer = jawabanAman(question, [...sudah.values()], hariIni);
     }
   }
 
