@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RefundCustomer } from "@/repositories/refund.repository";
 
 import {
+  arahkanPengeluaranLoonars2,
   formatHargaVilla,
   formatKeuanganVilla,
   formatOkupansiKeDepan,
@@ -384,5 +385,25 @@ describe("formatRefund", () => {
 
   it("says so when the module has no customers", () => {
     expect(formatRefund([], "2026-10-01")).toContain("Belum ada customer refund");
+  });
+});
+
+describe("arahkanPengeluaranLoonars2", () => {
+  const dasar = { isDataQuestion: true, branchName: null, bulanDari: null, bulanSampai: null, tanggalMulai: null, jumlahHari: null };
+
+  it("total pengeluaran Loonars 2 -> AI CFO (gabungan dengan Loonars Coffee), bukan borongan/utang villa", () => {
+    const r = arahkanPengeluaranLoonars2("Berapa total pengeluaran loonars 2 ?", { ...dasar, tools: ["loonars2_borongan", "loonars2_utang"] });
+    expect(r.tools).toEqual(["ai_cfo"]);
+  });
+
+  it("rincian borongan tetap memakai tool borongan", () => {
+    const r = arahkanPengeluaranLoonars2("pengeluaran borongan tukang loonars 2 berapa?", { ...dasar, tools: ["loonars2_borongan"] });
+    expect(r.tools).toEqual(["ai_cfo", "loonars2_borongan"]);
+  });
+
+  it("pertanyaan lain tidak diubah", () => {
+    const i = { ...dasar, tools: ["loonars2_saldo" as const] };
+    expect(arahkanPengeluaranLoonars2("saldo loonars 2?", i)).toBe(i);
+    expect(arahkanPengeluaranLoonars2("pengeluaran villa bulan ini", i)).toBe(i);
   });
 });
