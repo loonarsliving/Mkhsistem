@@ -110,16 +110,20 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
     name: "loonars2_tagihan",
     description: "Loonars 2: tagihan/pembayaran pembeli unit yang belum lunas",
   },
-  { name: "loonars2_utang", description: "Loonars 2: daftar sisa utang toko bangunan" },
+  {
+    name: "loonars2_utang",
+    description:
+      "Loonars 2: daftar rinci sisa utang per toko bangunan proyek villa saja (TANPA Loonars Coffee). Untuk total pengeluaran/biaya/utang Loonars 2 pilih ai_cfo",
+  },
   {
     name: "loonars2_borongan",
     description:
-      "Loonars 2: borongan tukang/mandor (mis. Sarno) — nilai borongan per unit, upah mingguan yang sudah diajukan & dibayar (total dan jumlah minggu), retensi",
+      "Loonars 2: rincian borongan tukang/mandor (mis. Sarno) — nilai borongan per unit, upah mingguan yang sudah diajukan & dibayar (total dan jumlah minggu), retensi. BUKAN total pengeluaran Loonars 2 (pilih ai_cfo)",
   },
   {
     name: "ai_cfo",
     description:
-      "AI CFO MKH Property (Loonars 1 + Loonars 2 terpusat): posisi kas, forecast arus kas 13 minggu & prediksi defisit (optimis/normal/pesimis), kebutuhan dana, kewajiban & urutan bayar yang disarankan, peringatan risiko, rekonsiliasi, EBITDA villa & bagian MKH setelah jaminan investor, budget vs aktual konstruksi, DAN menilai rencana pengeluaran/keputusan owner (\"mau beli/bangun/keluarkan Rp X, boleh?\") -- pilih ini untuk pertanyaan analisis keuangan, risiko, atau keputusan",
+      "AI CFO MKH Property (Loonars 1 + Loonars 2 terpusat): posisi kas, forecast arus kas 13 minggu & prediksi defisit (optimis/normal/pesimis), kebutuhan dana, kewajiban & urutan bayar yang disarankan, peringatan risiko, rekonsiliasi, EBITDA villa & bagian MKH setelah jaminan investor, budget vs aktual konstruksi, TOTAL PENGELUARAN / biaya / belanja pembangunan Loonars 2 yang sudah DIGABUNG dengan Loonars Coffee (dan total sisa utang toko gabungan), DAN menilai rencana pengeluaran/keputusan owner (\"mau beli/bangun/keluarkan Rp X, boleh?\") -- pilih ini untuk pertanyaan analisis keuangan, risiko, atau keputusan",
   },
 ];
 
@@ -752,6 +756,27 @@ export interface OwnerAssistantResult {
   answer: string;
 }
 
+/**
+ * Owner 2026-11-01: "berapa total pengeluaran loonars 2?" dijawab dari tool
+ * borongan + utang toko villa saja, sehingga Loonars Coffee (dibiayai Loonars 2)
+ * tidak ikut. Pertanyaan TOTAL pengeluaran/biaya/belanja Loonars 2 selalu
+ * diarahkan ke AI CFO (angka gabungan villa + Loonars Coffee). Tool rincian
+ * borongan/utang tetap dipakai bila owner memang menanyakan rinciannya.
+ */
+export function arahkanPengeluaranLoonars2(question: string, intent: OwnerIntent): OwnerIntent {
+  const q = question.toLowerCase();
+  const soalL2 = /loonars\s*2|\bl2\b|loonars living|coffee|kopi/.test(q);
+  const soalPengeluaran = /pengeluaran|belanja|biaya|spending|uang keluar/.test(q);
+  if (!soalL2 || !soalPengeluaran) return intent;
+  const mintaRincian = /borongan|tukang|mandor|retensi/.test(q);
+  const mintaToko = /utang|hutang|toko/.test(q);
+  const tools = intent.tools.filter(
+    (t) => (t !== "loonars2_borongan" || mintaRincian) && (t !== "loonars2_utang" || mintaToko),
+  );
+  if (!tools.includes("ai_cfo")) tools.unshift("ai_cfo");
+  return { ...intent, isDataQuestion: true, tools };
+}
+
 export async function tryOwnerAssistant(
   question: string,
   sender: string,
@@ -761,7 +786,7 @@ export async function tryOwnerAssistant(
 
   const hariIni = tanggalWib();
   const riwayat = await ambilRiwayat(sender).catch(() => "");
-  const intent = await extractOwnerIntent(question, riwayat, hariIni);
+  const intent = arahkanPengeluaranLoonars2(question, await extractOwnerIntent(question, riwayat, hariIni));
   if (!intent.isDataQuestion) return { applicable: false, answer: "" };
   // A data question no tool covers: say so plainly instead of letting the
   // general chat answer "tidak tersedia" as if the data were empty (owner,
