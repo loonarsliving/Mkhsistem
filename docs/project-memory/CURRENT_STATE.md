@@ -12,6 +12,14 @@ Di-merge ke produksi lewat PR #147 (deploy Vercel READY, /api/health ok). Tanpa 
 - Batasan: slip hanya memuat total take-home (tabel tidak menyimpan rincian pokok/tunjangan/potongan). Tanpa baris cocok sama sekali → jatuh ke alur lama tanpa perubahan.
 
 
+## Laporan keuangan PDF lewat WA owner (2026-11-02)
+
+- Tool baru `pdf_holding`, `pdf_loonars1`, dan `pdf_loonars2` di `owner-assistant.ts`. `arahkanPdf` mengarahkan permintaan PDF secara deterministik.
+- Alur: `POST finance.haluoleo.id/api/cfo/pdf-wa` (rahasia sync) → tautan 15 menit → `sendWhatsAppDocument`.
+- Periode: holding pakai tahun, villa pakai bulan, Loonars 2 per hari ini.
+- PDF tanpa jenis → bot menawarkan pilihan.
+- Pasangan mkh-properti migrasi 0062.
+
 ## Laporan holding PT Loonars Mahakarya + gaji = beban holding (2026-11-02, migrasi 0311)
 
 Keputusan owner: PT Loonars Mahakarya = nama baru PT MKH; laporan holding SAK

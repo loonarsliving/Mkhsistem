@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { RefundCustomer } from "@/repositories/refund.repository";
 
 import {
+  arahkanPdf,
   arahkanPengeluaranLoonars2,
+  periodePdf,
   jawabanAman,
   formatHargaVilla,
   formatKeuanganVilla,
@@ -424,5 +426,34 @@ describe("jawabanAman", () => {
     expect(j).toMatch(/^Maaf, saya belum bisa/);
     expect(j).toContain("gaji cabang Jogja Rp 12.000.000");
     expect(j).not.toContain("Loonars 1 baris 5");
+  });
+});
+
+describe("arahkanPdf", () => {
+  const dasar = { isDataQuestion: true, branchName: null, bulanDari: null, bulanSampai: null, tanggalMulai: null, jumlahHari: null };
+
+  it("permintaan PDF diarahkan ke jenis yang tepat walau model tidak memilih", () => {
+    expect(arahkanPdf("kirim laporan holding 2026 pdf", { ...dasar, tools: ["ai_cfo"] }).tools).toEqual(["pdf_holding"]);
+    expect(arahkanPdf("pdf laporan villa oktober", { ...dasar, tools: [] }).tools).toEqual(["pdf_loonars1"]);
+    expect(arahkanPdf("tolong kirimkan laporan loonars 2 dalam bentuk file", { ...dasar, tools: [] }).tools).toEqual(["pdf_loonars2"]);
+    expect(arahkanPdf("laporan loonars 1 dan loonars 2 pdf", { ...dasar, tools: [] }).tools.sort()).toEqual(["pdf_loonars1", "pdf_loonars2"]);
+  });
+
+  it("PDF tanpa jenis → minta pilih; tanpa kata PDF → tool PDF dibuang", () => {
+    expect(arahkanPdf("kirim pdf", { ...dasar, tools: [] }).minta_pdf_tanpa_jenis).toBe(true);
+    expect(arahkanPdf("laba holding tahun ini berapa?", { ...dasar, tools: ["pdf_holding", "ai_cfo"] }).tools).toEqual(["ai_cfo"]);
+  });
+
+  it("laporan utang toko tetap jalur lama (tidak dibelokkan ke PDF Loonars 2)", () => {
+    expect(arahkanPdf("laporan utang toko loonars 2 pdf", { ...dasar, tools: [] }).tools).not.toContain("pdf_loonars2");
+  });
+
+  it("periode: holding → tahun, villa → bulan, loonars 2 → hari ini", () => {
+    const i = { ...dasar, tools: [], bulanDari: "2026-10", bulanSampai: null };
+    expect(periodePdf("holding", i, "2026-11-02")).toBe("2026");
+    expect(periodePdf("holding", { ...dasar, tools: [] }, "2026-11-02")).toBe("2026");
+    expect(periodePdf("loonars1", i, "2026-11-02")).toBe("2026-10");
+    expect(periodePdf("loonars1", { ...dasar, tools: [] }, "2026-11-02")).toBeNull();
+    expect(periodePdf("loonars2", i, "2026-11-02")).toBeNull();
   });
 });
