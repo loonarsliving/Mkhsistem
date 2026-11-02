@@ -39,12 +39,17 @@ LINI BISNIS AKTIF (keputusan owner 1 Nov 2026 — hanya dua ini yang dilaporkan)
 
 LAPORAN KEUANGAN HOLDING (SAK EMKM) — keputusan owner 2 Nov 2026:
 - Laporan holding PT Loonars Mahakarya = Loonars 1 + Loonars 2 + tingkat holding (biaya bersama). Dipakai untuk laporan tahunan SAK EMKM: Laporan Posisi Keuangan, Laporan Laba Rugi, Catatan atas Laporan Keuangan. Halaman: MKH Property → AI CFO → Laporan Holding.
+- Serah terima unit Loonars 2: akhir Desember → pendapatan & harga pokok unit diakui 31 Desember.
+- Modal disetor ditetapkan dari posisi bisnis yang berjalan.
+- Tidak ada pinjaman bank → beban bunga 0. Penyusutan bangunan Loonars Coffee: garis lurus 20 tahun, mulai setelah proyek selesai. Villa Loonars 1 milik investor, tidak disusutkan PT.
+- Pajak (estimasi, dikonfirmasi konsultan pajak): penjualan unit Loonars 2 = PPh final 2,5%; penghasilan lain = PPh badan 22% dengan fasilitas Pasal 31E. PBJT hotel terpisah.
+- Rekening holding belum ada (akan diberikan owner); sementara gaji holding dibayar dari dana owner.
 - Tahun buku resmi pertama: 2027. Tahun 2026 = periode persiapan; saldo akhir 31 Des 2026 menjadi saldo awal 2027.
 - Pendapatan villa dicatat KOTOR penuh; bagi hasil investor (pool 70%) dan top-up jaminan = beban.
 - GAJI: slip gaji karyawan MK Connect (tim Jogja, Head Office, dll. — sales, markom, pengawas, refund) = BEBAN HOLDING, bukan Loonars 1 maupun Loonars 2. Gaji staf villa sudah termasuk OPEX laporan villa (Loonars 1). Slip yang belum ditransfer = utang gaji holding. Data gaji dibaca lewat AI CFO (laporan holding).
 
 DITUTUP / DIKUNCI per 1 Nov 2026 (data lama tetap ada sebagai arsip, tidak bisa ditambah):
-- Proyek MKH Property: AFP (Al Fath Puuwatu), IH (Introvert House), GCI (Griya Cariu Indah), GCR (Green Cibarusah Residence), KDI (Pembangunan Cabang Kendari). Utang bank AFP tetap ada secara hukum tetapi di luar laporan.
+- Proyek MKH Property: AFP (Al Fath Puuwatu), IH (Introvert House), GCI (Griya Cariu Indah), GCR (Green Cibarusah Residence), KDI (Pembangunan Cabang Kendari). Proyek-proyek ini (termasuk utang bank AFP) milik PT Maha Karya dan TIDAK masuk laporan keuangan PT Loonars Mahakarya.
 - Karyawan MK Connect cabang Makassar, Jabodetabek, dan Kendari dinonaktifkan.
 - Yang masih aktif: Head Office, Jogja, Loonars Private Living (karyawan); proyek LL (Loonars Living), LC (Loonars Coffee), HO (overhead).
 - Refund customer MK Connect TETAP dilaporkan dan tetap kewajiban.
