@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendWhatsAppDocument } from "@/lib/ai/notifications/engine";
 import { logger } from "@/lib/logger";
 import { getOccupancyProvider, getVillaRoomPricesForDate } from "@/lib/occupancy/villa-provider";
 import {
@@ -51,6 +52,7 @@ import { PENGETAHUAN_SISTEM } from "./owner-knowledge";
 const VILLA_API_BASE = "https://svcmybsziaelwwdrnzcv.supabase.co/functions/v1/villa-api";
 const MKH_PROPERTY_RINGKASAN_URL = "https://finance.haluoleo.id/api/laporan-investor/ringkasan-wa";
 const MKH_PROPERTY_CFO_URL = "https://finance.haluoleo.id/api/cfo/tanya-wa";
+const MKH_PROPERTY_PDF_URL = "https://finance.haluoleo.id/api/cfo/pdf-wa";
 const MAKS_HARI_OKUPANSI = 14;
 const RIWAYAT_MAKS_GILIRAN = 6;
 const RIWAYAT_JENDELA_MS = 3 * 60 * 60 * 1000;
@@ -67,7 +69,10 @@ type OwnerToolName =
   | "loonars2_tagihan"
   | "loonars2_utang"
   | "loonars2_borongan"
-  | "ai_cfo";
+  | "ai_cfo"
+  | "pdf_holding"
+  | "pdf_loonars1"
+  | "pdf_loonars2";
 type ToolName = QueryToolName | OwnerToolName;
 
 const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
@@ -129,7 +134,26 @@ const OWNER_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
   },
 ];
 
+const PDF_TOOL_CATALOG: { name: OwnerToolName; description: string }[] = [
+  {
+    name: "pdf_holding",
+    description:
+      "KIRIM FILE PDF Laporan Keuangan Holding PT Loonars Mahakarya (SAK EMKM: laba rugi, posisi keuangan, ekuitas, catatan) untuk satu TAHUN -- pilih HANYA bila owner meminta PDF/file/dokumen laporan holding/konsolidasi/SAK EMKM/laporan tahunan",
+  },
+  {
+    name: "pdf_loonars1",
+    description:
+      "KIRIM FILE PDF laporan bulanan Loonars 1 / villa (pendapatan per channel, EBITDA, okupansi, bagi hasil) untuk satu BULAN -- pilih HANYA bila owner meminta PDF/file/dokumen laporan villa/Loonars 1",
+  },
+  {
+    name: "pdf_loonars2",
+    description:
+      "KIRIM FILE PDF laporan Loonars 2 (penjualan villa, uang investor, pengeluaran pembangunan + Loonars Coffee, utang toko, posisi keuangan) per hari ini -- pilih HANYA bila owner meminta PDF/file/dokumen laporan Loonars 2",
+  },
+];
+
 const SEMUA_TOOL: { name: ToolName; description: string }[] = [
+  ...PDF_TOOL_CATALOG,
   ...QUERY_TOOL_CATALOG,
   ...OWNER_TOOL_CATALOG,
 ];
@@ -702,6 +726,9 @@ export const OWNER_MENU_TEXT = [
   "• pengajuan & cuti yang masih pending?",
   "• refund customer bulan ini? sisa refund?",
   "",
+  "📄 *Laporan PDF* (dikirim sebagai file)",
+  "• laporan holding 2026 pdf · laporan villa Oktober pdf · laporan loonars 2 pdf",
+  "",
   "🧩 *Pertanyaan bebas & gabungan*",
   "• Loonars 2 sudah keluar berapa termasuk Loonars Coffee, dan utangnya?",
   "• rekening C Loonars 2 itu untuk apa?",
@@ -878,6 +905,11 @@ function jalankanToolOwner(
       return runLoonars2(sender, "daftar_borongan", "Loonars 2 Borongan Tukang");
     case "ai_cfo":
       return runAiCfo(sender, question);
+    case "pdf_holding":
+    case "pdf_loonars1":
+    case "pdf_loonars2":
+      // Dikirim sebagai dokumen di tryOwnerAssistant, bukan data teks.
+      return Promise.resolve(`[${tool}] dikirim sebagai PDF terpisah`);
     default:
       return runTool(supabase, tool, c.branchId, c.branchName);
   }
@@ -936,6 +968,78 @@ export function arahkanPengeluaranLoonars2(question: string, intent: OwnerIntent
   return { ...intent, isDataQuestion: true, tools };
 }
 
+type JenisPdf = "holding" | "loonars1" | "loonars2";
+const PDF_TOOL: Record<"pdf_holding" | "pdf_loonars1" | "pdf_loonars2", JenisPdf> = {
+  pdf_holding: "holding",
+  pdf_loonars1: "loonars1",
+  pdf_loonars2: "loonars2",
+};
+const JUDUL_PDF: Record<JenisPdf, string> = {
+  holding: "Laporan Keuangan Holding (SAK EMKM)",
+  loonars1: "Laporan Loonars 1 (villa)",
+  loonars2: "Laporan Loonars 2 (penjualan & pembangunan)",
+};
+
+export const OWNER_PDF_PILIH_TEXT = [
+  "📄 Laporan PDF mana yang Bapak perlukan?",
+  "• *laporan holding 2026 pdf* — laba rugi, neraca, catatan (SAK EMKM)",
+  "• *laporan villa Oktober pdf* — Loonars 1 bulanan",
+  "• *laporan loonars 2 pdf* — penjualan, pembangunan, utang",
+  "• *lapkeu* — Laporan Investor · *laporan utang loonars 2 pdf* — utang toko",
+].join("\n");
+
+/**
+ * Owner 2026-11-02: "semua laporan keuangan saya minta di WA dan AI
+ * mengirimkan file PDF". Model kecil kadang tidak memilih tool PDF, jadi
+ * permintaan PDF yang jelas diarahkan secara deterministik. Exported for tests.
+ */
+export function arahkanPdf(question: string, intent: OwnerIntent): OwnerIntent & { minta_pdf_tanpa_jenis?: boolean } {
+  const q = question.toLowerCase();
+  if (!/\bpdf\b|\bfile\b|\bdokumen\b|kirim(?:kan)?\s+(?:saya\s+)?laporan/.test(q)) {
+    return { ...intent, tools: intent.tools.filter((t) => !(t in PDF_TOOL)) };
+  }
+  const tools = new Set(intent.tools.filter((t) => t in PDF_TOOL));
+  if (/holding|konsolidasi|sak\s*emkm|laporan\s+tahunan|laba\s*rugi|neraca|posisi\s+keuangan/.test(q)) tools.add("pdf_holding");
+  if (/villa|loonars\s*1\b|\bl1\b|hospitality/.test(q)) tools.add("pdf_loonars1");
+  if (/loonars\s*2\b|\bl2\b|loonars\s+living|pembangunan|developer|coffee/.test(q) && !/utang\s+toko/.test(q)) tools.add("pdf_loonars2");
+  if (tools.size === 0) return { ...intent, isDataQuestion: true, tools: [], minta_pdf_tanpa_jenis: true };
+  return { ...intent, isDataQuestion: true, tools: [...tools] };
+}
+
+/** Periode PDF dari intent: holding → tahun; loonars1 → bulan; loonars2 → per hari ini. Exported for tests. */
+export function periodePdf(jenis: JenisPdf, intent: OwnerIntent, hariIni: string): string | null {
+  const bulan = intent.bulanSampai ?? intent.bulanDari;
+  if (jenis === "holding") return (bulan ?? hariIni).slice(0, 4);
+  if (jenis === "loonars1") return bulan ?? null;
+  return null;
+}
+
+async function kirimPdf(sender: string, jenis: JenisPdf, periode: string | null): Promise<string> {
+  const judul = `${JUDUL_PDF[jenis]}${periode ? ` ${periode}` : ""}`;
+  const { data: secret, error } = await createAdminClient().rpc("get_sync_secret");
+  if (error || !secret) return `⚠️ ${judul}: rahasia sistem tidak tersedia, PDF belum bisa dibuat.`;
+  try {
+    const res = await fetch(MKH_PROPERTY_PDF_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-sync-secret": secret as string },
+      body: JSON.stringify({ nomor: sender, jenis, periode }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const j = (await res.json().catch(() => ({}))) as { status?: string; url?: string; nama_berkas?: string };
+    if (!res.ok || j.status !== "ok" || !j.url || !j.nama_berkas) {
+      logger.error("owner-assistant: tautan PDF gagal", { status: res.status, jenis });
+      return `⚠️ ${judul}: MKH Property gagal membuat PDF (HTTP ${res.status}).`;
+    }
+    const kirim = await sendWhatsAppDocument(sender, j.url, j.nama_berkas);
+    if (!kirim.success) return `⚠️ ${judul}: PDF sudah dibuat tapi gagal dikirim sebagai dokumen. Coba minta lagi sebentar.`;
+    return `📄 ${judul} terkirim sebagai PDF.`;
+  } catch (e) {
+    logger.error("owner-assistant: gagal meminta PDF", { error: e instanceof Error ? e.message : String(e), jenis });
+    return `⚠️ ${judul}: MKH Property tidak bisa dihubungi.`;
+  }
+}
+
 export async function tryOwnerAssistant(
   question: string,
   sender: string,
@@ -945,7 +1049,20 @@ export async function tryOwnerAssistant(
 
   const hariIni = tanggalWib();
   const riwayat = await ambilRiwayat(sender).catch(() => "");
-  const intent = arahkanPengeluaranLoonars2(question, await extractOwnerIntent(question, riwayat, hariIni));
+  const intent = arahkanPdf(question, arahkanPengeluaranLoonars2(question, await extractOwnerIntent(question, riwayat, hariIni)));
+  if (intent.minta_pdf_tanpa_jenis) return { applicable: true, answer: OWNER_PDF_PILIH_TEXT };
+  const pdfTools = intent.tools.filter((t): t is keyof typeof PDF_TOOL => t in PDF_TOOL);
+  if (pdfTools.length) {
+    const hasilPdf = [];
+    for (const t of pdfTools) {
+      const jenis = PDF_TOOL[t];
+      hasilPdf.push(await kirimPdf(sender, jenis, periodePdf(jenis, intent, hariIni)));
+    }
+    return {
+      applicable: true,
+      answer: `${hasilPdf.join("\n")}\n\nIsi PDF dihitung otomatis dari data terbaru sistem saat dibuat. Tautan unduh hanya berlaku 15 menit.`,
+    };
+  }
   if (!intent.isDataQuestion) {
     if (!intent.isSystemQuestion) return { applicable: false, answer: "" };
     const answer = await askAI(
