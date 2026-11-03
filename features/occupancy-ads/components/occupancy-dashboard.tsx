@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { AdScheduleFields, AdScheduleSummary, adScheduleError, DEFAULT_AD_SCHEDULE, toScheduleInput, type AdScheduleValue } from "@/components/shared/ad-schedule-fields";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatTile } from "@/components/shared/stat-tile";
 import { CampaignDecisionPanel } from "./campaign-decision-panel";
@@ -64,6 +65,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
   const [propertyName, setPropertyName] = React.useState("Loonars Private Living");
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [schedules, setSchedules] = React.useState<Record<string, AdScheduleValue>>({});
 
   const { data: targets, isLoading: targetsLoading } = useQuery({ queryKey: ["occupancy-targets"], queryFn: listOccupancyTargetsAction });
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({ queryKey: ["occupancy-campaigns"], queryFn: listOccupancyCampaignsAction });
@@ -201,6 +203,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
+                <AdScheduleSummary durationDays={c.duration_days} totalBudgetIdr={c.total_budget_idr} endsAt={c.ends_at} />
 
                 {["draft", "review", "rejected", "approved", "ready_for_meta"].includes(c.status) && <MetaAdPreview campaign={c} canManage={canManage} />}
 
@@ -214,6 +217,15 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
 
                 {(c.status === "active" || c.status === "paused") && <CampaignDecisionPanel campaignId={c.id} campaignStatus={c.status} />}
                 <CampaignMetaReviewStatus campaignId={c.id} hasMetaAdId={Boolean(c.meta_ad_id)} />
+
+                {canManage && c.status === "approved" && (
+                  <AdScheduleFields
+                    value={schedules[c.id] ?? DEFAULT_AD_SCHEDULE}
+                    onChange={(value) => setSchedules((prev) => ({ ...prev, [c.id]: value }))}
+                    disabled={busy === c.id}
+                    continuousLabel={`Terus berjalan (Rp${c.daily_budget_idr.toLocaleString("id-ID")}/hari)`}
+                  />
+                )}
 
                 {canManage && (
                   <div className="flex flex-wrap gap-2 pt-2">
@@ -232,13 +244,36 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                             toast.error('Belum ada aset terpilih untuk campaign ini -- pilih dulu lewat "Ganti Aset" di Meta Ad Preview sebelum meluncurkan.');
                             return;
                           }
-                          if (!window.confirm(`Luncurkan campaign ini ke Meta dengan budget Rp${c.daily_budget_idr.toLocaleString("id-ID")}/hari? Ini akan mengeluarkan biaya iklan nyata.`)) return;
+                          const schedule = schedules[c.id] ?? DEFAULT_AD_SCHEDULE;
+                          const scheduleError = adScheduleError(schedule);
+                          if (scheduleError) {
+                            toast.error(scheduleError);
+                            return;
+                          }
+                          const scheduleInput = toScheduleInput(schedule);
+                          const confirmText = scheduleInput
+                            ? `Luncurkan campaign ini ke Meta selama ${scheduleInput.durationDays} hari dengan total budget Rp${scheduleInput.totalBudgetIdr.toLocaleString("id-ID")}? Ini akan mengeluarkan biaya iklan nyata.`
+                            : `Luncurkan campaign ini ke Meta dengan budget Rp${c.daily_budget_idr.toLocaleString("id-ID")}/hari? Ini akan mengeluarkan biaya iklan nyata.`;
+                          if (!window.confirm(confirmText)) return;
                           setBusy(c.id);
-                          const result = await launchOccupancyCampaignAction(c.id, [primaryAsset.public_url], primaryAsset.media_type as "image" | "video");
-                          setBusy(null);
+                          let result: Awaited<ReturnType<typeof launchOccupancyCampaignAction>>;
+                          try {
+                            result = await launchOccupancyCampaignAction(c.id, [primaryAsset.public_url], primaryAsset.media_type as "image" | "video", scheduleInput);
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Gagal meluncurkan campaign -- coba lagi");
+                            return;
+                          } finally {
+                            setBusy(null);
+                          }
                           if (!result.success) toast.error(result.error);
                           else {
-                            toast.success("Campaign diluncurkan ke Meta");
+                            const launched = result.data;
+                            toast.success(
+                              launched?.durationDays && launched.totalBudgetIdr
+                                ? `Campaign diluncurkan: ${launched.durationDays} hari, Rp${launched.dailyBudgetIdr.toLocaleString("id-ID")}/hari (total maks Rp${launched.totalBudgetIdr.toLocaleString("id-ID")})` +
+                                    (launched.clampedByCeiling ? " -- budget harian dipotong ke plafon harian properti" : "")
+                                : "Campaign diluncurkan ke Meta",
+                            );
                             queryClient.invalidateQueries({ queryKey: ["occupancy-campaigns"] });
                           }
                         }}

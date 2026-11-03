@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AdScheduleFields, AdScheduleSummary, adScheduleError, DEFAULT_AD_SCHEDULE, toScheduleInput, type AdScheduleValue } from "@/components/shared/ad-schedule-fields";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatTile } from "@/components/shared/stat-tile";
@@ -46,6 +47,7 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
   const [budgetEditId, setBudgetEditId] = React.useState<string | null>(null);
   const [budgetValue, setBudgetValue] = React.useState("");
   const [savingBudget, setSavingBudget] = React.useState(false);
+  const [schedules, setSchedules] = React.useState<Record<string, AdScheduleValue>>({});
 
   const { data: projects } = useQuery({ queryKey: ["markom-projects-for-photos"], queryFn: listProjectsForPhotoUploadAction, enabled: canManage });
   const { data: campaigns, isLoading } = useQuery({ queryKey: ["markom-ad-campaigns"], queryFn: listAdCampaignsAction });
@@ -74,15 +76,29 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
 
   /** try/catch/finally is deliberate here -- without it, any thrown error (network hiccup, Vercel function timeout on a slow Meta launch) leaves the button stuck spinning forever with no toast, since setBusyId(null) would never run. */
   async function handleLaunchDraft(id: string) {
+    const schedule = schedules[id] ?? DEFAULT_AD_SCHEDULE;
+    const scheduleError = adScheduleError(schedule);
+    if (scheduleError) {
+      toast.error(scheduleError);
+      return;
+    }
     setBusyId(id);
     try {
-      const result = await launchDraftCampaignAction(id);
+      const result = await launchDraftCampaignAction(id, toScheduleInput(schedule));
       if (!result.success) {
         toast.error(result.error ?? "Gagal meluncurkan iklan");
         queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
         return;
       }
-      toast.success("Iklan berhasil diluncurkan ke Meta");
+      const launched = result.data;
+      if (launched?.durationDays && launched.totalBudgetIdr) {
+        toast.success(
+          `Iklan diluncurkan: ${launched.durationDays} hari, Rp${launched.dailyBudgetIdr.toLocaleString("id-ID")}/hari (total maks Rp${launched.totalBudgetIdr.toLocaleString("id-ID")})` +
+            (launched.clampedByAccountCap ? " -- budget harian dipotong oleh batas harian akun iklan" : ""),
+        );
+      } else {
+        toast.success("Iklan berhasil diluncurkan ke Meta");
+      }
       queryClient.invalidateQueries({ queryKey: ["markom-ad-campaigns"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal meluncurkan iklan -- coba lagi");
@@ -328,6 +344,16 @@ export function AdCampaignList({ canManage }: { canManage: boolean }) {
                       </p>
                     )}
                     {c.status === "failed" && c.failure_reason && <p className="text-xs text-destructive">Gagal: {c.failure_reason}</p>}
+                    <AdScheduleSummary durationDays={c.duration_days} totalBudgetIdr={c.total_budget_idr} endsAt={c.ends_at} />
+
+                    {canManage && c.status === "draft" && (
+                      <AdScheduleFields
+                        value={schedules[c.id] ?? DEFAULT_AD_SCHEDULE}
+                        onChange={(value) => setSchedules((prev) => ({ ...prev, [c.id]: value }))}
+                        disabled={busyId === c.id}
+                        continuousLabel={`Terus berjalan (Rp${c.daily_budget_idr.toLocaleString("id-ID")}/hari)`}
+                      />
+                    )}
 
                     {(c.status === "active" || c.status === "paused") && (
                       <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { toMetaUnixTimestamp } from "@/lib/ads/campaign-schedule";
+
 import { META_CONFIG } from "./config";
 import { metaGraphRequest } from "./client";
 
@@ -217,6 +219,8 @@ export interface CreateAdSetInput {
   dailyBudgetIdr: number;
   targeting: AdSetTargeting;
   status?: "ACTIVE" | "PAUSED";
+  /** Iklan berjadwal (migrasi 0312): Meta berhenti menayangkan ad set ini pada waktu ini. Tanpa nilai = berjalan terus (perilaku lama). */
+  endTime?: Date;
 }
 
 /** destination_type: WHATSAPP + promoted_object.page_id is what makes this a Click-to-WhatsApp ad set -- the actual destination number is whichever WhatsApp Business Account is linked to that Page in Business Manager, not an API field. */
@@ -227,6 +231,7 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
       name: input.name,
       campaign_id: input.campaignId,
       daily_budget: Math.round(input.dailyBudgetIdr),
+      ...(input.endTime ? { end_time: toMetaUnixTimestamp(input.endTime) } : {}),
       billing_event: "IMPRESSIONS",
       optimization_goal: "CONVERSATIONS",
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
@@ -386,6 +391,8 @@ export interface LaunchCampaignInput {
   description?: string;
   welcomeMessage?: string;
   dailyBudgetIdr: number;
+  /** Lihat CreateAdSetInput.endTime. */
+  endTime?: Date;
   /** Defaults to country-wide ["ID"] if omitted -- callers pass getLeaseholdTargetGeoLocations() for villa projects. */
   targeting?: AdSetTargeting;
 }
@@ -424,6 +431,7 @@ export async function launchWhatsAppLeadCampaign(input: LaunchCampaignInput): Pr
       name: `${input.projectName} - Ad Set`,
       campaignId: campaign.id,
       dailyBudgetIdr: input.dailyBudgetIdr,
+      endTime: input.endTime,
       targeting: input.targeting ?? { countries: ["ID"] },
       status: "ACTIVE",
     });
@@ -473,6 +481,8 @@ export interface CreateTrafficAdSetInput {
   dailyBudgetIdr: number;
   targeting: AdSetTargeting;
   status?: "ACTIVE" | "PAUSED";
+  /** Iklan berjadwal (migrasi 0312): Meta berhenti menayangkan ad set ini pada waktu ini. Tanpa nilai = berjalan terus (perilaku lama). */
+  endTime?: Date;
 }
 
 /** optimization_goal: LINK_CLICKS -- Meta optimizes delivery for people likely to click through to destinationUrl, no WhatsApp-specific fields (destination_type/promoted_object) here. */
@@ -483,6 +493,7 @@ export async function createTrafficAdSet(input: CreateTrafficAdSetInput): Promis
       name: input.name,
       campaign_id: input.campaignId,
       daily_budget: Math.round(input.dailyBudgetIdr),
+      ...(input.endTime ? { end_time: toMetaUnixTimestamp(input.endTime) } : {}),
       billing_event: "IMPRESSIONS",
       optimization_goal: "LINK_CLICKS",
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
@@ -575,6 +586,8 @@ export interface LaunchLinkClickCampaignInput {
   destinationUrl: string;
   cta?: string;
   dailyBudgetIdr: number;
+  /** Lihat CreateAdSetInput.endTime. */
+  endTime?: Date;
   targeting?: AdSetTargeting;
 }
 
@@ -601,6 +614,7 @@ export async function launchLinkClickCampaign(input: LaunchLinkClickCampaignInpu
       name: `${input.campaignName} - Ad Set`,
       campaignId: campaign.id,
       dailyBudgetIdr: input.dailyBudgetIdr,
+      endTime: input.endTime,
       targeting: input.targeting ?? { countries: ["ID"] },
       status: "ACTIVE",
     });
