@@ -143,6 +143,20 @@ export async function trySalaryPayslipFromTransferProof(sender: { id: string; ro
       return { outcome: "not_applicable", reason: `no_salary_match(rows=${rows.length})` };
     }
     logger.info("salary-payslip: salary-like screenshot without a match", { rows: rows.map(describeRow) });
+    if (rows.length === 1) {
+      // Real incident 2026-11-03: owner paid three Loonars 2 pengajuan (Rp 7.590.500) in one transfer to an account
+      // that is ALSO a Kepala Cabang's salary account. Only the account matched, so the reply claimed it was a gaji
+      // proof, which made no sense to the owner. Still not forwarded anywhere (same safeguard), but say plainly
+      // that only the account matched and how to file it if it was a pengajuan payment.
+      return {
+        outcome: "processed",
+        sentCount: 0,
+        replyText:
+          `⚠️ Transfer ${describeRow(rows[0])} belum bisa saya catat.\n` +
+          "Rekening ini terdaftar sebagai rekening gaji karyawan, tapi nominalnya tidak cocok dengan gaji mana pun, dan juga tidak cocok dengan pengajuan yang menunggu pembayaran. Tidak ada yang dicatat dan foto tidak diteruskan ke siapa pun.\n\n" +
+          "Kalau ini pembayaran pengajuan Loonars 2, kirim ulang foto dengan keterangan \"L2 bayar M-xx\" (kode di pesan pengajuan). Kalau ini gaji, cek nominal/rekening di /hr/salary.",
+      };
+    }
     return {
       outcome: "processed",
       sentCount: 0,
