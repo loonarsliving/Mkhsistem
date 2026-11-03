@@ -274,6 +274,82 @@ const LAPORAN_UTANG_PDF_DULU_RE = /^utang(?:\s+toko)?(?:\s+(?:loonars\s*2|l2))?\
 export const TRANSFER_BEDA_RE = /\b(?:(?:transfer|trf|bukti|cicilan)\s+(?:beda|berbeda|lain)|beda\s+(?:transfer|trf|bukti)|bukan\s+(?:transfer\s+|bukti\s+)?(?:double|dobel|ganda))\b/i;
 
 const PREFIX_RE = /^(?:l2|loonars\s*2)\b[\s:,.-]*/i;
+
+/** Karakter tak terlihat yang disisipkan WhatsApp/keyboard (mis. U+2060 sesudah bullet "• ⁠pasir"). */
+const TAK_TERLIHAT_RE = /[​-‍⁠﻿]/g;
+const BULLET_RE = /^\s*(?:[-•*·▪●◦]|\d{1,2}[.)](?=\s))\s*/;
+
+function hapusBullet(baris: string): string {
+  return baris.replace(BULLET_RE, "").trim();
+}
+
+function adalahBullet(baris: string): boolean {
+  return BULLET_RE.test(baris) && hapusBullet(baris) !== "";
+}
+
+/** "Transfer ke Bank BCA 7855066190 Naimuddin Irfan": rekening tanpa nominal & tanpa kata pembayaran. */
+function adalahBarisRekeningSaja(baris: string): boolean {
+  const { rekening, sisa } = pisahRekening(hapusBullet(baris));
+  if (!rekening) return false;
+  if (parseRupiah(sisa.replace(UNIT_SEMUA_RE, " ")) !== null) return false;
+  if (/\b(?:cicilan|cicil|angsuran|kontraktor|tukang|upah|borongan|mandor|retensi|unit|blok)\b/i.test(sisa)) return false;
+  return sisa.split(/\s+/).filter(Boolean).length <= 6;
+}
+
+/**
+ * Baris-baris di bawah label ("L2 lain") adalah daftar rincian bila ada minimal satu baris bullet, setiap baris bullet
+ * bernominal, dan baris selebihnya hanya rekening. Daftar bahan tanpa nominal per baris ("L2 bahan TB Maju\n- semen
+ * 100 sak\n- pasir 12 rit\ntotal 8,5 juta") tidak termasuk, tetap dibaca alur bahan seperti biasa.
+ */
+function adalahDaftarRincian(baris: string[]): boolean {
+  let adaBullet = false;
+  for (const b of baris) {
+    if (adalahBarisRekeningSaja(b)) continue;
+    if (!adalahBullet(b)) return false;
+    if (parseRupiah(pisahRekening(hapusBullet(b)).sisa.replace(UNIT_SEMUA_RE, " ")) === null) return false;
+    adaBullet = true;
+  }
+  return adaBullet;
+}
+
+/**
+ * Pengajuan yang setiap barisnya diberi bullet dan "L2" (real incident 3 Nov 2026, Vando):
+ *   • L2 pasir 5.250.000
+ *   • L2 belanja material 1.340.500
+ *   • L2 kos 1 Jt
+ *   Transfer ke Bank BCA 7855066190 Naimuddin Irfan
+ * Karena baris pertama diawali "•", pesan ini tidak dikenali sebagai L2, jatuh ke asisten umum, yang lalu menjawab
+ * "akan diproses" padahal tidak ada yang tercatat. Ditulis ulang menjadi "L2 pengajuan" + satu baris per pembayaran.
+ * Bullet di depan "L2" pada pesan biasa (satu perintah) cukup dibuang.
+ */
+export function rapikanBulletL2(input: string): string {
+  const bersih = input.replace(TAK_TERLIHAT_RE, "");
+  const baris = bersih.split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+  if (baris.length === 0) return bersih;
+  const tanpaBullet = baris.map(hapusBullet);
+  if (!PREFIX_RE.test(tanpaBullet[0])) return bersih;
+  const barisL2 = tanpaBullet.filter((b) => PREFIX_RE.test(b));
+  const isiL2 = (b: string) => b.replace(PREFIX_RE, "").trim();
+  const bisaDaftar =
+    barisL2.length >= 2 &&
+    !/^(?:pengajuan|ajuan|mingguan|borongan)\b/i.test(isiL2(tanpaBullet[0])) &&
+    barisL2.every((b) => parseRupiah(pisahRekening(isiL2(b)).sisa.replace(UNIT_SEMUA_RE, " ")) !== null) &&
+    tanpaBullet.every((b) => PREFIX_RE.test(b) || adalahBarisRekeningSaja(b));
+  if (bisaDaftar) {
+    return ["L2 pengajuan", ...tanpaBullet.map((b) => (PREFIX_RE.test(b) ? `- ${isiL2(b)}` : b))].join("\n");
+  }
+  if (tanpaBullet[0] === baris[0]) return bersih;
+  const semua = bersih.split(/\r?\n/);
+  const i = semua.findIndex((b) => b.trim());
+  semua[i] = hapusBullet(semua[i]);
+  return semua.join("\n");
+}
+
+/** Pesan berbaris yang jelas menyebut L2 (di depan baris, boleh setelah bullet) dan memuat nominal. */
+function jelasPengajuanL2Berbaris(input: string): boolean {
+  const baris = input.replace(TAK_TERLIHAT_RE, "").split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+  return baris.length >= 2 && baris.some((b) => PREFIX_RE.test(hapusBullet(b))) && parseRupiah(input) !== null;
+}
 const UNIT_LALU_UPAH_RE = /^(?:unit|blok)\s+[\w\s,&-]*?\b(?:kontraktor|tukang|upah|mandor)\b/i;
 
 /**
@@ -294,6 +370,11 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   let isi: string[];
   if (header) {
     isi = [header[1], ...baris.slice(1)].filter((b) => b.trim());
+  } else if (baris.length > 1 && adalahDaftarRincian(baris.slice(1))) {
+    // "L2 lain\n• pasir 5.250.000\n• belanja material 1.340.500\nTransfer ke BCA ..." (real incident 3 Nov 2026):
+    // baris pertama hanya label, rinciannya di baris bullet. Dulu hanya "lain" yang terbaca (Rp 0) dan semua baris
+    // bullet dibuang. Label tanpa nominal diabaikan; label bernominal ikut sebagai baris pertama.
+    isi = [...(parseRupiah(kepala.replace(UNIT_SEMUA_RE, " ")) !== null ? [kepala] : []), ...baris.slice(1)];
   } else if (baris.length === 1 && /^(?:(?:cicilan|cicil|angsuran|bayar\s+utang|kontraktor|tukang|upah|mandor|retensi|pembelian|beli|belanja)\b|borongan\s+\S)/i.test(kepala) ||
     // "L2 unit 1-6 tukang minggu ini 20.000.000" (real incident 21 Okt 2026): unit ditulis sebelum kata "tukang". Dulu
     // jatuh ke pengajuan satuan (hanya unit 1, tidak tertaut borongan); sekarang baris upah mingguan seperti biasa.
@@ -302,7 +383,14 @@ export function parsePengajuanMingguan(input: string): Loonars2Perintah | null {
   } else {
     return null;
   }
-  const hasil = isi.map(parseBarisMingguan).filter((b): b is BarisMingguan => b !== null);
+  // Baris yang isinya hanya rekening ("Transfer ke Bank BCA 7855066190 Naimuddin Irfan") bukan pembayaran: dipakai
+  // sebagai rekening tujuan baris-baris yang belum menyebut rekening, bukan dicatat sebagai baris Rp 0.
+  const rekeningSaja = isi.filter(adalahBarisRekeningSaja);
+  const hasil = isi
+    .filter((b) => !adalahBarisRekeningSaja(b))
+    .map(parseBarisMingguan)
+    .filter((b): b is BarisMingguan => b !== null)
+    .map((b) => (!b.rekening && rekeningSaja.length === 1 ? { ...b, rekening: hapusBullet(rekeningSaja[0]) } : b));
   if (hasil.length === 0) return { aksi: "bantuan" };
   return { aksi: "ajukan_mingguan", data: { baris: hasil } };
 }
@@ -364,8 +452,11 @@ const L2_DI_TENGAH_RE = /^\s*(?:[^\s\n]+\s+){1,4}?(?:l2|loonars\s*2)\b[\s:,.-]*(
 export const L2_TIDAK_DI_AWAL =
   "⚠️ Pengajuan Loonars 2 harus diawali kata \"L2\" di paling depan, jadi pesan ini belum saya catat. Kirim ulang dengan \"L2\" sebagai kata pertama, mis.\nL2 pengajuan minggu ini\n- cicilan TB Maju 3 juta BCA 1234567890 a.n. Budi";
 
+export const L2_FORMAT_TIDAK_TERBACA =
+  "⚠️ Pengajuan Loonars 2 ini belum bisa saya baca, jadi BELUM tercatat. Kirim ulang dengan format:\nL2 pengajuan minggu ini\n- pasir 5.250.000 BCA 1234567890 a.n. Budi\n- belanja material 1.340.500\n\nSatu baris = satu pembayaran, nominal di setiap baris.";
+
 export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
-  input = rapikanAwalanL2(input);
+  input = rapikanAwalanL2(rapikanBulletL2(input));
   const borongan = parseBorongan(input);
   if (borongan) return borongan;
   const mingguan = parsePengajuanMingguan(input);
@@ -661,6 +752,10 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     // Jelas pengajuan L2 (ada nominal) tapi "L2" tidak di depan: jangan dilempar ke asisten umum yang tidak tahu
     // Loonars 2 dan bisa mengarang jawaban.
     if (L2_DI_TENGAH_RE.test(text) && parseRupiah(text) !== null) return { outcome: "handled", reply: L2_TIDAK_DI_AWAL };
+    // Pesan berbaris yang jelas menyebut L2 dan bernominal tapi formatnya tidak terbaca: balas petunjuk format,
+    // jangan dilempar ke asisten umum (3 Nov 2026: asisten umum menjawab "akan diproses" padahal tidak tercatat,
+    // dan malah menyebut saldo kas cabang kepada pelaksana).
+    if (jelasPengajuanL2Berbaris(text)) return { outcome: "handled", reply: L2_FORMAT_TIDAK_TERBACA };
     return { outcome: "not_applicable" };
   }
 

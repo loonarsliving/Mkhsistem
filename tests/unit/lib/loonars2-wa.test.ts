@@ -431,3 +431,57 @@ describe("upah tukang dengan unit di depan (L2-67, 21 Okt 2026)", () => {
     expect(parseLoonars2Perintah("L2 unit 1-6")?.aksi).toBe("unit_dibangun");
   });
 });
+
+describe("pengajuan Vando 3 Nov 2026 (bullet di setiap baris & label \"L2 lain\")", () => {
+  type Baris = { jenis: string; nominal: number | null; rekening?: string; deskripsi: string };
+  const barisDari = (p: unknown) => (p as { data: { baris: Baris[] } }).data.baris;
+  // Pesan asli dari log ai_conversations, termasuk U+2060 (word joiner) yang disisipkan WhatsApp sesudah bullet.
+  const PESAN_LABEL = "L2 lain \n• pasir 5.250.000 \n• ⁠belanja material 1.340.500\n• ⁠kos 1 Jt\nTransfer ke Bank BCA 7855066190 Naimuddin Irfan";
+  const PESAN_BULLET_L2 = "• L2 pasir 5.250.000 \n• ⁠L2 belanja material 1.340.500\n• ⁠L2 kos 1 Jt\nTransfer ke Bank BCA 7855066190 Naimuddin Irfan";
+
+  it.each([
+    ["label \"L2 lain\" + baris bullet", PESAN_LABEL],
+    ["bullet + \"L2\" di setiap baris", PESAN_BULLET_L2],
+  ])("%s terbaca 3 baris, total 7.590.500, rekening terpakai di semua baris", (_nama, pesan) => {
+    const p = parseLoonars2Perintah(pesan);
+    expect(p?.aksi).toBe("ajukan_mingguan");
+    const baris = barisDari(p);
+    expect(baris.map((b) => b.nominal)).toEqual([5_250_000, 1_340_500, 1_000_000]);
+    expect(baris.reduce((s, b) => s + (b.nominal ?? 0), 0)).toBe(7_590_500);
+    expect(baris.every((b) => b.rekening?.includes("7855066190"))).toBe(true);
+    expect(baris.map((b) => b.deskripsi).join(" ")).not.toMatch(/⁠|L2/);
+  });
+
+  it("variasi \"pasir 3 dump 5.250.000\" (percobaan Vando sebelumnya) tetap terbaca nominal yang benar", () => {
+    const baris = barisDari(parseLoonars2Perintah(PESAN_LABEL.replace("pasir 5.250.000", "pasir 3 dump 5.250.000")));
+    expect(baris.map((b) => b.nominal)).toEqual([5_250_000, 1_340_500, 1_000_000]);
+  });
+
+  it("bullet di depan perintah L2 satu baris dibuang", () => {
+    expect(parseLoonars2Perintah("• L2 cicilan TB Maju 3 juta")).toMatchObject({ aksi: "ajukan_mingguan", data: { baris: [{ jenis: "cicilan", nominal: 3_000_000 }] } });
+  });
+
+  it("label bernominal ikut sebagai baris pertama", () => {
+    const baris = barisDari(parseLoonars2Perintah("L2 listrik 600 rb\n- bensin 200 rb"));
+    expect(baris.map((b) => b.nominal)).toEqual([600_000, 200_000]);
+  });
+
+  it("dua rekening berbeda di baris terpisah tidak dibagikan sembarangan", () => {
+    const baris = barisDari(parseLoonars2Perintah("L2 lain\n- pasir 1 juta\n- semen 2 juta\nBCA 1234567890 a.n. Budi\nMandiri 9876543210 a.n. Sarno"));
+    expect(baris.map((b) => b.nominal)).toEqual([1_000_000, 2_000_000]);
+    expect(baris.every((b) => !b.rekening)).toBe(true);
+  });
+
+  it("daftar bahan tanpa nominal per baris tidak dibajak sebagai daftar rincian", () => {
+    expect(parseLoonars2Perintah("L2 lain\n- semen 100 sak\n- pasir 12 rit")).not.toMatchObject({ aksi: "ajukan_mingguan", data: { baris: [{ nominal: null }, { nominal: null }] } });
+  });
+
+  it("pesan berbaris ber-L2 yang tetap tidak terbaca dibalas petunjuk, bukan dilempar ke asisten umum", async () => {
+    const { tryHandleLoonars2Text, L2_FORMAT_TIDAK_TERBACA } = await import("@/lib/ai/domains/loonars2-wa");
+    await expect(tryHandleLoonars2Text("62800", "Pak mohon dicek\n• L2 ??? 5.250.000 dan seterusnya\nterima kasih")).resolves.toEqual({
+      outcome: "handled",
+      reply: L2_FORMAT_TIDAK_TERBACA,
+    });
+    await expect(tryHandleLoonars2Text("62800", "Halo kak\nmau tanya villa 500 rb")).resolves.toEqual({ outcome: "not_applicable" });
+  });
+});
