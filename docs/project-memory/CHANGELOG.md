@@ -7,6 +7,20 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-03 — Loonars 2: pengajuan berbullet tidak lagi hilang + saldo kas WA dibatasi per peran
+
+Insiden: Vando (Kepala Cabang Jogja) mengirim pengajuan Rp 7.590.500 lima kali dan tidak ada yang tercatat.
+(1) "L2 lain" + baris bullet: parser hanya membaca "lain" (Rp 0) dan membuang semua baris bullet. (2) "• L2 pasir ..."
+(bullet di depan L2): tidak dikenali sebagai L2, jatuh ke asisten umum LEON yang menjawab "akan diproses" (tidak
+benar) dan menyebut saldo kas semua cabang ke kepala cabang.
+- `loonars2-wa.ts`: `rapikanBulletL2` (bullet & U+2060 dibuang; baris "• L2 ..." berulang ditulis ulang jadi
+  "L2 pengajuan" + satu baris per pembayaran); label tanpa nominal + daftar bullet bernominal dibaca sebagai rincian;
+  baris yang hanya berisi rekening dipakai untuk semua baris (bila hanya satu); pesan berbaris ber-L2 bernominal yang
+  tetap tidak terbaca dibalas petunjuk format (tidak ke asisten umum).
+- `data-queries.ts`: tool `branch_balance` memberi saldo semua cabang hanya ke super_admin / direktur_utama /
+  direktur_operasional / finance; peran lain hanya cabangnya sendiri; penanya tak dikenal tidak mendapat saldo.
+- Tanpa migrasi, tanpa perubahan env.
+
 ## 2026-11-02 — Slip gaji otomatis dari bukti transfer gaji via WA (PR #147) — LIVE
 - Foto bukti transfer gaji (termasuk screenshot bulk payroll berisi banyak karyawan) yang dikirim Super Admin ke WA sistem dicocokkan per baris (rekening + nominal) ke `employee_salary_submissions`, ditandai ditransfer, dan tiap karyawan menerima gambar Slip Gaji buatan sistem (bukan screenshot bank). Kepala Cabang dapat ringkasan teks. Tanpa migrasi. Lihat CURRENT_STATE.md.
 

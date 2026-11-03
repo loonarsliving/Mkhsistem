@@ -175,6 +175,24 @@ export async function runTool(supabase: AdminClient, tool: QueryToolName, branch
   }
 }
 
+/** Peran yang boleh melihat saldo kas SEMUA cabang lewat WhatsApp. Peran lain hanya cabangnya sendiri. */
+const PERAN_SALDO_SEMUA_CABANG = new Set(["super_admin", "direktur_utama", "direktur_operasional", "finance"]);
+
+/**
+ * Saldo kas semua cabang dulu bisa ditanyakan siapa pun yang terdaftar (incident 3 Nov 2026: kepala cabang Jogja
+ * menerima saldo Kendari/Makassar/Jogja dalam balasan pengajuan). Penanya tak dikenal tidak mendapat saldo apa pun.
+ */
+async function aksesSaldoCabang(
+  supabase: AdminClient,
+  employee: { id: string } | null,
+): Promise<{ semua: boolean; cabangSendiri: { id: string; name: string } | null }> {
+  if (!employee) return { semua: false, cabangSendiri: null };
+  const { data } = await supabase.from("employees").select("branch_id, roles(key), branches(name)").eq("id", employee.id).maybeSingle();
+  const row = data as { branch_id: string | null; roles: { key: string } | null; branches: { name: string } | null } | null;
+  if (row?.roles?.key && PERAN_SALDO_SEMUA_CABANG.has(row.roles.key)) return { semua: true, cabangSendiri: null };
+  return { semua: false, cabangSendiri: row?.branch_id && row.branches?.name ? { id: row.branch_id, name: row.branches.name } : null };
+}
+
 export interface DataAnswerResult {
   /** False if the question didn't need real data -- caller should fall through to the normal domain chat prompt. */
   applicable: boolean;
@@ -211,7 +229,17 @@ export async function tryAnswerWithData(question: string, employee: { id: string
     branchId = empRow?.branch_id ?? null;
   }
 
-  const results = await Promise.all(intent.tools.map((tool) => runTool(supabase, tool, branchId, intent.branchName)));
+  const results = await Promise.all(
+    intent.tools.map(async (tool) => {
+      if (tool !== "branch_balance") return runTool(supabase, tool, branchId, intent.branchName);
+      const akses = await aksesSaldoCabang(supabase, employee);
+      if (akses.semua) return runTool(supabase, tool, branchId, intent.branchName);
+      if (!akses.cabangSendiri || (intent.branchName && branchId !== akses.cabangSendiri.id)) {
+        return "[Saldo Cabang] TIDAK BOLEH DISEBUTKAN: penanya hanya berhak melihat saldo kas cabangnya sendiri. Sampaikan dengan sopan bahwa saldo cabang lain hanya bisa dilihat direksi/finance.";
+      }
+      return runTool(supabase, tool, akses.cabangSendiri.id, akses.cabangSendiri.name);
+    }),
+  );
   const dataContext = results.join("\n\n");
 
   const answer = await askAI(
