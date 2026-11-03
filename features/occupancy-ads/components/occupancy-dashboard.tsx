@@ -258,7 +258,7 @@ export function OccupancyDashboard({ canManage }: { canManage: boolean }) {
                           setBusy(c.id);
                           let result: Awaited<ReturnType<typeof launchOccupancyCampaignAction>>;
                           try {
-                            result = await launchOccupancyCampaignAction(c.id, [primaryAsset.public_url], primaryAsset.media_type as "image" | "video", scheduleInput);
+                            result = await launchOccupancyCampaignAction(c.id, scheduleInput);
                           } catch (err) {
                             toast.error(err instanceof Error ? err.message : "Gagal meluncurkan campaign -- coba lagi");
                             return;

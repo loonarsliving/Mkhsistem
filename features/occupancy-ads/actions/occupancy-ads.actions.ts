@@ -323,8 +323,6 @@ export async function deleteOccupancyCampaignDraftAction(id: string): Promise<Ac
  */
 export async function launchOccupancyCampaignAction(
   id: string,
-  mediaUrls: string[],
-  mediaType: "image" | "video",
   scheduleInput?: CampaignScheduleInput | null,
 ): Promise<ActionResult<{ dailyBudgetIdr: number; durationDays?: number; totalBudgetIdr?: number; endsAt?: string; clampedByCeiling?: boolean }>> {
   const session = await requirePermission("occupancy_ads.manage");
@@ -349,7 +347,25 @@ export async function launchOccupancyCampaignAction(
   if (!isAllowedOccupancyDestinationUrl(campaign.destination_url)) {
     return actionError(`Destination URL "${campaign.destination_url}" tidak diizinkan -- hanya https://loonars.id (atau halaman di bawahnya) yang boleh dituju.`);
   }
-  if (mediaUrls.length === 0) return actionError("Pilih minimal satu aset kreatif untuk diluncurkan");
+  // Media selalu diambil server-side dari aset utama campaign (0270's
+  // primary_asset_id), tidak pernah dari URL kiriman client -- URL ini
+  // di-fetch oleh server (uploadAdImageFromUrl/uploadAdVideoFromUrl), jadi
+  // menerima URL bebas dari client = SSRF. Sama dengan Ads Specialist yang
+  // mengambil foto dari DB (launchDraftCampaignAction).
+  if (!campaign.primary_asset_id) {
+    return actionError('Belum ada aset terpilih untuk campaign ini -- pilih dulu lewat "Ganti Aset" di Meta Ad Preview sebelum meluncurkan.');
+  }
+  let primaryAsset: Awaited<ReturnType<typeof getCreativeAsset>>;
+  try {
+    primaryAsset = await getCreativeAsset(supabase, campaign.primary_asset_id);
+  } catch {
+    return actionError("Aset kreatif campaign ini tidak ditemukan -- pilih ulang lewat \"Ganti Aset\".");
+  }
+  if (!primaryAsset || primaryAsset.deleted_at || !primaryAsset.public_url) {
+    return actionError('Aset kreatif campaign ini sudah dihapus -- pilih aset lain lewat "Ganti Aset".');
+  }
+  const mediaType: "image" | "video" = primaryAsset.media_type === "video" ? "video" : "image";
+  const mediaUrls: string[] = [primaryAsset.public_url];
 
   const targets = await listOccupancyTargets(supabase);
   const target = targets.find((t) => t.id === campaign.target_id);
