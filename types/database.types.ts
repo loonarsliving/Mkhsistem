@@ -2346,6 +2346,9 @@ export interface Database {
           description: string | null;
           welcome_message: string | null;
           daily_budget_idr: number;
+          duration_days: number | null;
+          total_budget_idr: number | null;
+          ends_at: string | null;
           status: "draft" | "active" | "paused" | "ended" | "failed";
           launched_by: "ai" | "human";
           research_summary: string | null;
@@ -2376,6 +2379,9 @@ export interface Database {
           description?: string | null;
           welcome_message?: string | null;
           daily_budget_idr: number;
+          duration_days?: number | null;
+          total_budget_idr?: number | null;
+          ends_at?: string | null;
           status?: "draft" | "active" | "paused" | "ended" | "failed";
           launched_by?: "ai" | "human";
           research_summary?: string | null;

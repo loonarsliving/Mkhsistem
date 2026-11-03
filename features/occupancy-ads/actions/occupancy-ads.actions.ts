@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { askOccupancyCopilot, generateOccupancyAdsBrief, generateOccupancyCreativeVariants, resolveLaunchBudgetIdr } from "@/lib/ai/domains/occupancy-ads";
 import { decideCampaignAction, type DecisionEngineMetaInsights } from "@/lib/occupancy/decision-engine";
+import { computeScheduleEnd, parseCampaignSchedule, type CampaignScheduleInput } from "@/lib/ads/campaign-schedule";
 import { checkWeeklyBudgetCeiling, isAllowedOccupancyDestinationUrl, type OccupancyPersona } from "@/lib/occupancy/campaign-rules";
 import { classifyOccupancyCalendar, classifyOccupancyDay, selectAdvertisableDates, summarizeGap, type OccupancyThresholds } from "@/lib/occupancy/gap-engine";
 import { getOccupancyProvider } from "@/lib/occupancy/villa-provider";
@@ -313,9 +314,21 @@ export async function deleteOccupancyCampaignDraftAction(id: string): Promise<Ac
  * campaign not already 'approved' by a human. Default automation mode is
  * ASSISTED (spec §41) -- there is no code path anywhere in this module
  * that reaches launchLinkClickCampaign without this explicit action.
+ *
+ * `schedule` (opsional, migrasi 0312): durasi 7/14/30 hari + total budget.
+ * Budget harian = total ÷ hari, tetap di-clamp ke plafon harian properti
+ * dan dicek ke plafon mingguan seperti biasa; ad set dikirim dengan
+ * end_time sehingga Meta berhenti sendiri. Total yang dicatat = budget
+ * harian final × hari. Tanpa schedule = perilaku lama.
  */
-export async function launchOccupancyCampaignAction(id: string, mediaUrls: string[], mediaType: "image" | "video"): Promise<ActionResult> {
+export async function launchOccupancyCampaignAction(
+  id: string,
+  scheduleInput?: CampaignScheduleInput | null,
+): Promise<ActionResult<{ dailyBudgetIdr: number; durationDays?: number; totalBudgetIdr?: number; endsAt?: string; clampedByCeiling?: boolean }>> {
   const session = await requirePermission("occupancy_ads.manage");
+  const parsedSchedule = parseCampaignSchedule(scheduleInput);
+  if (!parsedSchedule.ok) return actionError(parsedSchedule.error);
+  const schedule = parsedSchedule.schedule;
   const supabase = await createClient();
 
   if (!isMetaConfigured()) {
@@ -334,7 +347,25 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
   if (!isAllowedOccupancyDestinationUrl(campaign.destination_url)) {
     return actionError(`Destination URL "${campaign.destination_url}" tidak diizinkan -- hanya https://loonars.id (atau halaman di bawahnya) yang boleh dituju.`);
   }
-  if (mediaUrls.length === 0) return actionError("Pilih minimal satu aset kreatif untuk diluncurkan");
+  // Media selalu diambil server-side dari aset utama campaign (0270's
+  // primary_asset_id), tidak pernah dari URL kiriman client -- URL ini
+  // di-fetch oleh server (uploadAdImageFromUrl/uploadAdVideoFromUrl), jadi
+  // menerima URL bebas dari client = SSRF. Sama dengan Ads Specialist yang
+  // mengambil foto dari DB (launchDraftCampaignAction).
+  if (!campaign.primary_asset_id) {
+    return actionError('Belum ada aset terpilih untuk campaign ini -- pilih dulu lewat "Ganti Aset" di Meta Ad Preview sebelum meluncurkan.');
+  }
+  let primaryAsset: Awaited<ReturnType<typeof getCreativeAsset>>;
+  try {
+    primaryAsset = await getCreativeAsset(supabase, campaign.primary_asset_id);
+  } catch {
+    return actionError("Aset kreatif campaign ini tidak ditemukan -- pilih ulang lewat \"Ganti Aset\".");
+  }
+  if (!primaryAsset || primaryAsset.deleted_at || !primaryAsset.public_url) {
+    return actionError('Aset kreatif campaign ini sudah dihapus -- pilih aset lain lewat "Ganti Aset".');
+  }
+  const mediaType: "image" | "video" = primaryAsset.media_type === "video" ? "video" : "image";
+  const mediaUrls: string[] = [primaryAsset.public_url];
 
   const targets = await listOccupancyTargets(supabase);
   const target = targets.find((t) => t.id === campaign.target_id);
@@ -342,7 +373,8 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
   if (maxDailyBudgetIdr <= 0) {
     return actionError("Plafon budget harian untuk properti ini tidak ditemukan/0 -- tidak bisa meluncurkan tanpa plafon yang valid.");
   }
-  const dailyBudgetIdr = Math.min(campaign.daily_budget_idr, maxDailyBudgetIdr);
+  const requestedDailyIdr = schedule ? schedule.dailyBudgetIdr : campaign.daily_budget_idr;
+  const dailyBudgetIdr = Math.min(requestedDailyIdr, maxDailyBudgetIdr);
 
   const alreadyCommittedWeeklyIdr = target ? await getActiveWeeklyCommittedBudgetIdr(supabase, target.id, campaign.id) : 0;
   const weeklyCheck = checkWeeklyBudgetCeiling(alreadyCommittedWeeklyIdr, dailyBudgetIdr, target?.max_weekly_budget_idr ?? null);
@@ -353,6 +385,9 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
         `melebihi plafon mingguan Rp${(target?.max_weekly_budget_idr ?? 0).toLocaleString("id-ID")}. Jeda campaign lain atau naikkan plafon mingguan dulu.`,
     );
   }
+
+  const endsAt = schedule ? computeScheduleEnd(new Date(), schedule.durationDays) : undefined;
+  const launchedSchedule = schedule && endsAt ? { durationDays: schedule.durationDays, totalBudgetIdr: dailyBudgetIdr * schedule.durationDays, endsAt } : undefined;
 
   try {
     const result = await launchLinkClickCampaign({
@@ -365,9 +400,10 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
       destinationUrl: campaign.destination_url,
       cta: campaign.cta ?? undefined,
       dailyBudgetIdr,
+      endTime: endsAt,
       targeting: await resolveGeoLocationsFromNames([campaign.target_market], 30).catch(() => getLeaseholdTargetGeoLocations()),
     });
-    await markCampaignLaunched(supabase, id, result, session.employee.id);
+    await markCampaignLaunched(supabase, id, result, session.employee.id, { dailyBudgetIdr, schedule: launchedSchedule });
   } catch (err) {
     const reason = err instanceof MetaApiError ? err.message : err instanceof Error ? err.message : "Meta API call failed";
     await markCampaignFailed(supabase, id, reason, session.employee.id);
@@ -376,7 +412,13 @@ export async function launchOccupancyCampaignAction(id: string, mediaUrls: strin
   }
 
   revalidatePath("/occupancy-ads");
-  return actionSuccess();
+  return actionSuccess({
+    dailyBudgetIdr,
+    ...(launchedSchedule
+      ? { durationDays: launchedSchedule.durationDays, totalBudgetIdr: launchedSchedule.totalBudgetIdr, endsAt: launchedSchedule.endsAt.toISOString() }
+      : {}),
+    clampedByCeiling: dailyBudgetIdr < requestedDailyIdr,
+  });
 }
 
 export async function pauseOccupancyCampaignAction(id: string): Promise<ActionResult> {

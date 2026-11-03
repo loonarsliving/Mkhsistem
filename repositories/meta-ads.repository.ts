@@ -48,10 +48,15 @@ export async function updateAdCampaignStatus(supabase: TypedSupabaseClient, id: 
   if (error) throw error;
 }
 
-export async function updateAdCampaignBudget(supabase: TypedSupabaseClient, id: string, dailyBudgetIdr: number) {
+/** totalBudgetIdr hanya diisi untuk iklan berjadwal (0312) -- total rencana ikut menyesuaikan budget harian baru (daily × durasi). */
+export async function updateAdCampaignBudget(supabase: TypedSupabaseClient, id: string, dailyBudgetIdr: number, totalBudgetIdr?: number) {
   const { error } = await supabase
     .from("meta_ad_campaigns")
-    .update({ daily_budget_idr: dailyBudgetIdr, updated_at: new Date().toISOString() })
+    .update({
+      daily_budget_idr: dailyBudgetIdr,
+      ...(totalBudgetIdr !== undefined ? { total_budget_idr: totalBudgetIdr } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id);
   if (error) throw error;
 }
@@ -63,8 +68,16 @@ export interface LaunchedCampaignIds {
   adId: string;
 }
 
-/** Fills in a 'draft' row's Meta object IDs and flips it to 'active' once launchWhatsAppLeadCampaign succeeds. */
-export async function markAdCampaignLaunched(supabase: TypedSupabaseClient, id: string, ids: LaunchedCampaignIds) {
+/** Jadwal yang benar-benar dikirim ke Meta saat peluncuran (0312). dailyBudgetIdr = budget harian final setelah clamp. */
+export interface LaunchedCampaignSchedule {
+  dailyBudgetIdr: number;
+  durationDays: number;
+  totalBudgetIdr: number;
+  endsAt: Date;
+}
+
+/** Fills in a 'draft' row's Meta object IDs and flips it to 'active' once launchWhatsAppLeadCampaign succeeds. With a schedule, also records the real daily budget/duration/end time sent to Meta. */
+export async function markAdCampaignLaunched(supabase: TypedSupabaseClient, id: string, ids: LaunchedCampaignIds, schedule?: LaunchedCampaignSchedule) {
   const { error } = await supabase
     .from("meta_ad_campaigns")
     .update({
@@ -73,6 +86,14 @@ export async function markAdCampaignLaunched(supabase: TypedSupabaseClient, id: 
       meta_creative_id: ids.creativeId,
       meta_ad_id: ids.adId,
       status: "active",
+      ...(schedule
+        ? {
+            daily_budget_idr: schedule.dailyBudgetIdr,
+            duration_days: schedule.durationDays,
+            total_budget_idr: schedule.totalBudgetIdr,
+            ends_at: schedule.endsAt.toISOString(),
+          }
+        : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

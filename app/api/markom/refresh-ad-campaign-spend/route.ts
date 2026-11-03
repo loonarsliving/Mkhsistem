@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
@@ -70,5 +71,45 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ status: "done", refreshed, total: (campaigns ?? []).length });
+  const scheduleEnded = await markScheduledCampaignsEnded(supabase);
+
+  return NextResponse.json({ status: "done", refreshed, total: (campaigns ?? []).length, scheduleEnded });
+}
+
+/**
+ * Iklan berjadwal (migrasi 0312): Meta sudah berhenti sendiri di end_time
+ * ad set, tapi status lokal masih 'active'/'paused'. Dijalankan SETELAH
+ * refresh spend di atas supaya angka belanja terakhir ikut tersimpan.
+ * Ads Specialist → 'ended' (juga membuat AI dispatch 0253 tidak meluncurkan
+ * iklan baru otomatis untuk project itu); Occupancy Ads → 'completed'.
+ * Hanya update DB, tidak ada panggilan Meta (ad set-nya sudah tidak tayang).
+ */
+async function markScheduledCampaignsEnded(supabase: ReturnType<typeof createAdminClient>) {
+  const nowIso = new Date().toISOString();
+  const result = { adsSpecialist: 0, occupancyAds: 0 };
+
+  const { data: endedAds, error: adsError } = await supabase
+    .from("meta_ad_campaigns")
+    .update({ status: "ended", updated_at: nowIso })
+    .in("status", ["active", "paused"])
+    .not("ends_at", "is", null)
+    .lte("ends_at", nowIso)
+    .select("id");
+  if (adsError) logger.error("refresh-ad-campaign-spend: failed to mark scheduled ads ended", { error: adsError.message });
+  else result.adsSpecialist = endedAds?.length ?? 0;
+
+  // loonars_occupancy_campaigns belum ada di types/database.types.ts (pola
+  // yang sama dengan repositories/occupancy-ads.repository.ts's db()).
+  const untyped = supabase as unknown as SupabaseClient;
+  const { data: endedOccupancy, error: occupancyError } = await untyped
+    .from("loonars_occupancy_campaigns")
+    .update({ status: "completed" })
+    .in("status", ["active", "paused"])
+    .not("ends_at", "is", null)
+    .lte("ends_at", nowIso)
+    .select("id");
+  if (occupancyError) logger.error("refresh-ad-campaign-spend: failed to mark scheduled occupancy campaigns completed", { error: occupancyError.message });
+  else result.occupancyAds = endedOccupancy?.length ?? 0;
+
+  return result;
 }

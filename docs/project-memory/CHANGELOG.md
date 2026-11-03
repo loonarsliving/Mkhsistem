@@ -7,6 +7,13 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-03 — Iklan berjadwal 7/14/30 hari dengan total budget (Ads Specialist + Occupancy Ads)
+
+Migrasi 0312 (`duration_days`, `total_budget_idr`, `ends_at` di `meta_ad_campaigns` & `loonars_occupancy_campaigns`).
+Pilihan durasi + total budget saat peluncuran manual; budget harian dihitung di kode dan tetap di-clamp ke plafon yang
+ada; ad set Meta dikirim dengan `end_time`; cron 0140 menandai iklan yang jadwalnya habis sebagai selesai. Detail di
+CURRENT_STATE.md.
+
 ## 2026-11-03 — Loonars 2: pengajuan berbullet tidak lagi hilang + saldo kas WA dibatasi per peran
 
 Insiden: Vando (Kepala Cabang Jogja) mengirim pengajuan Rp 7.590.500 lima kali dan tidak ada yang tercatat.

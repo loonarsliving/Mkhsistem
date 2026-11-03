@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { computeScheduleEnd, isScheduleEnded, parseCampaignSchedule, type CampaignScheduleInput } from "@/lib/ads/campaign-schedule";
 import { analyzeAdPerformance } from "@/lib/ai/domains/markom";
 import { hasPermission, requirePermission, requireSession } from "@/lib/rbac/session";
 import {
@@ -67,9 +68,31 @@ export async function requestAdsResearchAction(projectId: string, branchId: stri
   return actionSuccess();
 }
 
-/** Step 2: explicit human confirmation to actually spend -- launches a saved 'draft' row's exact content via the real Meta API, no new Gemini call. */
-export async function launchDraftCampaignAction(campaignId: string): Promise<ActionResult> {
+export interface LaunchedAdSummary {
+  dailyBudgetIdr: number;
+  /** Hanya untuk iklan berjadwal (0312). */
+  durationDays?: number;
+  totalBudgetIdr?: number;
+  endsAt?: string;
+  /** true bila budget harian dari jadwal dipotong oleh sisa META_ADS_DAILY_BUDGET_CAP_IDR hari ini. */
+  clampedByAccountCap?: boolean;
+}
+
+/**
+ * Step 2: explicit human confirmation to actually spend -- launches a saved 'draft' row's exact content via the real Meta API, no new Gemini call.
+ *
+ * `schedule` (opsional, migrasi 0312): durasi 7/14/30 hari + total budget.
+ * Budget harian = total ÷ hari (lib/ads/campaign-schedule.ts), tetap di-clamp
+ * ke sisa batas harian akun seperti biasa, dan ad set dikirim dengan
+ * end_time sehingga Meta berhenti sendiri. Bila di-clamp, total yang
+ * dicatat = budget harian final × hari (maksimum belanja sebenarnya), bukan
+ * angka yang diketik. Tanpa schedule = perilaku lama (berjalan terus).
+ */
+export async function launchDraftCampaignAction(campaignId: string, scheduleInput?: CampaignScheduleInput | null): Promise<ActionResult<LaunchedAdSummary>> {
   await requirePermission("ad_campaign.manage");
+  const parsedSchedule = parseCampaignSchedule(scheduleInput);
+  if (!parsedSchedule.ok) return actionError(parsedSchedule.error);
+  const schedule = parsedSchedule.schedule;
   const supabase = await createClient();
 
   if (!isMetaConfigured()) {
@@ -106,12 +129,14 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   const videoUrl = isVideoAd ? media[0].public_url : undefined;
 
   let dailyBudgetIdr: number;
+  const requestedDailyIdr = schedule ? schedule.dailyBudgetIdr : draft.daily_budget_idr;
   try {
     const remaining = await getRemainingDailyBudgetIdr();
-    dailyBudgetIdr = Math.min(draft.daily_budget_idr, remaining);
+    dailyBudgetIdr = Math.min(requestedDailyIdr, remaining);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Cek batas budget gagal");
   }
+  const endsAt = schedule ? computeScheduleEnd(new Date(), schedule.durationDays) : undefined;
 
   try {
     const result = await launchWhatsAppLeadCampaign({
@@ -123,6 +148,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
       description: draft.description ?? undefined,
       welcomeMessage: draft.welcome_message ?? undefined,
       dailyBudgetIdr,
+      endTime: endsAt,
       targeting:
         project?.project_type === "villa" && project?.offering_type === "sale"
           ? await getLeaseholdTargetGeoLocations()
@@ -133,7 +159,7 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
       adSetId: result.adSetId,
       creativeId: result.creativeId,
       adId: result.adId,
-    });
+    }, schedule && endsAt ? { dailyBudgetIdr, durationDays: schedule.durationDays, totalBudgetIdr: dailyBudgetIdr * schedule.durationDays, endsAt } : undefined);
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Meta API call failed";
     await markAdCampaignFailed(supabase, campaignId, reason);
@@ -142,7 +168,17 @@ export async function launchDraftCampaignAction(campaignId: string): Promise<Act
   }
 
   revalidatePath("/markom/ads");
-  return actionSuccess();
+  return actionSuccess<LaunchedAdSummary>(
+    schedule && endsAt
+      ? {
+          dailyBudgetIdr,
+          durationDays: schedule.durationDays,
+          totalBudgetIdr: dailyBudgetIdr * schedule.durationDays,
+          endsAt: endsAt.toISOString(),
+          clampedByAccountCap: dailyBudgetIdr < requestedDailyIdr,
+        }
+      : { dailyBudgetIdr },
+  );
 }
 
 /** Discards an unreviewed draft or a failed launch attempt -- both are safe to hard-delete since neither ever ends up with real Meta campaign/ad set/ad objects (a 'draft' never attempted the Meta calls; a 'failed' row's partial objects were already rolled back by launchWhatsAppLeadCampaign's own cleanup, see lib/meta/ads.ts). Repository scopes the delete to status in ('draft', 'failed') as a second guard against ever deleting a launched campaign's record. */
@@ -209,6 +245,15 @@ export async function setAdCampaignStatusAction(id: string, metaAdId: string | n
   if (!metaAdId) return actionError("Iklan ini belum berhasil dibuat di Meta, tidak ada yang bisa diubah statusnya");
 
   const supabase = await createClient();
+  if (status === "active") {
+    // Iklan berjadwal (0312) yang end_time-nya sudah lewat tidak akan
+    // ditayangkan Meta lagi walau di-ACTIVE-kan -- tolak supaya tidak
+    // tampil "Aktif" padahal tidak berjalan.
+    const campaign = await getAdCampaign(supabase, id);
+    if (isScheduleEnded(campaign.ends_at)) {
+      return actionError("Jadwal iklan ini sudah selesai -- riset & luncurkan iklan baru bila ingin tayang lagi.");
+    }
+  }
   try {
     await setAdStatus(metaAdId, status === "active" ? "ACTIVE" : "PAUSED");
     await updateAdCampaignStatus(supabase, id, status);
@@ -300,7 +345,8 @@ export async function setAdCampaignBudgetAction(id: string, metaAdSetId: string 
       if (!metaAdSetId) return actionError("Iklan ini belum berhasil dibuat di Meta, tidak ada budget yang bisa diubah");
       await updateAdSetDailyBudget(metaAdSetId, dailyBudgetIdr);
     }
-    await updateAdCampaignBudget(supabase, id, dailyBudgetIdr);
+    // Iklan berjadwal: total rencana ikut budget harian baru (end_time di Meta tidak berubah).
+    await updateAdCampaignBudget(supabase, id, dailyBudgetIdr, campaign.duration_days ? dailyBudgetIdr * campaign.duration_days : undefined);
   } catch (err) {
     return actionError(err instanceof Error ? err.message : "Gagal mengubah budget iklan");
   }

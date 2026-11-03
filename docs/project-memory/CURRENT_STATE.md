@@ -3,6 +3,25 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Iklan berjadwal 7/14/30 hari + total budget (2026-11-03, migrasi 0312) — MIGRASI DITERAPKAN
+
+Owner: "bisakah ada settingan untuk iklan berjalan sebulan dengan budget yang kita tentukan" → "Keduanya, bisa dipilih 7 14 30".
+- Ads Specialist (`/markom/ads`, draft) dan Loonars AI Occupancy Ads (`/occupancy-ads`, approved): pilihan "Durasi tayang"
+  (terus berjalan / 7 / 14 / 30 hari) + total budget sebelum Luncurkan (`components/shared/ad-schedule-fields.tsx`).
+- `lib/ads/campaign-schedule.ts` (murni, dites): budget harian = total ÷ hari (dibulatkan ke bawah, min Rp10.000/hari),
+  `ends_at` = peluncuran + N×24 jam. Server action memvalidasi ulang; budget harian tetap di-clamp ke
+  `META_ADS_DAILY_BUDGET_CAP_IDR` (Ads Specialist) / plafon harian + mingguan properti (Occupancy). Total yang dicatat =
+  budget harian final × hari.
+- `lib/meta/ads.ts`: `createAdSet`/`createTrafficAdSet` menerima `endTime` → `end_time` (UNIX detik) di ad set, jadi Meta
+  berhenti sendiri.
+- Cron `refresh-ad-campaign-spend` (0140, tiap 2 jam) setelah refresh spend menandai `ends_at` lewat: `meta_ad_campaigns`
+  → `ended` (AI dispatch 0253 tidak meluncurkan ulang), `loonars_occupancy_campaigns` → `completed`.
+- Mengaktifkan ulang iklan Ads Specialist yang jadwalnya sudah habis ditolak. Ubah budget harian iklan berjadwal →
+  `total_budget_idr` = harian baru × durasi (end_time tidak berubah).
+- Peluncuran otomatis AI (`meta_ads_launch`) tidak berubah (tanpa jadwal).
+- Migrasi 0312 diterapkan ke DB live 2026-11-03 sebelum merge. `loonars_occupancy_campaigns.duration_days` sudah ada
+  sejak 0269 (durasi saran AI) dan dipakai ulang; penanda "berjadwal" hanya `ends_at`.
+
 ## Slip gaji otomatis dari bukti transfer WA (2026-11-02) — LIVE (PR #147)
 Di-merge ke produksi lewat PR #147 (deploy Vercel READY, /api/health ok). Tanpa migrasi / perubahan skema / env baru.
 - Super Admin kirim foto bukti transfer gaji (satu struk ATAU screenshot bulk payroll, mis. Kopra Mandiri) ke WA sistem → `trySalaryPayslipFromTransferProof` (`lib/ai/domains/salary-payslip-whatsapp.ts`), dipanggil di `lib/ai/webhook-handler.ts` sebelum matcher bukti transfer lain (fund transfer / fee Loonars / settlement / gaji 0250 / bahan-tukang).

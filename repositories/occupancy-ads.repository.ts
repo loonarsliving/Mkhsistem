@@ -284,10 +284,30 @@ export interface LaunchedCampaignMetaIds {
   adId: string;
 }
 
-export async function markCampaignLaunched(supabase: TypedSupabaseClient, id: string, ids: LaunchedCampaignMetaIds, employeeId: string) {
+/** Budget harian final yang dikirim ke Meta + jadwal opsional (0312). */
+export interface LaunchedOccupancyCampaignBudget {
+  dailyBudgetIdr: number;
+  schedule?: { durationDays: number; totalBudgetIdr: number; endsAt: Date };
+}
+
+export async function markCampaignLaunched(
+  supabase: TypedSupabaseClient,
+  id: string,
+  ids: LaunchedCampaignMetaIds,
+  employeeId: string,
+  budget?: LaunchedOccupancyCampaignBudget,
+) {
   const { error } = await db(supabase)
     .from("loonars_occupancy_campaigns")
     .update({
+      ...(budget ? { daily_budget_idr: budget.dailyBudgetIdr } : {}),
+      ...(budget?.schedule
+        ? {
+            duration_days: budget.schedule.durationDays,
+            total_budget_idr: budget.schedule.totalBudgetIdr,
+            ends_at: budget.schedule.endsAt.toISOString(),
+          }
+        : {}),
       meta_campaign_id: ids.campaignId,
       meta_adset_id: ids.adSetId,
       meta_creative_id: ids.creativeId,
