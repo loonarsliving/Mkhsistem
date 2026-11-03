@@ -25,7 +25,9 @@ describe("wa-media short links", () => {
     const [payload, sig] = token.split(".");
     const forged = Buffer.from(JSON.stringify({ b: "refund-transfer-proofs", p: "other/x.jpg", e: 9999999999 })).toString("base64url");
     expect(readWaMediaToken(`${forged}.${sig}`)).toBeNull();
-    expect(readWaMediaToken(`${payload}.x${sig.slice(1)}`)).toBeNull();
+    // Always change the first character (a fixed "x" was a no-op whenever the real signature started with "x").
+    const tampered = `${sig[0] === "x" ? "y" : "x"}${sig.slice(1)}`;
+    expect(readWaMediaToken(`${payload}.${tampered}`)).toBeNull();
     expect(readWaMediaToken(token, Date.now() + 2 * 3600 * 1000)).toBeNull();
   });
 
