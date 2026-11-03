@@ -3,7 +3,7 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
-## Iklan berjadwal 7/14/30 hari + total budget (2026-11-03, migrasi 0312) — BELUM DI-MERGE / MIGRASI BELUM DITERAPKAN
+## Iklan berjadwal 7/14/30 hari + total budget (2026-11-03, migrasi 0312) — MIGRASI DITERAPKAN
 
 Owner: "bisakah ada settingan untuk iklan berjalan sebulan dengan budget yang kita tentukan" → "Keduanya, bisa dipilih 7 14 30".
 - Ads Specialist (`/markom/ads`, draft) dan Loonars AI Occupancy Ads (`/occupancy-ads`, approved): pilihan "Durasi tayang"
@@ -19,8 +19,8 @@ Owner: "bisakah ada settingan untuk iklan berjalan sebulan dengan budget yang ki
 - Mengaktifkan ulang iklan Ads Specialist yang jadwalnya sudah habis ditolak. Ubah budget harian iklan berjadwal →
   `total_budget_idr` = harian baru × durasi (end_time tidak berubah).
 - Peluncuran otomatis AI (`meta_ads_launch`) tidak berubah (tanpa jadwal).
-- **Migrasi 0312 wajib diterapkan sebelum kode ini di-deploy**: tanpa kolom baru, peluncuran berjadwal akan sukses di Meta
-  tapi gagal dicatat di DB.
+- Migrasi 0312 diterapkan ke DB live 2026-11-03 sebelum merge. `loonars_occupancy_campaigns.duration_days` sudah ada
+  sejak 0269 (durasi saran AI) dan dipakai ulang; penanda "berjadwal" hanya `ends_at`.
 
 ## Slip gaji otomatis dari bukti transfer WA (2026-11-02) — LIVE (PR #147)
 Di-merge ke produksi lewat PR #147 (deploy Vercel READY, /api/health ok). Tanpa migrasi / perubahan skema / env baru.

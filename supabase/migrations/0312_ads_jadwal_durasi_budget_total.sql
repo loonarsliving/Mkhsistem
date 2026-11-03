@@ -22,6 +22,13 @@
 -- (loonars_occupancy_campaigns). 'ended' juga membuat AI dispatch (0253)
 -- tidak meluncurkan iklan baru untuk project itu secara otomatis.
 --
+-- CATATAN: loonars_occupancy_campaigns.duration_days SUDAH ADA sejak 0269
+-- (integer not null > 0, durasi saran AI dari brief, maks 60). "add column
+-- if not exists" di bawah melewatinya -- kolom itu dipakai ulang apa
+-- adanya: peluncuran berjadwal menimpanya dengan 7/14/30 yang dipilih, dan
+-- yang menandai "berjadwal" hanya ends_at (bukan duration_days). Check
+-- (7, 14, 30) di bawah hanya berlaku untuk meta_ad_campaigns.
+--
 -- Hanya menambah kolom pada tabel yang sudah ada -- RLS tabel yang sama
 -- sudah berlaku, tidak ada policy baru yang diperlukan.
 -- ============================================================================
