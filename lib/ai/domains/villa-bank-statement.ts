@@ -103,3 +103,112 @@ Kalau ini bukan mutasi rekening atau tidak terbaca: {"readable": false, "bank": 
   });
   return parseMutasiReply(response.text);
 }
+
+// ── Daftar payout OTA (owner 2026-11-06) ────────────────────────────────
+// Finance mengunggah foto/screenshot daftar payout Booking.com atau Agoda
+// (sebelum transfer masuk). Sama seperti mutasi bank: hanya menyalin. Villa
+// yang mencocokkan ke booking dan finance yang menekan tombol pencatatan.
+
+export interface PayoutBarisHasil {
+  /** Nomor booking/reservasi OTA persis seperti tertulis (string, bukan angka). */
+  nomor: string;
+  tipe: string;
+  tamu: string;
+  /** YYYY-MM-DD, atau "" kalau tidak tertulis. */
+  checkin: string;
+  checkout: string;
+  /** Rupiah bulat; null kalau tidak ada kolomnya. */
+  kotor: number | null;
+  /** Yang dibayarkan ke properti untuk booking ini (Net / Payout). */
+  net: number;
+}
+
+export interface PayoutListHasil {
+  readable: boolean;
+  ota: "booking.com" | "agoda" | null;
+  rows: PayoutBarisHasil[];
+  /** Total payout yang tertulis di dokumen, untuk dicek terhadap jumlah baris; null kalau tidak ada. */
+  total: number | null;
+  catatan: string;
+}
+
+const MAKS_BARIS_PAYOUT = 300;
+
+function angka(v: unknown): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+export function parsePayoutReply(text: string): PayoutListHasil {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    throw new Error("Respons AI bukan JSON yang valid");
+  }
+  const rows: PayoutBarisHasil[] = [];
+  if (Array.isArray(parsed.rows)) {
+    for (const raw of parsed.rows) {
+      if (!raw || typeof raw !== "object") continue;
+      const r = raw as Record<string, unknown>;
+      const nomor = typeof r.nomor === "string" || typeof r.nomor === "number" ? String(r.nomor).replace(/\s+/g, "") : "";
+      const net = angka(r.net);
+      // Baris tanpa nomor atau Net yang jelas dibuang, bukan ditebak.
+      if (!nomor || net == null) continue;
+      const tgl = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "");
+      rows.push({
+        nomor,
+        tipe: typeof r.tipe === "string" ? r.tipe.trim().slice(0, 40) : "Reservation",
+        tamu: typeof r.tamu === "string" ? r.tamu.replace(/\s+/g, " ").trim().slice(0, 120) : "",
+        checkin: tgl(r.checkin),
+        checkout: tgl(r.checkout),
+        kotor: r.kotor == null ? null : angka(r.kotor),
+        net,
+      });
+      if (rows.length >= MAKS_BARIS_PAYOUT) break;
+    }
+  }
+  const ota = parsed.ota === "booking.com" || parsed.ota === "agoda" ? parsed.ota : null;
+  return {
+    readable: parsed.readable === true,
+    ota,
+    rows,
+    total: parsed.total == null ? null : angka(parsed.total),
+    catatan: typeof parsed.catatan === "string" ? parsed.catatan.trim().slice(0, 300) : "",
+  };
+}
+
+export async function bacaDaftarPayout(input: { data: string; mimeType: string; hariIni: string }): Promise<PayoutListHasil> {
+  const userPrompt = `Ini adalah daftar payout dari OTA (Booking.com atau Agoda): foto, screenshot, atau PDF. Hari ini ${input.hariIni}.
+
+Salin SETIAP baris booking yang terlihat:
+- nomor: nomor booking/reservasi OTA persis seperti tertulis (Booking.com: "Booking number", 10 digit; Agoda: nomor kecil di bawah nama tamu). Tulis sebagai string, jangan diubah.
+- tipe: "Reservation" kalau tertulis atau tidak ada kolom tipe; kalau tertulis lain (Adjustment, Refund, dst) salin apa adanya.
+- tamu: nama tamu persis seperti tertulis (boleh terpotong seperti di layar).
+- checkin, checkout: format YYYY-MM-DD. Agoda menulis "Stay dates" sebagai "tanggal masuk - tanggal keluar"; pisahkan jadi checkin dan checkout.
+- kotor: kolom "Amount" (sebelum komisi) kalau ada, kalau tidak ada null.
+- net: jumlah yang DIBAYARKAN ke properti untuk booking itu (Booking.com: kolom "Net"; Agoda: kolom "Payout"), rupiah bulat tanpa pemisah ribuan/desimal (mis. "389.697,00" -> 389697, "Rp 1,105,912" -> 1105912). Jangan pakai kolom Commission, VAT, atau Fee.
+- total: total payout yang tertulis di dokumen kalau ada (mis. "Total payout IDR 1.219.504,00" -> 1219504), kalau tidak ada null. JANGAN menjumlahkan sendiri.
+
+Jangan menebak baris yang terpotong atau tidak terbaca -- sebutkan di catatan.
+
+Balas HANYA dengan JSON object:
+{"readable": true, "ota": "booking.com", "rows": [{"nomor": "6953881895", "tipe": "Reservation", "tamu": "Lawrence Efraim", "checkin": "2026-10-31", "checkout": "2026-11-02", "kotor": 1410150, "net": 1105912}], "total": 5921531, "catatan": ""}
+
+"ota" hanya "booking.com", "agoda", atau null. Kalau ini bukan daftar payout atau tidak terbaca: {"readable": false, "ota": null, "rows": [], "total": null, "catatan": "alasannya"}`;
+
+  const response = await generateAIText({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt,
+    image: { data: input.data, mimeType: input.mimeType },
+    responseFormat: "json",
+    temperature: 0,
+    maxOutputTokens: 8192,
+  });
+  return parsePayoutReply(response.text);
+}
