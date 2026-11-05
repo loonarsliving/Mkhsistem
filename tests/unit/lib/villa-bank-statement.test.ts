@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseMutasiReply } from "@/lib/ai/domains/villa-bank-statement";
+import { parseMutasiReply, parsePayoutReply } from "@/lib/ai/domains/villa-bank-statement";
 
 describe("parseMutasiReply", () => {
   it("parses rows, rounding amounts and normalising whitespace", () => {
@@ -38,5 +38,34 @@ describe("parseMutasiReply", () => {
       catatan: "buram",
     });
     expect(() => parseMutasiReply("Berikut mutasinya: ...")).toThrow();
+  });
+});
+
+describe("parsePayoutReply", () => {
+  it("parses payout rows, keeping the booking number as a string and rounding Net", () => {
+    const raw = JSON.stringify({
+      readable: true,
+      ota: "agoda",
+      rows: [
+        { nomor: 2054671783, tipe: "Reservation", tamu: "Diah  Ayu", checkin: "2026-09-30", checkout: "2026-10-01", kotor: null, net: "389697.0" },
+        { nomor: "2054625441", tamu: "Malinda Mayanti", checkin: "30/09", checkout: "2026-10-01", net: 389697 },
+      ],
+      total: 779394,
+      catatan: "",
+    });
+    const r = parsePayoutReply(raw);
+    expect(r.ota).toBe("agoda");
+    expect(r.total).toBe(779394);
+    expect(r.rows[0]).toEqual({ nomor: "2054671783", tipe: "Reservation", tamu: "Diah Ayu", checkin: "2026-09-30", checkout: "2026-10-01", kotor: null, net: 389697 });
+    // unclear date is blanked, not guessed
+    expect(r.rows[1].checkin).toBe("");
+  });
+
+  it("drops rows without a booking number or Net, and rejects non-JSON", () => {
+    const raw = JSON.stringify({ readable: true, ota: "x", rows: [{ nomor: "", net: 1 }, { nomor: "1", net: "abc" }] });
+    const r = parsePayoutReply(raw);
+    expect(r.rows).toEqual([]);
+    expect(r.ota).toBeNull();
+    expect(() => parsePayoutReply("bukan json")).toThrow();
   });
 });

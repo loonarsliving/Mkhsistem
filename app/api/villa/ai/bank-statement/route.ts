@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { bacaMutasiBank } from "@/lib/ai/domains/villa-bank-statement";
+import { bacaDaftarPayout, bacaMutasiBank } from "@/lib/ai/domains/villa-bank-statement";
 import { logger } from "@/lib/logger";
 import { getClientIp, recordAuthFailure } from "@/lib/security/rate-limit";
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { data?: unknown; mimeType?: unknown; hariIni?: unknown };
+  let body: { data?: unknown; mimeType?: unknown; hariIni?: unknown; jenis?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -72,7 +72,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const hasil = await bacaMutasiBank({ data, mimeType, hariIni });
+    // jenis "payout": daftar payout OTA (owner 2026-11-06); default tetap mutasi bank.
+    const hasil =
+      body.jenis === "payout" ? await bacaDaftarPayout({ data, mimeType, hariIni }) : await bacaMutasiBank({ data, mimeType, hariIni });
     return NextResponse.json({ success: true, ...hasil });
   } catch (e) {
     logger.error("villa/ai/bank-statement: reading failed", { error: e instanceof Error ? e.message : String(e) });
