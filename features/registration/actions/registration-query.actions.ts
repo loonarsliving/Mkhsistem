@@ -6,9 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { countPendingRegistrations } from "@/repositories/employee.repository";
 
 /** Branches open for self-registration — deliberately a fixed subset, not every branch (e.g. Head Office isn't). */
-const REGISTRATION_BRANCH_NAMES = ["Makassar", "Jabodetabek", "Kendari", "Jogja", "Loonars Private Living"] as const;
+const REGISTRATION_BRANCH_NAMES = ["Makassar", "Jabodetabek", "Kendari", "Jogja", "Loonars Private Living", "Excellent living"] as const;
 /** The "Jogja" branch is displayed as "Yogyakarta" on the registration form. */
-const BRANCH_DISPLAY_NAME: Record<string, string> = { Jogja: "Yogyakarta" };
+const BRANCH_DISPLAY_NAME: Record<string, string> = { Jogja: "Yogyakarta", "Excellent living": "Loonars Excellent Living" };
 
 /**
  * Public (unauthenticated) lookups for the /register form. RLS blocks anon
