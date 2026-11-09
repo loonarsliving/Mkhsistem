@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     nama_tamu: typeof body.nama_tamu === "string" ? body.nama_tamu : null,
     konteks_tamu: typeof body.konteks_tamu === "string" ? body.konteks_tamu : null,
     ketersediaan: (body.ketersediaan ?? null) as ChatReplyInput["ketersediaan"],
+    nama_properti: typeof body.nama_properti === "string" ? body.nama_properti : null,
   };
 
   try {

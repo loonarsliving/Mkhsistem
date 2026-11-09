@@ -67,6 +67,12 @@ export interface ChatReplyInput {
   /** Current WIB time, "2026-10-05 14:03 (Minggu)". */
   sekarang: string;
   ketersediaan?: { checkin: string; checkout: string; tipe: KetersediaanTipe[] } | null;
+  /**
+   * Property the conversation belongs to (villa serves Private Living and
+   * Excellent Living from one WhatsApp number, 2026-11-09). Omitted = Private
+   * Living, so older villa deploys keep the exact same prompt.
+   */
+  nama_properti?: string | null;
 }
 
 export interface ChatReplyDraft {
@@ -80,7 +86,9 @@ export interface ChatReplyDraft {
 export const MAX_RIWAYAT = 30;
 export const MAX_PENGETAHUAN_CHARS = 12_000;
 
-const SYSTEM_PROMPT = `Kamu menyusun DRAF balasan WhatsApp untuk resepsionis Loonars Private Living Villa Yogyakarta. Draf dibaca resepsionis dulu sebelum dikirim ke tamu.
+export const NAMA_PROPERTI_BAWAAN = "Loonars Private Living Villa Yogyakarta";
+
+const SYSTEM_PROMPT_TEMPLATE = `Kamu menyusun DRAF balasan WhatsApp untuk resepsionis {{NAMA_PROPERTI}}. Draf dibaca resepsionis dulu sebelum dikirim ke tamu.
 
 ATURAN MUTLAK:
 1. Gunakan HANYA fakta dari bagian PENGETAHUAN dan DATA KETERSEDIAAN. Jangan menebak, jangan menambah fakta, jangan berjanji di luar itu. Kalau jawabannya tidak ada di sana, pilih kategori "perlu_resepsionis" dan tulis draf singkat yang sopan bahwa tim akan mengecek dulu.
@@ -166,7 +174,18 @@ export function parseChatReply(raw: string): ChatReplyDraft {
   return { kategori: kategori as KategoriBalasan, draf, cek_tanggal: cekTanggal, alasan };
 }
 
+/** Only plain property names are accepted; anything else falls back to Private Living. */
+export function namaPropertiAman(nama: unknown): string {
+  if (typeof nama !== "string") return NAMA_PROPERTI_BAWAAN;
+  const bersih = nama.trim();
+  return /^[\p{L}\p{N} .,&'-]{3,80}$/u.test(bersih) ? bersih : NAMA_PROPERTI_BAWAAN;
+}
+
+export function buildSystemPrompt(namaProperti?: string | null): string {
+  return SYSTEM_PROMPT_TEMPLATE.replace("{{NAMA_PROPERTI}}", namaPropertiAman(namaProperti));
+}
+
 export async function draftChatReply(input: ChatReplyInput): Promise<ChatReplyDraft> {
-  const raw = await askAI(SYSTEM_PROMPT, buildUserPrompt(input), { temperature: 0.2, maxOutputTokens: 1024 });
+  const raw = await askAI(buildSystemPrompt(input.nama_properti), buildUserPrompt(input), { temperature: 0.2, maxOutputTokens: 1024 });
   return parseChatReply(raw);
 }
