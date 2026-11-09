@@ -7,6 +7,12 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-09 — Lead WA Jogja: semua lead baru ke owner
+
+Perubahan data (tanpa migration/kode): `mkc_chat_role_assignments` departemen `lead_wa_jogja` — owner (Avi Perdana)
+ditambahkan sebagai `sales`; Ayu, Yudha, Fety di-revoke. `mkc_wa_lead_pick_sales` kini selalu memilih owner. Lead lama
+(29 terbuka) tetap di sales masing-masing. Owner menerima pengingat 15 mnt (sebagai sales) dan 30 mnt (sebagai pemantau).
+
 ## 2026-11-03 — Iklan berjadwal 7/14/30 hari dengan total budget (Ads Specialist + Occupancy Ads)
 
 Migrasi 0312 (`duration_days`, `total_budget_idr`, `ends_at` di `meta_ad_campaigns` & `loonars_occupancy_campaigns`).

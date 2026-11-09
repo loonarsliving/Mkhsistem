@@ -178,6 +178,13 @@ migrasi 0057 (AI CFO, branch `claude/ai-cfo-financial-manager`).
   pesan sambutan / pesan tidak di tempat di aplikasi WhatsApp Business pada
   HP Whacenter.
 - Detail: `docs/CONNECT_MARKOM_SALES_JOGJA.md` (bagian 0303).
+- **2026-11-09 (data, bukan migration):** atas permintaan owner, giliran
+  lead WA Jogja kini hanya owner (Avi Perdana, baris `sales` di
+  `lead_wa_jogja`); Ayu, Yudha, Fety di-*revoke* (`revoked_at`). Semua lead
+  baru masuk ke owner dan dibalas owner sendiri. 29 lead yang sudah terbuka
+  tetap dipegang sales lamanya (keanggotaan percakapan `direct` tidak
+  disentuh). Vando tetap `manager` (pemantau). Untuk mengembalikan: hapus
+  `revoked_at` ketiga sales dan revoke baris owner.
 
 ## Loonars Connect: chat pribadi 1-on-1 (0300) — DITERAPKAN (2026-10-25)
 
