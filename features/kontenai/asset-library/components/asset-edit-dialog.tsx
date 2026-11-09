@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { BRAND_LABELS, CONTENT_FOCUS_VALUES } from "@/constants/app";
 import { useUpdateKontenAiAsset } from "@/features/kontenai/asset-library/hooks/use-kontenai-asset-mutations";
 import type { KontenAiAssetWithCreator } from "@/repositories/kontenai-assets.repository";
 
@@ -85,7 +86,18 @@ export function AssetEditDialog({ asset, open, onOpenChange }: AssetEditDialogPr
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="asset-edit-company">Company</Label>
-              <Input id="asset-edit-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Leasehold, Villa, Beauty..." />
+              <Select value={company || undefined} onValueChange={setCompany}>
+                <SelectTrigger id="asset-edit-company">
+                  <SelectValue placeholder="Pilih brand" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTENT_FOCUS_VALUES.map((focus) => (
+                    <SelectItem key={focus} value={focus}>
+                      {BRAND_LABELS[focus]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="asset-edit-project">Project</Label>

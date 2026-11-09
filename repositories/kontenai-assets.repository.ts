@@ -307,15 +307,23 @@ export interface KontenAiAnalyzedAsset {
  * rank against each storyboard scene. Capped at `limit` (default 300) --
  * generous for the current library size while still bounding the ranking
  * work done per scene.
+ *
+ * `company` hard-filters the pool to one brand (ContentFocus slug -- see
+ * kontenai_assets_company_check) *before* any scoring happens, so a
+ * Leasehold storyboard can never surface Beauty or Villa footage just
+ * because the wording happens to overlap -- the Jaccard match in
+ * scene-asset-matching.ts only ever ranks within an already brand-safe
+ * pool. Omit it for brand-unscoped ("general") briefs, which still search
+ * the whole library as before.
  */
-export async function listAnalyzedAssetLibrary(supabase: TypedSupabaseClient, limit = 300): Promise<KontenAiAnalyzedAsset[]> {
-  const { data, error } = await supabase
+export async function listAnalyzedAssetLibrary(supabase: TypedSupabaseClient, limit = 300, company?: string | null): Promise<KontenAiAnalyzedAsset[]> {
+  let query = supabase
     .from("kontenai_assets")
     .select("id, asset_type, title, public_url, file_type, ai_title, ai_description, ai_tags, ai_category, ai_mood, ai_detected_objects, ai_dominant_colors")
     .is("deleted_at", null)
-    .eq("ai_vision_status", "completed")
-    .order("ai_analyzed_at", { ascending: false })
-    .limit(limit);
+    .eq("ai_vision_status", "completed");
+  if (company) query = query.eq("company", company);
+  const { data, error } = await query.order("ai_analyzed_at", { ascending: false }).limit(limit);
   if (error) throw error;
 
   return (data ?? []).map((row) => ({

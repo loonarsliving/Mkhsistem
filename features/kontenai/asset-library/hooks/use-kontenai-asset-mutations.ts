@@ -11,6 +11,7 @@ import {
   type CreateKontenAiAssetActionInput,
   type UpdateKontenAiAssetActionInput,
 } from "@/features/kontenai/asset-library/actions/asset-library.actions";
+import { syncKontenAiAssetsFromDriveAction } from "@/features/kontenai/asset-library/actions/drive-import.actions";
 import { analyzeAssetVisionAction } from "@/features/kontenai/asset-library/actions/gemini-vision.actions";
 import { guessAssetTypeFromMime } from "@/features/kontenai/asset-library/utils/asset-type-meta";
 import { inspectFile } from "@/features/kontenai/asset-library/utils/file-inspect";
@@ -156,6 +157,33 @@ export function useDeleteKontenAiAsset() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Gagal menghapus aset");
+    },
+  });
+}
+
+/** "Sync from Drive" -- imports any footage newly added to the KontenAI Drive folder tree, deriving company/content_type from the folder path (see lib/kontenai/drive-import.ts). */
+export function useSyncKontenAiAssetsFromDrive() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const result = await syncKontenAiAssetsFromDriveAction();
+      if (!result.success) throw new Error(result.error ?? "Gagal sinkronisasi dari Google Drive");
+      return result.data!;
+    },
+    onSuccess: (summary) => {
+      if (summary.errors.length > 0) {
+        toast.warning(`${summary.imported} footage baru diimpor, ${summary.errors.length} gagal. Cek console untuk detail.`);
+        console.error("Drive sync errors:", summary.errors);
+      } else if (summary.imported > 0) {
+        toast.success(`${summary.imported} footage baru diimpor dari Drive (${summary.skipped} sudah ada sebelumnya).`);
+      } else {
+        toast.info("Tidak ada footage baru di Drive untuk diimpor.");
+      }
+      invalidateAssetLibrary(queryClient);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Gagal sinkronisasi dari Google Drive");
     },
   });
 }

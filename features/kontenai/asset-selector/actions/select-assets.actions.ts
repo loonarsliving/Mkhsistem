@@ -59,7 +59,14 @@ export async function runAssetSelectionAction(storyboardId: string): Promise<Act
     const storyboard = await getKontenAiStoryboard(supabase, storyboardId);
     if (storyboard.scenes.length === 0) return actionError("Storyboard ini belum memiliki scene");
 
-    const assetPool = await listAnalyzedAssetLibrary(supabase);
+    // "general" briefs (made directly on the AI Director page, not tied to a
+    // brand) intentionally search the whole library -- every other brand
+    // hard-filters so a Leasehold storyboard can never match Beauty/Villa
+    // footage regardless of text overlap (see listAnalyzedAssetLibrary).
+    const brand = storyboard.creativeBrief?.content_focus;
+    const brandFilter = brand && brand !== "general" ? brand : undefined;
+
+    const assetPool = await listAnalyzedAssetLibrary(supabase, 300, brandFilter);
     const matches = matchAssetsToScenes(storyboard.scenes, assetPool);
 
     const scenes = storyboard.scenes.map((scene, index) => ({
