@@ -7,6 +7,12 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-10 — Loonars 2 WA: nota, tanpa nota, pelunasan "sudah dibayar" (pasangan MKH Property 0068)
+
+`lib/ai/domains/loonars2-wa.ts`: foto berketerangan "L2 nota [n]" → aksi `nota` (+nota_url); "L2 tanpa nota <alasan>" →
+`tanpa_nota`; balasan total menerima "sudah 3 juta" (field `sudah`); pengajuan satu baris yang dikirim sebagai keterangan
+foto membawa foto itu sebagai nota. Pemeriksaan & penahanan dilakukan MKH Property.
+
 ## 2026-11-10 — Loonars 2: DP pelaksana ditanya total nilainya (pasangan MKH Property migrasi 0064)
 
 `lib/ai/domains/loonars2-wa.ts`: baris DP ("DP kaca 3 juta dari total 10 juta", "(total harga 8,5 jt)", "30%") dipisah —
