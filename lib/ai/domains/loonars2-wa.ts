@@ -267,19 +267,34 @@ export function totalDp(dp: { total: number | null; persen: number | null }, nom
  * balasan seperti itu.
  */
 export function parseTotalDpBalasan(input: string): { no: number | null; total: number; sudah?: number }[] | null {
-  const baris = input.split(/\r?\n/).map((b) => b.trim().replace(/^(?:l2|loonars\s*2)\b[\s:,.-]*/i, "")).filter(Boolean);
-  if (baris.length === 0 || baris.length > 10 || input.length > 400) return null;
+  const pasangan = input
+    .replace(TAK_TERLIHAT_RE, "")
+    .split(/\r?\n/)
+    .map((m) => ({ m: m.trim(), b: m.trim().replace(/^(?:l2|loonars\s*2)\b[\s:,.-]*/i, "") }))
+    .filter((x) => x.b);
+  const mentah = pasangan.map((x) => x.m);
+  const baris = pasangan.map((x) => x.b);
+  if (baris.length === 0 || baris.length > 10 || input.length > 600) return null;
+  // Bentuk bebas (insiden 10 Nov 2026, Vando): "1. DP Kaca - Rp. 3.000.000 total Rp. 11.652.000". Hanya untuk baris
+  // tanpa awalan "L2" yang bernomor atau menyebut DP/pelunasan, supaya pengajuan baru ("L2 semen total 1,3 jt") tidak
+  // terbaca sebagai jawaban.
+  const totalBebas = new RegExp(String.raw`\b(?:dari\s+)?total(?:\s+(?:harga|nilai|keseluruhan|semua|seluruhnya|nya))*\s*[:=]?\s*(${JUMLAH_RE})`, "i");
+  const bolehBebas = (i: number, isi: string, bernomor: boolean) =>
+    !/^(?:l2|loonars\s*2)\b/i.test(mentah[i]) && (bernomor || KATA_DP_RE.test(isi) || /\b(?:pelunasan|lunas|termin|sisa)\b/i.test(isi));
   const denganKata = new RegExp(String.raw`^(?:dari\s+)?(?:total|harga|nilai|dari)(?:\s+(?:total|harga|nilai|keseluruhan|semua|seluruhnya|nya))*\s*[:=]?\s*(${JUMLAH_RE})\s*[.!]?$`, "i");
   const angkaSaja = new RegExp(String.raw`^(${JUMLAH_RE})\s*[.!]?$`, "i");
   const sudahRe = new RegExp(String.raw`[\s,;]+(?:dan\s+)?(?:sudah|udah|sdh)(?:\s+(?:dibayar|bayar|dibayarkan|masuk|dp))?\s*[:=]?\s*(${JUMLAH_RE})\s*[.!]?$`, "i");
   const hasil: { no: number | null; total: number; sudah?: number }[] = [];
-  for (const b of baris) {
+  for (const [i, b] of baris.entries()) {
     const nomor = b.match(/^(\d{1,2})\s*[.)\-:]\s+(.+)$/);
     let isi = (nomor ? nomor[2] : b).trim();
     const s = sudahRe.exec(isi);
     const sudah = s ? parseRupiah(s[1]) : null;
     if (s && s.index !== undefined) isi = isi.slice(0, s.index).trim();
-    const jumlah = denganKata.exec(isi)?.[1] ?? (nomor ? angkaSaja.exec(isi)?.[1] : undefined);
+    const jumlah =
+      denganKata.exec(isi)?.[1] ??
+      (nomor ? angkaSaja.exec(isi)?.[1] : undefined) ??
+      (bolehBebas(i, isi, Boolean(nomor)) ? totalBebas.exec(isi)?.[1] : undefined);
     const total = jumlah ? parseRupiah(jumlah) : null;
     if (!total) return null;
     hasil.push(sudah !== null ? { no: nomor ? Number(nomor[1]) : null, total, sudah } : { no: nomor ? Number(nomor[1]) : null, total });
@@ -639,6 +654,12 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   const profit = kecil.match(/^cairkan\s+profit\s+(.+)$/);
   if (profit) return { aksi: "cairkan_profit", data: { nominal: parseRupiah(profit[1]) } };
 
+  // "L2 m100", "M-100", "bayar M-100" -- menyebut kode pengajuan (insiden 10 Nov 2026: "L2 m100" tidak dikenali dan foto
+  // bukti transfer owner jatuh ke modul slip gaji). Tanpa awalan "L2" juga diterima: balasan owner atas pertanyaan
+  // "foto cocok dengan beberapa pengajuan, balas kodenya".
+  const sebutKode = teks.match(/^(?:(?:bayar|dibayar|lunas)\s+)?m\s*-?\s*(\d{1,5})$/i);
+  if (sebutKode) return { aksi: "bayar_kelompok", data: { kode: `M-${sebutKode[1]}` } };
+
   // Balasan atas pertanyaan "nomor rekening tujuan?" -- boleh tanpa awalan "L2"; MKH Property hanya menerimanya bila
   // pelaksana memang sedang ditanya (selain itu "tidak_ada_pending" dan pesannya dilewatkan ke alur lain).
   const rekBalasan = parseRekeningBalasan(teks);
@@ -705,6 +726,10 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
   const unit = parseUnit(teks);
   if (unit) return { aksi: "ajukan_ai", unit: unit.ref, teks };
+  // Satu baris bernominal tanpa kata kunci & tanpa unit ("L2 DP kaca 3 jt BCA 7855066190 a.n. Irfan", insiden 10 Nov
+  // 2026 — dulu dibalas daftar perintah): satu baris pengajuan; unit mengikuti unit yang sedang dibangun.
+  const satuBaris = parseBarisMingguan(teks);
+  if (satuBaris && satuBaris.nominal) return { aksi: "ajukan_mingguan", data: { baris: [satuBaris] } };
   return { aksi: "bantuan" };
 }
 
@@ -775,6 +800,14 @@ export async function bacaLoonars2(sender: string, aksi: "saldo" | "tagihan" | "
 export type Loonars2Outcome = { outcome: "not_applicable" } | { outcome: "handled"; reply: string };
 
 const GAGAL = "⚠️ Sistem Loonars 2 sedang tidak bisa dihubungi. Coba lagi beberapa menit lagi.";
+
+const JAWABAN_PERTANYAAN = new Set(["total_dp", "tanpa_total_dp", "nota", "tanpa_nota"]);
+const TIDAK_SEDANG_DITANYA: Record<string, string> = {
+  total_dp: "ℹ️ Tidak ada pertanyaan total DP yang sedang menunggu jawaban, jadi pesan ini belum dicatat. Kalau ini pengajuan baru, awali dengan \"L2\", mis. \"L2 DP kaca 3 jt dari total 11 jt BCA 123… a.n. …\".",
+  tanpa_total_dp: "ℹ️ Tidak ada pertanyaan total DP yang sedang menunggu jawaban.",
+  nota: "ℹ️ Tidak ada nota yang sedang diminta. Kalau ini pengajuan baru dengan nota, tulis pengajuannya di keterangan foto, mis. \"L2 semen 20 sak 1,3 jt\".",
+  tanpa_nota: "ℹ️ Tidak ada nota yang sedang diminta.",
+};
 
 async function teruskan(sender: string, aksi: string, data: Record<string, unknown>): Promise<Loonars2Outcome> {
   const hasil = await panggilMkhProperty(sender, aksi, data);
@@ -916,6 +949,18 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     });
   }
 
+  // Jawaban atas pertanyaan sistem (total DP, nota, kode): bila tidak ada yang sedang ditanyakan, jawab jujur —
+  // jangan dilempar ke asisten umum (10 Nov 2026: jawaban total Vando dibalas asisten umum dengan status "sudah
+  // dibayarkan" yang tidak ada di data).
+  if (JAWABAN_PERTANYAAN.has(perintah.aksi)) {
+    const hasil = await panggilMkhProperty(sender, perintah.aksi, perintah.data);
+    if (!hasil) return { outcome: "handled", reply: GAGAL };
+    if (hasil.status === "abaikan") return { outcome: "not_applicable" };
+    if (hasil.status === "tidak_ada_pending") return { outcome: "handled", reply: TIDAK_SEDANG_DITANYA[perintah.aksi] ?? TIDAK_SEDANG_DITANYA.total_dp };
+    await flushLoonars2Outbox().catch(() => undefined);
+    return { outcome: "handled", reply: typeof hasil.balasan === "string" ? hasil.balasan : "OK" };
+  }
+
   return teruskan(sender, perintah.aksi, perintah.data);
 }
 
@@ -967,7 +1012,10 @@ async function bacaBuktiTransferOtomatis(sender: string, imageUrl: string, keter
 export async function tryHandleLoonars2Image(sender: string, imageUrl: string, caption: string | null | undefined): Promise<Loonars2Outcome> {
   const perintah = parseLoonars2Perintah(caption ?? "");
   if (!perintah) return bacaBuktiTransferOtomatis(sender, imageUrl, caption?.trim() ? caption.trim().slice(0, 300) : null);
-  if (perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
+  // Keterangan "L2 …" yang tidak dikenali tidak boleh membuat foto bukti transfer jatuh ke modul lain: coba pencocok
+  // bukti transfer dengan keterangan itu (yang bisa menyebut kode).
+  if (perintah.aksi === "bantuan") return bacaBuktiTransferOtomatis(sender, imageUrl, caption?.trim() ? caption.trim().slice(0, 300) : null);
+  if (perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
 
   // Foto nota yang diminta CFO ("L2 nota" / "L2 nota 2").
   if (perintah.aksi === "nota") return teruskan(sender, "nota", { ...perintah.data, nota_url: imageUrl });
@@ -978,10 +1026,22 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
     return teruskan(sender, "ajukan_mingguan", baris.length === 1 ? { ...perintah.data, baris: [{ ...baris[0], nota_url: imageUrl }] } : perintah.data);
   }
 
+  // Foto bukti + kode ("L2 m100", "L2 bayar M-100"): nominal dibaca dari foto supaya database bisa mencocokkan dengan
+  // total kode itu (yang masih menunggu disetujui owner sekaligus — transfer = persetujuan).
+  if (perintah.aksi === "bayar_kelompok") {
+    const image = await fetchImageAsBase64(imageUrl);
+    const ai: TransferProofRecognition | null =
+      image && !image.fetchError ? await recognizeTransferProof({ imageBase64: image.data, imageMimeType: image.mimeType }).catch(() => null) : null;
+    return teruskan(sender, "bayar_kelompok", {
+      ...perintah.data,
+      bukti_url: imageUrl,
+      nominal: ai?.readable && ai.nominal !== null && ai.nominal >= 1000 ? ai.nominal : null,
+    });
+  }
+
   if (
     perintah.aksi === "konfirmasi_transfer" ||
     perintah.aksi === "bayar_pengajuan" ||
-    perintah.aksi === "bayar_kelompok" ||
     perintah.aksi === "receipt"
   ) {
     return teruskan(sender, perintah.aksi, { ...perintah.data, bukti_url: imageUrl });

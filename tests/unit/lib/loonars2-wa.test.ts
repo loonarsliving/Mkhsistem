@@ -562,3 +562,35 @@ describe("CFO memeriksa kelengkapan (nota, pelunasan) — 10 Nov 2026", () => {
     expect(parseLoonars2Perintah("L2 bahan TB Maju semen 100 sak 8,5 juta nota beda")).toMatchObject({ aksi: "bahan_ai" });
   });
 });
+
+describe("insiden 10 Nov 2026 (jawaban total Vando, pengajuan satu baris, \"L2 m100\")", () => {
+  it("jawaban total bentuk bebas bernomor dari Vando terbaca", () => {
+    const teks = "1. DP Kaca - Rp. 3.000.000 total Rp. 11.652.000\n2. ⁠DP instalasi pipa & bahan pipa air panas - Rp. 3.000.000 total Rp. 10.670.000";
+    expect(parseTotalDpBalasan(teks)).toEqual([
+      { no: 1, total: 11_652_000 },
+      { no: 2, total: 10_670_000 },
+    ]);
+    expect(parseLoonars2Perintah(teks)).toMatchObject({ aksi: "total_dp" });
+  });
+
+  it("pengajuan baru berawalan L2 yang menyebut total tidak dianggap jawaban", () => {
+    expect(parseTotalDpBalasan("L2 semen 20 sak total 1.300.000")).toBeNull();
+    expect(parseLoonars2Perintah("L2 DP kaca 3 jt dari total 11.652.000 BCA 7855066190 a.n. Naimuddin Irfan")).toMatchObject({ aksi: "ajukan_mingguan" });
+  });
+
+  it("pengajuan satu baris tanpa kata kunci & tanpa unit menjadi satu baris pengajuan", () => {
+    const p = parseLoonars2Perintah("L2 DP kaca 3 jt BCA 7855066190 a.n. Naimuddin Irfan") as { aksi: string; data: { baris: { nominal: number; deskripsi: string; rekening?: string }[] } };
+    expect(p.aksi).toBe("ajukan_mingguan");
+    expect(p.data.baris[0]).toMatchObject({ nominal: 3_000_000, deskripsi: "DP kaca" });
+    expect(p.data.baris[0].rekening).toContain("7855066190");
+    const t = parseLoonars2Perintah("L2 DP kaca 3 jt dari total 11.652.000 BCA 7855066190 a.n. Naimuddin Irfan") as typeof p & { data: { baris: { total_dp?: number }[] } };
+    expect(t.data.baris[0]).toMatchObject({ nominal: 3_000_000, total_dp: 11_652_000 });
+    expect(parseLoonars2Perintah("L2 kaca 3 jt BCA 7855066190 a.n. Naimuddin Irfan")).toMatchObject({ aksi: "ajukan_mingguan" });
+  });
+
+  it("menyebut kode: L2 m100, M-100, bayar m100", () => {
+    for (const t of ["L2 m100", "M-100", "m100", "L2 bayar M-100", "bayar m 100"]) {
+      expect(parseLoonars2Perintah(t)).toEqual({ aksi: "bayar_kelompok", data: { kode: "M-100" } });
+    }
+  });
+});
