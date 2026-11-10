@@ -697,7 +697,7 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
 export const LOONARS2_BANTUAN =
   "Perintah Loonars 2 (pelaksana selalu diawali L2):\n" +
-  "• Setiap pengajuan (belanja kecil, reimburse, kontraktor, cicilan) sebaiknya langsung melampirkan REKENING tujuan agar Pak Avi tinggal menyalin, mis. \"- Reimburse mas Sarno 972.000 BCA 1234567890 a.n. Sarno\". Kalau belum, sistem menanyakan; rekening yang pernah dikirim diingat. Tidak ada rekening: \"L2 tanpa rekening\"\n" +
+  "• Setiap pengajuan (belanja kecil, reimburse, kontraktor, cicilan) sebaiknya langsung melampirkan REKENING tujuan agar transfer tinggal disalin, mis. \"- Reimburse mas Sarno 972.000 BCA 1234567890 a.n. Sarno\". Kalau belum, sistem menanyakan; rekening yang pernah dikirim diingat. Tidak ada rekening: \"L2 tanpa rekening\"\n" +
   "• Upah tukang mingguan (borongan): \"L2 tukang minggu ini\" — nominal & minggu ke-n dihitung sistem; \"L2 retensi unit 3\" setelah unit selesai\n" +
   "• Catat utang material (langsung sah, tidak perlu persetujuan; sistem hanya menolak nota yang kembar): \"L2 utang TB Maju semen 50 sak 6.500.000\" (+ foto nota). Kalau ditolak karena dikira double tapi notanya memang lain, tambahkan \"nota beda\"; beli tunai: \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"\n" +
   "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
