@@ -52,6 +52,8 @@ export type Loonars2Aksi =
   | "tanpa_rekening"
   | "total_dp"
   | "tanpa_total_dp"
+  | "nota"
+  | "tanpa_nota"
   | "ajukan_mingguan"
   | "putuskan_kode"
   | "bayar_kelompok"
@@ -260,21 +262,27 @@ export function totalDp(dp: { total: number | null; persen: number | null }, nom
 
 /**
  * Balasan pelaksana atas pertanyaan "DP ini dari total nilai berapa?": "total 10 juta", "dari 10 jt", atau bernomor
- * "1. total 10 juta\n2. total 8,5 juta" / "1. 10 juta". Boleh diawali "L2". null bila bukan balasan seperti itu.
+ * "1. total 10 juta\n2. total 8,5 juta" / "1. 10 juta". Untuk pelunasan tanpa DP tercatat boleh ditambah yang sudah
+ * dibayar: "total 10 juta sudah 3 juta" / "total 10 jt, sudah dibayar 3 jt". Boleh diawali "L2". null bila bukan
+ * balasan seperti itu.
  */
-export function parseTotalDpBalasan(input: string): { no: number | null; total: number }[] | null {
+export function parseTotalDpBalasan(input: string): { no: number | null; total: number; sudah?: number }[] | null {
   const baris = input.split(/\r?\n/).map((b) => b.trim().replace(/^(?:l2|loonars\s*2)\b[\s:,.-]*/i, "")).filter(Boolean);
   if (baris.length === 0 || baris.length > 10 || input.length > 400) return null;
   const denganKata = new RegExp(String.raw`^(?:dari\s+)?(?:total|harga|nilai|dari)(?:\s+(?:total|harga|nilai|keseluruhan|semua|seluruhnya|nya))*\s*[:=]?\s*(${JUMLAH_RE})\s*[.!]?$`, "i");
   const angkaSaja = new RegExp(String.raw`^(${JUMLAH_RE})\s*[.!]?$`, "i");
-  const hasil: { no: number | null; total: number }[] = [];
+  const sudahRe = new RegExp(String.raw`[\s,;]+(?:dan\s+)?(?:sudah|udah|sdh)(?:\s+(?:dibayar|bayar|dibayarkan|masuk|dp))?\s*[:=]?\s*(${JUMLAH_RE})\s*[.!]?$`, "i");
+  const hasil: { no: number | null; total: number; sudah?: number }[] = [];
   for (const b of baris) {
     const nomor = b.match(/^(\d{1,2})\s*[.)\-:]\s+(.+)$/);
-    const isi = (nomor ? nomor[2] : b).trim();
+    let isi = (nomor ? nomor[2] : b).trim();
+    const s = sudahRe.exec(isi);
+    const sudah = s ? parseRupiah(s[1]) : null;
+    if (s && s.index !== undefined) isi = isi.slice(0, s.index).trim();
     const jumlah = denganKata.exec(isi)?.[1] ?? (nomor ? angkaSaja.exec(isi)?.[1] : undefined);
     const total = jumlah ? parseRupiah(jumlah) : null;
     if (!total) return null;
-    hasil.push({ no: nomor ? Number(nomor[1]) : null, total });
+    hasil.push(sudah !== null ? { no: nomor ? Number(nomor[1]) : null, total, sudah } : { no: nomor ? Number(nomor[1]) : null, total });
   }
   return hasil;
 }
@@ -550,6 +558,11 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
 
   if (/^tanpa\s+rek(?:ening)?$/.test(kecil)) return { aksi: "tanpa_rekening", data: {} };
   if (/^(?:tanpa|belum\s+(?:ada|tahu))\s+total(?:\s+dp)?$/.test(kecil)) return { aksi: "tanpa_total_dp", data: {} };
+  // Nota yang diminta CFO: foto berketerangan "L2 nota" / "L2 nota 2"; atau "L2 tanpa nota <alasan>".
+  const nota = kecil.match(/^nota(?:\s+(?:no\.?\s*)?(\d{1,2}))?$/);
+  if (nota) return { aksi: "nota", data: nota[1] ? { no: Number(nota[1]) } : {} };
+  const tanpaNota = teks.match(/^tanpa\s+(?:nota|kwitansi|kuitansi)\b[\s:,.-]*(.*)$/i);
+  if (tanpaNota) return { aksi: "tanpa_nota", data: { alasan: tanpaNota[1].trim().slice(0, 200) } };
   if (/^saldo$/.test(kecil)) return { aksi: "saldo", data: {} };
   if (/^tagihan$/.test(kecil)) return { aksi: "tagihan", data: {} };
   if (/^(?:daftar\s+|sisa\s+)?utang(?:\s+toko)?$/.test(kecil) && (awalan || /^utang$/.test(kecil))) {
@@ -703,6 +716,7 @@ export const LOONARS2_BANTUAN =
   "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
   "• Pembayaran lain-lain: \"L2 lain listrik proyek 600 rb\", \"L2 bensin 200 rb\", \"L2 sewa alat 1,5 juta\"\n" +
   "• Semua sekaligus, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", \"- lain listrik 600 rb\"\n" +
+  "• Belanja Rp 1 juta ke atas: lampirkan foto nota (kirim pengajuan sebagai keterangan foto, atau foto + \"L2 nota\" saat diminta); tidak ada nota: \"L2 tanpa nota <alasan>\"\n" +
   "• DP / uang muka: sebutkan total harganya, mis. \"- DP kaca 3 juta dari total 10 juta\"; kalau belum, sistem menanyakan (\"L2 tanpa total\" bila belum tahu)\n" +
   "• Unit yang sedang dibangun: sistem menanyakan; balas YA atau \"L2 unit 1-7\". Koreksi pembagian bahan: \"L2 koreksi M-7 semen unit 1,2,3\"\n" +
   "• Setelah dibayar: foto bukti + \"L2 bayar M-3\". Lihat: \"L2 rab unit 3\", \"L2 borongan\"\n" +
@@ -954,6 +968,15 @@ export async function tryHandleLoonars2Image(sender: string, imageUrl: string, c
   const perintah = parseLoonars2Perintah(caption ?? "");
   if (!perintah) return bacaBuktiTransferOtomatis(sender, imageUrl, caption?.trim() ? caption.trim().slice(0, 300) : null);
   if (perintah.aksi === "bantuan" || perintah.aksi === "ya" || perintah.aksi === "batal") return { outcome: "not_applicable" };
+
+  // Foto nota yang diminta CFO ("L2 nota" / "L2 nota 2").
+  if (perintah.aksi === "nota") return teruskan(sender, "nota", { ...perintah.data, nota_url: imageUrl });
+
+  // Pengajuan satu baris yang dikirim sebagai keterangan foto: fotonya = nota baris itu.
+  if (perintah.aksi === "ajukan_mingguan") {
+    const baris = (perintah.data.baris as Record<string, unknown>[] | undefined) ?? [];
+    return teruskan(sender, "ajukan_mingguan", baris.length === 1 ? { ...perintah.data, baris: [{ ...baris[0], nota_url: imageUrl }] } : perintah.data);
+  }
 
   if (
     perintah.aksi === "konfirmasi_transfer" ||

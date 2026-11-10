@@ -540,3 +540,25 @@ describe("DP: total nilai keseluruhan (permintaan owner 10 Nov 2026)", () => {
     expect(parseLoonars2Perintah("L2 tanpa total")).toEqual({ aksi: "tanpa_total_dp", data: {} });
   });
 });
+
+describe("CFO memeriksa kelengkapan (nota, pelunasan) — 10 Nov 2026", () => {
+  it("balasan total + sudah dibayar untuk pelunasan", () => {
+    expect(parseTotalDpBalasan("total 10 juta sudah 3 juta")).toEqual([{ no: null, total: 10_000_000, sudah: 3_000_000 }]);
+    expect(parseTotalDpBalasan("total 10 jt, sudah dibayar 3 jt")).toEqual([{ no: null, total: 10_000_000, sudah: 3_000_000 }]);
+    expect(parseTotalDpBalasan("1. total 8 juta sudah 2 juta\n2. total 5 juta")).toEqual([
+      { no: 1, total: 8_000_000, sudah: 2_000_000 },
+      { no: 2, total: 5_000_000 },
+    ]);
+  });
+
+  it("nota & tanpa nota", () => {
+    expect(parseLoonars2Perintah("L2 nota")).toEqual({ aksi: "nota", data: {} });
+    expect(parseLoonars2Perintah("L2 nota 2")).toEqual({ aksi: "nota", data: { no: 2 } });
+    expect(parseLoonars2Perintah("L2 tanpa nota beli di pasar")).toEqual({ aksi: "tanpa_nota", data: { alasan: "beli di pasar" } });
+    expect(parseLoonars2Perintah("tanpa nota")).toEqual({ aksi: "tanpa_nota", data: { alasan: "" } });
+  });
+
+  it("frasa \"nota beda\" pada pengajuan bahan tidak terbaca sebagai balasan nota", () => {
+    expect(parseLoonars2Perintah("L2 bahan TB Maju semen 100 sak 8,5 juta nota beda")).toMatchObject({ aksi: "bahan_ai" });
+  });
+});
