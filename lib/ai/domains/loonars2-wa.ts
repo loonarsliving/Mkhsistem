@@ -55,6 +55,7 @@ export type Loonars2Aksi =
   | "tanpa_total_dp"
   | "nota"
   | "tanpa_nota"
+  | "rincian"
   | "ajukan_mingguan"
   | "putuskan_kode"
   | "bayar_kelompok"
@@ -719,6 +720,11 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   // Sisanya hanya untuk pesan berawalan "L2" (pelaksana).
   if (!awalan) return null;
 
+  // "L2 rincian semen 5 sak, paku 2 kg" / "L2 rincian 2 semen 5 sak" -- jawaban atas "barang apa saja yang dibeli?"
+  // (owner 10 Nov 2026: rincian "belanja material" harus diperjelas).
+  const rincian = teks.match(/^rincian(?:nya)?\b[\s:,.-]*(?:(?:no\.?\s*)?(\d{1,2})\s*[.):-]?\s+)?(.*)$/i);
+  if (rincian) return { aksi: "rincian", data: rincian[1] ? { no: Number(rincian[1]), isi: rincian[2].trim() } : { isi: rincian[2].trim() } };
+
   // "L2 bayar M-3" -- bayar semua baris pengajuan mingguan yang disetujui
   const bayarKelompok = teks.match(/^(?:bayar|dibayar|lunas)\s+m\s*-\s*(\d+)\b/i);
   if (bayarKelompok) return { aksi: "bayar_kelompok", data: { kode: `M-${bayarKelompok[1]}` } };
@@ -793,6 +799,7 @@ export const LOONARS2_BANTUAN =
   "• Pembayaran lain-lain: \"L2 lain listrik proyek 600 rb\", \"L2 bensin 200 rb\", \"L2 sewa alat 1,5 juta\"\n" +
   "• Semua sekaligus, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", \"- lain listrik 600 rb\"\n" +
   "• Belanja Rp 1 juta ke atas: lampirkan foto nota (kirim pengajuan sebagai keterangan foto, atau foto + \"L2 nota\" saat diminta); tidak ada nota: \"L2 tanpa nota <alasan>\"\n" +
+  "• Sebut barangnya, jangan hanya \"belanja material\" — kalau terlalu umum, sistem menanyakan; balas \"L2 rincian semen 5 sak, paku 2 kg\"\n" +
   "• DP / uang muka: sebutkan total harganya, mis. \"- DP kaca 3 juta dari total 10 juta\"; kalau belum, sistem menanyakan (\"L2 tanpa total\" bila belum tahu)\n" +
   "• Unit yang sedang dibangun: sistem menanyakan; balas YA atau \"L2 unit 1-7\". Koreksi pembagian bahan: \"L2 koreksi M-7 semen unit 1,2,3\"\n" +
   "• Setelah dibayar: foto bukti + \"L2 bayar M-3\". Lihat: \"L2 rab unit 3\", \"L2 borongan\"\n" +
@@ -852,12 +859,13 @@ export type Loonars2Outcome = { outcome: "not_applicable" } | { outcome: "handle
 
 const GAGAL = "⚠️ Sistem Loonars 2 sedang tidak bisa dihubungi. Coba lagi beberapa menit lagi.";
 
-const JAWABAN_PERTANYAAN = new Set(["total_dp", "tanpa_total_dp", "nota", "tanpa_nota"]);
+const JAWABAN_PERTANYAAN = new Set(["total_dp", "tanpa_total_dp", "nota", "tanpa_nota", "rincian"]);
 const TIDAK_SEDANG_DITANYA: Record<string, string> = {
   total_dp: "ℹ️ Tidak ada pertanyaan total DP yang sedang menunggu jawaban, jadi pesan ini belum dicatat. Kalau ini pengajuan baru, awali dengan \"L2\", mis. \"L2 DP kaca 3 jt dari total 11 jt BCA 123… a.n. …\".",
   tanpa_total_dp: "ℹ️ Tidak ada pertanyaan total DP yang sedang menunggu jawaban.",
   nota: "ℹ️ Tidak ada nota yang sedang diminta. Kalau ini pengajuan baru dengan nota, tulis pengajuannya di keterangan foto, mis. \"L2 semen 20 sak 1,3 jt\".",
   tanpa_nota: "ℹ️ Tidak ada nota yang sedang diminta.",
+  rincian: "ℹ️ Tidak ada rincian yang sedang ditanyakan. Kalau ini pengajuan baru, tulis barang & nominalnya, mis. \"L2 semen 5 sak 400 rb BCA … a.n. …\".",
 };
 
 async function teruskan(sender: string, aksi: string, data: Record<string, unknown>): Promise<Loonars2Outcome> {

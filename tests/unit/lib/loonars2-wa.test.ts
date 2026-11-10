@@ -631,3 +631,14 @@ describe("pembaca cadangan AI: angka harus tertulis di pesan", () => {
     expect(b[0].total_dp).toBeUndefined();
   });
 });
+
+describe("rincian barang (owner 10 Nov 2026: \"belanja material\" diperjelas)", () => {
+  it("L2 rincian … dikenali, dengan atau tanpa nomor", () => {
+    expect(parseLoonars2Perintah("L2 rincian semen 5 sak, paku 2 kg")).toEqual({ aksi: "rincian", data: { isi: "semen 5 sak, paku 2 kg" } });
+    expect(parseLoonars2Perintah("L2 rincian 2. cat tembok 1 pail")).toEqual({ aksi: "rincian", data: { no: 2, isi: "cat tembok 1 pail" } });
+    expect(parseLoonars2Perintah("L2 rinciannya: kuas, roll")).toEqual({ aksi: "rincian", data: { isi: "kuas, roll" } });
+  });
+  it("tanpa awalan L2 tidak dianggap jawaban rincian", () => {
+    expect(parseLoonars2Perintah("rincian gaji saya")).toBeNull();
+  });
+});
