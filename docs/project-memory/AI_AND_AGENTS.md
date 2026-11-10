@@ -3,6 +3,13 @@
 Only AI features/agents with direct code evidence are listed. Nothing here
 is invented or extrapolated beyond what the source shows.
 
+## Prinsip owner: sistem bersuara sebagai CFO sendiri (2026-11-10)
+
+Pesan otomatis ke pelaksana/staf (mis. Loonars 2 lewat `lib/ai/domains/loonars2-wa.ts` dan
+MKH Property) tidak pernah mengatasnamakan atau menyebut owner ("Pak Avi", "persetujuan
+owner"). Data yang kurang ditanyakan sistem sendiri. Angka tetap dihitung kode dan keputusan
+uang tetap di owner. Detail: MKH Property `docs/project-memory/AI_AND_AGENTS.md`.
+
 ## Provider layer
 
 - **Model/provider**: Google Gemini, via `@google/genai`
