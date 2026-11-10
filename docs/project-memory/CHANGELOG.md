@@ -7,6 +7,15 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-10 — Loonars 2 WA: pembaca cadangan AI untuk pengajuan yang tidak cocok pola
+
+Owner: "kenapa sering tidak bisa pengajuan". Audit 30 hari percakapan Vando: 40 diterima, ±27 gagal — pola kata kaku
+(dibalas daftar perintah) dan pesan bocor ke asisten umum/modul HR. Kini pesan "L2 …" bernominal yang tidak cocok
+pola (dan pesan L2 di tengah/berbaris yang tak terbaca) dibaca `recognizePengajuanL2`
+(`lib/ai/domains/loonars2-pengajuan-recognition.ts`); `validasiPengajuanAi` hanya meneruskan baris yang nominalnya
+tertulis di pesan, rekening hanya bila nomornya tertulis, unit/total DP hanya bila tertulis. Gagal → balasan jujur
+singkat (bukan daftar perintah) + log `loonars2: pesan L2 tidak terbaca`. Daftar perintah hanya untuk "L2" tanpa nominal.
+
 ## 2026-11-10 — Loonars 2 WA: perbaikan insiden (jawaban total Vando, pengajuan satu baris, "L2 m100")
 
 `lib/ai/domains/loonars2-wa.ts`: jawaban total bentuk bebas bernomor ("1. DP Kaca - Rp. 3.000.000 total Rp. 11.652.000")

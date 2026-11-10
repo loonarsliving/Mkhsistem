@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { NOTA_BEDA_RE, parseRekeningBalasan, parseTotalDpBalasan, pisahTotalDp, totalDp, pisahRekening, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { angkaUangDiPesan, validasiPengajuanAi, NOTA_BEDA_RE, parseRekeningBalasan, parseTotalDpBalasan, pisahTotalDp, totalDp, pisahRekening, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -592,5 +592,42 @@ describe("insiden 10 Nov 2026 (jawaban total Vando, pengajuan satu baris, \"L2 m
     for (const t of ["L2 m100", "M-100", "m100", "L2 bayar M-100", "bayar m 100"]) {
       expect(parseLoonars2Perintah(t)).toEqual({ aksi: "bayar_kelompok", data: { kode: "M-100" } });
     }
+  });
+});
+
+describe("pembaca cadangan AI: angka harus tertulis di pesan", () => {
+  const pesan = "project BALAS 2.068.000\nBCA 0374705969 a/n meidy via ruflyani";
+
+  it("jumlah uang di pesan, nomor rekening tidak dihitung", () => {
+    const u = angkaUangDiPesan(pesan);
+    expect(u.has(2_068_000)).toBe(true);
+    expect([...u].some((n) => n > 1_000_000_000)).toBe(false);
+    expect(angkaUangDiPesan("lampu anyaman 16pcs 1,6 jt").has(1_600_000)).toBe(true);
+  });
+
+  it("baris dengan nominal & rekening yang tertulis diterima", () => {
+    const b = validasiPengajuanAi(
+      { baris: [{ deskripsi: "project BALAS", nominal: 2_068_000, jenis: "lain", rekening: null, toko: null, unit: [], total_dp: null }], rekening_umum: "BCA 0374705969 a/n meidy", notes: "" },
+      pesan,
+    );
+    expect(b).toEqual([{ jenis: "lain", deskripsi: "project BALAS", nominal: 2_068_000, unit: [], rekening: "BCA 0374705969 a/n meidy" }]);
+  });
+
+  it("nominal karangan AI, rekening karangan, unit & total DP yang tidak tertulis dibuang", () => {
+    const b = validasiPengajuanAi(
+      {
+        baris: [
+          { deskripsi: "karangan", nominal: 5_000_000, jenis: "material", rekening: null, toko: null, unit: [], total_dp: null },
+          { deskripsi: "project BALAS", nominal: 2_068_000, jenis: "lain", rekening: "BCA 1111222233", toko: null, unit: [7], total_dp: 9_000_000 },
+        ],
+        rekening_umum: null,
+        notes: "",
+      },
+      pesan,
+    );
+    expect(b).toHaveLength(1);
+    expect(b[0].rekening).toBeUndefined();
+    expect(b[0].unit).toEqual([]);
+    expect(b[0].total_dp).toBeUndefined();
   });
 });

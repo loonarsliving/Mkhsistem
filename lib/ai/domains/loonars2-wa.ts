@@ -6,6 +6,7 @@ import { fetchImageAsBase64 } from "@/lib/ai/domains/construction-progress-visio
 import { recognizeConstructionCostRequest, type CostRequestRecognition } from "@/lib/ai/domains/loonars-coffee-recognition";
 import { recognizeExpenseReceipt, type ExpenseReceiptRecognition } from "@/lib/ai/domains/expense-receipt-recognition";
 import { recognizeBahanPesanan, type BahanRecognition } from "@/lib/ai/domains/loonars2-bahan-recognition";
+import { recognizePengajuanL2, type PengajuanAi } from "@/lib/ai/domains/loonars2-pengajuan-recognition";
 import { recognizeTransferProof, type TransferProofRecognition } from "@/lib/ai/domains/transfer-proof-recognition";
 import { sendWhatsAppDocument, sendWhatsAppImage, sendWhatsAppText } from "@/lib/ai/notifications/engine";
 
@@ -549,6 +550,56 @@ export const L2_TIDAK_DI_AWAL =
 export const L2_FORMAT_TIDAK_TERBACA =
   "⚠️ Pengajuan Loonars 2 ini belum bisa saya baca, jadi BELUM tercatat. Kirim ulang dengan format:\nL2 pengajuan minggu ini\n- pasir 5.250.000 BCA 1234567890 a.n. Budi\n- belanja material 1.340.500\n\nSatu baris = satu pembayaran, nominal di setiap baris.";
 
+// ---------------------------------------------------------------------------
+// Pembaca cadangan (AI) — hanya dipercaya untuk angka yang benar-benar tertulis
+// ---------------------------------------------------------------------------
+/** Semua jumlah uang yang tertulis di pesan (nomor rekening — deret angka polos ≥ 8 digit — tidak dihitung). */
+export function angkaUangDiPesan(pesan: string): Set<number> {
+  const hasil = new Set<number>();
+  for (const m of pesan.matchAll(/(?:rp\.?\s*)?\d[\d.,]*(?:\s*(?:miliar|milyar|juta|jt|ribu|rb|k)\b)?/gi)) {
+    const token = m[0].trim();
+    if (/^\d{8,}$/.test(token.replace(/^rp\.?\s*/i, ""))) continue;
+    const n = parseRupiah(token);
+    if (n !== null && n >= 1000) hasil.add(n);
+  }
+  return hasil;
+}
+
+/**
+ * Saring hasil AI: baris dipakai hanya bila nominalnya tertulis di pesan; rekening hanya bila nomornya tertulis;
+ * unit & total DP hanya bila tertulis. AI tidak bisa menambah angka yang tidak diketik pelaksana.
+ */
+export function validasiPengajuanAi(ai: PengajuanAi, pesan: string): BarisMingguan[] {
+  const uang = angkaUangDiPesan(pesan);
+  const digitPesan = pesan.replace(/\D/g, "");
+  const nomorUnit = new Set([...pesan.matchAll(/\b(\d{1,2})\b/g)].map((m) => Number(m[1])));
+  const rekeningSah = (r: string | null) => {
+    if (!r) return undefined;
+    const d = r.replace(/\D/g, "");
+    return d.length >= 8 && d.length <= 18 && digitPesan.includes(d) ? r : undefined;
+  };
+  const hasil: BarisMingguan[] = [];
+  for (const b of ai.baris) {
+    if (b.nominal === null || !uang.has(b.nominal)) continue;
+    const rekening = rekeningSah(b.rekening) ?? rekeningSah(ai.rekening_umum);
+    const unit = b.unit.filter((u) => nomorUnit.has(u)).map(String);
+    const baris: BarisMingguan = {
+      jenis: b.jenis,
+      deskripsi: b.deskripsi.replace(/\s+/g, " ").trim().slice(0, 200),
+      nominal: b.nominal,
+      unit,
+      ...(b.toko ? { toko: b.toko } : {}),
+      ...(rekening ? { rekening } : {}),
+      ...(b.total_dp !== null && uang.has(b.total_dp) && b.total_dp > b.nominal ? { total_dp: b.total_dp } : {}),
+    };
+    hasil.push(baris);
+  }
+  return hasil;
+}
+
+export const L2_TIDAK_TERBACA =
+  "⚠️ Pengajuan ini belum bisa saya baca, jadi BELUM tercatat. Tulis satu baris per pembayaran: rincian + nominal (+ rekening), mis. \"L2 pembayaran air kolam 350.000 BCA 8467112320 a.n. Teguh\".";
+
 export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   input = rapikanAwalanL2(rapikanBulletL2(input));
   // Balasan atas pertanyaan "DP ini dari total nilai berapa?" ("total 10 juta", "1. total 10 juta\n2. ..."), boleh
@@ -820,6 +871,25 @@ async function teruskan(sender: string, aksi: string, data: Record<string, unkno
   return { outcome: "handled", reply: typeof hasil.balasan === "string" ? hasil.balasan : "OK" };
 }
 
+/** Pengajuan yang tidak terbaca pola: AI membaca, kode memverifikasi angka, lalu diajukan seperti biasa. */
+async function bacaPengajuanAi(sender: string, text: string, balasanGagal: string): Promise<Loonars2Outcome> {
+  if (/\bloonars\s*(?:1|satu|living)\b/i.test(text)) {
+    return { outcome: "handled", reply: "⚠️ Pesan ini menyebut Loonars 1, sedangkan perintah \"L2\" khusus Loonars 2, jadi belum saya catat." };
+  }
+  const isi = text.replace(TAK_TERLIHAT_RE, "").replace(/(^|\n)\s*(?:[-•*·▪●◦]\s*)?(?:l2|loonars\s*2)\b[\s:,.-]*/gi, "$1").trim();
+  const ai = await recognizePengajuanL2(isi).catch((e: unknown) => {
+    logger.warn("loonars2: pembaca AI gagal", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  });
+  const baris = ai ? validasiPengajuanAi(ai, isi) : [];
+  if (baris.length === 0) {
+    logger.warn("loonars2: pesan L2 tidak terbaca", { pengirim: sender.slice(-4), panjang: text.length, ai_baris: ai?.baris.length ?? null });
+    return { outcome: "handled", reply: balasanGagal };
+  }
+  logger.info("loonars2: pengajuan dibaca AI", { pengirim: sender.slice(-4), baris: baris.length });
+  return teruskan(sender, "ajukan_mingguan", { baris });
+}
+
 function kategoriDariAi(t: CostRequestRecognition["requestType"]): "material" | "tukang" | "lain" {
   return t === "contractor_payment" ? "tukang" : t === "other_expense" ? "lain" : "material";
 }
@@ -876,11 +946,11 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
   if (!perintah) {
     // Jelas pengajuan L2 (ada nominal) tapi "L2" tidak di depan: jangan dilempar ke asisten umum yang tidak tahu
     // Loonars 2 dan bisa mengarang jawaban.
-    if (L2_DI_TENGAH_RE.test(text) && parseRupiah(text) !== null) return { outcome: "handled", reply: L2_TIDAK_DI_AWAL };
-    // Pesan berbaris yang jelas menyebut L2 dan bernominal tapi formatnya tidak terbaca: balas petunjuk format,
-    // jangan dilempar ke asisten umum (3 Nov 2026: asisten umum menjawab "akan diproses" padahal tidak tercatat,
-    // dan malah menyebut saldo kas cabang kepada pelaksana).
-    if (jelasPengajuanL2Berbaris(text)) return { outcome: "handled", reply: L2_FORMAT_TIDAK_TERBACA };
+    // Pesan bernominal yang menyebut L2 (di tengah, atau berbaris dengan format yang tidak dikenali): baca dengan AI,
+    // jangan dilempar ke asisten umum (3 Nov 2026: asisten umum menjawab "akan diproses" padahal tidak tercatat).
+    if ((L2_DI_TENGAH_RE.test(text) || jelasPengajuanL2Berbaris(text)) && parseRupiah(text) !== null) {
+      return bacaPengajuanAi(sender, text, L2_DI_TENGAH_RE.test(text) ? L2_TIDAK_DI_AWAL : L2_FORMAT_TIDAK_TERBACA);
+    }
     return { outcome: "not_applicable" };
   }
 
@@ -896,7 +966,12 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
     };
   }
 
-  if (perintah.aksi === "bantuan") return { outcome: "handled", reply: LOONARS2_BANTUAN };
+  // "L2 …" bernominal yang tidak cocok pola mana pun (mis. "L2 project BALAS 2.068.000 BCA …") dulu dibalas daftar
+  // perintah; sekarang dibaca AI. Daftar perintah hanya untuk "L2" tanpa nominal.
+  if (perintah.aksi === "bantuan") {
+    if (parseRupiah(pisahRekening(text).sisa) !== null) return bacaPengajuanAi(sender, text, L2_TIDAK_TERBACA);
+    return { outcome: "handled", reply: LOONARS2_BANTUAN };
+  }
 
   if (perintah.aksi === "ajukan_ai") {
     const { rekening, sisa: teksTanpaRek } = pisahRekening(perintah.teks);
