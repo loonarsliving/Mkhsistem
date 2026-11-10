@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { NOTA_BEDA_RE, parseRekeningBalasan, pisahRekening, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
+import { NOTA_BEDA_RE, parseRekeningBalasan, parseTotalDpBalasan, pisahTotalDp, totalDp, pisahRekening, TRANSFER_BEDA_RE, parseBarisMingguan, parseBorongan, parseLoonars2Perintah, parseRupiah, parseUnit, parseUnits } from "@/lib/ai/domains/loonars2-wa";
 
 describe("parseRupiah", () => {
   it("reads the ways an owner writes money", () => {
@@ -483,5 +483,60 @@ describe("pengajuan Vando 3 Nov 2026 (bullet di setiap baris & label \"L2 lain\"
       reply: L2_FORMAT_TIDAK_TERBACA,
     });
     await expect(tryHandleLoonars2Text("62800", "Halo kak\nmau tanya villa 500 rb")).resolves.toEqual({ outcome: "not_applicable" });
+  });
+});
+
+describe("DP: total nilai keseluruhan (permintaan owner 10 Nov 2026)", () => {
+  it("baris DP tanpa total: nominal tetap DP, tanpa total_dp (MKH Property yang menanyakan)", () => {
+    const b = parseBarisMingguan("DP kaca 3.000.000 unit 6,7");
+    expect(b?.nominal).toBe(3_000_000);
+    expect(b?.total_dp).toBeUndefined();
+  });
+
+  it("\"dari total X\" dipisahkan: nominal = DP, bukan angka total yang lebih besar", () => {
+    const b = parseBarisMingguan("DP kaca 3.000.000 dari total 10 juta unit 6,7 BCA 7855066190 a.n. Naimuddin Irfan");
+    expect(b?.nominal).toBe(3_000_000);
+    expect(b?.total_dp).toBe(10_000_000);
+    expect(b?.unit).toEqual(["6", "7"]);
+    expect(b?.deskripsi).toBe("DP kaca");
+    expect(b?.rekening).toContain("7855066190");
+  });
+
+  it("ragam tulisan total", () => {
+    expect(pisahTotalDp("DP sambungan pipa 3 jt (total harga 8,5 juta)").total).toBe(8_500_000);
+    expect(pisahTotalDp("uang muka kusen 2 juta dari 6 juta").total).toBe(6_000_000);
+    expect(pisahTotalDp("panjar las 1 jt, harga 4 jt").total).toBe(4_000_000);
+    expect(totalDp(pisahTotalDp("DP kusen 30% 3 juta"), 3_000_000)).toBe(10_000_000);
+  });
+
+  it("bukan DP: kata total tidak diubah", () => {
+    expect(pisahTotalDp("semen 20 sak total 1.300.000")).toEqual({ total: null, persen: null, sisa: "semen 20 sak total 1.300.000" });
+    expect(parseBarisMingguan("semen 20 sak total 1.300.000")?.total_dp).toBeUndefined();
+  });
+
+  it("total tidak lebih besar dari DP diabaikan", () => {
+    expect(totalDp({ total: 2_000_000, persen: null }, 3_000_000)).toBeUndefined();
+  });
+
+  it("pengajuan mingguan membawa total_dp per baris", () => {
+    const p = parseLoonars2Perintah("L2 pengajuan\n- DP kaca 3 juta dari total 10 juta\n- DP sambungan pipa air panas 3 juta");
+    expect(p).toMatchObject({ aksi: "ajukan_mingguan" });
+    const baris = (p as unknown as { data: { baris: { total_dp?: number; nominal: number }[] } }).data.baris;
+    expect(baris[0]).toMatchObject({ nominal: 3_000_000, total_dp: 10_000_000 });
+    expect(baris[1].total_dp).toBeUndefined();
+  });
+
+  it("balasan atas pertanyaan total", () => {
+    expect(parseTotalDpBalasan("total 10 juta")).toEqual([{ no: null, total: 10_000_000 }]);
+    expect(parseTotalDpBalasan("L2 dari total 10jt")).toEqual([{ no: null, total: 10_000_000 }]);
+    expect(parseTotalDpBalasan("1. total 10 juta\n2. 8.500.000")).toEqual([
+      { no: 1, total: 10_000_000 },
+      { no: 2, total: 8_500_000 },
+    ]);
+    expect(parseTotalDpBalasan("10 juta")).toBeNull();
+    expect(parseTotalDpBalasan("total belanja minggu ini berapa?")).toBeNull();
+    expect(parseLoonars2Perintah("Total 10 juta")).toEqual({ aksi: "total_dp", data: { daftar: [{ no: null, total: 10_000_000 }] } });
+    expect(parseLoonars2Perintah("L2\n1. total 10 juta\n2. total 8 juta")).toMatchObject({ aksi: "total_dp" });
+    expect(parseLoonars2Perintah("L2 tanpa total")).toEqual({ aksi: "tanpa_total_dp", data: {} });
   });
 });

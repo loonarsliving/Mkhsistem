@@ -50,6 +50,8 @@ export type Loonars2Aksi =
   | "laporan_utang"
   | "rekening"
   | "tanpa_rekening"
+  | "total_dp"
+  | "tanpa_total_dp"
   | "ajukan_mingguan"
   | "putuskan_kode"
   | "bayar_kelompok"
@@ -162,6 +164,8 @@ export type BarisMingguan = {
   nominal: number | null;
   /** Tulisan pelaksana yang memuat rekening tujuan (database yang membaca bank/nomor/a.n.). */
   rekening?: string;
+  /** Baris DP: total nilai keseluruhan ("DP kaca 3 juta dari total 10 juta"). Tanpa ini MKH Property menanyakannya. */
+  total_dp?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -216,6 +220,65 @@ function pisahRekeningNamaDiTengah(teks: string): { rekening: string | null; sis
   };
 }
 
+// ---------------------------------------------------------------------------
+// DP (uang muka): total nilai keseluruhan
+// ---------------------------------------------------------------------------
+/** DP / uang muka / panjar / persekot / down payment (bukan "DPP"). Sama dengan `_loonars2_kata_dp` di MKH Property. */
+export const KATA_DP_RE = /(?:^|[^a-z0-9])(?:dp|d\.p\.?|uang\s+muka|panjar|persekot|down\s*payment)(?=[^a-z0-9]|$)/i;
+const JUMLAH_RE = String.raw`(?:rp\.?\s*)?\d[\d.,]*(?:\s*(?:miliar|milyar|juta|jt|ribu|rb|k)\b)?`;
+const KATA_TOTAL = String.raw`(?:total|harga|nilai)(?:\s+(?:harga|nilai|keseluruhan|semua|seluruhnya|nya))*`;
+const TOTAL_DP_RE = new RegExp(String.raw`\(?\s*(?:dari\s+(?:${KATA_TOTAL}\s*[:=]?\s*)?|${KATA_TOTAL}\s*[:=]?\s*)(${JUMLAH_RE})\s*\)?`, "i");
+const PERSEN_DP_RE = /\b(\d{1,2}(?:[.,]\d+)?)\s*(?:%|persen\b)/i;
+
+/**
+ * Baris DP (permintaan owner 10 Nov 2026: "DP dari total nilai berapa"): pisahkan total keseluruhan dari tulisan
+ * pelaksana supaya angka total tidak terbaca sebagai nominal DP (parseRupiah mengambil angka terbesar).
+ * "DP kaca 3 juta dari total 10 juta" -> total 10.000.000, sisa "DP kaca 3 juta"; "DP kusen 30% 3 juta" -> persen 30
+ * (total dihitung dari nominal). Bukan baris DP -> apa adanya.
+ */
+export function pisahTotalDp(teks: string): { total: number | null; persen: number | null; sisa: string } {
+  if (!KATA_DP_RE.test(teks)) return { total: null, persen: null, sisa: teks };
+  const rapikan = (t: string) => t.replace(/\s+/g, " ").replace(/[\s,;-]+$/, "").trim();
+  const m = teks.match(TOTAL_DP_RE);
+  if (m && m.index !== undefined) {
+    const total = parseRupiah(m[1]);
+    if (total) return { total, persen: null, sisa: rapikan(teks.slice(0, m.index) + " " + teks.slice(m.index + m[0].length)) };
+  }
+  const p = teks.match(PERSEN_DP_RE);
+  if (p && p.index !== undefined) {
+    const persen = Number.parseFloat(p[1].replace(",", "."));
+    if (persen > 0 && persen < 100) return { total: null, persen, sisa: rapikan(teks.slice(0, p.index) + " " + teks.slice(p.index + p[0].length)) };
+  }
+  return { total: null, persen: null, sisa: teks };
+}
+
+/** Total DP dari hasil pisahTotalDp + nominal DP (persen dihitung di sini). Hanya bila lebih besar dari DP. */
+export function totalDp(dp: { total: number | null; persen: number | null }, nominal: number | null | undefined): number | undefined {
+  const total = dp.total ?? (dp.persen && nominal ? Math.round((nominal * 100) / dp.persen) : null);
+  return total && (!nominal || total > nominal) ? total : undefined;
+}
+
+/**
+ * Balasan pelaksana atas pertanyaan "DP ini dari total nilai berapa?": "total 10 juta", "dari 10 jt", atau bernomor
+ * "1. total 10 juta\n2. total 8,5 juta" / "1. 10 juta". Boleh diawali "L2". null bila bukan balasan seperti itu.
+ */
+export function parseTotalDpBalasan(input: string): { no: number | null; total: number }[] | null {
+  const baris = input.split(/\r?\n/).map((b) => b.trim().replace(/^(?:l2|loonars\s*2)\b[\s:,.-]*/i, "")).filter(Boolean);
+  if (baris.length === 0 || baris.length > 10 || input.length > 400) return null;
+  const denganKata = new RegExp(String.raw`^(?:dari\s+)?(?:total|harga|nilai|dari)(?:\s+(?:total|harga|nilai|keseluruhan|semua|seluruhnya|nya))*\s*[:=]?\s*(${JUMLAH_RE})\s*[.!]?$`, "i");
+  const angkaSaja = new RegExp(String.raw`^(${JUMLAH_RE})\s*[.!]?$`, "i");
+  const hasil: { no: number | null; total: number }[] = [];
+  for (const b of baris) {
+    const nomor = b.match(/^(\d{1,2})\s*[.)\-:]\s+(.+)$/);
+    const isi = (nomor ? nomor[2] : b).trim();
+    const jumlah = denganKata.exec(isi)?.[1] ?? (nomor ? angkaSaja.exec(isi)?.[1] : undefined);
+    const total = jumlah ? parseRupiah(jumlah) : null;
+    if (!total) return null;
+    hasil.push({ no: nomor ? Number(nomor[1]) : null, total });
+  }
+  return hasil;
+}
+
 /** Balasan pelaksana atas pertanyaan rekening: "BCA 123 a.n. X" atau bernomor "1. BCA ...\n2. Mandiri ...". */
 export function parseRekeningBalasan(input: string): { no: number | null; rekening: string }[] | null {
   const baris = input.split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
@@ -246,8 +309,16 @@ export function parseBarisMingguan(baris: string): BarisMingguan | null {
   return hasil && rekening ? { ...hasil, rekening } : hasil;
 }
 
-function parseBarisTanpaRekening(teks: string): BarisMingguan | null {
+function parseBarisTanpaRekening(asli: string): BarisMingguan | null {
+  const dp = pisahTotalDp(asli);
+  const teks = dp.sisa;
   const nominal = parseRupiah(teks.replace(UNIT_SEMUA_RE, " "));
+  const hasil = parseBarisJenis(teks, nominal);
+  const total = hasil.jenis === "cicilan" || hasil.jenis === "retensi" ? undefined : totalDp(dp, nominal);
+  return total ? { ...hasil, total_dp: total } : hasil;
+}
+
+function parseBarisJenis(teks: string, nominal: number | null): BarisMingguan {
   const cicilan = teks.match(/^(?:cicilan|cicil|angsuran|bayar\s+utang)\s+(?:utang\s+)?(?:ke\s+)?(.+)$/i);
   if (cicilan) {
     return { jenis: "cicilan", toko: bersihkan(cicilan[1]).replace(/\s+(?:lunas|semua|penuh|habis|sisanya?)$/i, ""), deskripsi: teks, nominal };
@@ -457,6 +528,11 @@ export const L2_FORMAT_TIDAK_TERBACA =
 
 export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   input = rapikanAwalanL2(rapikanBulletL2(input));
+  // Balasan atas pertanyaan "DP ini dari total nilai berapa?" ("total 10 juta", "1. total 10 juta\n2. ..."), boleh
+  // tanpa awalan "L2". Dibaca paling awal supaya daftar bernomor tidak terbaca sebagai pengajuan baru. MKH Property
+  // hanya menerimanya bila pelaksana memang sedang ditanya (selain itu "tidak_ada_pending", pesan dilewatkan).
+  const totalBalasan = parseTotalDpBalasan(input);
+  if (totalBalasan) return { aksi: "total_dp", data: { daftar: totalBalasan } };
   const borongan = parseBorongan(input);
   if (borongan) return borongan;
   const mingguan = parsePengajuanMingguan(input);
@@ -473,6 +549,7 @@ export function parseLoonars2Perintah(input: string): Loonars2Perintah | null {
   if (/^batal$/.test(kecil)) return { aksi: "batal", data: {} };
 
   if (/^tanpa\s+rek(?:ening)?$/.test(kecil)) return { aksi: "tanpa_rekening", data: {} };
+  if (/^(?:tanpa|belum\s+(?:ada|tahu))\s+total(?:\s+dp)?$/.test(kecil)) return { aksi: "tanpa_total_dp", data: {} };
   if (/^saldo$/.test(kecil)) return { aksi: "saldo", data: {} };
   if (/^tagihan$/.test(kecil)) return { aksi: "tagihan", data: {} };
   if (/^(?:daftar\s+|sisa\s+)?utang(?:\s+toko)?$/.test(kecil) && (awalan || /^utang$/.test(kecil))) {
@@ -626,6 +703,7 @@ export const LOONARS2_BANTUAN =
   "• Bayar utang per toko: \"L2 cicilan TB Maju 3 juta\" atau \"L2 cicilan TB Maju lunas\"; lihat sisa utang: \"L2 utang\"\n" +
   "• Pembayaran lain-lain: \"L2 lain listrik proyek 600 rb\", \"L2 bensin 200 rb\", \"L2 sewa alat 1,5 juta\"\n" +
   "• Semua sekaligus, satu pesan satu baris per pembayaran: \"L2 pengajuan minggu ini\" lalu \"- tukang minggu ini\", \"- cicilan TB Maju 3 juta\", \"- lain listrik 600 rb\"\n" +
+  "• DP / uang muka: sebutkan total harganya, mis. \"- DP kaca 3 juta dari total 10 juta\"; kalau belum, sistem menanyakan (\"L2 tanpa total\" bila belum tahu)\n" +
   "• Unit yang sedang dibangun: sistem menanyakan; balas YA atau \"L2 unit 1-7\". Koreksi pembagian bahan: \"L2 koreksi M-7 semen unit 1,2,3\"\n" +
   "• Setelah dibayar: foto bukti + \"L2 bayar M-3\". Lihat: \"L2 rab unit 3\", \"L2 borongan\"\n" +
   "• Owner: \"DP unit 5, 210 juta\", \"pelunasan unit 5\", \"saldo\", \"tagihan\", \"sudah 1\"/\"sudah semua\", " +
@@ -774,7 +852,9 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
   if (perintah.aksi === "bantuan") return { outcome: "handled", reply: LOONARS2_BANTUAN };
 
   if (perintah.aksi === "ajukan_ai") {
-    const { rekening, sisa: teksAi } = pisahRekening(perintah.teks);
+    const { rekening, sisa: teksTanpaRek } = pisahRekening(perintah.teks);
+    const dp = pisahTotalDp(teksTanpaRek);
+    const teksAi = dp.sisa;
     const ai = await recognizeConstructionCostRequest(teksAi).catch(
       (): CostRequestRecognition => ({ isRequest: false, requestType: null, items: [], nominal: null, weekNumber: null, partyName: null, notes: "Analisa AI gagal." }),
     );
@@ -793,16 +873,18 @@ export async function tryHandleLoonars2Text(sender: string, text: string): Promi
       toko: ai.partyName,
       nominal,
       rekening,
+      total_dp: totalDp(dp, nominal),
     });
   }
 
   if (perintah.aksi === "bahan_ai") {
-    const { rekening, sisa: teksBahan } = pisahRekening(perintah.teks);
-    const data = await susunBahan(teksBahan, perintah.utang, perintah.unit);
+    const { rekening, sisa: teksTanpaRek } = pisahRekening(perintah.teks);
+    const dp = pisahTotalDp(teksTanpaRek);
+    const data = await susunBahan(dp.sisa, perintah.utang, perintah.unit);
     if (!data.nominal) {
       return { outcome: "handled", reply: "Total pesanan bahan belum terbaca. Tulis totalnya, mis. \"L2 bahan TB Maju semen 100 sak, pasir 12 rit 8,5 juta\"." };
     }
-    return teruskan(sender, "bahan", { ...data, rekening, paksa: NOTA_BEDA_RE.test(perintah.teks) });
+    return teruskan(sender, "bahan", { ...data, rekening, total_dp: totalDp(dp, data.nominal as number), paksa: NOTA_BEDA_RE.test(perintah.teks) });
   }
 
   if (perintah.aksi === "utang_foto") {
