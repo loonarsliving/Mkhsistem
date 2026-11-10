@@ -7,6 +7,11 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-10 — Loonars 2 WA: "L2 rincian …" (pasangan MKH Property 0071)
+
+Owner: rincian umum seperti "belanja material" (M-102) harus diperjelas. "L2 rincian semen 5 sak, paku 2 kg" /
+"L2 rincian 2 …" → aksi `rincian`; tanpa pertanyaan yang menunggu dibalas jujur. Pemeriksaan & penahanan di MKH Property.
+
 ## 2026-11-10 — Loonars 2 WA: pembaca cadangan AI untuk pengajuan yang tidak cocok pola
 
 Owner: "kenapa sering tidak bisa pengajuan". Audit 30 hari percakapan Vando: 40 diterima, ±27 gagal — pola kata kaku
