@@ -7,6 +7,14 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-10 — Loonars 2 WA: perbaikan insiden (jawaban total Vando, pengajuan satu baris, "L2 m100")
+
+`lib/ai/domains/loonars2-wa.ts`: jawaban total bentuk bebas bernomor ("1. DP Kaca - Rp. 3.000.000 total Rp. 11.652.000")
+terbaca; pengajuan satu baris bernominal tanpa kata kunci/unit → satu baris pengajuan; "L2 m100"/"M-100"/"bayar m100" →
+`bayar_kelompok` (foto: nominal dibaca dari foto); foto berketerangan "L2 …" tak dikenali → pencocok bukti transfer
+(bukan modul lain); jawaban total/nota tanpa pertanyaan yang menunggu dibalas jujur, tidak dilempar ke asisten umum
+(asisten umum sempat mengarang status "sudah dibayarkan"). Pasangan MKH Property migrasi 0070.
+
 ## 2026-11-10 — Loonars 2 WA: nota, tanpa nota, pelunasan "sudah dibayar" (pasangan MKH Property 0068)
 
 `lib/ai/domains/loonars2-wa.ts`: foto berketerangan "L2 nota [n]" → aksi `nota` (+nota_url); "L2 tanpa nota <alasan>" →
