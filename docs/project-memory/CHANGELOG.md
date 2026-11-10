@@ -7,6 +7,13 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-10 — Loonars 2: DP pelaksana ditanya total nilainya (pasangan MKH Property migrasi 0064)
+
+`lib/ai/domains/loonars2-wa.ts`: baris DP ("DP kaca 3 juta dari total 10 juta", "(total harga 8,5 jt)", "30%") dipisah —
+total dikirim sebagai `total_dp` dan tidak lagi terbaca sebagai nominal (parseRupiah mengambil angka terbesar). Balasan
+"total 10 juta" / "1. total 10 juta\n2. 8.500.000" -> aksi `total_dp`; "L2 tanpa total" -> `tanpa_total_dp`. MKH Property
+yang menahan pengajuan dan menanyakan total bila belum ada. Harus dirilis bersama/ setelah migrasi 0064 + route MKH Property.
+
 ## 2026-11-03 — Iklan berjadwal 7/14/30 hari dengan total budget (Ads Specialist + Occupancy Ads)
 
 Migrasi 0312 (`duration_days`, `total_budget_idr`, `ends_at` di `meta_ad_campaigns` & `loonars_occupancy_campaigns`).
