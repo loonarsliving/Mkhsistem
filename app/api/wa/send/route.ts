@@ -30,14 +30,19 @@ function secretsMatch(provided: string, expected: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const expected = (process.env.VILLA_BRIDGE_SECRET ?? "").trim();
-  if (expected.length === 0) {
+  // Two independent callers, each with its own secret: villa-api
+  // (VILLA_BRIDGE_SECRET) and Loonars AI Advisor (ADVISOR_BRIDGE_SECRET,
+  // >= 32 chars; D-2026-005). Revoking one never affects the other.
+  const villaSecret = (process.env.VILLA_BRIDGE_SECRET ?? "").trim();
+  const advisorSecret = (process.env.ADVISOR_BRIDGE_SECRET ?? "").trim();
+  const expectedSecrets = [villaSecret, advisorSecret.length >= 32 ? advisorSecret : ""].filter((s) => s.length > 0);
+  if (expectedSecrets.length === 0) {
     logger.error("wa/send: VILLA_BRIDGE_SECRET is not configured");
     return NextResponse.json({ success: false, error: "bridge not configured" }, { status: 503 });
   }
 
   const provided = (request.headers.get("x-internal-secret") ?? "").trim();
-  if (!secretsMatch(provided, expected)) {
+  if (!expectedSecrets.some((expected) => secretsMatch(provided, expected))) {
     const limited = recordAuthFailure(`wa-send:${getClientIp(request)}`);
     if (limited) {
       logger.warn("wa/send: rate-limited after repeated invalid x-internal-secret attempts");

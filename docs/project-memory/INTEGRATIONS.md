@@ -197,3 +197,7 @@ Every external integration below is evidenced by dependency + code +
 - Keluar: owner-assistant tool `ai_cfo` → `https://finance.haluoleo.id/api/cfo/tanya-wa`.
 - Masuk (sudah ada, dipakai ulang): briefing WA AI CFO tiba lewat `/api/loonars2/outbox` (antrean `loonars2_outbox` MKH Property, jenis `cfo_*`) dan dikirim Whacenter.
 - Masuk: `POST /api/mkh-property/ai-cfo/narasi` (server MKH Property) — HMAC rahasia sync dari database MKH Property (`cfo_tanda_ai`), 5 menit, terikat body; system prompt AI CFO tetap di route (tidak dari body); `askAI`.
+
+## Loonars AI Advisor (2026-11-11)
+- Keluar: asisten owner → `ADVISOR_SERVICE_URL/api/advisor/pesan` (x-advisor-bridge-secret), hanya untuk pesan berawalan advisor/mentor dari super admin.
+- Masuk: layanan advisor → `/api/wa/send` dengan `ADVISOR_BRIDGE_SECRET` (terpisah dari `VILLA_BRIDGE_SECRET`). Dikirim lewat Whacenter yang sama.
