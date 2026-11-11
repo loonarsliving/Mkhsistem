@@ -16,6 +16,28 @@ describe("advisor bridge", () => {
     expect(isAdvisorMessage("advisornya siapa")).toBe(false);
   });
 
+  it("D-2026-007: pertanyaan bebas ke advisor, data cepat & perintah tetap asisten lama", () => {
+    for (const q of [
+      "Apa yg harus saya lakukan bulan ini",
+      "menurutmu sebaiknya saya fokus ke L1 atau L2?",
+      "mau bangun 3 unit lagi 480 jt, boleh tidak?",
+      "bagaimana kalau saya ekspansi ke Bali?",
+      "catat keputusan: tunda renovasi villa",
+      "konfirmasi D-2026-008",
+    ]) expect(isAdvisorMessage(q), q).toBe(true);
+    for (const q of [
+      "okupansi villa hari ini?",
+      "berapa kas sekarang? apa yang harus dibayar",
+      "laporan holding 2026 pdf",
+      "kas dan utang bank sekarang?",
+      "LUNAS budi",
+      "setujui L2-12",
+      "menu",
+      "lead minggu ini?",
+      "kapan kas berisiko defisit?",
+    ]) expect(isAdvisorMessage(q), q).toBe(false);
+  });
+
   it("tanpa konfigurasi lengkap tidak memanggil apa pun", async () => {
     let called = false;
     const f = (async () => { called = true; return new Response(null, { status: 202 }); }) as typeof fetch;

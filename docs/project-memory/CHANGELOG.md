@@ -7,6 +7,10 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## Advisor: pertanyaan bebas owner otomatis ke advisor (2026-11-11, D-2026-007)
+- `isAdviceQuestion` (`lib/ai/domains/advisor-bridge.ts`, deterministik, tanpa AI MK Connect): pesan owner bersinyal diskusi (harus/sebaiknya/menurutmu/strategi/fokus/prioritas/rencana/keputusan/boleh tidak/bagaimana kalau/layak/ekspansi/bahas/catat keputusan/konfirmasi D-…) diteruskan ke Loonars AI Advisor tanpa perlu awalan "advisor". Pencarian data cepat (awalan berapa/cek/lihat/daftar/kirim/tampilkan), PDF, menu, dan perintah (LUNAS, setujui/tolak, L2 …, refund, lapkeu, bayar) tetap di asisten owner lama. Ragu → asisten lama.
+- Pemicu: uji owner "Apa yg harus saya lakukan bulan ini" dijawab asisten lama (Flash-Lite) dan keliru membaca tanggal defisit (titik terendah dibaca sebagai awal defisit).
+
 ## Loonars AI Advisor via WA (2026-11-11) — jembatan, tanpa perubahan AI MK Connect
 
 - Keputusan owner D-2026-005/006 (repo `loonarsliving/Istri`): advisor berdiri sebagai layanan sendiri dengan **kunci Gemini sendiri**; AI MK Connect (`GEMINI_MODEL` Flash-Lite, `GEMINI_API_KEY`) **tidak diubah**.
