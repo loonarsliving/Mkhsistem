@@ -17,6 +17,7 @@ import { askAI, generateAIText } from "../service";
 import { QUERY_TOOL_CATALOG, runTool, type QueryToolName } from "./data-queries";
 import { bacaLoonars2 } from "./loonars2-wa";
 import { angkaTakBerdasar } from "./owner-angka";
+import { forwardToAdvisor, isAdvisorMessage } from "./advisor-bridge";
 import { PENGETAHUAN_SISTEM } from "./owner-knowledge";
 
 /**
@@ -726,6 +727,10 @@ export const OWNER_MENU_TEXT = [
   "• pengajuan & cuti yang masih pending?",
   "• refund customer bulan ini? sisa refund?",
   "",
+  "🧭 *Loonars AI Advisor* (awali dengan *advisor* / *mentor*)",
+  "• advisor: apa fokus saya minggu ini?",
+  "• advisor keputusan saya",
+  "",
   "📄 *Laporan PDF* (dikirim sebagai file)",
   "• laporan holding 2026 pdf · laporan villa Oktober pdf · laporan loonars 2 pdf",
   "",
@@ -1046,6 +1051,8 @@ export async function tryOwnerAssistant(
   opts?: { jobId?: string },
 ): Promise<OwnerAssistantResult> {
   if (isOwnerMenuRequest(question)) return { applicable: true, answer: OWNER_MENU_TEXT };
+  // Loonars AI Advisor (layanan terpisah, kunci AI sendiri) — diteruskan apa adanya.
+  if (isAdvisorMessage(question)) return { applicable: true, answer: await forwardToAdvisor(sender, question) };
 
   const hariIni = tanggalWib();
   const riwayat = await ambilRiwayat(sender).catch(() => "");

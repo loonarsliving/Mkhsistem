@@ -3,6 +3,14 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Loonars AI Advisor via WA (2026-11-11) — jembatan, tanpa perubahan AI MK Connect
+
+- Keputusan owner D-2026-005/006 (repo `loonarsliving/Istri`): advisor berdiri sebagai layanan sendiri dengan **kunci Gemini sendiri**; AI MK Connect (`GEMINI_MODEL` Flash-Lite, `GEMINI_API_KEY`) **tidak diubah**.
+- Asisten owner (super admin): pesan berawalan `advisor` / `mentor` diteruskan apa adanya ke `ADVISOR_SERVICE_URL/api/advisor/pesan` (header `x-advisor-bridge-secret`) lewat `lib/ai/domains/advisor-bridge.ts`, dicek sebelum klasifikasi Gemini (tanpa panggilan AI MK Connect). Balasan langsung "sedang diproses"; jawaban advisor menyusul lewat `/api/wa/send` (Whacenter yang sama).
+- `/api/wa/send` kini menerima dua rahasia terpisah: `VILLA_BRIDGE_SECRET` (perilaku lama) dan `ADVISOR_BRIDGE_SECRET` (≥ 32 karakter). Tanpa keduanya tetap 503.
+- Env baru (Vercel MK Connect): `ADVISOR_SERVICE_URL`, `ADVISOR_BRIDGE_SECRET`. Tanpa itu, pesan advisor dijawab "Advisor belum tersambung" — fitur lain tidak terpengaruh.
+- Tes: `tests/unit/lib/advisor-bridge.test.ts`, `tests/unit/lib/wa-send-bridge-secrets.test.ts`.
+
 ## Iklan berjadwal 7/14/30 hari + total budget (2026-11-03, migrasi 0312) — MIGRASI DITERAPKAN
 
 Owner: "bisakah ada settingan untuk iklan berjalan sebulan dengan budget yang kita tentukan" → "Keduanya, bisa dipilih 7 14 30".
