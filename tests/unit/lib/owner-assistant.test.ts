@@ -407,6 +407,11 @@ describe("arahkanPengeluaranLoonars2", () => {
     expect(r.tools).toEqual(["ai_cfo"]);
   });
 
+  it("total pembayaran kontraktor L2 -> AI CFO (owner 2026-11-11)", () => {
+    const r = arahkanPengeluaranLoonars2("Total keseluruhan pembayaran kontraktor L2", { ...dasar, tools: ["loonars2_borongan"] });
+    expect(r.tools).toEqual(["ai_cfo"]);
+  });
+
   it("rincian borongan tetap memakai tool borongan", () => {
     const r = arahkanPengeluaranLoonars2("pengeluaran borongan tukang loonars 2 berapa?", { ...dasar, tools: ["loonars2_borongan"] });
     expect(r.tools).toEqual(["ai_cfo", "loonars2_borongan"]);

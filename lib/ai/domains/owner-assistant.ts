@@ -962,7 +962,7 @@ Balas HANYA JSON: {"isDataQuestion": true, "tools": [], "branchName": null, "bul
 export function arahkanPengeluaranLoonars2(question: string, intent: OwnerIntent): OwnerIntent {
   const q = question.toLowerCase();
   const soalL2 = /loonars\s*2|\bl2\b|loonars living|coffee|kopi/.test(q);
-  const soalPengeluaran = /pengeluaran|belanja|biaya|spending|uang keluar/.test(q);
+  const soalPengeluaran = /pengeluaran|belanja|biaya|spending|uang keluar|kontraktor/.test(q);
   if (!soalL2 || !soalPengeluaran) return intent;
   const mintaRincian = /borongan|tukang|mandor|retensi/.test(q);
   const mintaToko = /utang|hutang|toko/.test(q);
