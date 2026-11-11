@@ -10,8 +10,22 @@
 
 const AWALAN_ADVISOR = /^\s*(advisor|mentor|loonars advisor)\b/i;
 
+/**
+ * D-2026-007: pertanyaan/diskusi bebas owner otomatis ke advisor; perintah
+ * operasional & pencarian data cepat tetap di asisten owner lama. Deterministik
+ * (tanpa AI MK Connect, tanpa biaya). Ragu → tetap asisten lama.
+ */
+const SINYAL_DISKUSI = /\b(harus|sebaiknya|seharusnya|menurut(mu| kamu| anda)?|saran(mu)?|strategi|fokus|prioritas|rencana|keputusan|putuskan|boleh (tidak|nggak|gak|ga)|bolehkah|bagaimana (kalau|jika|cara|sebaiknya|menurut)|gimana (kalau|cara|sebaiknya)|kenapa|mengapa|evaluasi|kritik|kritisi|ide\b|layak|ekspansi|fundraising|investor baru|bahas|board|mentor|catat keputusan|konfirmasi d-\d)/i;
+const PERINTAH_ATAU_DATA = /(^\s*(berapa|cek|lihat|daftar|kirim|tampilkan|menu|bantuan|help)\b)|\bpdf\b|^\s*(lunas|setujui|tolak|l2\b|refund\b|lapkeu|bayar\b)/i;
+
+export function isAdviceQuestion(question: string): boolean {
+  const q = question.trim();
+  if (q.length < 8 || PERINTAH_ATAU_DATA.test(q)) return false;
+  return SINYAL_DISKUSI.test(q);
+}
+
 export function isAdvisorMessage(question: string): boolean {
-  return AWALAN_ADVISOR.test(question);
+  return AWALAN_ADVISOR.test(question) || isAdviceQuestion(question);
 }
 
 export const ADVISOR_DITERIMA_TEXT = "⏳ Advisor sedang menyusun jawaban, hasilnya menyusul di chat ini (biasanya 1–2 menit).";
