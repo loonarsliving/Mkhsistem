@@ -7,6 +7,10 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## Advisor: ringkasan hospitality hanya-baca untuk Manager Hospitality AI (2026-11-11, D-2026-009)
+- `POST /api/advisor/hospitality` (public path, cek rahasia sendiri `x-advisor-bridge-secret` = `ADVISOR_BRIDGE_SECRET`): ringkasan 0–62 hari (bawaan 30) dari laporan akhir hari Loonars Connect (`mkc_hosp_reports`), checklist staf, tugas kamar, masalah, `villa_room_checks`, dan chat WA tamu (`wa_conversations`/`wa_conversation_messages`). HANYA SELECT; tidak ada migrasi, tidak ada AI MK Connect.
+- Angka dihitung di kode (`lib/advisor/hospitality-summary.ts`): laporan terlewat per jenis, checklist per staf (nama depan saja), bersih ulang & median waktu per cleaning/FO, tugas selesai lewat app villa tanpa verifikasi FO, masalah terbuka/terlambat, waktu balas chat tamu (median/p90, tidak dibalas >2 jam), kategori AI resepsionis. Contoh ≤120 pesan tamu disamarkan (nomor/email/tautan), tanpa nama/nomor tamu. Sumber gagal → dilaporkan "tidak terbaca", bukan nol.
+
 ## Advisor: pertanyaan bebas owner otomatis ke advisor (2026-11-11, D-2026-007)
 - `isAdviceQuestion` (`lib/ai/domains/advisor-bridge.ts`, deterministik, tanpa AI MK Connect): pesan owner bersinyal diskusi (harus/sebaiknya/menurutmu/strategi/fokus/prioritas/rencana/keputusan/boleh tidak/bagaimana kalau/layak/ekspansi/bahas/catat keputusan/konfirmasi D-…) diteruskan ke Loonars AI Advisor tanpa perlu awalan "advisor". Pencarian data cepat (awalan berapa/cek/lihat/daftar/kirim/tampilkan), PDF, menu, dan perintah (LUNAS, setujui/tolak, L2 …, refund, lapkeu, bayar) tetap di asisten owner lama. Ragu → asisten lama.
 - Pemicu: uji owner "Apa yg harus saya lakukan bulan ini" dijawab asisten lama (Flash-Lite) dan keliru membaca tanggal defisit (titik terendah dibaca sebagai awal defisit).

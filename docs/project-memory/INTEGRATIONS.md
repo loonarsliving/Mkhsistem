@@ -201,3 +201,4 @@ Every external integration below is evidenced by dependency + code +
 ## Loonars AI Advisor (2026-11-11)
 - Keluar: asisten owner → `ADVISOR_SERVICE_URL/api/advisor/pesan` (x-advisor-bridge-secret), hanya untuk pesan berawalan advisor/mentor dari super admin.
 - Masuk: layanan advisor → `/api/wa/send` dengan `ADVISOR_BRIDGE_SECRET` (terpisah dari `VILLA_BRIDGE_SECRET`). Dikirim lewat Whacenter yang sama.
+- Masuk (D-2026-009): layanan advisor → `POST /api/advisor/hospitality` (header `x-advisor-bridge-secret`), ringkasan operasional hospitality hanya-baca untuk rapat direksi.
