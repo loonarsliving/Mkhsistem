@@ -1,16 +1,50 @@
 import type { TypedSupabaseClient } from "@/lib/supabase/types";
 import type { AttendanceStatus } from "@/constants/app";
+import {
+  DEFAULT_COMPANY_TIMEZONE,
+  OPEN_SHIFT_MAX_HOURS,
+  localDate,
+  pickCurrentAttendance,
+} from "@/lib/attendance/current-shift";
+import type { Attendance } from "@/types/domain";
 
-export async function getTodayAttendance(supabase: TypedSupabaseClient, userId: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from("attendance")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("attendance_date", today)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+export type CurrentAttendance = Attendance & { carried_over: boolean };
+
+export async function getCompanyTimezone(supabase: TypedSupabaseClient): Promise<string> {
+  const { data } = await supabase.from("company_settings").select("timezone").limit(1).maybeSingle();
+  return data?.timezone || DEFAULT_COMPANY_TIMEZONE;
+}
+
+/**
+ * The attendance row the user acts on right now: today's row (company-local
+ * date, not UTC) or a still-open shift from the previous night. See
+ * lib/attendance/current-shift.ts for the rule.
+ */
+export async function getTodayAttendance(supabase: TypedSupabaseClient, userId: string): Promise<CurrentAttendance | null> {
+  const now = new Date();
+  const timezone = await getCompanyTimezone(supabase);
+  const today = localDate(now, timezone);
+  const since = new Date(now.getTime() - OPEN_SHIFT_MAX_HOURS * 3_600_000).toISOString();
+
+  const [todayRes, openRes] = await Promise.all([
+    supabase.from("attendance").select("*").eq("user_id", userId).eq("attendance_date", today).maybeSingle(),
+    supabase
+      .from("attendance")
+      .select("*")
+      .eq("user_id", userId)
+      .lt("attendance_date", today)
+      .not("check_in_time", "is", null)
+      .is("check_out_time", null)
+      .is("deleted_at", null)
+      .gte("check_in_time", since)
+      .order("check_in_time", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (todayRes.error) throw todayRes.error;
+  if (openRes.error) throw openRes.error;
+
+  return pickCurrentAttendance(todayRes.data, openRes.data, today, now);
 }
 
 export async function getMonthlyStats(supabase: TypedSupabaseClient, userId: string, month: Date) {
