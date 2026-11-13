@@ -103,7 +103,23 @@ export interface FetchImageResult {
 }
 
 /** Fetches a WhatsApp media URL's bytes and base64-encodes them for Gemini Vision -- no existing helper does this from a remote URL (kontenai-vision.ts's callers all start from an already-uploaded file). */
-export async function fetchImageAsBase64(url: string): Promise<FetchImageResult | null> {
+export async function fetchImageAsBase64(url: string, options: { attempts?: number; retryDelayMs?: number } = {}): Promise<FetchImageResult | null> {
+  // Real incident (2026-11-13): Whacenter fired the webhook the same second
+  // the photo was sent, the media URL wasn't downloadable yet, and the one
+  // and only fetch failed -- so the bukti transfer was never read by the AI
+  // at all. A short retry covers that "media not ready yet" window.
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const retryDelayMs = options.retryDelayMs ?? 1500;
+  let last: FetchImageResult | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    last = await fetchImageOnce(url);
+    if (!last.fetchError) return last;
+    if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+  return last;
+}
+
+async function fetchImageOnce(url: string): Promise<FetchImageResult> {
   try {
     const res = await fetch(url);
     if (!res.ok) {
@@ -111,6 +127,11 @@ export async function fetchImageAsBase64(url: string): Promise<FetchImageResult 
     }
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const mimeType = contentType.split(";")[0].trim() || "image/jpeg";
+    // A 200 carrying a JSON/HTML error page instead of the picture is the
+    // same "not ready" failure wearing a success status.
+    if (/^(application\/json|text\/)/i.test(mimeType)) {
+      return { data: "", mimeType: "", fetchError: `unexpected content-type ${mimeType}` };
+    }
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.length === 0) {
       return { data: "", mimeType: "", fetchError: "empty response body" };

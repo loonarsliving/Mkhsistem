@@ -23,6 +23,15 @@ export const AI_CONFIG = {
    * lower-capacity preview model -- see git history for that trail.)
    */
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite",
+  /**
+   * Stronger model used ONLY to read bukti-transfer photos (owner's ask
+   * 2026-11-13: a misread or unread receipt posts the wrong jurnal entry, so
+   * accuracy matters more than speed there). One attempt on this model,
+   * then transfer-proof-recognition.ts falls back to geminiModel above --
+   * gemini-3.5-flash's known capacity problem (503/timeouts, see comment
+   * above) can slow one photo down but can never block it.
+   */
+  geminiTransferProofModel: process.env.GEMINI_TRANSFER_PROOF_MODEL ?? "gemini-3.5-flash",
   temperature: Number(process.env.GEMINI_TEMPERATURE ?? "0.4"),
   maxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "1024"),
   timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? "20000"),

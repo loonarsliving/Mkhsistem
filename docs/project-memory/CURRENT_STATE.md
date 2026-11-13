@@ -3,6 +3,12 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Bukti transfer: model Gemini lebih pintar + tidak lagi menebak (2026-11-13)
+- Insiden (pengajuan 452): owner kirim bukti Rp 8.922.000 ke SARNO, sistem mencatatnya sebagai "Laundry kasur" Rp 4.400.000. Sebab (dicek di `ai_request_telemetry`/`ai_integration_logs`/`sync_log`): foto gagal diunduh dari Whacenter, **tidak ada panggilan Gemini sama sekali**, lalu jalur FIFO di `tryConfirmTransferProofViaWhatsApp` mengonfirmasi pengajuan pending terlama tanpa peringatan.
+- `tryConfirmTransferProofViaWhatsApp`: foto tak terunduh / nominal tak terbaca → outcome baru `unreadable`, **tidak ada yang dicatat/diteruskan**, owner diminta kirim ulang (FIFO dihapus).
+- `fetchImageAsBase64`: coba sampai 3x (jeda 1,5 dtk) dan menolak balasan 200 yang isinya JSON/teks.
+- `recognizeTransferProof`: memakai `GEMINI_TRANSFER_PROOF_MODEL` (bawaan `gemini-3.5-flash`, 1 percobaan, temperature 0) lalu mundur ke `GEMINI_MODEL` bila gagal; hasil baca satu foto dipakai bersama semua pencocok (cache 2 menit). `AIGenerateRequest.model` = override model per panggilan. Tanpa migrasi.
+
 ## Tampilan baru ala loonars.id (2026-11-13) — hanya tampilan
 - Owner: "dirombak total jadi bagus seperti loonars.id". Tanpa perubahan database, RBAC/RLS, API, Server Action, maupun perhitungan FRIDAY.
 - Palet di `app/globals.css` (token HSL, terang & gelap): krem pasir, tinta cokelat, hijau daun (`--primary`), terakota `--terra`, kayu `--teak`. Huruf: DM Sans (badan) + Cormorant Garamond (`font-display`, judul halaman & nama di banner).

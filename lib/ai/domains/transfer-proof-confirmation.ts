@@ -10,6 +10,12 @@ export type TransferProofConfirmationOutcome =
   | { outcome: "no_pending_transfer" }
   | { outcome: "sync_failed"; error: string }
   | {
+      outcome: "unreadable";
+      /** "download" = the photo itself couldn't be fetched; "ai" = fetched, but no nominal could be read off it. */
+      reason: "download" | "ai";
+      candidates: { partyName: string | null; nominal: number }[];
+    }
+  | {
       outcome: "no_amount_match";
       readNominal: number;
       candidates: { partyName: string | null; nominal: number }[];
@@ -394,8 +400,10 @@ async function confirmGroup(supabase: Supa, group: PendingRow[], sender: { id: s
  * lands on the right pengajuan instead of silently confirming whatever
  * happens to be at the front of the queue.
  *
- * Falls back to FIFO (oldest pending) ONLY when the photo itself is
- * unreadable -- there's genuinely nothing better to go on. When the photo
+ * When the photo itself is unreadable (download failed, or the AI couldn't
+ * read a nominal) NOTHING is confirmed -- returns `unreadable` so Super
+ * Admin resends it. (It used to fall back to FIFO; see the incident note at
+ * that branch.) When the photo
  * IS readable but its nominal doesn't match any single pending row, it
  * tries one more thing before giving up: does the nominal match the SUM of
  * every still-pending item for the same destination account? (Owner's real
@@ -448,8 +456,19 @@ export async function tryConfirmTransferProofViaWhatsApp(
       : { readable: false, nominal: null, tanggal: null, rekeningTujuan: null, notes: "Foto tidak bisa diunduh untuk dianalisa AI, tetap dicatat sebagai bukti transfer." };
 
   if (!ai.readable || ai.nominal === null) {
-    // Genuinely nothing to go on -- FIFO is the only sane fallback.
-    return confirmSingleRow(supabase, pendingRows[0], sender, imageUrl, ai, false);
+    // This used to confirm the oldest pending row ("FIFO is the only sane
+    // fallback"). Real incident 2026-11-13: the photo (Rp 8.922.000 to
+    // SARNO) couldn't even be downloaded, so nothing was read, and FIFO
+    // posted it to jurnal as an unrelated Rp 4.400.000 laundry pengajuan --
+    // with no warning, since there was no read nominal to compare. Same
+    // rule as no_amount_match below: never guess where money went.
+    const reason = image && !image.fetchError ? "ai" : "download";
+    logger.warn("transfer proof: unreadable, nothing confirmed", { reason, fetchError: image?.fetchError ?? null, notes: ai.notes, pendingCount: pendingRows.length });
+    return {
+      outcome: "unreadable",
+      reason,
+      candidates: pendingRows.map((p) => ({ partyName: p.party_name, nominal: Number(p.nominal) })),
+    };
   }
 
   const amountMatches = pendingRows.filter((p) => !isNominalMismatch(Number(p.nominal), ai.nominal));
