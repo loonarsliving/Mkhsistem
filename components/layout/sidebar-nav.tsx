@@ -76,7 +76,7 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
               type="button"
               onClick={() => toggleGroup(group.label)}
               aria-expanded={isExpanded}
-              className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/80"
+              className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[hsl(36_40%_70%/0.7)] transition-colors hover:text-[hsl(36_45%_78%)]"
             >
               {group.label}
               <ChevronDown
@@ -84,7 +84,7 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
               />
             </button>
             <div
-              className="grid transition-[grid-template-rows] duration-200 ease-out"
+              className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
             >
               <div className="overflow-hidden">
@@ -93,9 +93,11 @@ export function SidebarNav({ permissions, onNavigate }: { permissions: Permissio
                     const active = !item.external && (pathname === item.href || pathname.startsWith(`${item.href}/`));
                     const Icon = item.icon;
                     const linkClassName = cn(
-                      "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-all duration-150 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      // Hover: ikon membesar & teks bergeser sedikit. Aktif: pil krem
+                      // transparan + garis terakota yang "tumbuh" (anim-pop).
+                      "group/item relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-sidebar-foreground/75 transition-all duration-300 hover:bg-sidebar-accent hover:text-sidebar-foreground [&_svg]:transition-transform [&_svg]:duration-300 hover:[&_svg]:scale-110",
                       active &&
-                        "bg-gradient-to-r from-primary/25 to-transparent text-sidebar-foreground before:absolute before:-left-1 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-primary before:shadow-[0_0_8px_hsl(var(--primary)/0.8)] [&_svg]:text-primary [&_svg]:drop-shadow-[0_0_4px_hsl(var(--primary)/0.6)]",
+                        "bg-[hsl(var(--sidebar-foreground)/0.09)] text-sidebar-foreground shadow-[inset_0_0_0_1px_hsl(var(--sidebar-foreground)/0.06)] before:absolute before:-left-1 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-terra before:[animation:mkc-pop_0.4s_backwards] [&_svg]:text-[hsl(36_50%_72%)]",
                     );
                     if (item.external) {
                       return (

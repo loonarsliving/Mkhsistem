@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -9,7 +9,14 @@ import { Providers } from "./providers";
 
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const sans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
+// Huruf judul ala loonars.id -- hanya untuk judul halaman & angka besar.
+const serif = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+});
 
 const description = `${APP_TAGLINE} untuk ${COMPANY_NAME}`;
 
@@ -41,8 +48,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5fbfa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a1615" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f1e8" },
+    { media: "(prefers-color-scheme: dark)", color: "#14110e" },
   ],
 };
 
@@ -51,7 +58,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="id" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans`}>
+      <body className={`${sans.variable} ${serif.variable} font-sans`}>
         <Providers nonce={nonce}>{children}</Providers>
         <WebVitalsReporter />
         <SpeedInsights />

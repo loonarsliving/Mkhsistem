@@ -1,23 +1,23 @@
 import Link from "next/link";
 
-import { APP_NAME } from "@/constants/app";
 import type { PermissionKey } from "@/constants/rbac";
 
+import { BrandMark } from "./brand-mark";
 import { SidebarNav } from "./sidebar-nav";
 
 export function Sidebar({ permissions }: { permissions: PermissionKey[] }) {
   return (
     <aside className="relative hidden w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
+      {/* Cahaya hangat lembut di pojok atas + lingkaran tipis ala loonars.id */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-48 opacity-60"
-        style={{ background: "radial-gradient(24rem 12rem at 20% 0%, hsl(var(--primary) / 0.25), transparent 70%)" }}
+        className="pointer-events-none absolute inset-x-0 top-0 h-56 opacity-70"
+        style={{ background: "radial-gradient(22rem 12rem at 15% 0%, hsl(var(--terra) / 0.22), transparent 70%)" }}
       />
-      <Link href="/dashboard" className="relative flex items-center gap-2 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-sm font-bold text-primary-foreground shadow-[0_0_16px_hsl(var(--primary)/0.5)]">
-          MK
-        </div>
-        <span className="text-sm font-semibold">{APP_NAME}</span>
+      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full border border-sidebar-foreground/5 shadow-[0_0_0_40px_hsl(var(--sidebar-foreground)/0.02),0_0_0_80px_hsl(var(--sidebar-foreground)/0.015)]" />
+      <Link href="/dashboard" className="relative flex items-center px-5 pb-5 pt-6">
+        <BrandMark />
       </Link>
+      <div className="relative mx-5 mb-1 h-px bg-gradient-to-r from-sidebar-foreground/15 via-sidebar-foreground/10 to-transparent" />
       <SidebarNav permissions={permissions} />
     </aside>
   );

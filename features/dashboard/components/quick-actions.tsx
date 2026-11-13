@@ -36,9 +36,11 @@ export function QuickActions({ permissions }: { permissions: PermissionKey[] }) 
           <Link
             key={action.href}
             href={action.href}
-            className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 text-center text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5"
+            className="group flex flex-col items-center gap-2 rounded-2xl border border-border bg-background/40 p-4 text-center text-sm font-medium transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:bg-primary/5 hover:shadow-[0_18px_30px_-22px_hsl(var(--primary)/0.8)]"
           >
-            <action.icon className="h-5 w-5 text-primary" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+              <action.icon className="h-5 w-5 text-primary" />
+            </span>
             {action.label}
           </Link>
         ))}

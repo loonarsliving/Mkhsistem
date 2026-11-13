@@ -3,6 +3,14 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Tampilan baru ala loonars.id (2026-11-13) — hanya tampilan
+- Owner: "dirombak total jadi bagus seperti loonars.id". Tanpa perubahan database, RBAC/RLS, API, Server Action, maupun perhitungan FRIDAY.
+- Palet di `app/globals.css` (token HSL, terang & gelap): krem pasir, tinta cokelat, hijau daun (`--primary`), terakota `--terra`, kayu `--teak`. Huruf: DM Sans (badan) + Cormorant Garamond (`font-display`, judul halaman & nama di banner).
+- Tema bawaan kini **terang** (`defaultTheme="light"` di `app/providers.tsx`); mode gelap tetap bisa dipilih lewat tombol tema. Toaster mengikuti tema aplikasi, bukan tema perangkat.
+- Komponen bersama dirombak: Card/StatTile/RevenueTile (muncul halus, angka berhitung lewat `components/shared/animated-value.tsx` — bingkai terakhir selalu teks asli), Button, Badge, Skeleton (shimmer), Dialog/Sheet, Tabs, Table, Input/Select, PageHeader (serif), EmptyState; sidebar hijau hutan dengan `BrandMark`; banner sambutan Dashboard (`ProfileSummaryCard`); panel login.
+- ATURAN: animasi masuk memakai fill-mode `backwards` (kelas `anim-rise`, `stagger`) — jangan beri transform permanen pada pembungkus halaman karena elemen `position: fixed` di dalamnya akan salah posisi.
+- Aplikasi Android ikut berubah otomatis (WebView memuat `mkh.haluoleo.id`), tanpa build APK baru.
+
 ## Advisor: ringkasan hospitality hanya-baca untuk Manager Hospitality AI (2026-11-11, D-2026-009)
 - `POST /api/advisor/hospitality` (public path, cek rahasia sendiri `x-advisor-bridge-secret` = `ADVISOR_BRIDGE_SECRET`): ringkasan 0–62 hari (bawaan 30) dari laporan akhir hari Loonars Connect (`mkc_hosp_reports`), checklist staf, tugas kamar, masalah, `villa_room_checks`, dan chat WA tamu (`wa_conversations`/`wa_conversation_messages`). HANYA SELECT; tidak ada migrasi, tidak ada AI MK Connect.
 - Angka dihitung di kode (`lib/advisor/hospitality-summary.ts`): laporan terlewat per jenis, checklist per staf (nama depan saja), bersih ulang & median waktu per cleaning/FO, tugas selesai lewat app villa tanpa verifikasi FO, masalah terbuka/terlambat, waktu balas chat tamu (median/p90, tidak dibalas >2 jam), kategori AI resepsionis. Contoh ≤120 pesan tamu disamarkan (nomor/email/tautan), tanpa nama/nomor tamu. Sumber gagal → dilaporkan "tidak terbaca", bukan nol.

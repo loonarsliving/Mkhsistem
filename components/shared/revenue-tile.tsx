@@ -2,6 +2,8 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { AnimatedValue } from "./animated-value";
+
 interface RevenueTileProps {
   icon: LucideIcon;
   label: string;
@@ -33,13 +35,15 @@ const TONE_WRAPPER_CLASS: Record<NonNullable<RevenueTileProps["tone"]>, string> 
  */
 export function RevenueTile({ icon: Icon, label, value, tone = "default", className }: RevenueTileProps) {
   return (
-    <div className={cn("col-span-full flex items-center gap-4 rounded-lg border p-4 sm:p-5", TONE_WRAPPER_CLASS[tone], className)}>
-      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", TONE_CLASS[tone])}>
+    <div className={cn("group sheen anim-rise col-span-full flex items-center gap-4 rounded-2xl border p-4 sm:p-5", TONE_WRAPPER_CLASS[tone], className)}>
+      <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform duration-300 group-hover:scale-110", TONE_CLASS[tone])}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="whitespace-nowrap text-[clamp(1.125rem,4.5vw,2.25rem)] font-bold leading-tight tabular-nums">{value}</p>
+        <p className="whitespace-nowrap text-[clamp(1.125rem,4.5vw,2.25rem)] font-bold leading-tight tabular-nums">
+          <AnimatedValue value={value} />
+        </p>
       </div>
     </div>
   );

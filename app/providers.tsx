@@ -23,7 +23,7 @@ export function Providers({ children, nonce }: { children: React.ReactNode; nonc
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange nonce={nonce}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={200}>
           <NativeAppShell>{children}</NativeAppShell>
