@@ -1072,6 +1072,23 @@ export async function handleWhatsAppWebhookEvent(
           await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
           return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
         }
+        if (transferResult.outcome === "unreadable") {
+          const candidateLines = transferResult.candidates
+            .map((c) => `- ${c.partyName ?? "Pengajuan"}: Rp ${c.nominal.toLocaleString("id-ID")}`)
+            .join("\n");
+          const replyText =
+            (transferResult.reason === "download"
+              ? "⚠️ Foto ini gagal saya unduh dari WhatsApp, jadi belum terbaca sama sekali"
+              : "⚠️ Nominal di foto ini tidak bisa saya baca dengan jelas") +
+            " -- BELUM ada yang dicatat ke jurnal dan belum ada yang diteruskan, supaya tidak salah tempel.\n\n" +
+            `Pengajuan yang masih menunggu bukti transfer:\n${candidateLines}\n\n` +
+            "Tolong kirim ulang fotonya (lebih bagus screenshot langsung dari aplikasi bank). Kalau ini bukan bukti transfer untuk pengajuan di atas, abaikan saja.";
+          trace.push(`sendWhatsAppText:calling(transfer-unreadable:${transferResult.reason})`);
+          const sendResult = await sendWhatsAppText(inbound.sender, replyText);
+          trace.push(sendResult.success ? "sendWhatsAppText:success" : `sendWhatsAppText:failed(${sendResult.error ?? "unknown"})`);
+          await saveAiConversationTurn(inbound.sender, inbound.content.caption ?? "[bukti transfer]", replyText, employee.id);
+          return { status: "processed", sender: inbound.sender, replySent: sendResult.success, trace };
+        }
         if (transferResult.outcome === "no_amount_match") {
           const candidateLines = transferResult.candidates
             .map((c) => `- ${c.partyName ?? "Pengajuan"}: Rp ${c.nominal.toLocaleString("id-ID")}`)

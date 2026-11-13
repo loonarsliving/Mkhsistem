@@ -22,6 +22,7 @@ recorded anywhere in this file or elsewhere in `docs/project-memory/`.**
 |---|---|---|---|---|
 | `GEMINI_API_KEY` | Gemini API auth | Required for any AI feature | Server only | `lib/ai/provider/registry.ts` (`isGeminiConfigured()`), `lib/ai/config.ts` |
 | `GEMINI_MODEL` | Model identifier | Optional (has default) | Server only | `lib/ai/config.ts` → `AI_CONFIG.geminiModel` |
+| `GEMINI_TRANSFER_PROOF_MODEL` | Model pembaca foto bukti transfer (bawaan `gemini-3.5-flash`; mundur ke `GEMINI_MODEL` bila gagal) | Optional (has default) | Server only | `lib/ai/config.ts` → `AI_CONFIG.geminiTransferProofModel` |
 | `GEMINI_TEMPERATURE` | Generation temperature | Optional (has default) | Server only | `lib/ai/config.ts` |
 | `GEMINI_MAX_OUTPUT_TOKENS` | Output token cap | Optional (has default) | Server only | `lib/ai/config.ts` |
 | `GEMINI_TIMEOUT_MS` | Request timeout | Optional (has default) | Server only | `lib/ai/config.ts` |

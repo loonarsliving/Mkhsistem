@@ -1,6 +1,10 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
+import { AI_CONFIG } from "@/lib/ai/config";
 import { generateAIText } from "@/lib/ai/service";
+import { logger } from "@/lib/logger";
 
 const SYSTEM_PROMPT =
   "Kamu adalah asisten AI yang membaca foto/screenshot bukti transfer bank (dari aplikasi m-banking atau struk ATM) untuk membantu mencatat pengeluaran perusahaan. Baca HANYA apa yang benar-benar terlihat di gambar -- jangan mengarang angka. Kalau gambar tidak terbaca jelas atau bukan bukti transfer, katakan begitu. Jawab selalu dalam Bahasa Indonesia. Balas HANYA dengan JSON object valid, tanpa markdown code fence.";
@@ -51,6 +55,26 @@ function parseRecognition(text: string): TransferProofRecognition {
  * (construction-progress-vision.ts).
  */
 export async function recognizeTransferProof(input: { imageBase64: string; imageMimeType: string; expectedNominal?: number }): Promise<TransferProofRecognition> {
+  // One WhatsApp photo walks through several matchers in a row (fee,
+  // settlement, gaji, pengajuan ...) and each of them asks for this same
+  // reading -- share one in-flight/finished result per photo instead of
+  // paying for the stronger model five times over. Failures are never kept.
+  if (typeof input.expectedNominal === "number") return readTransferProof(input);
+  const key = createHash("sha256").update(input.imageBase64).digest("hex");
+  const now = Date.now();
+  for (const [k, v] of recentReads) if (now - v.at > RECENT_READ_TTL_MS) recentReads.delete(k);
+  const cached = recentReads.get(key);
+  if (cached) return cached.result;
+  const result = readTransferProof(input);
+  recentReads.set(key, { at: now, result });
+  result.catch(() => recentReads.delete(key));
+  return result;
+}
+
+const RECENT_READ_TTL_MS = 2 * 60 * 1000;
+const recentReads = new Map<string, { at: number; result: Promise<TransferProofRecognition> }>();
+
+async function readTransferProof(input: { imageBase64: string; imageMimeType: string; expectedNominal?: number }): Promise<TransferProofRecognition> {
   const expectedLine =
     typeof input.expectedNominal === "number"
       ? `Nominal yang seharusnya ditransfer: Rp${Math.round(input.expectedNominal).toLocaleString("id-ID")}.`
@@ -69,12 +93,33 @@ Lihat langsung isi gambar ini dan baca:
 Balas HANYA dengan JSON object:
 {"readable": true, "nominal": 0, "tanggal": null, "waktu": null, "referensi": null, "rekeningTujuan": null, "notes": "..."}`;
 
-  const response = await generateAIText({
+  const request = {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     image: { data: input.imageBase64, mimeType: input.imageMimeType },
-    responseFormat: "json",
+    responseFormat: "json" as const,
     maxOutputTokens: 512,
-  });
+    // Reading digits off a receipt is not a creative task.
+    temperature: 0,
+  };
+
+  // Stronger model first (AI_CONFIG.geminiTransferProofModel), one attempt
+  // only -- if it's overloaded, times out, or returns something that isn't
+  // the JSON asked for, the everyday model reads the photo instead with its
+  // normal retry budget. Skipped entirely when both are the same model.
+  const strongModel = AI_CONFIG.geminiTransferProofModel;
+  if (strongModel && strongModel !== AI_CONFIG.geminiModel) {
+    try {
+      const response = await generateAIText({ ...request, model: strongModel, maxAttempts: 1 });
+      return parseRecognition(response.text);
+    } catch (err) {
+      logger.warn("transfer proof: strong model failed, falling back to default model", {
+        strongModel,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const response = await generateAIText(request);
   return parseRecognition(response.text);
 }

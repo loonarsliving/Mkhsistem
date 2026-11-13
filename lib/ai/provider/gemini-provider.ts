@@ -112,6 +112,7 @@ export class GeminiProvider implements AIProvider {
     overallStartedAt: number,
     uploadedVideo: { name: string; uri: string; mimeType: string } | null,
   ): Promise<AIGenerateResponse> {
+    const model = request.model ?? this.options.model;
 
     // Shared circuit breaker, checked before spending any quota on this
     // call: if Gemini has been failing consecutively across the whole
@@ -124,7 +125,7 @@ export class GeminiProvider implements AIProvider {
     if (!breaker.allowed) {
       await recordTelemetry({
         provider: "gemini",
-        model: this.options.model,
+        model,
         jobId: request.jobId,
         attempt: 0,
         maxAttempts,
@@ -166,14 +167,14 @@ export class GeminiProvider implements AIProvider {
     try {
       const response = await withGeminiRetry(
         {
-          model: this.options.model,
+          model,
           maxAttempts,
           baseDelayMs: this.options.retryBaseDelayMs,
           onAttempt: async (info) => {
             await Promise.all([
               recordTelemetry({
                 provider: "gemini",
-                model: this.options.model,
+                model,
                 jobId: request.jobId,
                 attempt: info.attempt,
                 maxAttempts: info.maxAttempts,
@@ -188,7 +189,7 @@ export class GeminiProvider implements AIProvider {
             ]);
           },
         },
-        () => this.callOnce(request.userPrompt, request.image, request.images, uploadedVideo, config),
+        () => this.callOnce(model, request.userPrompt, request.image, request.images, uploadedVideo, config),
       );
 
       const text = response.text ?? "";
@@ -204,7 +205,7 @@ export class GeminiProvider implements AIProvider {
             }
           : undefined,
         provider: "gemini",
-        model: this.options.model,
+        model,
         responseTimeMs: Date.now() - overallStartedAt,
       };
     } catch (err) {
@@ -227,6 +228,7 @@ export class GeminiProvider implements AIProvider {
    * that from the retry layer.
    */
   private async callOnce(
+    model: string,
     userPrompt: string,
     image: AIGenerateRequest["image"],
     images: AIGenerateRequest["images"],
@@ -268,7 +270,7 @@ export class GeminiProvider implements AIProvider {
 
     try {
       return await Promise.race([
-        this.client.models.generateContent({ model: this.options.model, contents, config }),
+        this.client.models.generateContent({ model, contents, config }),
         timeoutPromise,
       ]);
     } finally {

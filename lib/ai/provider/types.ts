@@ -30,6 +30,14 @@ export interface AIGenerateRequest {
    * (default retryMaxAttempts) behavior every HR/Markom/CRM/webhook call uses.
    */
   maxAttempts?: number;
+  /**
+   * Overrides the provider's default model (AI_CONFIG.geminiModel) for this
+   * one call -- e.g. bukti-transfer reading uses a stronger model than the
+   * Flash-Lite default every chat reply runs on (see
+   * transfer-proof-recognition.ts). Telemetry rows record the model actually
+   * called. Omit for the default.
+   */
+  model?: string;
   /** Links every telemetry row this call produces (ai_request_telemetry) back to its ai_job_queue row — set only by the async job processor, omitted for direct/synchronous callers (HR/Markom/CRM dashboard actions). */
   jobId?: string;
 }
