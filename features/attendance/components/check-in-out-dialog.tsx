@@ -15,6 +15,30 @@ import { uploadUserFile } from "@/lib/supabase/storage";
 import { checkInAction, checkOutAction } from "../actions/attendance.actions";
 import { CameraCapture } from "./camera-capture";
 
+// A weak villa connection used to leave the confirm button spinning
+// indefinitely. Cap each step; if a timed-out step actually landed, the
+// retry gets a clear "sudah check-in" message and the refresh shows it.
+const STEP_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} terlalu lama. Periksa koneksi internet, lalu coba lagi.`)),
+      STEP_TIMEOUT_MS,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 interface CheckInOutDialogProps {
   mode: "check-in" | "check-out";
   userId: string;
@@ -54,16 +78,25 @@ export function CheckInOutDialog({ mode, userId, open, onOpenChange }: CheckInOu
     setSubmitting(true);
     try {
       console.warn("[check-in-out-dialog] handleSubmit: uploading selfie");
-      const { path } = await uploadUserFile(STORAGE_BUCKETS.ATTENDANCE_SELFIES, userId, photoBlob, "selfie.jpg");
+      const { path } = await withTimeout(
+        uploadUserFile(STORAGE_BUCKETS.ATTENDANCE_SELFIES, userId, photoBlob, "selfie.jpg"),
+        "Upload foto",
+      );
       console.warn("[check-in-out-dialog] handleSubmit: upload complete, path =", path);
 
       const payload = { latitude: geo.latitude, longitude: geo.longitude, photoUrl: path, note: note || undefined };
       console.warn(`[check-in-out-dialog] handleSubmit: calling ${mode === "check-in" ? "checkInAction" : "checkOutAction"}`);
-      const result = mode === "check-in" ? await checkInAction(payload) : await checkOutAction(payload);
+      const result = await withTimeout(
+        mode === "check-in" ? checkInAction(payload) : checkOutAction(payload),
+        "Menyimpan absensi",
+      );
       console.warn("[check-in-out-dialog] handleSubmit: action result =", result.success ? "success" : `error: ${result.error}`);
 
       if (!result.success) {
         toast.error(result.error ?? "Gagal memproses absensi");
+        // The server may already hold a newer state than this card (e.g. a
+        // check-in that landed before a timeout); refresh so the buttons match.
+        router.refresh();
         return;
       }
 
@@ -77,6 +110,7 @@ export function CheckInOutDialog({ mode, userId, open, onOpenChange }: CheckInOu
         err instanceof Error ? err.message : err,
       );
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan");
+      router.refresh();
     } finally {
       console.warn("[check-in-out-dialog] handleSubmit: finally, setSubmitting(false)");
       setSubmitting(false);

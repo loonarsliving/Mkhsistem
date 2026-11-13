@@ -9,15 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AttendanceStatusBadge } from "@/components/shared/status-badge";
 import type { AttendanceStatus } from "@/constants/app";
-import type { Attendance } from "@/types/domain";
+import type { CurrentAttendance } from "@/repositories/attendance.repository";
 
 import { CheckInOutDialog } from "./check-in-out-dialog";
 
-export function CheckInOutCard({ userId, attendance }: { userId: string; attendance: Attendance | null }) {
+export function CheckInOutCard({ userId, attendance }: { userId: string; attendance: CurrentAttendance | null }) {
   const [dialogMode, setDialogMode] = React.useState<"check-in" | "check-out" | null>(null);
 
   const checkedIn = Boolean(attendance?.check_in_time);
   const checkedOut = Boolean(attendance?.check_out_time);
+  // Night shift that started on an earlier date and is still open (see
+  // lib/attendance/current-shift.ts): check-out closes that shift; a new
+  // check-in for today stays possible in case the old shift was forgotten.
+  const carriedOver = Boolean(attendance?.carried_over);
 
   return (
     <Card>
@@ -31,6 +35,13 @@ export function CheckInOutCard({ userId, attendance }: { userId: string; attenda
           <TimeSlot label="Jam Pulang" time={attendance?.check_out_time ?? null} />
         </div>
 
+        {carriedOver && attendance && (
+          <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
+            Shift {format(new Date(attendance.check_in_time!), "EEEE, d MMM HH:mm", { locale: idLocale })} belum
+            check-out. Check out untuk menutup shift itu.
+          </p>
+        )}
+
         {!checkedIn && (
           <Button className="w-full" onClick={() => setDialogMode("check-in")}>
             <LogIn className="h-4 w-4" /> Check In
@@ -39,6 +50,11 @@ export function CheckInOutCard({ userId, attendance }: { userId: string; attenda
         {checkedIn && !checkedOut && (
           <Button className="w-full" variant="secondary" onClick={() => setDialogMode("check-out")}>
             <LogOut className="h-4 w-4" /> Check Out
+          </Button>
+        )}
+        {carriedOver && (
+          <Button className="w-full" variant="outline" onClick={() => setDialogMode("check-in")}>
+            <LogIn className="h-4 w-4" /> Mulai shift baru hari ini
           </Button>
         )}
         {checkedIn && checkedOut && (

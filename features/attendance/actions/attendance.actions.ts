@@ -17,6 +17,19 @@ import {
   type LeaveRequestInput,
 } from "../schemas/attendance.schema";
 
+// The RPCs raise English messages; staff only read Indonesian.
+const RPC_ERROR_MESSAGES: Record<string, string> = {
+  "Already checked in today": "Anda sudah check-in hari ini. Muat ulang halaman untuk melihat status terbaru.",
+  "You must check in before checking out": "Tidak ada shift terbuka untuk di-check-out. Muat ulang halaman, lalu check in dulu.",
+  "Already checked out today": "Anda sudah check-out. Muat ulang halaman untuk melihat status terbaru.",
+  "Employee or branch not found": "Data karyawan/cabang Anda belum lengkap. Hubungi HR.",
+  "Not authenticated": "Sesi login habis. Silakan login ulang.",
+};
+
+function attendanceRpcError(message: string) {
+  return RPC_ERROR_MESSAGES[message] ?? message;
+}
+
 export async function checkInAction(input: CheckInInput): Promise<ActionResult> {
   await requireSession();
   const parsed = checkInSchema.safeParse(input);
@@ -30,10 +43,11 @@ export async function checkInAction(input: CheckInInput): Promise<ActionResult> 
     p_note: parsed.data.note ?? null,
   });
 
-  if (error) return actionError(error.message);
+  if (error) return actionError(attendanceRpcError(error.message));
 
   revalidatePath("/dashboard");
   revalidatePath("/attendance");
+  revalidatePath("/refund");
   return actionSuccess();
 }
 
@@ -50,10 +64,11 @@ export async function checkOutAction(input: CheckOutInput): Promise<ActionResult
     p_note: parsed.data.note ?? null,
   });
 
-  if (error) return actionError(error.message);
+  if (error) return actionError(attendanceRpcError(error.message));
 
   revalidatePath("/dashboard");
   revalidatePath("/attendance");
+  revalidatePath("/refund");
   return actionSuccess();
 }
 

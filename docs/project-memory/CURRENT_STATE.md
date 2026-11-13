@@ -3,6 +3,13 @@
 Audit date: 2026-08-21. Reconstructed from `git log`, migration file names,
 and existing docs — not from any external issue tracker (none found).
 
+## Absensi FO & Security: shift malam bisa check-out, "hari ini" pakai tanggal WITA (2026-11-13)
+- Gejala (LPL Front Office & Security): kadang tidak bisa check-in/check-out, kartu absensi "nyangkut". Data live 2 minggu terakhir: banyak baris check-in tanpa check-out.
+- Sebab 1: `getTodayAttendance` memakai tanggal UTC (server Vercel), padahal RPC memakai tanggal WITA. Antara 00:00-07:59 WITA kartu menampilkan baris *kemarin* → tombol salah (mis. "Check Out" yang lalu ditolak RPC, atau check-in pagi terlihat belum masuk).
+- Sebab 2: shift yang melewati tengah malam disimpan di tanggal check-in; `attendance_check_out` hanya mencari baris tanggal hari ini → "You must check in before checking out", shift tidak pernah tertutup.
+- Perbaikan: `lib/attendance/current-shift.ts` (tanggal lokal perusahaan + shift terbuka dari tanggal sebelumnya tetap "aktif" maks. 14 jam, `OPEN_SHIFT_MAX_HOURS`); kartu menampilkan peringatan shift kemarin + tombol "Mulai shift baru hari ini"; pesan error RPC diterjemahkan; upload/simpan diberi batas waktu 45 dtk lalu halaman di-refresh.
+- Migrasi `0315_attendance_checkout_shift_malam.sql`: `attendance_check_out` mundur ke shift terbuka terakhir ≤14 jam bila hari ini belum ada check-in. `attendance_check_in` tidak berubah. Status apply ke DB live: lihat commit/PR berikutnya.
+
 ## Bukti transfer: model Gemini lebih pintar + tidak lagi menebak (2026-11-13)
 - Insiden (pengajuan 452): owner kirim bukti Rp 8.922.000 ke SARNO, sistem mencatatnya sebagai "Laundry kasur" Rp 4.400.000. Sebab (dicek di `ai_request_telemetry`/`ai_integration_logs`/`sync_log`): foto gagal diunduh dari Whacenter, **tidak ada panggilan Gemini sama sekali**, lalu jalur FIFO di `tryConfirmTransferProofViaWhatsApp` mengonfirmasi pengajuan pending terlama tanpa peringatan.
 - `tryConfirmTransferProofViaWhatsApp`: foto tak terunduh / nominal tak terbaca → outcome baru `unreadable`, **tidak ada yang dicatat/diteruskan**, owner diminta kirim ulang (FIFO dihapus).
