@@ -7,7 +7,9 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        "relative overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.04),0_1px_6px_hsl(var(--primary)/0.06)] transition-[box-shadow,transform] duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-primary/40 before:to-transparent hover:-translate-y-0.5 hover:shadow-[0_4px_12px_hsl(var(--primary)/0.08),0_2px_4px_hsl(var(--primary)/0.06)]",
+        // Kartu krem-kertas ala loonars.id: sudut lebih bulat, bayangan hangat,
+        // muncul halus (fill-mode backwards -- tanpa transform permanen).
+        "anim-rise relative overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground shadow-[0_1px_2px_hsl(30_30%_20%/0.04),0_8px_24px_-12px_hsl(30_30%_20%/0.12)] transition-[box-shadow,transform,border-color] duration-300 ease-out before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-terra/35 before:to-transparent hover:-translate-y-0.5 hover:border-border hover:shadow-[0_2px_4px_hsl(30_30%_20%/0.05),0_22px_40px_-22px_hsl(30_30%_20%/0.3)]",
         className,
       )}
       {...props}

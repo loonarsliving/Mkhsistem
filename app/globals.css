@@ -3,96 +3,105 @@
 @tailwind utilities;
 
 /*
- * Teal Property palette (UI Pro Max: "Real Estate/Property" product type)
- * -- replaces the previous generic blue. Deliberate choice for a property/
- * villa/kos/CRM company: teal signals trust without being another
- * interchangeable SaaS blue. --accent stays a subtle neutral hover tint
- * (shadcn convention -- it's not a second brand color), just teal-shifted
- * for cohesion instead of the old blue-gray.
+ * Palet "Loonars" (owner 2026-11-13: "dirombak total jadi bagus seperti
+ * loonars.id"). Hangat dan tenang untuk dipakai seharian: krem pasir sebagai
+ * latar, tinta cokelat tua untuk teks, hijau daun sebagai warna utama,
+ * terakota & kayu jati sebagai aksen. Mode gelap memakai versi gelap yang
+ * senada (cokelat-arang, bukan biru/teal). Semua komponen membaca token ini,
+ * jadi mengubah warna cukup di sini.
  */
 @layer base {
   :root {
-    --background: 170 20% 98%;
-    --foreground: 200 30% 12%;
+    --background: 39 45% 95%;
+    --foreground: 32 15% 15%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 200 30% 12%;
+    --card: 40 100% 99%;
+    --card-foreground: 32 15% 15%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 30% 12%;
+    --popover: 40 100% 99%;
+    --popover-foreground: 32 15% 15%;
 
-    --primary: 175 77% 26%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 133 19% 30%;
+    --primary-foreground: 40 100% 99%;
 
-    --secondary: 172 35% 95%;
-    --secondary-foreground: 200 30% 15%;
+    --secondary: 37 42% 90%;
+    --secondary-foreground: 32 15% 18%;
 
-    --muted: 172 30% 95%;
-    --muted-foreground: 200 12% 45%;
+    --muted: 37 38% 91%;
+    --muted-foreground: 32 10% 38%;
 
-    --accent: 172 40% 92%;
-    --accent-foreground: 200 30% 15%;
+    --accent: 37 44% 89%;
+    --accent-foreground: 32 15% 15%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 8 60% 46%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 35%;
+    --success: 134 30% 33%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 45%;
+    --warning: 32 78% 41%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 172 30% 88%;
-    --input: 172 30% 88%;
-    --ring: 175 77% 26%;
+    --border: 36 26% 85%;
+    --input: 36 24% 82%;
+    --ring: 133 19% 30%;
 
-    --sidebar: 176 45% 10%;
-    --sidebar-foreground: 170 25% 92%;
-    --sidebar-border: 176 35% 16%;
-    --sidebar-accent: 176 35% 18%;
+    --sidebar: 134 18% 15%;
+    --sidebar-foreground: 39 40% 92%;
+    --sidebar-border: 134 14% 21%;
+    --sidebar-accent: 134 13% 22%;
 
-    --radius: 0.625rem;
+    /* Aksen tambahan khas Loonars */
+    --terra: 22 48% 48%;
+    --teak: 28 32% 46%;
+    --sand-deep: 36 35% 84%;
+
+    --radius: 0.875rem;
   }
 
   .dark {
-    --background: 180 25% 6%;
-    --foreground: 166 25% 95%;
+    --background: 30 12% 7%;
+    --foreground: 38 30% 92%;
 
-    --card: 178 22% 9%;
-    --card-foreground: 166 25% 95%;
+    --card: 30 10% 10%;
+    --card-foreground: 38 30% 92%;
 
-    --popover: 178 22% 9%;
-    --popover-foreground: 166 25% 95%;
+    --popover: 30 10% 10%;
+    --popover-foreground: 38 30% 92%;
 
-    --primary: 173 65% 45%;
-    --primary-foreground: 180 25% 6%;
+    --primary: 118 22% 60%;
+    --primary-foreground: 30 12% 7%;
 
-    --secondary: 178 18% 15%;
-    --secondary-foreground: 166 25% 95%;
+    --secondary: 30 8% 15%;
+    --secondary-foreground: 38 30% 92%;
 
-    --muted: 178 18% 15%;
-    --muted-foreground: 172 12% 62%;
+    --muted: 30 8% 15%;
+    --muted-foreground: 36 12% 64%;
 
-    --accent: 178 18% 18%;
-    --accent-foreground: 166 25% 95%;
+    --accent: 30 8% 18%;
+    --accent-foreground: 38 30% 92%;
 
-    --destructive: 0 63% 50%;
+    --destructive: 8 62% 54%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 60% 40%;
-    --success-foreground: 0 0% 100%;
+    --success: 128 30% 48%;
+    --success-foreground: 30 12% 7%;
 
-    --warning: 38 85% 50%;
-    --warning-foreground: 180 25% 6%;
+    --warning: 34 80% 54%;
+    --warning-foreground: 30 12% 7%;
 
-    --border: 178 18% 17%;
-    --input: 178 18% 17%;
-    --ring: 173 65% 45%;
+    --border: 30 8% 19%;
+    --input: 30 8% 21%;
+    --ring: 118 22% 60%;
 
-    --sidebar: 180 30% 4%;
-    --sidebar-foreground: 166 20% 90%;
-    --sidebar-border: 178 22% 11%;
-    --sidebar-accent: 178 22% 13%;
+    --sidebar: 134 18% 6%;
+    --sidebar-foreground: 38 30% 90%;
+    --sidebar-border: 134 12% 12%;
+    --sidebar-accent: 134 12% 14%;
+
+    --terra: 22 58% 58%;
+    --teak: 30 35% 58%;
+    --sand-deep: 30 8% 22%;
   }
 }
 
@@ -114,8 +123,12 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(60rem 40rem at 100% -10%, hsl(var(--primary) / 0.08), transparent 60%),
-      radial-gradient(50rem 35rem at -10% 100%, hsl(var(--primary) / 0.06), transparent 55%);
+      radial-gradient(60rem 40rem at 100% -10%, hsl(var(--terra) / 0.08), transparent 60%),
+      radial-gradient(50rem 35rem at -10% 100%, hsl(var(--primary) / 0.07), transparent 55%);
+  }
+  h1,
+  h2 {
+    letter-spacing: -0.01em;
   }
   ::selection {
     background: hsl(var(--primary) / 0.25);
@@ -167,6 +180,101 @@
   }
   .no-print {
     display: none !important;
+  }
+}
+
+/* ══ Gerak (2026-11-13) ══════════════════════════════════════════════
+   Animasi masuk memakai fill-mode `backwards` supaya transform hilang
+   setelah selesai -- transform permanen pada pembungkus membuat elemen
+   `position: fixed` di dalamnya salah posisi. */
+@layer utilities {
+  .font-display {
+    font-family: var(--font-serif), Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .anim-rise {
+    animation: mkc-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .anim-pop {
+    animation: mkc-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  }
+  .anim-float {
+    animation: mkc-float 3.4s ease-in-out infinite;
+  }
+  /* Anak-anak langsung muncul bergantian (grid kartu, daftar). */
+  .stagger > * {
+    animation: mkc-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .stagger > *:nth-child(2) { animation-delay: 0.05s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.15s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.2s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.25s; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 0.3s; }
+  .shimmer {
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--sand-deep)) 37%, hsl(var(--muted)) 63%);
+    background-size: 200% 100%;
+    animation: mkc-shimmer 1.4s linear infinite;
+  }
+  /* Kilau yang menyapu sekali saat hover (tombol utama, kartu statistik). */
+  .sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.35), transparent);
+    transform: translateX(-130%) skewX(-18deg);
+    pointer-events: none;
+  }
+  .sheen:hover::after {
+    animation: mkc-sheen 0.85s ease;
+  }
+}
+
+@keyframes mkc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes mkc-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+@keyframes mkc-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes mkc-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes mkc-sheen {
+  to {
+    transform: translateX(330%) skewX(-18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
 

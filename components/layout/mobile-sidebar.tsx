@@ -6,9 +6,9 @@ import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { APP_NAME } from "@/constants/app";
 import type { PermissionKey } from "@/constants/rbac";
 
+import { BrandMark } from "./brand-mark";
 import { SidebarNav } from "./sidebar-nav";
 
 export function MobileSidebar({ permissions }: { permissions: PermissionKey[] }) {
@@ -22,11 +22,8 @@ export function MobileSidebar({ permissions }: { permissions: PermissionKey[] })
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="flex flex-col bg-sidebar p-0 text-sidebar-foreground">
-        <Link href="/dashboard" className="flex items-center gap-2 px-5 py-5" onClick={() => setOpen(false)}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            MK
-          </div>
-          <span className="text-sm font-semibold">{APP_NAME}</span>
+        <Link href="/dashboard" className="flex items-center px-5 pb-5 pt-6" onClick={() => setOpen(false)}>
+          <BrandMark />
         </Link>
         <SidebarNav permissions={permissions} onNavigate={() => setOpen(false)} />
       </SheetContent>

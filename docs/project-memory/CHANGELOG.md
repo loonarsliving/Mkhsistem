@@ -7,6 +7,11 @@ for full detail on any specific change. No entries are fabricated; every
 line below corresponds to one or more actual commit messages.
 
 
+## 2026-11-13 — Tampilan baru ala loonars.id (hanya tampilan)
+- Palet hangat (krem, hijau daun, terakota) + huruf DM Sans/Cormorant Garamond, tema bawaan terang, mode gelap senada.
+- Komponen bersama, sidebar, menu atas, banner Dashboard, dan panel login dirombak dengan animasi (muncul halus, angka berhitung, shimmer, hover).
+- Tidak ada perubahan database, izin akses, API, atau logika.
+
 ## Owner WA: pembayaran kontraktor L2 diarahkan ke AI CFO (2026-11-11)
 - `arahkanPengeluaranLoonars2` kini juga menangkap "kontraktor" (mis. "total keseluruhan pembayaran kontraktor L2") → selalu memakai `ai_cfo`; angka totalnya ditambahkan di MKH Property (`faktaCfo`, niat `kontraktor_l2`). Tanpa migrasi.
 
