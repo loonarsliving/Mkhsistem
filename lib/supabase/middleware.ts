@@ -104,6 +104,9 @@ const PUBLIC_PATHS = [
   // shared-secret check (x-advisor-bridge-secret against ADVISOR_BRIDGE_SECRET)
   // in app/api/advisor/hospitality/route.ts.
   "/api/advisor/hospitality",
+  // Read-only villa revenue & pricing summary for the advisor (2026-11-14);
+  // same shared-secret check in app/api/advisor/harga/route.ts.
+  "/api/advisor/harga",
   // Server-to-server bridge that deploys the villa-api Supabase Edge
   // Function via the Supabase Management API -- built because the MCP
   // deploy_edge_function tool is stuck behind a broken approval gate.
