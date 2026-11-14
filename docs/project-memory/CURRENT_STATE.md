@@ -108,7 +108,7 @@ data pengetahuan sistemku" → "Ya" (tahap 1: model tetap Gemini Flash-Lite).
 - Tahap berikut (belum): model lebih kuat khusus chat owner — perlu
   keputusan biaya owner.
 
-## Advisor: ringkasan harga & okupansi villa (2026-11-14) — BELUM DI-MERGE
+## Advisor: ringkasan harga & okupansi villa (2026-11-14) — LIVE (PR #173; tanpa rahasia → 401 diverifikasi)
 `POST /api/advisor/harga` (x-advisor-bridge-secret, path publik di middleware;
 `lib/advisor/revenue-summary.ts`, 3 tes). Hanya SELECT: okupansi/ADR/RevPAR 30
 hari & on-the-books 3 bulan per properti (PL/EL), harga 30 hari & kompetitor 60
