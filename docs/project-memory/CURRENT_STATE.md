@@ -108,6 +108,14 @@ data pengetahuan sistemku" → "Ya" (tahap 1: model tetap Gemini Flash-Lite).
 - Tahap berikut (belum): model lebih kuat khusus chat owner — perlu
   keputusan biaya owner.
 
+## Advisor: ringkasan harga & okupansi villa (2026-11-14) — BELUM DI-MERGE
+`POST /api/advisor/harga` (x-advisor-bridge-secret, path publik di middleware;
+`lib/advisor/revenue-summary.ts`, 3 tes). Hanya SELECT: okupansi/ADR/RevPAR 30
+hari & on-the-books 3 bulan per properti (PL/EL), harga 30 hari & kompetitor 60
+hari per tipe kamar, setelan mesin harga (termasuk status autopush), rekomendasi
+mesin 30 hari, musim ramai. Dipakai fitur `advisor strategi harga` & `advisor
+lokasi` (Istri D-2026-011). Tidak menulis harga/rekomendasi.
+
 ## Cabang Makassar ditutup (2026-11-14, migrasi 0316) — DITERAPKAN
 Owner: "Cabang makassar sy minta tutup, gaji sdh terbayar smua". 11 slip gaji
 Makassar `pending_transfer` (Agu–Okt 2026, Rp 105.528.400) ditandai
