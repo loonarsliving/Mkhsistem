@@ -108,6 +108,13 @@ data pengetahuan sistemku" → "Ya" (tahap 1: model tetap Gemini Flash-Lite).
 - Tahap berikut (belum): model lebih kuat khusus chat owner — perlu
   keputusan biaya owner.
 
+## Cabang Makassar ditutup (2026-11-14, migrasi 0316) — DITERAPKAN
+Owner: "Cabang makassar sy minta tutup, gaji sdh terbayar smua". 11 slip gaji
+Makassar `pending_transfer` (Agu–Okt 2026, Rp 105.528.400) ditandai
+`transferred` (note `[owner 2026-11-14]`, `transferred_by` kosong — konfirmasi
+owner, bukan bukti transfer; tanpa WA). `branches` MKS `is_active=false`.
+Diterapkan via Supabase MCP; diverifikasi: 14 slip Makassar semua transferred.
+
 ## Karyawan cabang Makassar, Jabodetabek, Kendari ditutup (2026-11-01, migrasi 0310) — DITERAPKAN
 
 Keputusan owner: hanya Loonars 1 (hospitality Yogyakarta) & Loonars 2 (Loonars
